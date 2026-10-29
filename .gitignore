@@ -1,0 +1,27 @@
+.DS_Store
+.build/
+.swiftpm/
+/dist/
+/local-assets/
+*.xcuserstate
+# 本地环境、用户数据与临时输出
+.env
+.env.*
+!.env.example
+/.codex/
+/.agents/
+/.aws/
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.app/
+*.dmg
+*.zip
+# 内部计划、调查、对比与实施记录只保留本地；正式来源说明按需加入 Git
+/docs/*
+!/docs/来源与架构.md
+
+# 定向回归样例仅保留本地
+/Tests/
