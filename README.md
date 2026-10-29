@@ -6,24 +6,21 @@
 
 基于 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，保留白龙娘的动画素材和主要交互，在 Mac 上重新实现窗口、菜单、聊天、设置和任务提醒。原作行为基线为 [v0.5.1 / b102e73](https://github.com/jingh12312-rgb/bailong-desktop-pet/commit/b102e734f20bb50889af12df5778f1499109f41b)，本项目独立维护，不代表原作者或 OpenAI。
 
-当前版本为 **0.2.1**。功能仍在早期阶段，很可能有不少问题，适合尝试和反馈，暂时别按成熟软件的稳定性来期待。**Intel 版尚未在 Intel Mac 上进行实机测试。**
+当前版本为 **0.2.1**。功能仍在早期阶段，很可能有不少问题，适合尝试和反馈，暂时别按成熟软件的稳定性来期待。**当前仅提供 Apple Silicon 版，Intel 版暂不发布。**
 
 界面和动画视图使用 Swift + AppKit，透明 WebM 由 FFmpeg 解码。没有使用 SwiftUI，也不需要 Python、PySide6 或 PyObjC 运行环境。
 
 ## 下载与安装
 
-> 当前为私有仓库内的开发预发布版本，下载需要仓库访问权限，尚未面向公众发行。素材授权和 Intel 解码器的公开分发条件仍待处理，请勿转发安装包。
+> 当前为私有仓库内的开发预发布版本，下载需要仓库访问权限，尚未面向公众发行。素材授权等公开分发条件仍待处理，请勿转发安装包。
 
-需要 **macOS 14 或更新版本**。
+需要 **Apple Silicon Mac（arm64）及 macOS 14 或更新版本**。
 
-| 版本 | 下载 |
-| --- | --- |
-| Apple Silicon（arm64） | [下载 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/v0.2.1/bailong-desktop-pet-v0.2.1-macos-apple-silicon.zip) |
-| Intel（x86_64，未经实机测试） | [下载 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/v0.2.1/bailong-desktop-pet-v0.2.1-macos-intel.zip) |
+**[下载 Apple Silicon 版 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/v0.2.1/bailong-desktop-pet-v0.2.1-macos-apple-silicon.zip)**
 
 [发布说明](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/v0.2.1) · [全部版本](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)
 
-下载对应 ZIP，解压后把 `白龙娘桌宠MacOS-Swift版.app` 拖入「应用程序」即可。当前开发应用包携带动画、声音、图标及对应架构的 FFmpeg，不需要另外安装解码器。Release 中的 `Source code` 是源码归档，不是安装包。
+下载 ZIP，解压后把 `白龙娘桌宠MacOS-Swift版.app` 拖入「应用程序」即可。当前开发应用包携带动画、声音、图标及 arm64 FFmpeg，不需要另外安装解码器。Release 中的 `Source code` 是源码归档，不是安装包。
 
 聊天和任务功能需要本机有可用、已经登录的 Codex。桌宠不附带 Codex，也不提供账号或模型额度。
 
@@ -39,7 +36,7 @@
 
 ### 更新
 
-当前没有应用内自动更新。退出旧版后，用新版替换「应用程序」里的 App。两种架构的应用同名，不要同时运行。
+当前没有应用内自动更新。退出旧版后，用新版替换「应用程序」里的 App。更新前请先退出正在运行的桌宠。
 
 历史保存在独立的数据目录中，不在 App 包内。正常替换应用不会同时删除历史；需要备份时可从设置中打开数据目录。
 
@@ -142,15 +139,15 @@ local-assets/
 
 解码器需匹配目标架构，并支持当前透明 WebM 使用的 `libvpx-vp9` 解码路径。Windows 发布包里的 `ffmpeg.exe` 不能用于 Mac。
 
-准备完资源后，在仓库根目录构建所需架构：
+准备完资源后，在仓库根目录构建 Apple Silicon 版：
 
 ```sh
 ./scripts/build.sh arm64
-# 或
-./scripts/build.sh x86_64
 ```
 
-输出分别位于 `dist/arm64/` 和 `dist/x86_64/`，应用名均为 `白龙娘桌宠MacOS-Swift版.app`。构建脚本会复制运行资源并执行本地 ad-hoc 签名，不包含 Apple 公证步骤。
+输出位于 `dist/arm64/白龙娘桌宠MacOS-Swift版.app`。构建脚本会复制运行资源并执行本地 ad-hoc 签名，不包含 Apple 公证步骤。
+
+Intel 构建能力仍保留，可用 `./scripts/build.sh x86_64` 进行本地实验，输出位于 `dist/x86_64/`。这不代表 Intel 版本已受支持，Release 暂不提供 Intel 安装包。
 
 Apple Silicon 开发环境可使用：
 
@@ -163,11 +160,11 @@ Apple Silicon 开发环境可使用：
 
 开发运行直接读取 `local-assets`，不生成完整 App 包。按 Ctrl+C 正常退出。开发版与安装包共用单实例锁和默认数据，运行前先退出已有桌宠。
 
-当前资源准备流程还不完整，尤其是图标生成和可公开分发的 Intel 解码器。在这些补齐前，不保证新克隆的仓库只靠上述命令就能构建运行。
+当前资源准备流程还不完整，尤其是图标生成；Intel 本地实验另有解码器分发限制。在这些补齐前，不保证新克隆的仓库只靠上述命令就能构建运行。
 
 ## 已知限制与反馈
 
-Intel 版目前只有交叉编译及静态检查结果，没有 Intel 真机运行结论。设置布局、鼠标手势、中文输入法、多屏、全屏和登录项等行为仍需要更多实际使用反馈。
+Intel 安装包已从 Release 撤下，暂不提供下载；本地版本只有交叉编译及静态检查结果，没有 Intel 真机运行结论。设置布局、鼠标手势、中文输入法、多屏、全屏和登录项等行为仍需要更多实际使用反馈。
 
 动画保留原 WebM，并按需解码和缓存。原素材画质、透明边缘和不同显示缩放下的观感仍有改进空间；Swift 原生实现不会自动消除素材本身的问题。
 
