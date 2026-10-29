@@ -167,7 +167,7 @@ final class ModelSelectorContent: NSViewController {
         effort.font = .systemFont(ofSize:14,weight:.semibold)
         slider.target = self; slider.action = #selector(effortChanged)
         slider.allowsTickMarkValuesOnly = true; slider.isContinuous = true; slider.setAccessibilityLabel("推理强度")
-        for text in [explanation,defaultInfo,caution] {text.font = .systemFont(ofSize:12)}
+        for text in [explanation,defaultInfo,caution] {text.font = .systemFont(ofSize:12); text.isSelectable = false}
         explanation.textColor = .secondaryLabelColor; defaultInfo.textColor = .systemBlue
         refresh.frame = NSRect(x:16,y:9,width:88,height:28); refresh.callback = { [weak self] in self?.settings.onLoad(true) }
         luna.frame = NSRect(x:112,y:9,width:176,height:28); luna.callback = { [weak self] in self?.settings.chooseLunaMinimum() }

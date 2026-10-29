@@ -141,7 +141,7 @@ final class PetController: NSObject, NSMenuDelegate {
         manualHidden = !preferences.bool("showOnLaunch"); playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
         bubble.preferences = preferences
         sound = NSSound(contentsOf: Paths.resources.appendingPathComponent("sounds/click.wav"), byReference: true)
-        status.button?.title = preferences.petName; status.button?.toolTip = preferences.appName; refreshMenu()
+        status.button?.title = PetPreferences.productName; status.button?.toolTip = preferences.appName; refreshMenu()
         bubble.onClose = { [weak self] in self?.quotaActive = false }
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
         settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose) }
@@ -523,11 +523,6 @@ final class PetController: NSObject, NSMenuDelegate {
         if !preferences.allows(bubble.purpose) {bubble.hide()}
         if keys.contains("typingEffect") && !preferences.bool("typingEffect") {bubble.finishTyping()}
         if !Set(keys).isDisjoint(with:["interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime"]) {bubble.refreshDuration()}
-        if keys.contains("petName") {
-            if status.button?.image == nil {status.button?.title = preferences.petName}
-            status.button?.toolTip = preferences.appName; status.button?.image?.accessibilityDescription = preferences.appName
-            startup?.title = preferences.appName
-        }
         interaction(); checkDesktop(); refreshMenu(); onPreferencesChanged()
     }
     func refreshMenu() { status.menu = makeMenu() }

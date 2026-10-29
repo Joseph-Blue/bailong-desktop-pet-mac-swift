@@ -14,7 +14,7 @@ enum Paths {
         NSHomeDirectory() + "/Library/Application Support/BailongPetAppKit")
     static var version: String {
         let url = Bundle.main.bundleURL.pathExtension == "app" ? resources.appendingPathComponent("VERSION") : project.appendingPathComponent("VERSION")
-        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.2.0"
+        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.2.1"
     }
 }
 

@@ -85,7 +85,7 @@ final class CodexConnection {
                 let expired = self.pending.filter { $0.value.1 < Date() }
                 for (id,entry) in expired { self.pending.removeValue(forKey:id); entry.0(.failure(PetFailure(message:"Codex 请求超时，任务状态尚未确认。"))) }
             }
-            call("initialize",["clientInfo":["name":"bailong_appkit","title":PetPreferences.shared.petName+"桌宠","version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
+            call("initialize",["clientInfo":["name":"bailong_appkit","title":PetPreferences.shared.appName,"version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
                 guard let self else{return}
                 switch result {
                 case .success:

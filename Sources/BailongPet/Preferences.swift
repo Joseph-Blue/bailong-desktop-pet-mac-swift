@@ -75,7 +75,9 @@ final class PetPreferences {
     }
     func reset(_ keys: [String]) {for key in keys {defaults.removeObject(forKey:key)}; notify(keys)}
     var petName: String {let s = string("petName").trimmingCharacters(in:.whitespacesAndNewlines); return s.isEmpty ? "白龙娘" : s}
-    var appName: String {petName+"桌宠MacOS-Swift版"}
+    // 产品身份固定；petName 只用于角色称呼和互动文案。
+    static let productName = "白龙娘"
+    var appName: String {Self.productName+"桌宠MacOS-Swift版"}
     var address: String {
         let key = string("addressMode") == "name" ? "ownerName" : "customAddress"
         if string("addressMode") == "master" {return "主人"}

@@ -62,7 +62,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     init(models: ChatModelSettings) {
         self.models = models
         super.init()
-        composer.title = ""; history.title = PetPreferences.shared.petName+" · 历史对话"
+        composer.title = ""; history.title = PetPreferences.productName+" · 历史对话"
         for w in [composer as NSWindow,history] {w.isReleasedWhenClosed = false; w.delegate = self}
         composer.level = .floating; composer.contentMinSize = NSSize(width:500,height:350)
         composer.isOpaque = false; composer.backgroundColor = .clear; composer.hasShadow = true
@@ -304,7 +304,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerModel.isEnabled = !busy; historyModel.isEnabled = !busy && !selected.external
         let streaming = selected.turns.last.map {activeStatuses.contains($0.status)} ?? false
         historyStatus.stringValue = PetPreferences.shared.fixedText(streaming ? "主人，我正忙着呢，进展会记在这里哦" : "主人的叮嘱，我都记在这台电脑里啦")
-        history.title = PetPreferences.shared.petName+" · 历史对话"
+        history.title = PetPreferences.productName+" · 历史对话"
         composerEditor.placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
         historyEditor.isEditable = !selected.external && !busy; composerEditor.isEditable = !busy
         transcript.setContent(transcriptContent(selected),animated:streaming && PetPreferences.shared.bool("typingEffect"),reset:renderedConversation != selected.key)

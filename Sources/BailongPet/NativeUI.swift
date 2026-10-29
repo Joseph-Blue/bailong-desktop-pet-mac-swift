@@ -7,6 +7,7 @@ func showError(_ title: String, _ error: Error) {
 }
 func label(_ text: String, bold: Bool = false) -> NSTextField {
     let view = NSTextField(wrappingLabelWithString: text)
+    view.isSelectable = false
     view.font = bold ? .boldSystemFont(ofSize: 13) : .systemFont(ofSize: 13)
     return view
 }
@@ -107,7 +108,7 @@ final class Bubble {
         window.collectionBehavior = [.canJoinAllSpaces,.ignoresCycle,.fullScreenNone]
         let content = BubbleBackgroundView()
         window.contentView = content
-        text.isEditable = false; text.isSelectable = true; text.drawsBackground = false
+        text.isEditable = false; text.isSelectable = false; text.drawsBackground = false
         text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = [.width]
         text.textContainer?.widthTracksTextView = true; text.textContainerInset = NSSize(width:0,height:2)
         text.textColor = .labelColor
@@ -147,6 +148,9 @@ final class Bubble {
         let same = self.kind == kind && scroll.documentView === text && text.automaticallyFollowsEnd == followsText
         text.automaticallyFollowsEnd = followsText
         self.kind = kind; self.scale = scale
+        // 只有任务消息正文允许复制；互动、额度加载及一般提示不参与文本选择。
+        text.isSelectable = kind == "task"
+        if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
         currentBody = body; relatedConversation = nil
         if scroll.documentView !== text {scroll.documentView = text}
         title.stringValue = heading; title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)

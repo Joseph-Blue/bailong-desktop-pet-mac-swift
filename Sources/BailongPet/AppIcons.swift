@@ -128,7 +128,9 @@ private final class AboutWindowController: NSWindowController {
         scroll.drawsBackground = false
         let text = NSTextView(frame:NSRect(x:0,y:0,width:560,height:360))
         text.isEditable = false
-        text.isSelectable = true
+        text.isSelectable = false
+        // 说明文字不允许选中；链接通过点击手势打开，不依赖 NSTextView 的选择行为。
+        text.addGestureRecognizer(NSClickGestureRecognizer(target:self,action:#selector(openTextLink(_:))))
         text.drawsBackground = false
         text.isVerticallyResizable = true
         text.isHorizontallyResizable = false
@@ -150,6 +152,19 @@ private final class AboutWindowController: NSWindowController {
         window?.title = "关于"+name
         titleLabel.stringValue = name; titleLabel.toolTip = titleLabel.stringValue
         appIcon.setAccessibilityLabel(name+"应用图标")
+    }
+
+    @objc private func openTextLink(_ gesture: NSClickGestureRecognizer) {
+        guard let text = gesture.view as? NSTextView,
+              let layout = text.layoutManager, let container = text.textContainer,
+              let storage = text.textStorage, storage.length > 0 else {return}
+        let location = gesture.location(in:text), origin = text.textContainerOrigin
+        let point = NSPoint(x:location.x-origin.x,y:location.y-origin.y)
+        let glyph = layout.glyphIndex(for:point,in:container)
+        guard glyph < layout.numberOfGlyphs,
+              layout.boundingRect(forGlyphRange:NSRange(location:glyph,length:1),in:container).contains(point) else {return}
+        let character = layout.characterIndexForGlyph(at:glyph)
+        if let url = storage.attribute(.link,at:character,effectiveRange:nil) as? URL {NSWorkspace.shared.open(url)}
     }
 
     @objc private func updateAccent() {
@@ -186,7 +201,7 @@ private final class AboutWindowController: NSWindowController {
 
         heading("FFmpeg · 动画解码",to:text)
         #if arch(x86_64)
-        paragraph("当前随包版本：7.1（Intel x86_64）。Copyright © 2000–2024 the FFmpeg developers。此二进制启用了 --enable-nonfree，自带许可声明为 nonfree and unredistributable；当前仅用于本地构建，不作为可再分发的 FFmpeg 包。",to:text)
+        paragraph("当前随包版本：7.1（Intel x86_64）。Copyright © 2000–2024 the FFmpeg developers。此二进制启用了 --enable-nonfree，自带许可声明为 nonfree and unredistributable；当前仅作私有开发验证，公开发行前需替换解码器。",to:text)
         link("FFmpeg 项目与许可说明",url:"https://ffmpeg.org/legal.html",to:text)
         #else
         paragraph("当前随包版本：7.1。Copyright © 2000–2024 the FFmpeg developers。当前二进制自带许可声明为 GNU GPL 第 2 版或后续版本；其中集成的第三方组件另有各自许可。",to:text)
