@@ -140,7 +140,7 @@ final class DesktopSync {
                     let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.messages.components(separatedBy:"\n\n").last!
                     let signature = text
                     if !text.isEmpty && (turn.notices[signature] == nil || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say("主人，我还在留意进展…",body:text,kind:"task",seconds:12,thread:conversation.key)
+                        chat.pet.say("主人，我还在留意进展…",body:text,kind:"task",seconds:12,thread:conversation.key,followsText:false)
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
                     }
                 }
@@ -148,7 +148,7 @@ final class DesktopSync {
                 running.remove(key)
                 if !turn.finished {
                     turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)
-                    chat.pet.say(value.status == "completed" ? "主人，完成啦！" : "主人，任务还没有完成。",body:!value.error.isEmpty ? value.error : !value.final.isEmpty ? value.final : value.title,kind:"task",seconds:20,thread:conversation.key)
+                    chat.pet.say(value.status == "completed" ? "主人，完成啦！" : "主人，任务还没有完成。",body:!value.error.isEmpty ? value.error : !value.final.isEmpty ? value.final : value.title,kind:"task",seconds:20,thread:conversation.key,followsText:false,resetText:true)
                 }
             }
         }

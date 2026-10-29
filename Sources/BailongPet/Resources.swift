@@ -13,7 +13,8 @@ enum Paths {
     static let data = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BAILONG_DATA_DIR"] ??
         NSHomeDirectory() + "/Library/Application Support/BailongPetAppKit")
     static var version: String {
-        (try? String(contentsOf: resources.appendingPathComponent("VERSION"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.1.0-dev.2"
+        let url = Bundle.main.bundleURL.pathExtension == "app" ? resources.appendingPathComponent("VERSION") : project.appendingPathComponent("VERSION")
+        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.1.0-dev.3"
     }
 }
 
@@ -73,19 +74,51 @@ final class Decoder {
     private var process: Process?
     private var generation = 0
     private let cache = NSCache<NSString, Animation>()
-    init() { cache.totalCostLimit = 384 * 1024 * 1024 }
+    private var pinned = [String:Animation]()
+    private let pinnedIDs: Set<String> = ["idle", "idle2", "drag", "landing"]
+    init() { cache.totalCostLimit = 192 * 1024 * 1024 }
+    private func cached(_ id: String) -> Animation? {
+        lock.lock(); let value = pinned[id]; lock.unlock()
+        return value ?? cache.object(forKey:id as NSString)
+    }
+    // 只预热基础待机、拖拽和落地。用户发起新动作时可立即中断预热。
+    func warm(_ clips: [Clip]) {
+        lock.lock(); let token = generation; lock.unlock()
+        queue.async { [self] in
+            for clip in clips where cached(clip.id) == nil {
+                guard current(token) else { return }
+                decode(clip, token:token, first:{ _ in }, completion:{ _ in })
+            }
+        }
+    }
     func cancel() {
         lock.lock(); generation += 1
-        if let process, process.isRunning { process.terminate() }
+        let task = process
         lock.unlock()
+        if let task, task.isRunning {
+            task.terminate()
+            DispatchQueue.global().asyncAfter(deadline:.now()+1) {
+                if task.isRunning { kill(task.processIdentifier,SIGKILL) }
+            }
+        }
+    }
+    func close() {
+        cancel()
+        // 退出前等待自有解码任务排空管道；取消超时的 FFmpeg 会被现有定时器回收。
+        queue.sync {}
     }
     private func current(_ token: Int) -> Bool { lock.lock(); defer { lock.unlock() }; return generation == token }
     func load(_ clip: Clip, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
         cancel()
         lock.lock(); let token = generation; lock.unlock()
-        if let value = cache.object(forKey: clip.id as NSString) { completion(.success(value)); return }
-        queue.async { [self] in
+        if let value = cached(clip.id) { completion(.success(value)); return }
+        queue.async { [self] in decode(clip,token:token,first:first,completion:completion) }
+    }
+    private func decode(_ clip: Clip, token: Int, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
             guard current(token) else { return }
+            if let value = cached(clip.id) {
+                DispatchQueue.main.async { if self.current(token) { completion(.success(value)) } }; return
+            }
             let task = Process(), output = Pipe()
             let errorURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             do {
@@ -104,10 +137,13 @@ final class Decoder {
                 lock.unlock()
                 defer { if task.isRunning { task.terminate() }; try? output.fileHandleForReading.close() }
                 var frames = [Frame](), pending = Data()
+                var referenceBounds = CGRect.zero
                 let stride = 512 * 512 * 4
-                while current(token) {
+                while true {
                     let part = output.fileHandleForReading.readData(ofLength: stride - pending.count)
                     if part.isEmpty { break }
+                    // 取消后仍排空管道，避免 FFmpeg 卡在写入、waitUntilExit 永不返回。
+                    if !current(token) { pending.removeAll(); continue }
                     pending.append(part)
                     if pending.count == stride {
                         let pixels = pending; pending = Data()
@@ -116,14 +152,17 @@ final class Decoder {
                             bytesPerRow: 2048, space: CGColorSpaceCreateDeviceRGB(),
                             bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue), provider: provider,
                             decode: nil, shouldInterpolate: true, intent: .defaultIntent)!
-                        var x0 = 512, y0 = 512, x1 = -1, y1 = -1
-                        pixels.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
-                            for y in 0..<512 { for x in 0..<512 where bytes[(y * 512 + x) * 4 + 3] > 0 {
-                                x0 = min(x0, x); y0 = min(y0, y); x1 = max(x1, x); y1 = max(y1, y)
-                            }}
+                        // 仅首帧求稳定边界；透明命中直接读取当前帧的 alpha。
+                        if frames.isEmpty {
+                            var x0 = 512, y0 = 512, x1 = -1, y1 = -1
+                            pixels.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+                                for y in 0..<512 { for x in 0..<512 where bytes[(y * 512 + x) * 4 + 3] > 0 {
+                                    x0 = min(x0,x); y0 = min(y0,y); x1 = max(x1,x); y1 = max(y1,y)
+                                }}
+                            }
+                            referenceBounds = x1 < 0 ? .zero : CGRect(x:x0,y:y0,width:x1-x0+1,height:y1-y0+1)
                         }
-                        let rect = x1 < 0 ? CGRect.zero : CGRect(x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1)
-                        let frame = Frame(image: image, pixels: pixels, bounds: rect)
+                        let frame = Frame(image:image,pixels:pixels,bounds:referenceBounds)
                         frames.append(frame)
                         if frames.count == 1 { DispatchQueue.main.async { if self.current(token) { first(frame) } } }
                     }
@@ -135,12 +174,12 @@ final class Decoder {
                     throw PetFailure(message: "无法解码「\(clip.title)」\n\(detail)")
                 }
                 let animation = Animation(frames)
-                cache.setObject(animation, forKey: clip.id as NSString, cost: animation.cost)
+                if pinnedIDs.contains(clip.id) { lock.lock(); pinned[clip.id] = animation; lock.unlock() }
+                else { cache.setObject(animation, forKey:clip.id as NSString,cost:animation.cost) }
                 DispatchQueue.main.async { if self.current(token) { completion(.success(animation)) } }
             } catch {
                 DispatchQueue.main.async { if self.current(token) { completion(.failure(error)) } }
             }
-        }
     }
 }
 

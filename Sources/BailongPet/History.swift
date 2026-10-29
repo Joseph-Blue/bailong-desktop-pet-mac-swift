@@ -5,6 +5,7 @@ final class Turn: Codable {
     var id: String? = nil
     var key = UUID().uuidString
     var input = "", status = "pending", messages = "", summary = "", steps = "", final = "", error = ""
+    var model: String? = nil, effort: String? = nil
     var date = Date()
     var owned = true
     var finished = false

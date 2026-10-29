@@ -13,6 +13,7 @@ final class FollowLauncher {
         let a = NSAlert(); a.messageText = "随 Codex 启动"
         a.informativeText = enabled ? "当前已启用。停用后不再自动启动桌宠。" : "启用后会在登录时运行用户级监测器，打开 Codex 或 ChatGPT 时启动桌宠。手动退出会保持退出，直到下一次打开周期。"
         a.addButton(withTitle:"取消"); a.addButton(withTitle:enabled ? "停用" : "启用")
+        a.applyAccent(primary:1)
         guard a.runModal() == .alertSecondButtonReturn else{return}
         do {
             if enabled {try command(["bootout","gui/\(getuid())/\(label)"]); try FileManager.default.removeItem(at:plist)}

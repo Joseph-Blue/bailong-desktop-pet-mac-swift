@@ -12,6 +12,7 @@ final class MenuAction: NSMenuItem {
 final class SpriteView: NSView {
     weak var pet: PetController?
     override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
     override func draw(_ dirtyRect: NSRect) {
         guard let pet, let frame = pet.currentFrame else { return }
         NSGraphicsContext.saveGraphicsState()
@@ -23,7 +24,7 @@ final class SpriteView: NSView {
     override func mouseDown(with event: NSEvent) { pet?.mouseDown(event) }
     override func mouseDragged(with event: NSEvent) { pet?.mouseDragged(event) }
     override func mouseUp(with event: NSEvent) { pet?.mouseUp(event) }
-    override func rightMouseDown(with event: NSEvent) { if let pet { NSMenu.popUpContextMenu(pet.makeMenu(), with: event, for: self) } }
+    override func rightMouseDown(with event: NSEvent) { pet?.showContextMenu() }
 }
 
 final class PetController: NSObject, NSMenuDelegate {
@@ -33,7 +34,7 @@ final class PetController: NSObject, NSMenuDelegate {
     let decoder = Decoder()
     let bubble = Bubble()
     let settings = SettingsPanel()
-    let defaults = UserDefaults.standard
+    let defaults: UserDefaults
     let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     var onComposer: () -> Void = {}
     var onHistory: (String?) -> Void = { _ in }
@@ -50,6 +51,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var mode = "idle"
     var began = ProcessInfo.processInfo.systemUptime
     var loading = false
+    private var warmed = false
     var pending: (Clip, String)?
     var startup: NSPanel?
     var baseBounds: CGRect?
@@ -66,7 +68,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var pauseTime: Double?
     var press: CGPoint?, pressOrigin = CGPoint.zero
     var dragged = false, dragFromDock = false
-    var clickTimer: Timer?
+    var dockRecallAt: Double?
+    var dockDoubleClick = false
     var timer: Timer?, desktopTimer: Timer?
     var lastInteraction = ProcessInfo.processInfo.systemUptime
     var nextLeisure = ProcessInfo.processInfo.systemUptime + 15, movementReady = 0.0
@@ -104,10 +107,14 @@ final class PetController: NSObject, NSMenuDelegate {
         let dx = dock == "left" ? exposure * bounds.width - bounds.maxX : size - exposure * bounds.width - bounds.minX
         return rotation.concatenating(CGAffineTransform(translationX: dx * dockProgress, y: 0))
     }
-    init(catalog: Catalog) {
-        self.catalog = catalog; current = catalog.idle
+    init(catalog: Catalog, defaults: UserDefaults = .standard) {
+        self.defaults = defaults; self.catalog = catalog; current = catalog.idle
         window = PetWindow(contentRect: NSRect(x: 0,y: 0,width: 256,height: 256), styleMask: [.borderless,.nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
+        // 脚本与打包版共用初始化；首次将两个 100% 写入偏好，之后保留用户选择。
+        for key in ["petPercent","bubblePercent"] where defaults.object(forKey:key) == nil {
+            defaults.set(100,forKey:key)
+        }
         window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = false
         window.level = .floating; window.hidesOnDeactivate = false
         window.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .fullScreenNone]
@@ -133,10 +140,10 @@ final class PetController: NSObject, NSMenuDelegate {
             guard let self else { return }; self.sleeping = false; self.motion = nil; self.interaction(); self.keepOnScreen(); self.checkDesktop(); self.applyVisibility(); self.idle()
         })
         observationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.keepOnScreen() })
-        let startup = NSPanel(contentRect:NSRect(x:0,y:0,width:340,height:120),styleMask:[.titled],backing:.buffered,defer:false)
-        startup.title = "白龙桌宠"; startup.isReleasedWhenClosed = false
-        let heading = label("正在准备透明动画…"); heading.frame = NSRect(x:24,y:70,width:290,height:24)
-        let progress = NSProgressIndicator(frame:NSRect(x:24,y:40,width:290,height:18)); progress.isIndeterminate = true; progress.style = .bar; progress.startAnimation(nil)
+        let startup = NSPanel(contentRect:NSRect(x:0,y:0,width:440,height:108),styleMask:[.titled],backing:.buffered,defer:false)
+        startup.title = "白龙桌宠"; startup.isReleasedWhenClosed = false; startup.hidesOnDeactivate = false
+        let heading = label("主人，等我整理好裙摆和小翅膀，马上就来…"); heading.frame = NSRect(x:24,y:60,width:392,height:24)
+        let progress = NSProgressIndicator(frame:NSRect(x:24,y:28,width:392,height:16)); progress.isIndeterminate = true; progress.style = .bar; progress.startAnimation(nil)
         startup.contentView?.addSubview(heading); startup.contentView?.addSubview(progress)
         startup.center(); startup.orderFrontRegardless(); self.startup = startup
         window.orderFrontRegardless(); play(catalog.idle, "idle")
@@ -145,32 +152,48 @@ final class PetController: NSObject, NSMenuDelegate {
     func soundOnce() { if soundEnabled { sound?.play() } }
     func play(_ clip: Clip, _ mode: String) {
         if self.motion != nil { movementReady = now + 10 }; motion = nil
-        current = clip; self.mode = mode; loading = true
+        loading = true
         if bubble.kind == "interaction" { bubble.hide() }
         if mode == "interaction", let line = clip.line { say(line, kind: "interaction") }
+        if current.id == clip.id, let animation, animation.frames.count > 1 {
+            decoder.cancel(); loading = false; self.mode = mode; began = now; frameIndex = 0
+            return
+        }
         decoder.load(clip, first: { [weak self] frame in
             guard let self else { return }
-            if self.animation == nil { self.animation = Animation([frame]); self.frameIndex = 0; self.view.needsDisplay = true }
+            if self.animation == nil {
+                self.current = clip; self.mode = mode; self.began = self.now
+                self.animation = Animation([frame]); self.frameIndex = 0; self.view.needsDisplay = true
+            }
             if clip.id == self.catalog.idle.id && self.baseBounds == nil { self.baseBounds = frame.bounds }
         }, completion: { [weak self] result in
             guard let self else { return }; self.loading = false
             switch result {
             case .success(let animation):
                 self.startup?.orderOut(nil); self.startup = nil
+                // 像素、时间轴和清单校准一起切换，不能用新动作倍率绘制旧帧。
+                self.current = clip; self.mode = mode
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
-                self.pauseTime = self.hidden ? self.now : nil; self.view.needsDisplay = true
+                self.pauseTime = self.hidden || self.press != nil && !self.dragged ? self.now : nil
+                self.view.needsDisplay = true
                 if clip.id == self.catalog.idle.id {
                     let icon = NSImage(cgImage: animation.frames[0].image, size: NSSize(width: 128,height: 128))
-                    NSApp.applicationIconImage = icon
-                    let mini = icon.copy() as! NSImage; mini.size = NSSize(width: 22,height: 22)
-                    self.status.button?.image = mini; self.status.button?.title = ""
+                    NSApp.applicationIconImage = AppIcons.application ?? icon
+                    if self.status.button?.image == nil {self.status.button?.image = AppIcons.petSilhouette(animation.frames[0])}
+                    self.status.button?.title = ""
                 }
                 if self.mode == "move" { self.planMotion(manual: true) }
+                if !self.warmed {
+                    self.warmed = true
+                    self.decoder.warm([self.catalog.dragAnimation,self.catalog.landingAnimation]+Array(self.catalog.idles.dropFirst()))
+                }
             case .failure(let error):
                 self.startup?.orderOut(nil); self.startup = nil
-                let alert = NSAlert(); alert.messageText = "动画读取失败"; alert.informativeText = error.localizedDescription
-                alert.addButton(withTitle:"重试"); alert.addButton(withTitle:"关闭提示")
-                if alert.runModal() == .alertFirstButtonReturn { self.play(clip,mode) }
+                self.began = self.now
+                self.bubble.showFailure(AppFailure.animation(error),scale:Double(self.bubblePercent)/100,
+                    retry:{ [weak self] in self?.play(clip,mode) })
+                self.placeBubble()
+
             }
         })
     }
@@ -191,36 +214,44 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         play(Double.random(in: 0..<1) < 0.8 ? catalog.idles[0] : catalog.idles[1], "idle")
     }
-    func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !quotaActive && press == nil && clickTimer == nil && !menuOpen && !settingsOpen && now >= max(nextLeisure,lastInteraction+15) }
+    func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !quotaActive && press == nil && dockRecallAt == nil && !menuOpen && !settingsOpen && now >= max(nextLeisure,lastInteraction+15) }
     func route(_ clip: Clip) -> CGPoint? {
         let a = area(screen)
         return movementTarget(origin: position, bounds: CGRect(x:a.minX,y:a.minY,width:max(0,a.width-size),height:max(0,a.height-size)), size: size, clip: clip)
     }
     func planMotion(manual: Bool) { motion = (position, route(current) ?? position) }
     func tick() {
+        // 与作者一致，首次松手后给第二击 250ms；到期由持续动画时钟召回，无需新的鼠标事件。
+        if let deadline = dockRecallAt, now >= deadline, press == nil {
+            dockRecallAt = nil; undock()
+        }
         if dockAnimating {
             let t = min(1, (now-dockBegan)/0.3)
-            let eased = dockTarget == 1 ? 1-pow(1-t,3) : pow(1-t,3)
-            dockProgress = dockTarget == 1 ? dockFrom + (1-dockFrom)*eased : dockFrom*eased
+            // 作者展开公式：起始进度 × (1 - 时间进度)^3，连续衰减到零。
+            dockProgress = dockTarget == 1 ? dockFrom + (1-dockFrom)*(1-pow(1-t,3)) : dockFrom*pow(1-t,3)
             if t >= 1 { dockAnimating = false; dockProgress = dockTarget
                 if dockTarget == 0 { dock = nil; move(constrained(dockRestore,screen:screen)); play(catalog.idle,"idle")
+                    defaults.set(window.frame.minX,forKey:"x"); defaults.set(window.frame.minY,forKey:"y")
                     if let pending { self.pending = nil; play(pending.0,pending.1) }
                 }
             }
         }
-        if !hidden && !loading && (press == nil || dragged), let animation {
+        if !hidden && (press == nil || dragged), let animation {
             let elapsed = now-began, duration = current.durationMs/1000
             if let (origin,target) = motion {
                 let start = current.moveStartMs ?? 0, stop = current.moveStopMs ?? current.durationMs
                 let f = max(0,min(1,(elapsed*1000-start)/(stop-start)))
                 move(CGPoint(x:origin.x+(target.x-origin.x)*f,y:origin.y+(target.y-origin.y)*f))
             }
-            if elapsed >= duration {
+            if elapsed >= duration && !loading {
                 if motion != nil {movementReady = now + 10; motion = nil}
                 if mode == "drag" { began = now }
                 else if mode == "opening" && !activeTasks.isEmpty, let clip = catalog.work.filter({$0.id != "work01"}).randomElement() { play(clip,"working") }
                 else { idle() }
-            } else { frameIndex = min(animation.frames.count-1,Int(elapsed/duration*Double(animation.frames.count))) }
+            } else {
+                let playback = max(0,elapsed).truncatingRemainder(dividingBy:duration)
+                frameIndex = min(animation.frames.count-1,Int(playback/duration*Double(animation.frames.count)))
+            }
         }
         if !hidden {
             view.needsDisplay = true; placeBubble()
@@ -234,37 +265,44 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func mouseDown(_ event: NSEvent) {
-        clickTimer?.invalidate(); clickTimer = nil; interaction()
+        dockDoubleClick = dock != nil && dockRecallAt.map {now <= $0} == true
+        dockRecallAt = nil; interaction()
         if motion != nil { idle() }
         press = NSEvent.mouseLocation; pressOrigin = position; dragged = false; dragFromDock = dock != nil
         pauseTime = now
+        // 作者在第二次按下时直接取消召回并查额度，松手仅消费这次点击。
+        if dockDoubleClick {soundOnce(); onQuota()}
     }
     func mouseDragged(_ event: NSEvent) {
-        guard let press else { return }
+        guard let press, !dockDoubleClick else {return}
         let p = NSEvent.mouseLocation, delta = CGPoint(x:p.x-press.x,y:press.y-p.y)
         if !dragged && abs(delta.x)+abs(delta.y) >= 8 {
-            dragged = true; dock = nil; dockAnimating = false; dockProgress = 0
-            bubble.hide(); play(catalog.dragAnimation,"drag")
+            dragged = true; pauseTime = nil
+            if dragFromDock {
+                // 吸边拖动与召回一致，不切换到跟随鼠标的拖拽动作。
+                dockRecallAt = nil; undock(); return
+            }
+            pending = nil; bubble.hide(); play(catalog.dragAnimation,"drag")
         }
-        if dragged {
+        if dragged && !dragFromDock {
             let screen = NSScreen.screens.first(where:{$0.frame.contains(p)}) ?? self.screen
             move(constrained(CGPoint(x:pressOrigin.x+delta.x,y:pressOrigin.y+delta.y),screen:screen))
-            if !loading, let animation { frameIndex = Int((now-began).truncatingRemainder(dividingBy:current.durationMs/1000)/(current.durationMs/1000)*Double(animation.frames.count)); view.needsDisplay = true }
+            if !loading, let animation {frameIndex = Int((now-began).truncatingRemainder(dividingBy:current.durationMs/1000)/(current.durationMs/1000)*Double(animation.frames.count)); view.needsDisplay = true}
         }
     }
     func mouseUp(_ event: NSEvent) {
-        guard press != nil else { return }; press = nil; interaction()
-        if !dragged, let pauseTime { began += now-max(pauseTime,began) }; pauseTime = nil
-        if dragged { dragged = false
-            if !snap() { if dragFromDock { idle() } else { play(catalog.landingAnimation,"landing") } }
-        } else if event.clickCount >= 2 { soundOnce(); onQuota() }
-        else {
-            clickTimer = Timer.scheduledTimer(withTimeInterval: NSEvent.doubleClickInterval, repeats: false) { [weak self] _ in
-                guard let self else { return }; self.clickTimer = nil
-                if self.dock != nil { self.undock() }
-                else if let clip = (self.catalog.variants+self.catalog.work).filter({$0.id != self.current.id}).randomElement() { self.preview(clip) }
-            }
-        }
+        guard press != nil else {return}; press = nil; interaction()
+        if !dragged, let pauseTime {began += now-max(pauseTime,began)}; pauseTime = nil
+        if dragged {
+            dragged = false
+            if !dragFromDock && !snap() {play(catalog.landingAnimation,"landing")}
+        } else if dockDoubleClick {
+            dockDoubleClick = false
+        } else if dragFromDock && dock != nil {
+            dockRecallAt = now+0.25
+        } else if event.clickCount >= 2 {
+            soundOnce(); onQuota()
+        } else if let clip = (catalog.variants+catalog.work).filter({$0.id != current.id}).randomElement() {preview(clip)}
         defaults.set(window.frame.minX,forKey:"x"); defaults.set(window.frame.minY,forKey:"y")
     }
     func snap() -> Bool {
@@ -276,34 +314,46 @@ final class PetController: NSObject, NSMenuDelegate {
         dockProgress = 0; dockFrom = 0; dockTarget = 1; dockBegan = now; dockAnimating = true
         bubble.hide(); play(catalog.idle,"idle"); return true
     }
-    func undock() { guard dock != nil else { return }; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
+    func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
     func preview(_ clip: Clip) {
         interaction(); soundOnce(); manualHidden = false; applyVisibility()
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", seconds: Double = 4, thread: String? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", seconds: Double = 4, thread: String? = nil, followsText: Bool = true, resetText: Bool = false) {
         guard !hidden && (kind != "task" || taskBubbles) else { return }
-        if kind != "quota" && bubble.kind == "quota" { quotaActive = false }
+        if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
         bubble.onDetails = { [weak self] in self?.onHistory(thread) }
-        bubble.show(title:title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:seconds,details:thread != nil)
+        bubble.show(title:title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:seconds,details:thread != nil,followsText:followsText,resetText:resetText)
         placeBubble()
+    }
+    var stableLocalBounds: CGRect {
+        let b = baseBounds ?? CGRect(x:128,y:64,width:256,height:448)
+        return CGRect(x:b.minX*size/512,y:b.minY*size/512,width:b.width*size/512,height:b.height*size/512)
+    }
+    var visiblePetFrame: CGRect {
+        let local = stableLocalBounds.applying(transform).intersection(view.bounds)
+        return local.isNull ? window.frame : window.convertToScreen(view.convert(local,to:nil))
     }
     func placeBubble() {
         guard bubble.visible else{return}
-        var visible = window.frame
-        if let frame = currentFrame {
-            let r = drawRect, b = frame.bounds
-            let local = CGRect(x:r.minX+b.minX*r.width/512,y:r.minY+b.minY*r.height/512,width:b.width*r.width/512,height:b.height*r.height/512).applying(transform).intersection(view.bounds)
-            if !local.isNull {visible = window.convertToScreen(view.convert(local,to:nil))}
-        }
-        bubble.place(near:visible,screen:screen,dock:dock)
+        bubble.place(near:visiblePetFrame,screen:screen,dock:dock)
     }
     func resize(_ p: Int, _ b: Int) {
-        let old = window.frame; petPercent = p; bubblePercent = b; interaction()
+        let old = window.frame, bubbleChanged = bubblePercent != b
+        petPercent = p; bubblePercent = b; interaction()
         let side = 256 * Double(p)/100
         window.setFrame(NSRect(x:old.midX-side/2,y:old.minY,width:side,height:side),display:true)
-        keepOnScreen(); say("气泡尺寸预览",body:"拖动滑块或输入百分比，立即调整大小。",kind:"preview",seconds:0)
+        keepOnScreen()
+        if bubbleChanged || bubble.kind == "preview" {showSizePreview()}
+    }
+    func showSizePreview() {
+        guard !hidden else{return}
+        quotaActive = false
+        // 作者 size_preview 本身是空白框；按用户要求，改用 chat_ui.py 的普通对话文案填充预览。
+        bubble.onDetails = { [weak self] in self?.onHistory(nil) }
+        bubble.show(title:"主人，我正在回复你…",body:"主人，我在这里等你呀。把想做的事写在下方，我们就可以开始啦。",kind:"preview",scale:Double(bubblePercent)/100,seconds:8,details:true)
+        placeBubble()
     }
     func keepOnScreen() { motion = nil; move(constrained(position,screen:screen)); if dock != nil { let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y)) } }
     func taskStarted(_ key: String) { let first = activeTasks.isEmpty; activeTasks.insert(key); interaction()
@@ -334,11 +384,19 @@ final class PetController: NSObject, NSMenuDelegate {
         if fullscreenHidden != full && now-fullCandidateSince >= (full ? 0.25 : 0.75) { fullscreenHidden = full; applyVisibility() }
     }
     func applyVisibility() {
-        if hidden { if pauseTime == nil { pauseTime = now }; window.orderOut(nil); bubble.hide(); quotaActive = false; onVisibility(false) }
+        if hidden { press = nil; dragged = false; dockRecallAt = nil; dockDoubleClick = false; if pauseTime == nil { pauseTime = now }; window.orderOut(nil); bubble.hide(); quotaActive = false; onVisibility(false) }
         else { if let pauseTime { began += now-pauseTime }; pauseTime = nil; window.orderFrontRegardless(); interaction() }
         refreshMenu()
     }
     func reveal() { manualHidden = false; keepOnScreen(); applyVisibility() }
+    func showContextMenu() {
+        dockRecallAt = nil; dockDoubleClick = false
+        let menu = makeMenu(); menu.update()
+        let cursor = NSEvent.mouseLocation
+        let target = NSScreen.screens.first(where:{$0.frame.contains(cursor)}) ?? screen
+        let frame = MenuPlacement.frame(size:menu.size,cursor:cursor,screen:target.visibleFrame,pet:visiblePetFrame)
+        menu.popUp(positioning:nil,at:NSPoint(x:frame.minX,y:frame.maxY),in:nil)
+    }
     func makeMenu() -> NSMenu {
         let menu = NSMenu(); menu.delegate = self
         menu.addItem(MenuAction(manualHidden ? "显示桌宠" : "隐藏桌宠") { [weak self] in guard let self else{return}; self.manualHidden.toggle(); self.applyVisibility() })
@@ -350,24 +408,26 @@ final class PetController: NSObject, NSMenuDelegate {
             let item = NSMenuItem(title:name,action:nil,keyEquivalent:""); let sub = NSMenu()
             for clip in clips { sub.addItem(MenuAction(clip.title) { [weak self] in self?.preview(clip) }) }; item.submenu = sub; menu.addItem(item)
         }
-        menu.addItem(MenuAction("桌宠与气泡大小…") { [weak self] in guard let self else{return}; self.settingsOpen = true; self.settings.show(self.petPercent,self.bubblePercent) })
         menu.addItem(MenuAction("自主移动",checked:autoMove) { [weak self] in guard let self else{return}; self.autoMove.toggle(); self.interaction(); if self.motion != nil {self.idle()}; self.refreshMenu() })
         menu.addItem(MenuAction("播放音效",checked:soundEnabled) { [weak self] in self?.soundEnabled.toggle(); self?.refreshMenu() })
         menu.addItem(MenuAction("任务气泡提醒",checked:taskBubbles) { [weak self] in guard let self else{return}; self.taskBubbles.toggle(); if !self.taskBubbles && self.bubble.kind == "task" {self.bubble.hide()}; self.refreshMenu() })
         menu.addItem(MenuAction("全屏时自动隐藏",checked:autoFullscreen) { [weak self] in self?.autoFullscreen.toggle(); self?.checkDesktop(); self?.refreshMenu() })
         menu.addItem(MenuAction("随 Codex 启动设置…") { [weak self] in self?.onAutostart() })
-        menu.addItem(MenuAction("任务同步状态…") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "任务同步"; a.informativeText = self.syncStatus(); a.runModal() })
+        menu.addItem(MenuAction("任务同步状态…") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "任务同步"; a.informativeText = self.syncStatus(); a.applyAccent(); a.runModal() })
+        menu.addItem(MenuAction("桌宠大小与外观…") { [weak self] in guard let self else{return}; self.settingsOpen = true; if !self.bubble.visible {self.showSizePreview()}; self.settings.show(self.petPercent,self.bubblePercent) })
         menu.addItem(.separator())
-        menu.addItem(MenuAction("关于白龙桌宠…") { NSApp.orderFrontStandardAboutPanel(options:[.applicationName:"白龙桌宠",.applicationVersion:Paths.version,.credits:NSAttributedString(string:"Swift + AppKit · 原作 jingh12312-rgb\n本地开发版本，Apple Silicon")]) })
+        menu.addItem(MenuAction("关于白龙桌宠…") {AppIcons.showAbout()})
         menu.addItem(MenuAction("退出白龙桌宠") { [weak self] in self?.onQuit() })
         return menu
     }
     func refreshMenu() { status.menu = makeMenu() }
-    func menuWillOpen(_ menu: NSMenu) { menuOpen = true; interaction() }
+    func menuWillOpen(_ menu: NSMenu) { menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
     func close() {
-        startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); clickTimer?.invalidate(); decoder.cancel(); bubble.hide(); settings.window.orderOut(nil)
+        startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); dockRecallAt = nil; decoder.close(); bubble.hide(); settings.window.orderOut(nil)
         for token in observationTokens { NSWorkspace.shared.notificationCenter.removeObserver(token); NotificationCenter.default.removeObserver(token) }
         NSStatusBar.system.removeStatusItem(status); window.orderOut(nil)
     }
 }
+
+extension CGRect { var center: CGPoint { CGPoint(x:midX,y:midY) } }

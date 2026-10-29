@@ -3,7 +3,7 @@ import AppKit
 func showError(_ title: String, _ error: Error) {
     let alert = NSAlert(); alert.messageText = title; alert.informativeText = error.localizedDescription
     alert.alertStyle = .warning; alert.addButton(withTitle: "好")
-    NSApp.activate(ignoringOtherApps: true); alert.runModal()
+    alert.applyAccent(); NSApp.activate(ignoringOtherApps: true); alert.runModal()
 }
 func label(_ text: String, bold: Bool = false) -> NSTextField {
     let view = NSTextField(wrappingLabelWithString: text)
@@ -16,122 +16,298 @@ func materialView() -> NSVisualEffectView {
 }
 final class ActionButton: NSButton {
     var callback: () -> Void
+    private var prominent = false
+    var keepsAccentWhenInactive = false {didSet {updateAccent()}}
     init(_ title: String, _ callback: @escaping () -> Void) {
         self.callback = callback; super.init(frame: .zero)
         self.title = title; bezelStyle = .rounded; target = self; action = #selector(invokeCallback)
+        NotificationCenter.default.addObserver(self,selector:#selector(updateAccent),name:AppAccent.didChange,object:nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+    func emphasize(_ enabled: Bool = true) {prominent = enabled; updateAccent()}
+    @objc private func updateAccent() {
+        bezelColor = prominent ? AppAccent.color : nil
+        isBordered = !(prominent && keepsAccentWhenInactive); needsDisplay = true
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        guard prominent && keepsAccentWhenInactive else {super.draw(dirtyRect); return}
+        let color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : AppAccent.color
+        color.withAlphaComponent(isEnabled ? 1 : 0.45).setFill()
+        NSBezierPath(roundedRect:bounds.insetBy(dx:0,dy:1),xRadius:7,yRadius:7).fill()
+        let attributes: [NSAttributedString.Key:Any] = [.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.white]
+        let size = (title as NSString).size(withAttributes:attributes)
+        (title as NSString).draw(at:NSPoint(x:(bounds.width-size.width)/2,y:(bounds.height-size.height)/2),withAttributes:attributes)
+    }
     @objc func invokeCallback() { callback() }
 }
+final class BubbleCloseButton: NSButton {
+    var onClose: () -> Void = {}
+    private var tracking: NSTrackingArea?
+    private var hovering = false
+    init() {
+        super.init(frame:.zero)
+        title = ""; image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")
+        imagePosition = .imageOnly; isBordered = false; contentTintColor = .secondaryLabelColor
+        toolTip = "关闭气泡"; target = self; action = #selector(closeBubble)
+    }
+    required init?(coder: NSCoder) {fatalError()}
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
+    override func updateTrackingAreas() {
+        if let tracking {removeTrackingArea(tracking)}
+        let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+        addTrackingArea(area); tracking = area; super.updateTrackingAreas()
+    }
+    override func mouseEntered(with event: NSEvent) {hovering = true; needsDisplay = true}
+    override func mouseExited(with event: NSEvent) {hovering = false; needsDisplay = true}
+    override func draw(_ dirtyRect: NSRect) {
+        if hovering || isHighlighted {
+            NSColor.secondaryLabelColor.withAlphaComponent(isHighlighted ? 0.24 : 0.14).setFill()
+            NSBezierPath(ovalIn:bounds.insetBy(dx:1,dy:1)).fill()
+        }
+        super.draw(dirtyRect)
+    }
+    @objc private func closeBubble() {onClose()}
+}
+final class TopDownView: NSView {override var isFlipped: Bool {true}}
 final class PetWindow: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
+// 单层绘制透明圆角，避免 NSVisualEffectView 的边缘高光与圆角裁切叠出白边。
+final class BubbleBackgroundView: NSView {
+    override var isOpaque: Bool {false}
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill()
+        NSBezierPath(roundedRect:bounds,xRadius:14,yRadius:14).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
+}
 final class Bubble {
     let window: PetWindow
-    private let title = label("", bold: true)
-    private let text = NSTextView()
+    private let title = label("", bold:true)
+    private let text = StreamingTextView()
     private let scroll = NSScrollView()
-    private var closeButton: ActionButton!
+    private let closeButton = BubbleCloseButton()
     private var details: ActionButton!
+    private var retryButton: ActionButton!
     private var timer: Timer?
+    private var scale = 1.0
     var onClose: () -> Void = {}
     var onDetails: () -> Void = {}
     var kind = ""
     var visible: Bool { window.isVisible }
     init() {
-        window = PetWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 200), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        window = PetWindow(contentRect:NSRect(x:0,y:0,width:320,height:100),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = true
         window.level = .floating; window.hidesOnDeactivate = false
-        window.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .fullScreenNone]
-        let content = materialView(); content.wantsLayer = true; content.layer?.cornerRadius = 16; content.layer?.masksToBounds = true
+        window.collectionBehavior = [.canJoinAllSpaces,.ignoresCycle,.fullScreenNone]
+        let content = BubbleBackgroundView()
         window.contentView = content
         text.isEditable = false; text.isSelectable = true; text.drawsBackground = false
-        text.font = .systemFont(ofSize: 13); text.textColor = .labelColor
-        text.isVerticallyResizable = true; text.isHorizontallyResizable = false
-        text.textContainer?.widthTracksTextView = true
-        scroll.documentView = text; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
-        closeButton = ActionButton("×") { [weak self] in self?.hide(); self?.onClose() }
-        details = ActionButton("详情") { [weak self] in self?.onDetails() }
-        for view in [title, scroll, closeButton, details] as [NSView] { content.addSubview(view) }
-    }
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false) {
-        timer?.invalidate()
-        if scroll.documentView !== text {scroll.documentView = text}
-        let same = self.kind == kind
-        let clip = scroll.contentView
-        let atEnd = clip.bounds.maxY >= text.bounds.maxY - 8
-        let old = clip.bounds.origin
-        self.kind = kind
-        let w = 320 * scale, h = (body.isEmpty ? 96.0 : 240.0) * scale
-        window.setContentSize(NSSize(width: w, height: h))
-        title.stringValue = heading; title.font = .boldSystemFont(ofSize: 13 * scale)
-        title.frame = NSRect(x: 28, y: h - 64 * scale, width: w - 50, height: 48 * scale)
-        closeButton.frame = NSRect(x: 2, y: h - 28, width: 26, height: 26)
-        scroll.frame = NSRect(x: 14, y: 44, width: w - 28, height: max(0, h - 112 * scale))
-        scroll.isHidden = body.isEmpty
-        text.frame.size.width = scroll.contentSize.width
-        text.font = .systemFont(ofSize: 13 * scale); text.string = body
-        if same && !atEnd { clip.scroll(to: old) } else { text.scrollToEndOfDocument(nil) }
-        details.frame = NSRect(x: w - 82, y: 9, width: 68, height: 28); details.isHidden = !enabled
-        window.orderFrontRegardless()
-        if seconds > 0 { timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in self?.hide(); self?.onClose() } }
-    }
-    func quotaRows(_ rows: [(String, Double?, String)], scale: Double) {
-        let width = scroll.contentSize.width
-        let rowHeight = 78 * scale
-        let content = NSView(frame:NSRect(x:0,y:0,width:width,height:rowHeight*Double(rows.count)))
-        for (index,row) in rows.enumerated() {
-            let y = content.frame.height-Double(index+1)*rowHeight
-            let amount = row.1.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供"
-            let text = label(row.0+" · "+amount+"\n重置："+row.2)
-            text.font = .systemFont(ofSize:12*scale); text.frame = NSRect(x:2,y:y+26*scale,width:width-8,height:46*scale)
-            let bar = NSProgressIndicator(frame:NSRect(x:2,y:y+8*scale,width:width-8,height:12*scale))
-            bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 100
-            bar.doubleValue = row.1 ?? 0; bar.isHidden = row.1 == nil
-            content.addSubview(text); content.addSubview(bar)
+        text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = [.width]
+        text.textContainer?.widthTracksTextView = true; text.textContainerInset = NSSize(width:0,height:2)
+        text.textColor = .labelColor
+        scroll.documentView = text; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
+        closeButton.onClose = { [weak self] in self?.hide(); self?.onClose() }
+        details = ActionButton("详情") { [weak self] in
+            guard let self else{return}
+            let action = self.onDetails
+            self.hide(); self.onClose(); action()
         }
-        scroll.documentView = content
-        scroll.contentView.scroll(to:NSPoint(x:0,y:max(0,content.frame.height-scroll.contentSize.height)))
+        details.keepsAccentWhenInactive = true
+        retryButton = ActionButton("重试") {}; retryButton.keepsAccentWhenInactive = true; retryButton.emphasize(); retryButton.isHidden = true
+        for v in [title,scroll,closeButton,details,retryButton] as [NSView] { content.addSubview(v) }
+    }
+    private func layout(bodyHeight: Double) {
+        let w = 320*scale, margin = 16*scale
+        let headingWidth = w-margin*2-32*scale
+        let font = title.font!
+        let firstLineHeight = (font.ascender-font.descender+font.leading).rounded(.up)+4
+        let headingHeight = max(firstLineHeight,(title.stringValue as NSString).boundingRect(with:NSSize(width:headingWidth,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font]).height.rounded(.up)+4)
+        let footer = details.isHidden && retryButton.isHidden ? 0 : 42.0
+        let h = margin*2+headingHeight+(bodyHeight > 0 ? 12*scale+bodyHeight : 0)+footer
+        window.setContentSize(NSSize(width:w,height:h))
+        title.frame = NSRect(x:margin+32*scale,y:h-margin-headingHeight,width:headingWidth,height:headingHeight)
+        let closeSide = 24*scale
+        closeButton.frame = NSRect(x:margin-2*scale,y:h-margin-firstLineHeight/2-closeSide/2,width:closeSide,height:closeSide)
+        closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
+        scroll.frame = NSRect(x:margin,y:margin+footer,width:w-2*margin,height:bodyHeight)
+        scroll.isHidden = bodyHeight <= 0
+        text.frame.size.width = scroll.contentSize.width
+        text.textContainer?.containerSize = NSSize(width:scroll.contentSize.width,height:CGFloat.greatestFiniteMagnitude)
+        retryButton.frame = NSRect(x:w-margin-82,y:12,width:82,height:28)
+        details.frame = retryButton.isHidden ? NSRect(x:margin,y:12,width:w-2*margin,height:28) : NSRect(x:margin,y:12,width:w-2*margin-94,height:28)
+    }
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, followsText: Bool = true, resetText: Bool = false) {
+        timer?.invalidate()
+        let same = self.kind == kind && scroll.documentView === text && text.automaticallyFollowsEnd == followsText
+        text.automaticallyFollowsEnd = followsText
+        self.kind = kind; self.scale = scale
+        if scroll.documentView !== text {scroll.documentView = text}
+        title.stringValue = heading; title.font = .systemFont(ofSize:13*scale,weight:.semibold)
+        text.font = .systemFont(ofSize:13*scale)
+        details.title = "详情"; details.isHidden = !enabled; details.emphasize(); retryButton.isHidden = true
+        let rendered = kind == "task" ? MarkdownText.render(body,font:text.font!,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:text.font!,.foregroundColor:NSColor.labelColor])
+        let height = body.isEmpty ? 0 : min(180*scale,max(24*scale,rendered.boundingRect(with:NSSize(width:288*scale-12,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading]).height+12))
+        layout(bodyHeight:height)
+        text.setContent(rendered,animated:kind == "task" && followsText,reset:!same || resetText)
+        window.orderFrontRegardless()
+        // 所有回复/提示气泡均会收起；正在更新的内容会重新计时。
+        let timer = Timer(timeInterval:seconds > 0 ? seconds : 12,repeats:false) { [weak self] _ in self?.hide(); self?.onClose() }
+        self.timer = timer; RunLoop.main.add(timer,forMode:.common)
+    }
+    func showFailure(_ failure: AppFailure, scale: Double, retry: (() -> Void)? = nil) {
+        onDetails = {failure.showDetails()}
+        show(title:failure.title,body:failure.message,kind:"error",scale:scale,seconds:0,details:true)
+        details.title = "技术详情…"
+        if let retry {retryButton.title = "重试"; retryButton.isHidden = false; retryButton.callback = retry}
+        else if failure.openDesktop {retryButton.title = "打开 Codex"; retryButton.isHidden = false; retryButton.callback = {CodexConnection.openDesktop()}}
+        layout(bodyHeight:scroll.frame.height)
+    }
+    func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, retry: (() -> Void)? = nil) {
+        if let failure {
+            onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
+            if let retry {retryButton.title = "重试"; retryButton.callback = retry; retryButton.isHidden = false}
+        }
+        let width = scroll.frame.width - (scroll.scrollerStyle == .legacy ? NSScroller.scrollerWidth(for:.regular,scrollerStyle:.legacy) : 0)
+        let content = TopDownView(frame:NSRect(x:0,y:0,width:width,height:1))
+        var y = 0.0
+        @discardableResult func addText(_ value: String, font: NSFont, color: NSColor = .labelColor) -> CGFloat {
+            let text = label(value); text.font = font; text.textColor = color
+            let height = max(font.pointSize+5,(value as NSString).boundingRect(with:NSSize(width:width,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font]).height.rounded(.up)+3)
+            text.frame = NSRect(x:0,y:y,width:width,height:height); content.addSubview(text); y += height
+            return height
+        }
+        addText("套餐 · "+overview.plan,font:.systemFont(ofSize:13*scale,weight:.semibold)); y += 12*scale
+        for (index,row) in overview.rows.enumerated() {
+            if index > 0 {
+                let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
+            }
+            let headingFont = NSFont.systemFont(ofSize:12*scale,weight:.medium)
+            let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*scale,weight:.semibold)
+            // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
+            // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
+            let heading = NSTextField(labelWithString:row.title); heading.font = headingFont
+            let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
+            for field in [heading,amount] {
+                field.maximumNumberOfLines = 1; field.usesSingleLineMode = true
+                field.lineBreakMode = .byTruncatingTail; field.toolTip = field.stringValue
+            }
+            let gap = 12*scale
+            let headingMinimum = min(heading.fittingSize.width,96*scale)
+            let amountWidth = min(amount.fittingSize.width.rounded(.up),width-headingMinimum-gap)
+            let rowHeight = max(22*scale,max(heading.fittingSize.height,amount.fittingSize.height).rounded(.up))
+            heading.frame = NSRect(x:0,y:y,width:width-amountWidth-gap,height:rowHeight)
+            amount.frame = NSRect(x:width-amountWidth,y:y,width:amountWidth,height:rowHeight)
+            content.addSubview(heading); content.addSubview(amount); y += rowHeight
+            if let amount = row.remaining {
+                y += 4*scale
+                let bar = AccentProgressIndicator(frame:NSRect(x:0,y:y,width:width,height:9*scale))
+                bar.style = .bar; bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 100; bar.doubleValue = amount
+                content.addSubview(bar); y += 16*scale
+            }
+            if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*scale),color:.secondaryLabelColor)}
+            y += 12*scale
+        }
+        if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*scale,weight:.medium))}
+        content.frame.size.height = y
+        layout(bodyHeight:min(320*scale,y))
+        scroll.documentView = content; scroll.contentView.scroll(to:.zero)
     }
     func place(near rect: CGRect, screen: NSScreen, dock: String?) {
         let a = screen.visibleFrame, s = window.frame.size
-        var x = rect.midX - s.width / 2, y = rect.maxY + 8
-        if dock == "left" { x = rect.maxX + 8; y = rect.midY - s.height / 2 }
-        else if dock == "right" { x = rect.minX - s.width - 8; y = rect.midY - s.height / 2 }
-        else if y + s.height > a.maxY { y = rect.minY - s.height - 8 }
-        window.setFrameOrigin(NSPoint(x: max(a.minX, min(x, a.maxX - s.width)), y: max(a.minY, min(y, a.maxY - s.height))))
+        var x = rect.midX-s.width/2, y = rect.maxY+10
+        if dock == "left" {x = rect.maxX+10; y = rect.midY-s.height/2}
+        else if dock == "right" {x = rect.minX-s.width-10; y = rect.midY-s.height/2}
+        else if kind == "quota" {
+            // 额度在桌宠右侧显示；右侧放不下时切到左侧。
+            x = rect.maxX+10; y = rect.midY-s.height/2
+            if x+s.width > a.maxX {x = rect.minX-s.width-10}
+        }
+        else if kind == "task" || kind == "preview" {
+            x = rect.minX-s.width-10; y = rect.midY-s.height/2
+            if x < a.minX {x = rect.maxX+10}
+        }
+        else if y+s.height > a.maxY {y = rect.minY-s.height-10}
+        let origin = NSPoint(x:max(a.minX,min(x,a.maxX-s.width)).rounded(),y:max(a.minY,min(y,a.maxY-s.height)).rounded())
+        if origin != window.frame.origin {window.setFrameOrigin(origin)}
     }
-    func hide() { timer?.invalidate(); window.orderOut(nil); kind = "" }
+    func hide() {text.finishReveal(); timer?.invalidate(); window.orderOut(nil); kind = ""}
 }
 
-final class SettingsPanel: NSObject, NSWindowDelegate {
-    let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 240), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-    private let petSlider = NSSlider(value: 100, minValue: 50, maxValue: 200, target: nil, action: nil)
-    private let bubbleSlider = NSSlider(value: 100, minValue: 50, maxValue: 150, target: nil, action: nil)
+final class SettingsPanel: NSObject, NSWindowDelegate, NSTextFieldDelegate {
+    let window = NSPanel(contentRect:NSRect(x:0,y:0,width:460,height:456),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+    private let petSlider = NSSlider(value:100,minValue:50,maxValue:200,target:nil,action:nil)
+    private let bubbleSlider = NSSlider(value:100,minValue:50,maxValue:150,target:nil,action:nil)
     private let petValue = NSTextField(), bubbleValue = NSTextField()
-    var onChange: (Int, Int) -> Void = { _,_ in }
+    private var lastValues = (100,100)
+    private let accentChoice = NSPopUpButton(frame:.zero,pullsDown:false)
+    private let appearanceChoice = NSPopUpButton(frame:.zero,pullsDown:false)
+    private let customColor = NSColorWell(frame:.zero)
+    private var defaultMarks = [NSTextField]()
+    var onChange: (Int,Int) -> Void = {_,_ in}
     var onClose: () -> Void = {}
     override init() {
-        super.init(); window.title = "桌宠与气泡大小"; window.isReleasedWhenClosed = false; window.delegate = self
-        let content = materialView(); window.contentView = content
-        for (name, y, slider, field) in [("桌宠 · 50%—200%", 166.0, petSlider, petValue), ("气泡 · 50%—150%", 86.0, bubbleSlider, bubbleValue)] {
-            let heading = label(name); heading.frame = NSRect(x: 24, y: y + 24, width: 300, height: 22); content.addSubview(heading)
-            slider.frame = NSRect(x: 24, y: y - 8, width: 260, height: 28)
+        super.init(); window.title = "桌宠大小与外观"; window.isReleasedWhenClosed = false; window.delegate = self
+        let content = NSView(); window.contentView = content
+        for (name,y,slider,field) in [("桌宠大小",360.0,petSlider,petValue),("气泡大小",256.0,bubbleSlider,bubbleValue)] {
+            let heading = label(name,bold:true); heading.frame = NSRect(x:24,y:y+36,width:280,height:22); content.addSubview(heading)
+            slider.frame = NSRect(x:24,y:y,width:308,height:32)
             slider.target = self; slider.action = #selector(slid); slider.isContinuous = true
-            field.frame = NSRect(x: 300, y: y - 6, width: 80, height: 26)
-            let format = NumberFormatter(); format.minimum = 50; format.maximum = NSNumber(value: slider.maxValue); format.allowsFloats = false
-            field.formatter = format; field.target = self; field.action = #selector(typed)
-            content.addSubview(slider); content.addSubview(field)
+            slider.numberOfTickMarks = Int((slider.maxValue-slider.minValue)/25)+1; slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false; slider.trackFillColor = AppAccent.color
+            slider.setAccessibilityLabel(name)
+            field.frame = NSRect(x:348,y:y+3,width:62,height:26); field.alignment = .right
+            let format = NumberFormatter(); format.minimum = 50; format.maximum = NSNumber(value:slider.maxValue); format.allowsFloats = false; format.usesGroupingSeparator = false
+            field.formatter = format; field.target = self; field.action = #selector(typed); field.delegate = self; field.setAccessibilityLabel(name+"百分比")
+            let unit = label("%"); unit.textColor = .secondaryLabelColor; unit.frame = NSRect(x:414,y:y+5,width:24,height:22)
+            content.addSubview(slider); content.addSubview(field); content.addSubview(unit)
+            for index in 0..<slider.numberOfTickMarks {
+                let value = Int(slider.minValue)+index*25
+                let tick = label(String(value)); tick.font = .systemFont(ofSize:10); tick.alignment = .center; tick.textColor = value == 100 ? AppAccent.color : .secondaryLabelColor
+                if value == 100 {defaultMarks.append(tick)}
+                let mark = slider.rectOfTickMark(at:index)
+                tick.frame = NSRect(x:slider.frame.minX+mark.midX-18,y:y-19,width:36,height:16); content.addSubview(tick)
+            }
         }
+        let heading = label("强调色",bold:true); heading.frame = NSRect(x:24,y:193,width:100,height:22); content.addSubview(heading)
+        accentChoice.frame = NSRect(x:24,y:154,width:270,height:30)
+        accentChoice.addItems(withTitles:AppAccent.choices.map {$0.1})
+        accentChoice.target = self; accentChoice.action = #selector(accentChanged); content.addSubview(accentChoice)
+        customColor.frame = NSRect(x:348,y:154,width:62,height:30); customColor.target = self; customColor.action = #selector(customChanged); content.addSubview(customColor)
+        customColor.setAccessibilityLabel("自定义强调色")
+        let appearanceHeading = label("外观模式",bold:true)
+        appearanceHeading.frame = NSRect(x:24,y:112,width:100,height:22); content.addSubview(appearanceHeading)
+        appearanceChoice.frame = NSRect(x:24,y:72,width:270,height:30)
+        appearanceChoice.addItems(withTitles:AppAppearance.choices.map {$0.1})
+        appearanceChoice.target = self; appearanceChoice.action = #selector(appearanceChanged)
+        appearanceChoice.setAccessibilityLabel("外观模式"); content.addSubview(appearanceChoice)
+        NotificationCenter.default.addObserver(self,selector:#selector(updateAccent),name:AppAccent.didChange,object:nil)
+        updateAccent()
         let reset = ActionButton("恢复 100%") { [weak self] in self?.set(100,100); self?.slid() }
-        let done = ActionButton("完成") { [weak self] in self?.typed(); self?.window.close() }; done.keyEquivalent = "\r"
-        reset.frame = NSRect(x: 186, y: 16, width: 120, height: 32); done.frame = NSRect(x: 310, y: 16, width: 80, height: 32)
+        let done = ActionButton("完成") { [weak self] in self?.window.makeFirstResponder(nil); self?.typed(); self?.window.close() }
+        done.keyEquivalent = "\r"; done.emphasize()
+        reset.frame = NSRect(x:222,y:18,width:120,height:32); done.frame = NSRect(x:350,y:18,width:86,height:32)
         content.addSubview(reset); content.addSubview(done)
+        set(100,100)
     }
-    func set(_ p: Int, _ b: Int) { petSlider.integerValue = p; bubbleSlider.integerValue = b; petValue.integerValue = p; bubbleValue.integerValue = b }
-    @objc func slid() { set(petSlider.integerValue, bubbleSlider.integerValue); onChange(petSlider.integerValue, bubbleSlider.integerValue) }
-    @objc func typed() { set(max(50,min(200,petValue.integerValue)), max(50,min(150,bubbleValue.integerValue))); slid() }
-    func show(_ p: Int, _ b: Int) { set(p,b); window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    func windowWillClose(_ notification: Notification) { typed(); onClose() }
+    @objc private func updateAccent() {
+        appearanceChoice.selectItem(at:AppAppearance.choices.firstIndex(where:{$0.0 == AppAppearance.selection}) ?? 0)
+        accentChoice.selectItem(at:AppAccent.choices.firstIndex(where:{$0.0 == AppAccent.selection}) ?? 0)
+        customColor.color = AppAccent.color; customColor.isEnabled = AppAccent.selection == "custom"
+        petSlider.trackFillColor = AppAccent.color; bubbleSlider.trackFillColor = AppAccent.color
+        defaultMarks.forEach {$0.textColor = AppAccent.color}
+    }
+    @objc private func appearanceChanged() {AppAppearance.select(AppAppearance.choices[appearanceChoice.indexOfSelectedItem].0)}
+    @objc private func accentChanged() {AppAccent.select(AppAccent.choices[accentChoice.indexOfSelectedItem].0)}
+    @objc private func customChanged() {AppAccent.setCustom(customColor.color)}
+    func set(_ p: Int, _ b: Int) {petSlider.integerValue = p; bubbleSlider.integerValue = b; petValue.integerValue = p; bubbleValue.integerValue = b}
+    @objc func slid() {
+        set(petSlider.integerValue,bubbleSlider.integerValue)
+        let values = (petSlider.integerValue,bubbleSlider.integerValue)
+        guard values != lastValues else {return}; lastValues = values; onChange(values.0,values.1)
+    }
+    @objc func typed() {set(max(50,min(200,petValue.integerValue)),max(50,min(150,bubbleValue.integerValue))); slid()}
+    func controlTextDidEndEditing(_ notification: Notification) {typed()}
+    func show(_ p: Int,_ b: Int) {updateAccent(); lastValues = (p,b); set(p,b); window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)}
+    func windowWillClose(_ notification: Notification) {window.makeFirstResponder(nil); typed(); onClose()}
 }

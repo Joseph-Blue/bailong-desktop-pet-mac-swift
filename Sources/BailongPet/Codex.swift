@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 final class CodexConnection {
     typealias Reply = (Result<[String:Any],Error>) -> Void
@@ -15,15 +15,36 @@ final class CodexConnection {
     private var generation = 0
     private var expiration: Timer?
     private let reader = DispatchQueue(label:"白龙 Codex 协议")
+    private(set) var executableURL: URL?
+    static func desktopApplications() -> [URL] {
+        let running = NSWorkspace.shared.runningApplications.compactMap { app -> URL? in
+            guard ["Codex","ChatGPT"].contains(app.localizedName ?? "") else { return nil }
+            return app.bundleURL
+        }
+        return running + ["/Applications/Codex.app",NSHomeDirectory()+"/Applications/Codex.app",
+            "/Applications/ChatGPT.app",NSHomeDirectory()+"/Applications/ChatGPT.app"].map {URL(fileURLWithPath:$0)}
+    }
     static func executable() throws -> URL {
         let env = ProcessInfo.processInfo.environment
-        if let explicit = env["BAILONG_CODEX_BIN"], !explicit.isEmpty { return URL(fileURLWithPath:explicit) }
-        let candidates = (env["PATH"] ?? "").split(separator:":").map { String($0)+"/codex" } +
-            [NSHomeDirectory()+"/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/Codex.app/Contents/Resources/codex", NSHomeDirectory()+"/Applications/Codex.app/Contents/Resources/codex"]
+        if let explicit = env["BAILONG_CODEX_BIN"], !explicit.isEmpty {
+            guard FileManager.default.isExecutableFile(atPath:explicit) else {throw PetFailure(message:"指定的 Codex 程序不可执行："+explicit)}
+            return URL(fileURLWithPath:explicit)
+        }
+        // 优先当前桌面应用内置版本，防止旧 PATH CLI 不支持桌面端当前模型。
+        let bundled = desktopApplications().flatMap { app in
+            ["Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+             "Contents/Resources/codex", "Contents/Resources/codex-cli/codex"].map {app.appendingPathComponent($0).path}
+        }
+        let candidates = bundled + (env["PATH"] ?? "").split(separator:":").map {String($0)+"/codex"} +
+            [NSHomeDirectory()+"/.local/bin/codex","/opt/homebrew/bin/codex","/usr/local/bin/codex"]
         guard let path = candidates.first(where:{FileManager.default.isExecutableFile(atPath:$0)}) else {
-            throw PetFailure(message:"没有找到 Codex CLI。请先安装并登录，或设置 BAILONG_CODEX_BIN。")
+            throw PetFailure(message:"没有找到可用的 Codex。请安装或更新 Codex 桌面应用并登录，再重试。")
         }
         return URL(fileURLWithPath:path)
+    }
+    static func openDesktop() {
+        guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return}
+        NSWorkspace.shared.open(app)
     }
     func connect(_ callback: @escaping (Error?) -> Void) {
         if ready { callback(nil); return }
@@ -32,16 +53,12 @@ final class CodexConnection {
         do {
             closing = false; generation += 1; let token = generation
             let task = Process(), stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
-            task.executableURL = try Self.executable(); task.arguments = ["app-server","--listen","stdio://"]
+            task.executableURL = try Self.executable(); executableURL = task.executableURL; task.arguments = ["app-server","--listen","stdio://"]
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = [task.executableURL!.deletingLastPathComponent().path, NSHomeDirectory()+"/.local/bin","/opt/homebrew/bin","/usr/local/bin",env["PATH"] ?? ""].joined(separator:":")
             task.environment = env; task.standardInput = stdin; task.standardOutput = stdout; task.standardError = stderr
             // 消费 stderr 防止子进程阻塞；不保存原始诊断流或用户对话日志。
             stderr.fileHandleForReading.readabilityHandler = { handle in if handle.availableData.isEmpty { handle.readabilityHandler = nil } }
-            task.terminationHandler = { [weak self] _ in DispatchQueue.main.async {
-                guard let self, self.generation == token, !self.closing else { return }
-                self.fail(PetFailure(message:"Codex 连接已结束，任务状态未确认。"))
-            }}
             try task.run(); process = task; input = stdin.fileHandleForWriting
             reader.async { [weak self] in
                 var buffer = Data()
@@ -55,6 +72,11 @@ final class CodexConnection {
                             DispatchQueue.main.async { if self?.generation == token { self?.receive(message) } }
                         } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error) } }; return }
                     }
+                }
+                // 先交付最后一条完成/错误消息，再处理 EOF，避免退出回调抢先丢失结果。
+                DispatchQueue.main.async {
+                    guard let self, self.generation == token, !self.closing else {return}
+                    self.fail(PetFailure(message:"Codex 连接已结束，任务状态未确认。"))
                 }
             }
             expiration?.invalidate()
@@ -104,6 +126,8 @@ final class CodexConnection {
         if let process, process.isRunning {
             process.terminate()
             DispatchQueue.global().asyncAfter(deadline:.now()+2) { if process.isRunning { kill(process.processIdentifier,SIGKILL) } }
+            // AppKit 即将退出时也必须等到自有服务结束，否则异步清理来不及执行。
+            process.waitUntilExit()
         }
         process = nil; pending.removeAll(); waiting.removeAll()
     }
