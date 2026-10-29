@@ -2,182 +2,88 @@
 
 ## 项目简介
 
-**Swift + AppKit 原生 macOS 桌宠，非官方，由 Codex 重写。**
+**白龙娘桌宠的非官方 macOS 原生重写版，使用 Swift + AppKit，由 Codex 重写。**
 
-基于 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，保留白龙娘的动画素材和主要交互，在 Mac 上重新实现窗口、菜单、聊天、设置和任务提醒。原作行为基线为 [v0.5.1 / b102e73](https://github.com/jingh12312-rgb/bailong-desktop-pet/commit/b102e734f20bb50889af12df5778f1499109f41b)，本项目独立维护，不代表原作者或 OpenAI。
+参考 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet) 的功能与交互，沿用原作动画素材，独立维护。不代表原作者或 OpenAI。
 
-当前版本为 **0.2.1**。功能仍在早期阶段，很可能有不少问题，适合尝试和反馈，暂时别按成熟软件的稳定性来期待。**当前仅提供 Apple Silicon 版，Intel 版暂不发布。**
-
-界面和动画视图使用 Swift + AppKit，透明 WebM 由 FFmpeg 解码。没有使用 SwiftUI，也不需要 Python、PySide6 或 PyObjC 运行环境。
+当前版本 **0.2.1**，功能仍在早期阶段，很可能有不少问题，欢迎反馈。
 
 ## 下载与安装
 
-> 当前为私有仓库内的开发预发布版本，下载需要仓库访问权限，尚未面向公众发行。素材授权等公开分发条件仍待处理，请勿转发安装包。
+需要 **Apple Silicon Mac 和 macOS 14 或更新版本**。
 
-需要 **Apple Silicon Mac（arm64）及 macOS 14 或更新版本**。
+**[下载安装包 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/v0.2.1/bailong-desktop-pet-v0.2.1-macos-apple-silicon.zip)** · [发布说明](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/v0.2.1) · [全部版本](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)
 
-**[下载 Apple Silicon 版 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/v0.2.1/bailong-desktop-pet-v0.2.1-macos-apple-silicon.zip)**
+解压后，将 `白龙娘桌宠MacOS-Swift版.app` 拖入「应用程序」。安装包已包含动画、音效和解码器；聊天与任务功能另需本机安装并登录 Codex。
 
-[发布说明](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/v0.2.1) · [全部版本](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)
+> 当前为私有开发预发布，需要仓库访问权限才能下载，请勿转发安装包。
 
-下载 ZIP，解压后把 `白龙娘桌宠MacOS-Swift版.app` 拖入「应用程序」即可。当前开发应用包携带动画、声音、图标及 arm64 FFmpeg，不需要另外安装解码器。Release 中的 `Source code` 是源码归档，不是安装包。
+### 首次打开
 
-聊天和任务功能需要本机有可用、已经登录的 Codex。桌宠不附带 Codex，也不提供账号或模型额度。
+**本项目没有 Apple 公证和 Developer ID 签名。通过浏览器下载后，在 macOS 默认安全设置下，首次打开一定会被拦截。**
 
-### 第一次打开会被 macOS 拦截
+尝试打开一次后，前往「系统设置 → 隐私与安全性」，找到对应提示，点击「仍要打开」。详见 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。本地自行编译不属于上述下载场景。
 
-**本项目没有做 Apple 公证，也没有 Developer ID 签名。从浏览器下载这里的安装包后，在 macOS 默认安全设置下，首次打开一定会被拦截，需要手动允许。**
+更新时，退出桌宠后用新版替换旧 App 即可，聊天记录保留。当前没有自动更新。
 
-如果出现“无法验证开发者”或“Apple 无法检查是否包含恶意软件”，先关闭提示，再到「系统设置 → 隐私与安全性」找到对应记录，点击「仍要打开」，按系统提示确认。请在确认来源并信任项目后操作，不需要关闭整个系统的安全保护。
+## 功能与操作
 
-[Apple 官方说明：在 Mac 上安全地打开 App](https://support.apple.com/zh-cn/102445)
+- 桌面动画、随机互动、拖拽与落地、左右吸边、全屏隐藏。
+- 在聊天气泡或历史窗口中使用 Codex，查看进展、回复和额度，处理审批或停止任务。
+- 只读观察外部 Codex 对话；外部任务的审批和补充输入仍在原窗口处理。
+- 自定义称呼、台词、鼠标动作、活动频率、消息提醒、大小和外观。
 
-这里说的是下载的成品应用；克隆源码后在本地自行编译，不属于这一下载场景。未公证提示不等于已经检测到恶意软件，但公开源码也不代表经过安全审计。
-
-### 更新
-
-当前没有应用内自动更新。退出旧版后，用新版替换「应用程序」里的 App。更新前请先退出正在运行的桌宠。
-
-历史保存在独立的数据目录中，不在 App 包内。正常替换应用不会同时删除历史；需要备份时可从设置中打开数据目录。
-
-## 可以做什么
-
-- 在桌面上待机、互动、移动和播放工作动画，支持拖拽、落地、左右吸边和全屏时隐藏。
-- 通过临时聊天气泡或历史窗口发起 Codex 任务，两处共享模型、推理强度和输入快捷键。
-- 查看额度、公开思考摘要、进展和最终回复，支持逐步显示与 Markdown 排版。
-- 只读观察外部 Codex 对话，把公开进展和结果带到桌宠气泡与历史窗口。
-- 自定义称呼、互动台词、鼠标动作、活动频率、消息时长、大小和外观。
-
-### 桌宠内发起任务与观察外部任务
-
-在桌宠中发送的任务由桌宠管理：可以请求停止，也会显示需要批准的命令或文件操作，以及需要补充的问题。审批默认拒绝，退出时回收桌宠自己启动的相关进程。
-
-外部 Codex 对话只做观察，不接管原任务。遇到待审批或待输入的情况，需要回到原 Codex 窗口处理。“在新对话中继续”会把已观察到的内容放进可编辑草稿，并不等于恢复原会话的完整上下文，也不会自动发送。
-
-工具调用中的中间报错不再自动变成桌宠的错误弹窗。最终失败、停止和等待处理仍会保留提示；只有明确收到 `completed` 才显示完成。暂时没有新消息或同步读取失败，不会被当作任务成功。
-
-## 操作
-
-| 操作 | 默认行为 |
+| 默认操作 | 行为 |
 | --- | --- |
-| 单击 | 松手后立即随机互动 |
-| 双击 | 查看额度；第一下仍会执行单击动作 |
-| 右键单击 | 打开菜单 |
-| 右键双击 | 关闭菜单并打开临时聊天 |
-| 吸边时单击 | 松手后等待 250ms，再召回桌宠 |
-| 吸边时在判定期内再次按下 | 取消召回，执行双击动作 |
-| 从边缘拖出 | 立即召回，不等待单击判定 |
-| 普通拖拽 | 保留拖拽和落地动画 |
+| 单击 / 双击 | 随机互动 / 查看额度 |
+| 右键单击 / 右键双击 | 打开菜单 / 临时聊天 |
+| 吸边时单击或拖出 | 召回桌宠 |
+| ⌘ Command + ↩ Enter | 发送消息；单独 Enter 换行 |
+| ⌘, | 打开设置 |
 
-普通单击、双击和右键双击可在设置中改为无动作、临时聊天、查看额度、查看历史或随机动画。吸边单击只负责召回，不额外执行普通单击动作。
+鼠标动作和发送快捷键可在设置中调整。关闭聊天窗口不会停止任务，需要中止时请点击「停止」。聊天记录与输入框支持选择、复制。
 
-聊天默认 **⌘↩ 发送、↩ 换行**。也可切换为 **↩ 发送、⇧↩ 或 ⌥↩ 换行**，两个输入入口同步生效。中文输入法组字时，回车用于确认输入，不直接发送。
-
-关闭临时聊天窗不等于停止任务。需要中止执行时，请使用“停止”；停止请求发出后，仍以 Codex 返回的实际状态为准。
-
-## 设置与界面习惯
-
-通过菜单“设置…”或 **⌘,** 打开，更改即时保存。
-
-| 分类 | 可调整内容 |
-| --- | --- |
-| 通用 | 启动显隐、记住位置、全屏隐藏、显示器、登录或跟随启动 |
-| 称呼与个性 | 你的名字、对你的称呼、桌宠名字、问候语和互动台词 |
-| 动作与活动 | 鼠标动作、活动间隔、移动范围、动作频率与偏好、播放速度、开场和庆祝 |
-| 消息与提醒 | 发送快捷键、消息时长、悬停暂停、逐步显示、音效、安静陪伴与专注时段 |
-| 外观 | 桌宠大小、气泡大小、字号、明暗模式和强调色 |
-| 高级 | 设置导入／导出、打开数据目录、恢复默认 |
-
-桌宠大小可调为 50%—200%，气泡为 50%—150%，初始均为 100%。普通消息时长设为 0 表示手动关闭；待审批、补充输入和失败仍保留处理入口。登录项默认关闭，需要自行启用。
-
-自定义桌宠名字只影响角色称呼、聊天署名和互动台词。菜单、关于页和窗口等产品名称仍使用“白龙娘”及正式应用名，用户消息与模型回复原文不会被批量替换。
-
-普通标签、说明文字、关于和致谢正文不支持拖选；链接仍可点击。聊天记录、任务回复、输入框，以及技术错误和审批详情保留选择与复制。
-
-各设置页可以单独恢复默认，也可以全部恢复。恢复设置不删除历史、素材或改动系统登录项。导出设置不等于备份聊天记录。
-
-## 数据与 Codex
-
-聊天历史默认保存在：
-
-```text
-~/Library/Application Support/BailongPetAppKit/conversations.json
-```
-
-应用偏好使用 `com.bailongpet.appkit` 标识。产品显示名调整不会改变这些位置；本项目的数据与旧 Python 移植版隔离，不自动迁移旧历史。`BAILONG_DATA_DIR` 可以覆盖数据目录，但不会同时更改应用偏好的存储标识。
-
-桌宠沿用本机 Codex 的登录状态，不读取或复制登录凭证，也不改全局 Codex 配置。模型和推理强度选择保存在本应用偏好中；实际能用哪些模型，以连接的 Codex 返回结果及账号权限为准。
-
-程序优先使用 `BAILONG_CODEX_BIN` 指定的 CLI，其次查找已安装 Codex／ChatGPT 桌面应用内置的 CLI，再查找 `PATH` 等位置。外部任务观察读取 `CODEX_HOME` 下的公开记录，不导入外部完整推理内容。
-
-历史保存在本机，不代表模型推理离线运行。通过桌宠发送的内容仍交由 Codex 处理，相关模型使用受该账号的服务与额度限制。
+聊天历史保存在 `~/Library/Application Support/BailongPetAppKit/conversations.json`，可从设置打开数据目录备份。恢复默认设置不会删除聊天记录。
 
 ## 从源码构建
 
-只克隆仓库还不够：Git 中不包含动画、FFmpeg、图标或成品 App。目前没有一键下载全部资源的脚本，需先准备下面这些文件。
+需要 Apple Command Line Tools。界面使用系统 AppKit，透明 WebM 由 FFmpeg 解码，无需 Python 运行环境。
 
-| 资源或依赖 | 当前来源与说明 |
+仓库不含素材、解码器和图标，构建前需自行准备：
+
+| 文件 | 来源 |
 | --- | --- |
-| Swift 编译工具与 macOS SDK | Apple Command Line Tools；AppKit、Foundation 和 SQLite 使用系统提供的框架或库 |
-| 动画与素材清单 | [原作者 v0.5.1 发布包](https://github.com/jingh12312-rgb/bailong-desktop-pet/releases/tag/v0.5.1)中的 `outputs`；只解压取素材，不运行 Windows EXE |
-| FFmpeg | 当前本地使用 [imageio-ffmpeg 0.6.0](https://pypi.org/project/imageio-ffmpeg/0.6.0/) 中对应 Mac 架构的 7.1 二进制；只提取文件，不安装 Python 运行时 |
-| 音效及来源说明 | [原作 app/sounds](https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds) |
-| 应用图标 | 当前由待机首帧生成并保存在本地，尚未提供可复现的生成脚本或独立下载 |
+| 动画与素材清单 | [原作 v0.5.1 发布包](https://github.com/jingh12312-rgb/bailong-desktop-pet/releases/tag/v0.5.1)中的 `outputs`，解压提取即可 |
+| FFmpeg | 当前使用 [imageio-ffmpeg 0.6.0](https://pypi.org/project/imageio-ffmpeg/0.6.0/) 中的 macOS arm64 二进制，需支持 `libvpx-vp9` |
+| 音效与来源说明 | [原作 app/sounds](https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds) |
+| 应用图标 | 本地从待机首帧生成，暂未提供生成脚本或独立下载 |
 
-资源目录应为：
+按以下结构放置资源，其中 `ffmpeg` 需有执行权限：
 
 ```text
 local-assets/
   outputs/白龙桌宠素材/素材清单.json
   outputs/白龙桌宠素材/透明WebM/*.webm
-  tools/ffmpeg                 # arm64
-  tools/x86_64/ffmpeg          # x86_64
+  tools/ffmpeg
   sounds/click.wav
   sounds/来源.txt
   BailongPet.icns
 ```
 
-解码器需匹配目标架构，并支持当前透明 WebM 使用的 `libvpx-vp9` 解码路径。Windows 发布包里的 `ffmpeg.exe` 不能用于 Mac。
-
-准备完资源后，在仓库根目录构建 Apple Silicon 版：
+在仓库根目录执行：
 
 ```sh
-./scripts/build.sh arm64
+./scripts/build.sh arm64            # 打包应用
+./scripts/run-dev.sh                # 开发运行
+./scripts/run-dev.sh --build-only   # 仅编译
 ```
 
-输出位于 `dist/arm64/白龙娘桌宠MacOS-Swift版.app`。构建脚本会复制运行资源并执行本地 ad-hoc 签名，不包含 Apple 公证步骤。
+应用输出至 `dist/arm64/白龙娘桌宠MacOS-Swift版.app`，采用本地 ad-hoc 签名。开发运行前请退出已有桌宠，两者共用默认数据目录。
 
-Intel 构建能力仍保留，可用 `./scripts/build.sh x86_64` 进行本地实验，输出位于 `dist/x86_64/`。这不代表 Intel 版本已受支持，Release 暂不提供 Intel 安装包。
+## 反馈与来源
 
-Apple Silicon 开发环境可使用：
+问题请提交至 [Issues](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)，附应用版本、macOS 版本和复现步骤。聊天问题请注明是桌宠内任务还是外部对话观察，截图前记得遮住私人内容。
 
-```sh
-./scripts/run-dev.sh                 # 编译并前台运行
-./scripts/run-dev.sh --build-only    # 只编译，不启动
-```
+原作基线为 **v0.5.1 / b102e73**，未指定开源许可证；素材再分发授权仍待确认。FFmpeg 和音效遵循各自许可，详见 [来源与架构](docs/来源与架构.md)。
 
-`Tests/` 仅保留在维护者本地，不随仓库提供，也不是构建应用的依赖。仓库里的 `check-*.sh` 检查脚本需要对应的本地测试文件才能执行。
-
-开发运行直接读取 `local-assets`，不生成完整 App 包。按 Ctrl+C 正常退出。开发版与安装包共用单实例锁和默认数据，运行前先退出已有桌宠。
-
-当前资源准备流程还不完整，尤其是图标生成；Intel 本地实验另有解码器分发限制。在这些补齐前，不保证新克隆的仓库只靠上述命令就能构建运行。
-
-## 已知限制与反馈
-
-Intel 安装包已从 Release 撤下，暂不提供下载；本地版本只有交叉编译及静态检查结果，没有 Intel 真机运行结论。设置布局、鼠标手势、中文输入法、多屏、全屏和登录项等行为仍需要更多实际使用反馈。
-
-动画保留原 WebM，并按需解码和缓存。原素材画质、透明边缘和不同显示缩放下的观感仍有改进空间；Swift 原生实现不会自动消除素材本身的问题。
-
-Codex 的模型列表、接口或本地记录格式变化，可能影响聊天、额度显示和外部同步。本项目不能保证兼容所有旧版或未来版本的 Codex。
-
-反馈请到 [Issues](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)，附上应用版本、CPU 架构、macOS 版本和复现步骤。如果是聊天问题，再说明是桌宠内发起的任务还是外部观察记录。截图与错误详情请先去掉私人对话和敏感信息。
-
-## 来源与许可
-
-原作代码、动画和音效归各自权利人所有。仓库公开、提供下载链接或注明来源，都不能替代相应授权。项目不会因为使用 Swift 重写就重新声明原作素材的所有权。
-
-当前正式来源说明记录：原作基线未指定开源许可证，动画也没有额外再分发授权；公开源码与应用包前仍需确认可使用和可再分发的范围。FFmpeg 及其依赖按实际随包构建分别整理许可材料。
-
-当前本地 Intel FFmpeg 曾确认包含 `--enable-nonfree`，并标注 `nonfree and unredistributable`。这份二进制不能直接作为公开发行解码器；需替换并核对实际文件，不能只修改关于页的文字。
-
-详见 [来源与架构](docs/来源与架构.md) 和 [版本记录](CHANGELOG.md)。
+[版本记录](CHANGELOG.md)
