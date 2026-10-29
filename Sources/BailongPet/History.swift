@@ -24,7 +24,7 @@ struct HistoryDocument: Codable { var schemaVersion = 1; var conversations: [Con
 final class HistoryStore {
     var conversations = [Conversation]()
     var onError: (Error) -> Void = { _ in }
-    private let queue = DispatchQueue(label:"白龙历史保存")
+    private let queue = DispatchQueue(label:"白龙娘历史保存")
     private let url = Paths.data.appendingPathComponent("conversations.json")
     init() throws {
         if FileManager.default.fileExists(atPath:url.path) {

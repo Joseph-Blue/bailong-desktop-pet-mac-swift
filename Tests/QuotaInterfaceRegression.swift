@@ -54,9 +54,9 @@ struct QuotaInterfaceRegression {
             }
         }
         bubble.hide()
-        let settings = SettingsPanel()
+        let settings = SettingsPanel(); settings.select(.appearance)
         let sliders = descendants(settings.window.contentView!).compactMap {$0 as? NSSlider}
-        check(sliders.map {$0.numberOfTickMarks}.sorted() == [5,7],"大小设置缺少 25% 刻度")
+        check(sliders.map {$0.numberOfTickMarks}.filter {$0 > 0}.sorted() == [5,7],"大小设置缺少 25% 刻度")
         let screen = NSRect(x:-1440,y:80,width:1440,height:820), pet = NSRect(x:-180,y:160,width:120,height:180), cursor = NSPoint(x:-175,y:200)
         let frame = MenuPlacement.frame(size:NSSize(width:240,height:600),cursor:cursor,screen:screen,pet:pet)
         check(screen.contains(frame) && !frame.intersects(pet),"菜单遮挡或越界")

@@ -45,6 +45,12 @@ enum AppAccent {
         UserDefaults.standard.set(key,forKey:"accentStyle")
         NotificationCenter.default.post(name:didChange,object:nil)
     }
+    static func selectionColor(for appearance: NSAppearance) -> NSColor {
+        guard appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua else {return color}
+        // 只加深选中背景；链接、标题和图标仍用较明亮的强调色。
+        if selection == "purple" {return NSColor(srgbRed:0.50,green:0.30,blue:0.65,alpha:1)}
+        return color.blended(withFraction:0.18,of:.black) ?? color
+    }
     static func setCustom(_ color: NSColor) {
         guard let rgb = color.usingColorSpace(.sRGB) else {return}
         UserDefaults.standard.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],forKey:"accentRGB")

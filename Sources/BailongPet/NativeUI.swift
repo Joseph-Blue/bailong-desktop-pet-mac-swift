@@ -92,6 +92,10 @@ final class Bubble {
     private var retryButton: ActionButton!
     private var timer: Timer?
     private var scale = 1.0
+    var preferences = PetPreferences.shared
+    var purpose: MessagePurpose = .interaction
+    var relatedConversation: String?
+    private var currentBody = ""
     var onClose: () -> Void = {}
     var onDetails: () -> Void = {}
     var kind = ""
@@ -143,29 +147,47 @@ final class Bubble {
         let same = self.kind == kind && scroll.documentView === text && text.automaticallyFollowsEnd == followsText
         text.automaticallyFollowsEnd = followsText
         self.kind = kind; self.scale = scale
+        currentBody = body; relatedConversation = nil
         if scroll.documentView !== text {scroll.documentView = text}
-        title.stringValue = heading; title.font = .systemFont(ofSize:13*scale,weight:.semibold)
-        text.font = .systemFont(ofSize:13*scale)
+        title.stringValue = heading; title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
+        text.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale)
         details.title = "详情"; details.isHidden = !enabled; details.emphasize(); retryButton.isHidden = true
         let rendered = kind == "task" ? MarkdownText.render(body,font:text.font!,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:text.font!,.foregroundColor:NSColor.labelColor])
         let height = body.isEmpty ? 0 : min(180*scale,max(24*scale,rendered.boundingRect(with:NSSize(width:288*scale-12,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading]).height+12))
         layout(bodyHeight:height)
-        text.setContent(rendered,animated:kind == "task" && followsText,reset:!same || resetText)
+        text.setContent(rendered,animated:preferences.bool("typingEffect") && kind == "task" && followsText,reset:!same || resetText)
         window.orderFrontRegardless()
-        // 所有回复/提示气泡均会收起；正在更新的内容会重新计时。
-        let timer = Timer(timeInterval:seconds > 0 ? seconds : 12,repeats:false) { [weak self] _ in self?.hide(); self?.onClose() }
+        startCountdown(seconds)
+    }
+    private func startCountdown(_ seconds: Double) {
+        timer?.invalidate(); timer = nil
+        guard seconds > 0 else {return}
+        var remaining = seconds, previous = ProcessInfo.processInfo.systemUptime
+        let timer = Timer(timeInterval:0.1,repeats:true) { [weak self] _ in
+            guard let self else {return}
+            let now = ProcessInfo.processInfo.systemUptime, delta = now-previous; previous = now
+            let hovering = self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation)
+            if hovering || self.preferences.bool("countAfterReveal") && self.text.isRevealing {return}
+            remaining -= delta
+            if remaining <= 0 {self.hide(); self.onClose()}
+        }
         self.timer = timer; RunLoop.main.add(timer,forMode:.common)
     }
+    func finishTyping() {text.finishReveal()}
+    func refreshDuration() {if visible {startCountdown(preferences.duration(purpose,text:currentBody))}}
     func showFailure(_ failure: AppFailure, scale: Double, retry: (() -> Void)? = nil) {
         onDetails = {failure.showDetails()}
         show(title:failure.title,body:failure.message,kind:"error",scale:scale,seconds:0,details:true)
+        purpose = .attention
         details.title = "技术详情…"
         if let retry {retryButton.title = "重试"; retryButton.isHidden = false; retryButton.callback = retry}
         else if failure.openDesktop {retryButton.title = "打开 Codex"; retryButton.isHidden = false; retryButton.callback = {CodexConnection.openDesktop()}}
         layout(bodyHeight:scroll.frame.height)
     }
     func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, retry: (() -> Void)? = nil) {
+        let fontScale = scale*preferences.number("messageFontSize")/13
         if let failure {
+            purpose = .attention; timer?.invalidate(); timer = nil
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
             if let retry {retryButton.title = "重试"; retryButton.callback = retry; retryButton.isHidden = false}
         }
@@ -178,13 +200,13 @@ final class Bubble {
             text.frame = NSRect(x:0,y:y,width:width,height:height); content.addSubview(text); y += height
             return height
         }
-        addText("套餐 · "+overview.plan,font:.systemFont(ofSize:13*scale,weight:.semibold)); y += 12*scale
+        addText("套餐 · "+overview.plan,font:.systemFont(ofSize:13*fontScale,weight:.semibold)); y += 12*scale
         for (index,row) in overview.rows.enumerated() {
             if index > 0 {
                 let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
             }
-            let headingFont = NSFont.systemFont(ofSize:12*scale,weight:.medium)
-            let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*scale,weight:.semibold)
+            let headingFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
+            let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
             // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
             // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
             let heading = NSTextField(labelWithString:row.title); heading.font = headingFont
@@ -206,10 +228,10 @@ final class Bubble {
                 bar.style = .bar; bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 100; bar.doubleValue = amount
                 content.addSubview(bar); y += 16*scale
             }
-            if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*scale),color:.secondaryLabelColor)}
+            if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*fontScale),color:.secondaryLabelColor)}
             y += 12*scale
         }
-        if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*scale,weight:.medium))}
+        if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
         content.frame.size.height = y
         layout(bodyHeight:min(320*scale,y))
         scroll.documentView = content; scroll.contentView.scroll(to:.zero)
@@ -232,82 +254,5 @@ final class Bubble {
         let origin = NSPoint(x:max(a.minX,min(x,a.maxX-s.width)).rounded(),y:max(a.minY,min(y,a.maxY-s.height)).rounded())
         if origin != window.frame.origin {window.setFrameOrigin(origin)}
     }
-    func hide() {text.finishReveal(); timer?.invalidate(); window.orderOut(nil); kind = ""}
-}
-
-final class SettingsPanel: NSObject, NSWindowDelegate, NSTextFieldDelegate {
-    let window = NSPanel(contentRect:NSRect(x:0,y:0,width:460,height:456),styleMask:[.titled,.closable],backing:.buffered,defer:false)
-    private let petSlider = NSSlider(value:100,minValue:50,maxValue:200,target:nil,action:nil)
-    private let bubbleSlider = NSSlider(value:100,minValue:50,maxValue:150,target:nil,action:nil)
-    private let petValue = NSTextField(), bubbleValue = NSTextField()
-    private var lastValues = (100,100)
-    private let accentChoice = NSPopUpButton(frame:.zero,pullsDown:false)
-    private let appearanceChoice = NSPopUpButton(frame:.zero,pullsDown:false)
-    private let customColor = NSColorWell(frame:.zero)
-    private var defaultMarks = [NSTextField]()
-    var onChange: (Int,Int) -> Void = {_,_ in}
-    var onClose: () -> Void = {}
-    override init() {
-        super.init(); window.title = "桌宠大小与外观"; window.isReleasedWhenClosed = false; window.delegate = self
-        let content = NSView(); window.contentView = content
-        for (name,y,slider,field) in [("桌宠大小",360.0,petSlider,petValue),("气泡大小",256.0,bubbleSlider,bubbleValue)] {
-            let heading = label(name,bold:true); heading.frame = NSRect(x:24,y:y+36,width:280,height:22); content.addSubview(heading)
-            slider.frame = NSRect(x:24,y:y,width:308,height:32)
-            slider.target = self; slider.action = #selector(slid); slider.isContinuous = true
-            slider.numberOfTickMarks = Int((slider.maxValue-slider.minValue)/25)+1; slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false; slider.trackFillColor = AppAccent.color
-            slider.setAccessibilityLabel(name)
-            field.frame = NSRect(x:348,y:y+3,width:62,height:26); field.alignment = .right
-            let format = NumberFormatter(); format.minimum = 50; format.maximum = NSNumber(value:slider.maxValue); format.allowsFloats = false; format.usesGroupingSeparator = false
-            field.formatter = format; field.target = self; field.action = #selector(typed); field.delegate = self; field.setAccessibilityLabel(name+"百分比")
-            let unit = label("%"); unit.textColor = .secondaryLabelColor; unit.frame = NSRect(x:414,y:y+5,width:24,height:22)
-            content.addSubview(slider); content.addSubview(field); content.addSubview(unit)
-            for index in 0..<slider.numberOfTickMarks {
-                let value = Int(slider.minValue)+index*25
-                let tick = label(String(value)); tick.font = .systemFont(ofSize:10); tick.alignment = .center; tick.textColor = value == 100 ? AppAccent.color : .secondaryLabelColor
-                if value == 100 {defaultMarks.append(tick)}
-                let mark = slider.rectOfTickMark(at:index)
-                tick.frame = NSRect(x:slider.frame.minX+mark.midX-18,y:y-19,width:36,height:16); content.addSubview(tick)
-            }
-        }
-        let heading = label("强调色",bold:true); heading.frame = NSRect(x:24,y:193,width:100,height:22); content.addSubview(heading)
-        accentChoice.frame = NSRect(x:24,y:154,width:270,height:30)
-        accentChoice.addItems(withTitles:AppAccent.choices.map {$0.1})
-        accentChoice.target = self; accentChoice.action = #selector(accentChanged); content.addSubview(accentChoice)
-        customColor.frame = NSRect(x:348,y:154,width:62,height:30); customColor.target = self; customColor.action = #selector(customChanged); content.addSubview(customColor)
-        customColor.setAccessibilityLabel("自定义强调色")
-        let appearanceHeading = label("外观模式",bold:true)
-        appearanceHeading.frame = NSRect(x:24,y:112,width:100,height:22); content.addSubview(appearanceHeading)
-        appearanceChoice.frame = NSRect(x:24,y:72,width:270,height:30)
-        appearanceChoice.addItems(withTitles:AppAppearance.choices.map {$0.1})
-        appearanceChoice.target = self; appearanceChoice.action = #selector(appearanceChanged)
-        appearanceChoice.setAccessibilityLabel("外观模式"); content.addSubview(appearanceChoice)
-        NotificationCenter.default.addObserver(self,selector:#selector(updateAccent),name:AppAccent.didChange,object:nil)
-        updateAccent()
-        let reset = ActionButton("恢复 100%") { [weak self] in self?.set(100,100); self?.slid() }
-        let done = ActionButton("完成") { [weak self] in self?.window.makeFirstResponder(nil); self?.typed(); self?.window.close() }
-        done.keyEquivalent = "\r"; done.emphasize()
-        reset.frame = NSRect(x:222,y:18,width:120,height:32); done.frame = NSRect(x:350,y:18,width:86,height:32)
-        content.addSubview(reset); content.addSubview(done)
-        set(100,100)
-    }
-    @objc private func updateAccent() {
-        appearanceChoice.selectItem(at:AppAppearance.choices.firstIndex(where:{$0.0 == AppAppearance.selection}) ?? 0)
-        accentChoice.selectItem(at:AppAccent.choices.firstIndex(where:{$0.0 == AppAccent.selection}) ?? 0)
-        customColor.color = AppAccent.color; customColor.isEnabled = AppAccent.selection == "custom"
-        petSlider.trackFillColor = AppAccent.color; bubbleSlider.trackFillColor = AppAccent.color
-        defaultMarks.forEach {$0.textColor = AppAccent.color}
-    }
-    @objc private func appearanceChanged() {AppAppearance.select(AppAppearance.choices[appearanceChoice.indexOfSelectedItem].0)}
-    @objc private func accentChanged() {AppAccent.select(AppAccent.choices[accentChoice.indexOfSelectedItem].0)}
-    @objc private func customChanged() {AppAccent.setCustom(customColor.color)}
-    func set(_ p: Int, _ b: Int) {petSlider.integerValue = p; bubbleSlider.integerValue = b; petValue.integerValue = p; bubbleValue.integerValue = b}
-    @objc func slid() {
-        set(petSlider.integerValue,bubbleSlider.integerValue)
-        let values = (petSlider.integerValue,bubbleSlider.integerValue)
-        guard values != lastValues else {return}; lastValues = values; onChange(values.0,values.1)
-    }
-    @objc func typed() {set(max(50,min(200,petValue.integerValue)),max(50,min(150,bubbleValue.integerValue))); slid()}
-    func controlTextDidEndEditing(_ notification: Notification) {typed()}
-    func show(_ p: Int,_ b: Int) {updateAccent(); lastValues = (p,b); set(p,b); window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)}
-    func windowWillClose(_ notification: Notification) {window.makeFirstResponder(nil); typed(); onClose()}
+    func hide() {text.finishReveal(); timer?.invalidate(); window.orderOut(nil); kind = ""; relatedConversation = nil}
 }

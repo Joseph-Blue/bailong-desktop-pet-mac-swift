@@ -25,7 +25,7 @@ struct ChatPresentationRegression {
         t.input = "你好"; t.date = Date(timeIntervalSince1970:1790000017); t.status = "running"
         ui.refresh([c],selected:c,busy:true)
         check(ui.transcript.string.contains("主人 · "),"主人称呼")
-        check(ui.history.title == "GPT白龙娘动态桌宠 · 历史对话" && ui.composer.title.isEmpty && !ui.composer.styleMask.contains(.titled),"历史标题与无标题输入气泡")
+        check(ui.history.title == PetPreferences.shared.petName+" · 历史对话" && ui.composer.title.isEmpty && !ui.composer.styleMask.contains(.titled),"历史标题与无标题输入气泡")
         ui.history.contentView!.layoutSubtreeIfNeeded()
         let input = ui.historyEditor.enclosingScrollView!
         let box = input.convert(input.bounds,to:ui.history.contentView)

@@ -14,7 +14,7 @@ final class CodexConnection {
     private var closing = false
     private var generation = 0
     private var expiration: Timer?
-    private let reader = DispatchQueue(label:"白龙 Codex 协议")
+    private let reader = DispatchQueue(label:"白龙娘 Codex 协议")
     private(set) var executableURL: URL?
     static func desktopApplications() -> [URL] {
         let running = NSWorkspace.shared.runningApplications.compactMap { app -> URL? in
@@ -85,7 +85,7 @@ final class CodexConnection {
                 let expired = self.pending.filter { $0.value.1 < Date() }
                 for (id,entry) in expired { self.pending.removeValue(forKey:id); entry.0(.failure(PetFailure(message:"Codex 请求超时，任务状态尚未确认。"))) }
             }
-            call("initialize",["clientInfo":["name":"bailong_appkit","title":"白龙桌宠","version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
+            call("initialize",["clientInfo":["name":"bailong_appkit","title":PetPreferences.shared.petName+"桌宠","version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
                 guard let self else{return}
                 switch result {
                 case .success:

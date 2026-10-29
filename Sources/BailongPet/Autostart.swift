@@ -34,7 +34,7 @@ final class FollowLauncher {
             if !opened && previous {UserDefaults.standard.set(false,forKey:"manualQuit")}
             if opened && !previous && !UserDefaults.standard.bool(forKey:"manualQuit"), let exe = Bundle.main.executableURL {
                 let p = Process(); p.executableURL = exe
-                do {try p.run()} catch {NSLog("白龙跟随启动失败：%@",error.localizedDescription)}
+                do {try p.run()} catch {NSLog("白龙娘跟随启动失败：%@",error.localizedDescription)}
             }
             previous = opened
         }

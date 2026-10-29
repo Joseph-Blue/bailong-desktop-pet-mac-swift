@@ -1,12 +1,28 @@
 #!/bin/zsh
 set -eu
 cd "${0:A:h:h}"
-mkdir -p .build/module-cache dist
-xcrun swiftc -O -whole-module-optimization -swift-version 5 -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache Sources/BailongPet/*.swift -o .build/BailongPet -framework AppKit -lsqlite3
-app="dist/白龙桌宠.app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp .build/BailongPet "$app/Contents/MacOS/BailongPet"
-cp -R local-assets/. "$app/Contents/Resources/"
+if (( $# > 1 )); then
+    print -u2 "用法：$0 [arm64|x86_64]"; exit 2
+fi
+target_arch="${1:-arm64}"
+case "$target_arch" in
+    arm64) decoder="local-assets/tools/ffmpeg" ;;
+    x86_64) decoder="local-assets/tools/x86_64/ffmpeg" ;;
+    *) print -u2 "不支持的架构：$target_arch"; exit 2 ;;
+esac
+# 两份应用各自携带对应架构的解码器，避免 Intel 包误装 arm64 二进制。
+[[ -x "$decoder" ]] || { print -u2 "缺少 $target_arch 解码器：$decoder"; exit 1; }
+xcrun lipo -verify_arch "$target_arch" "$decoder"
+mkdir -p ".build/$target_arch" .build/module-cache "dist/$target_arch"
+xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" -module-cache-path .build/module-cache Sources/BailongPet/*.swift -o ".build/$target_arch/BailongPet" -framework AppKit -lsqlite3
+app="dist/$target_arch/白龙娘桌宠MacOS-Swift版.app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/tools"
+cp ".build/$target_arch/BailongPet" "$app/Contents/MacOS/BailongPet"
+# 仅打包运行资源；素材试修、源码副本和离线脚本不进入应用包。
+for resource in outputs sounds BailongPet.icns; do
+    cp -R "local-assets/$resource" "$app/Contents/Resources/"
+done
+cp "$decoder" "$app/Contents/Resources/tools/ffmpeg"
 cp VERSION "$app/Contents/Resources/VERSION"
 version="$(cat VERSION)"
 cat > "$app/Contents/Info.plist" <<PLIST
@@ -14,7 +30,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>com.bailongpet.appkit</string>
-<key>CFBundleName</key><string>白龙桌宠</string>
+<key>CFBundleName</key><string>白龙娘桌宠MacOS-Swift版</string>
+<key>CFBundleDisplayName</key><string>白龙娘桌宠MacOS-Swift版</string>
 <key>CFBundleExecutable</key><string>BailongPet</string>
 <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
@@ -28,4 +45,4 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 codesign --force --deep --sign - "$app"
-print "已构建 $app（$version，arm64，本地签名）"
+print "已构建 $app（$version，$target_arch，本地签名）"

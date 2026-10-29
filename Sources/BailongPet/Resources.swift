@@ -14,7 +14,7 @@ enum Paths {
         NSHomeDirectory() + "/Library/Application Support/BailongPetAppKit")
     static var version: String {
         let url = Bundle.main.bundleURL.pathExtension == "app" ? resources.appendingPathComponent("VERSION") : project.appendingPathComponent("VERSION")
-        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.1.0-dev.3"
+        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.2.0"
     }
 }
 
@@ -69,7 +69,7 @@ final class Animation: NSObject {
 }
 
 final class Decoder {
-    private let queue = DispatchQueue(label: "白龙透明动画解码", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "白龙娘透明动画解码", qos: .userInitiated)
     private let lock = NSLock()
     private var process: Process?
     private var generation = 0
@@ -80,6 +80,9 @@ final class Decoder {
     private func cached(_ id: String) -> Animation? {
         lock.lock(); let value = pinned[id]; lock.unlock()
         return value ?? cache.object(forKey:id as NSString)
+    }
+    func thumbnail(_ clip: Clip) -> NSImage? {
+        cached(clip.id)?.frames.first.map {NSImage(cgImage:$0.image,size:NSSize(width:36,height:36))}
     }
     // 只预热基础待机、拖拽和落地。用户发起新动作时可立即中断预热。
     func warm(_ clips: [Clip]) {

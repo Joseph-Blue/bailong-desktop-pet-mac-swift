@@ -8,27 +8,30 @@ struct ChatModel: Decodable {
 }
 final class ChatModelSettings {
     static let changed = Notification.Name("BailongChatModelChanged")
+    private let defaults: UserDefaults
+    init(defaults: UserDefaults = .standard) {self.defaults = defaults}
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
     private(set) var loading = false
     private(set) var error: String?
     var onLoad: (Bool) -> Void = {_ in}
-    var selectedModel: String? {UserDefaults.standard.string(forKey:"petChatModel")}
-    var selectedEffort: String? {UserDefaults.standard.string(forKey:"petChatEffort")}
+    var selectedModel: String? {defaults.string(forKey:"petChatModel")}
+    var selectedEffort: String? {defaults.string(forKey:"petChatEffort")}
     var currentModelID: String? {selectedModel ?? configuredModel ?? models.first(where:{$0.isDefault})?.model}
     var currentModel: ChatModel? {models.first(where:{$0.model == currentModelID})}
+    var supportedEfforts: [ChatModel.Effort] {currentModel?.supportedReasoningEfforts ?? []}
     var currentEffort: String? {
-        if let selectedEffort {return selectedEffort}
-        if selectedModel == nil, let configuredEffort {return configuredEffort}
-        return currentModel?.defaultReasoningEffort
+        guard let model = currentModel else {return nil}
+        let preferred = selectedEffort ?? (selectedModel == nil ? configuredEffort : nil)
+        if let preferred, supportedEfforts.contains(where:{$0.reasoningEffort == preferred}) {return preferred}
+        if supportedEfforts.contains(where:{$0.reasoningEffort == model.defaultReasoningEffort}) {return model.defaultReasoningEffort}
+        return supportedEfforts.first?.reasoningEffort
     }
+    // 与已安装 Codex 的简中本地化一致，Max / Ultra 保留原文，不按模型另起译名。
     static func effortName(_ raw: String) -> String {
-        ["none":"关闭","minimal":"最低","low":"低","medium":"中","high":"高","xhigh":"极高","max":"最高","ultra":"超高"][raw] ?? raw
+        ["none":"无","minimal":"极低","low":"轻度","medium":"中","high":"高","xhigh":"极高","max":"Max","ultra":"Ultra","persistent":"持续"][raw] ?? raw
     }
-    var effortTitle: String {
-        if currentModelID == "gpt-6-astra" && currentEffort == "max" {return "极高"}
-        return currentEffort.map(Self.effortName) ?? "默认"
-    }
+    var effortTitle: String {currentEffort.map(Self.effortName) ?? "不可调"}
     var showsAstraRedWarning: Bool {currentModelID == "gpt-6-astra" && (currentEffort == "max" || currentEffort == "ultra")}
     var effortExplanation: String {
         guard let effort = currentEffort else {return "跟随 Codex 的模型与推理强度设置。"}
@@ -58,12 +61,12 @@ final class ChatModelSettings {
     }
     func chooseLunaMinimum() {
         guard let (model,effort) = lunaMinimum else {return}
-        UserDefaults.standard.set(model,forKey:"petChatModel")
-        UserDefaults.standard.set(effort,forKey:"petChatEffort"); notify()
+        defaults.set(model,forKey:"petChatModel")
+        defaults.set(effort,forKey:"petChatEffort"); notify()
     }
     func syncWithCodex() {
-        UserDefaults.standard.removeObject(forKey:"petChatModel")
-        UserDefaults.standard.removeObject(forKey:"petChatEffort")
+        defaults.removeObject(forKey:"petChatModel")
+        defaults.removeObject(forKey:"petChatEffort")
         notify(); onLoad(true)
     }
     var title: String {
@@ -73,17 +76,23 @@ final class ChatModelSettings {
     func setLoading() {loading = true; error = nil; notify()}
     func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?) {
         self.models = models.filter {!$0.hidden}; self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
+        if let effort = selectedEffort, !supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
+            defaults.removeObject(forKey:"petChatEffort")
+        }
         loading = false; error = nil; notify()
     }
     func failed(_ error: Error) {loading = false; self.error = error.localizedDescription; notify()}
     func chooseModel(_ model: String?) {
-        UserDefaults.standard.set(model,forKey:"petChatModel")
+        defaults.set(model,forKey:"petChatModel")
         if let effort = selectedEffort, currentModel?.supportedReasoningEfforts.contains(where:{$0.reasoningEffort == effort}) != true {
-            UserDefaults.standard.removeObject(forKey:"petChatEffort")
+            defaults.removeObject(forKey:"petChatEffort")
         }
         notify()
     }
-    func chooseEffort(_ effort: String?) {UserDefaults.standard.set(effort,forKey:"petChatEffort"); notify()}
+    func chooseEffort(_ effort: String?) {
+        guard effort == nil || supportedEfforts.contains(where:{$0.reasoningEffort == effort}) else{return}
+        defaults.set(effort,forKey:"petChatEffort"); notify()
+    }
     func parameters() throws -> [String:Any] {
         if let selectedModel, !models.contains(where:{$0.model == selectedModel}) {
             throw PetFailure(message:"所选模型暂不可用，请打开模型选择器刷新或选择其他模型。")
@@ -149,6 +158,7 @@ final class ModelSelectorContent: NSViewController {
     private let luna = ActionButton("设置为 5.6-Luna 最低") {}
     private let refresh = ActionButton("刷新模型") {}
     private var options = [ChatModel.Effort]()
+    private var effortMarks = [NSTextField]()
     init(_ settings: ChatModelSettings) {self.settings = settings; super.init(nibName:nil,bundle:nil)}
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
@@ -172,14 +182,22 @@ final class ModelSelectorContent: NSViewController {
         for model in settings.models {picker.addItem(withTitle:model.displayName); picker.lastItem?.representedObject = model.model}
         if let model = settings.selectedModel, let index = settings.models.firstIndex(where:{$0.model == model}) {picker.selectItem(at:index+1)}
         picker.isEnabled = !settings.loading
-        options = settings.currentModel?.supportedReasoningEfforts ?? []
+        options = settings.supportedEfforts
+        slider.isHidden = options.count < 2
         slider.minValue = 0; slider.maxValue = Double(max(1,options.count-1)); slider.numberOfTickMarks = options.count
         slider.isEnabled = !settings.loading && options.count > 1; slider.trackFillColor = AppAccent.color
         slider.integerValue = options.firstIndex(where:{$0.reasoningEffort == settings.currentEffort}) ?? 0
+        effortMarks.forEach {$0.removeFromSuperview()}
+        effortMarks = options.map {option in
+            let mark = NSTextField(labelWithString:ChatModelSettings.effortName(option.reasoningEffort))
+            mark.font = .systemFont(ofSize:11); mark.alignment = .center
+            mark.textColor = option.reasoningEffort == settings.currentEffort ? AppAccent.color : .secondaryLabelColor
+            view.addSubview(mark); return mark
+        }
         effort.stringValue = "推理强度 · "+settings.effortTitle
         effort.textColor = AppAccent.color
-        explanation.stringValue = settings.loading ? "正在读取可用模型…" : settings.error != nil ? "模型列表暂不可用，请点击刷新模型重试。" : settings.effortExplanation
-        defaultInfo.isHidden = settings.loading || settings.error != nil || settings.selectedEffort != nil
+        explanation.stringValue = settings.loading ? "正在读取可用模型…" : settings.error != nil ? "模型列表暂不可用，请点击刷新模型重试。" : options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation
+        defaultInfo.isHidden = settings.loading || settings.error != nil || settings.selectedEffort != nil || options.isEmpty
         caution.stringValue = settings.caution ?? ""
         caution.isHidden = settings.loading || settings.error != nil || settings.caution == nil
         caution.textColor = settings.showsAstraRedWarning ? .systemRed : .systemOrange
@@ -196,7 +214,16 @@ final class ModelSelectorContent: NSViewController {
             let height = max(20,(text.stringValue as NSString).boundingRect(with:NSSize(width:428,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:text.font!]).height.rounded(.up)+4)
             text.frame = NSRect(x:16,y:y,width:428,height:height); y += height+8
         }
-        slider.frame = NSRect(x:16,y:y,width:428,height:32); y += 40
+        if !slider.isHidden {
+            slider.frame = NSRect(x:16,y:y+20,width:428,height:32)
+            for (index,mark) in effortMarks.enumerated() {
+                let tick = slider.rectOfTickMark(at:index)
+                let width = max(32,mark.fittingSize.width+8)
+                mark.frame = NSRect(x:max(16,min(16+tick.midX-width/2,444-width)),y:y,width:width,height:18)
+                mark.isHidden = false
+            }
+            y += 60
+        } else {effortMarks.forEach {$0.isHidden = true}}
         effort.frame = NSRect(x:16,y:y,width:428,height:22); y += 30
         picker.frame = NSRect(x:16,y:y,width:428,height:28); y += 40
         heading.frame = NSRect(x:16,y:y,width:428,height:22); y += 38
