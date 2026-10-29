@@ -13,7 +13,7 @@ enum Paths {
     static let data = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BAILONG_DATA_DIR"] ??
         NSHomeDirectory() + "/Library/Application Support/BailongPetAppKit")
     static var version: String {
-        (try? String(contentsOf: resources.appendingPathComponent("VERSION"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.1.0-dev.1"
+        (try? String(contentsOf: resources.appendingPathComponent("VERSION"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.1.0-dev.2"
     }
 }
 

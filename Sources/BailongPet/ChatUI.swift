@@ -18,6 +18,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onSelect: (String) -> Void = { _ in }, onSubmit: (String) -> Void = { _ in }
     var onStop: () -> Void = {}, onNew: () -> Void = {}, onFolder: () -> Void = {}, onContinue: () -> Void = {}, onHide: () -> Void = {}
     var busy = false
+    private var updatingList = false
     override init() {
         super.init()
         composer.title = "与白龙对话"; history.title = "白龙桌宠 · 历史对话"
@@ -61,8 +62,12 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     func refresh(_ conversations: [Conversation], selected: Conversation, busy: Bool) {
         self.conversations = conversations.reversed(); self.selected = selected.key; self.busy = busy
+        // reloadData 会先校正选择并同步通知 delegate；这不是用户切换对话。
+        // 将重载与恢复选择视作一次更新，避免 onSelect → refresh 的递归循环。
+        updatingList = true
         list.reloadData()
         if let row = self.conversations.firstIndex(where:{$0.key == selected.key}) { list.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
+        updatingList = false
         folder.stringValue = selected.cwd; folder.toolTip = selected.cwd
         composerButton.title = busy ? "停止" : "发送"; historyButton.title = busy ? "停止" : "发送"
         continueButton.isHidden = !selected.external; continueButton.isEnabled = !busy
@@ -89,8 +94,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let c = conversations[row]; let v = label((c.external ? "Codex · " : "")+c.title+"\n"+(c.turns.last?.status ?? "尚未发送")); v.font = .systemFont(ofSize:13); return v
     }
     func tableViewSelectionDidChange(_ notification: Notification) {
+        guard !updatingList else { return }
         let row = list.selectedRow
-        if row >= 0 && row < conversations.count && conversations[row].key != selected { onSelect(conversations[row].key) }
+        guard row >= 0 && row < conversations.count else { return }
+        let key = conversations[row].key
+        guard key != selected else { return }
+        selected = key
+        onSelect(key)
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool { sender.orderOut(nil); if sender == composer {onHide()}; return false }
     func openHistory() { history.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true) }
