@@ -23,17 +23,29 @@ struct NativeFailure: LocalizedError {
     var errorDescription: String? { message }
 }
 
-// 这是构建工具，不随桌宠运行。FFmpeg 只用于读取原 WebM 和调用系统编码器。
+// 这是构建工具，不随桌宠运行。FFmpeg 只生成中间素材，Apple 工具负责透明 HEVC。
 @main
 struct PrepareNativeSamples {
+    static func run(_ executable: URL, _ arguments: [String]) throws {
+        let task = Process()
+        task.executableURL = executable
+        task.arguments = arguments
+        try task.run()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            throw NativeFailure(message: "\(executable.lastPathComponent) 失败，退出码 \(task.terminationStatus)")
+        }
+    }
+
     static func main() async {
         do {
-            guard CommandLine.arguments.count == 4 else {
-                throw NativeFailure(message: "用法：PrepareNativeSamples <素材目录> <ffmpeg> <输出目录>")
+            guard CommandLine.arguments.count == 5 else {
+                throw NativeFailure(message: "用法：PrepareNativeSamples <素材目录> <ffmpeg> <输出目录> <预览版本>")
             }
             let source = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
             let encoder = URL(fileURLWithPath: CommandLine.arguments[2])
             let destination = URL(fileURLWithPath: CommandLine.arguments[3], isDirectory: true)
+            let version = CommandLine.arguments[4]
             let manager = FileManager.default
             // 输出为独立目录；存在时显式报错，避免误覆盖上次 review 的素材。
             guard !manager.fileExists(atPath: destination.path) else {
@@ -53,21 +65,17 @@ struct PrepareNativeSamples {
                     throw NativeFailure(message: "素材清单缺少 \(key) 的 id 或文件路径")
                 }
                 let output = staging.appendingPathComponent(id + ".mov")
-                let task = Process()
-                task.executableURL = encoder
-                // 保持原尺寸和时间戳；BGRA 与 alpha_quality 显式启用透明 HEVC。
-                // 软件编码是明确允许的系统能力，不承诺本机或 Intel 全程硬件加速。
-                task.arguments = ["-hide_banner", "-loglevel", "error", "-nostdin", "-n",
-                    "-c:v", "libvpx-vp9", "-threads", "2", "-i", source.appendingPathComponent(path).path,
-                    "-map", "0:v:0", "-an", "-pix_fmt", "bgra", "-fps_mode", "passthrough",
-                    "-c:v", "hevc_videotoolbox", "-allow_sw", "1", "-alpha_quality", "1",
-                    "-b:v", "8M", "-tag:v", "hvc1", "-movflags", "+faststart", output.path]
+                let intermediate = staging.appendingPathComponent(id + "-prores4444.mov")
                 print("转码：\(name) → \(output.lastPathComponent)")
-                try task.run()
-                task.waitUntilExit()
-                guard task.terminationStatus == 0 else {
-                    throw NativeFailure(message: "\(id) 转码失败，退出码 \(task.terminationStatus)；未完成输出保留在 \(staging.path)")
-                }
+                // FFmpeg 7.1 直接封装的透明 HEVC 在本机 AVAssetReader 中报 -11801/-12713。
+                // 改用带 alpha 的 ProRes 4444 作中间文件，由 Apple 完成 HEVC 编码和封装。
+                // 维持原尺寸与时间戳；两次编码不宣称无损，不修饰原素材边缘。
+                try run(encoder, ["-hide_banner", "-loglevel", "error", "-nostdin", "-n",
+                    "-c:v", "libvpx-vp9", "-threads", "2", "-i", source.appendingPathComponent(path).path,
+                    "-map", "0:v:0", "-an", "-c:v", "prores_ks", "-profile:v", "4",
+                    "-pix_fmt", "yuva444p10le", "-alpha_bits", "16", "-fps_mode", "passthrough", intermediate.path])
+                try run(URL(fileURLWithPath: "/usr/bin/avconvert"), ["--source", intermediate.path,
+                    "--preset", "PresetHEVCHighestQualityWithAlpha", "--output", output.path])
                 // 用未来运行时所用的框架读取元数据，避免把不带 alpha 的 HEVC 当成成功。
                 let asset = AVURLAsset(url: output)
                 guard let track = try await asset.loadTracks(withMediaType: .video).first else {
@@ -83,14 +91,25 @@ struct PrepareNativeSamples {
                 guard duration.seconds.isFinite, duration.seconds > 0 else {
                     throw NativeFailure(message: "\(id) 的时长无效")
                 }
+                // 此次故障中元数据正常而实际解码失败；生成时必须能读到真实首帧。
+                let reader = try AVAssetReader(asset: asset)
+                let decoded = AVAssetReaderTrackOutput(track: track,
+                    outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+                reader.add(decoded)
+                guard reader.startReading(), let frame = decoded.copyNextSampleBuffer(),
+                      CMSampleBufferGetImageBuffer(frame) != nil else {
+                    throw reader.error ?? NativeFailure(message: "\(id) 无法原生解码首帧")
+                }
+                reader.cancelReading()
+                try manager.removeItem(at: intermediate)
                 samples.append(NativeSample(id: id, name: name, file: output.lastPathComponent,
                     sourceFile: path, durationSeconds: duration.seconds, width: Int(size.width),
                     height: Int(size.height), frameRate: rate, containsAlpha: true))
-                print("已生成：\(id)，\(Int(size.width))×\(Int(size.height))，\(rate) fps，\(duration.seconds) 秒，含 alpha")
+                print("已生成：\(id)，\(Int(size.width))×\(Int(size.height))，\(rate) fps，\(duration.seconds) 秒，含 alpha，原生首帧解码通过")
             }
             let json = JSONEncoder()
             json.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            try json.encode(NativeSamples(version: "0.3.0-dev.1", samples: samples))
+            try json.encode(NativeSamples(version: version, samples: samples))
                 .write(to: staging.appendingPathComponent("samples.json"), options: .atomic)
             try manager.moveItem(at: staging, to: destination)
             print("素材准备完成：\(destination.path)")

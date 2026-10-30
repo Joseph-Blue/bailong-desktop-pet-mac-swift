@@ -70,6 +70,7 @@ private final class PreviewApp: NSObject, NSApplicationDelegate {
         for control in [clips, backgrounds, speeds] { controls.addArrangedSubview(control) }
         notice.font = .systemFont(ofSize: 12)
         notice.textColor = .secondaryLabelColor
+        notice.isSelectable = true
         for view in [controls, video, notice] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
@@ -103,7 +104,14 @@ private final class PreviewApp: NSObject, NSApplicationDelegate {
         looper = AVPlayerLooper(player: player, templateItem: item)
         observation = looper?.observe(\.status, options: [.initial, .new]) { [weak self] loop, _ in
             if loop.status == .failed {
-                let message = loop.error?.localizedDescription ?? "播放器未提供具体错误"
+                let message: String
+                if let error = loop.error as NSError? {
+                    let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+                    message = "\(error.localizedDescription)（\(error.domain) \(error.code)）"
+                        + (underlying.map { "\n底层错误：\($0.domain) \($0.code)" } ?? "")
+                } else {
+                    message = "播放器未提供具体错误"
+                }
                 DispatchQueue.main.async { self?.notice.stringValue = "播放失败：\(message)" }
             }
         }

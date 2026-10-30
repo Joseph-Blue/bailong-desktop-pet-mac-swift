@@ -14,6 +14,7 @@ case "$host_arch" in
 esac
 workspace=".build/native-hevc"
 samples="local-assets/native-hevc/samples"
+version="$(<Tools/NativeHEVC/VERSION)"
 mkdir -p "$workspace/module-cache" local-assets/native-hevc
 
 if [[ "${1:-}" != "--reuse-assets" ]]; then
@@ -24,14 +25,14 @@ if [[ "${1:-}" != "--reuse-assets" ]]; then
         Tools/NativeHEVC/AssetInfo.swift -framework AVFoundation \
         -o "$workspace/PrepareNativeSamples"
     "$workspace/PrepareNativeSamples" \
-        "local-assets/outputs/白龙桌宠素材" "$encoder" "$samples"
+        "local-assets/outputs/白龙桌宠素材" "$encoder" "$samples" "$version"
 else
     [[ -f "$samples/samples.json" ]] || { print -u2 "尚无已完成的素材，请先不带参数运行。"; exit 1; }
 fi
 
 # 预览与正式桌宠使用不同名称、包标识和输出目录；无 FFmpeg 运行依赖。
 for target_arch in arm64 x86_64; do
-    output="dist/native-hevc/$target_arch"
+    output="dist/native-hevc/$version/$target_arch"
     mkdir -p "$output"
     app="$output/白龙娘原生动画预览.app"
     staging="$(mktemp -d "$output/.preview-XXXXXX")"
@@ -42,7 +43,7 @@ for target_arch in arm64 x86_64; do
         -o "$staging/Contents/MacOS/NativeHEVCPreview"
     cp -R "$samples" "$staging/Contents/Resources/samples"
     cp local-assets/BailongPet.icns "$staging/Contents/Resources/"
-    cat > "$staging/Contents/Info.plist" <<'PLIST'
+    cat > "$staging/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -50,9 +51,9 @@ for target_arch in arm64 x86_64; do
 <key>CFBundleName</key><string>白龙娘原生动画预览</string>
 <key>CFBundleExecutable</key><string>NativeHEVCPreview</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>BailongVersion</key><string>0.3.0-dev.1</string>
+<key>CFBundleShortVersionString</key><string>${version%%-*}</string>
+<key>CFBundleVersion</key><string>${version##*.}</string>
+<key>BailongVersion</key><string>$version</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>CFBundleAllowMixedLocalizations</key><true/>
