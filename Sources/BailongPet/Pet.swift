@@ -87,6 +87,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var manualHidden = false, fullscreenHidden = false, sleeping = false
     var menuOpen = false, settingsOpen = false
     var composerVisible = false
+    private var greetingPending = true
     var pauseTime: Double?
     var press: CGPoint?, pressOrigin = CGPoint.zero
     var dragged = false, dragFromDock = false
@@ -158,6 +159,7 @@ final class PetController: NSObject, NSMenuDelegate {
         sound = NSSound(contentsOf: Paths.resources.appendingPathComponent("sounds/click.wav"), byReference: true)
         status.button?.title = PetPreferences.productName; status.button?.toolTip = preferences.appName; refreshMenu()
         bubble.onClose = { [weak self] in self?.quotaActive = false }
+        settings.petSymbol = { [weak self] in self?.status.button?.image }
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
         settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose) }
         settings.onPreviewDetails = { [weak self] in self?.onHistory(nil) }
@@ -188,7 +190,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func play(_ clip: Clip, _ mode: String) {
         if self.motion != nil { movementReady = now + 10 }; motion = nil
         loading = true
-        if bubble.kind == "interaction" { bubble.hide() }
+        // 气泡生命周期由自身计时和明确关闭控制，不随动作切换清空。
         if mode == "interaction", let line = preferences.line(for:clip) { say(line, kind:"interaction",personalizeTitle:false) }
         if preferences.bool("preloadWholeAnimation"), current.id == clip.id,
            let animation, animation.stream == nil, animation.frames.count > 1 {
@@ -204,10 +206,12 @@ final class PetController: NSObject, NSMenuDelegate {
                 if !self.hidden {self.visibilityFade.setVisible(true)}
             }
             if clip.id == self.catalog.idle.id && self.baseBounds == nil { self.baseBounds = frame.bounds }
+            self.greetOnFirstAppearance()
         }, completion: { [weak self] result in
             guard let self else { return }; self.loading = false
             switch result {
             case .success(let animation):
+                RecoveryWindow.resolve("animation-initialization")
                 self.startup?.orderOut(nil); self.startup = nil
                 // 像素、时间轴和清单校准一起切换，不能用新动作倍率绘制旧帧。
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id)
@@ -222,9 +226,15 @@ final class PetController: NSObject, NSMenuDelegate {
                     self.status.button?.title = ""
                 }
                 if self.mode == "move" { self.planMotion(manual: true) }
+                self.greetOnFirstAppearance()
             case .failure(let error):
                 self.startup?.orderOut(nil); self.startup = nil
                 self.began = self.now
+                if self.animation == nil {
+                    self.timer?.invalidate(); self.timer = nil
+                    RecoveryWindow.show(id:"animation-initialization",report:RecoveryReport(title:"桌宠画面未能加载",message:"动画没有可显示的画面。请确认应用资源完整，再重新加载。设置和历史记录不会被重置。",module:"动画",operation:"初始化动画",error:error),actionTitle:"重新加载") { [weak self] in self?.play(clip,mode) }
+                    return
+                }
                 self.bubble.showFailure(AppFailure.animation(error),scale:Double(self.bubblePercent)/100,
                     retry:{ [weak self] in self?.play(clip,mode) })
                 self.placeBubble()
@@ -363,7 +373,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 // 吸边拖动与召回一致，不切换到跟随鼠标的拖拽动作。
                 undock(); return
             }
-            pending = nil; bubble.hide(); play(catalog.dragAnimation,"drag")
+            pending = nil; play(catalog.dragAnimation,"drag")
         }
         if dragged && !dragFromDock {
             let screen = NSScreen.screens.first(where:{$0.frame.contains(p)}) ?? self.screen
@@ -393,7 +403,7 @@ final class PetController: NSObject, NSMenuDelegate {
         dockRestore = p; dock = left <= right ? "left" : "right"
         move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:p.y))
         dockProgress = 0; dockFrom = 0; dockTarget = 1; dockBegan = now; dockAnimating = true
-        bubble.hide(); play(catalog.idle,"idle"); return true
+        play(catalog.idle,"idle"); return true
     }
     func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
     func preview(_ clip: Clip) {
@@ -401,13 +411,14 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, taskStartedAt: Date? = nil, taskKey: String? = nil, taskFinishedAt: Date? = nil, taskStatus: String? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, taskStartedAt: Date? = nil, taskKey: String? = nil, taskFinishedAt: Date? = nil, taskStatus: String? = nil, attentionAction: Bool = false, questions: [TaskQuestion] = [], questionSubmit: (([String:String], @escaping (Error?) -> Void) -> Void)? = nil, questionSkip: ((Set<String>) -> Void)? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
+        bubble.onQuestionSubmit = questionSubmit; bubble.onQuestionsSkipped = questionSkip
         bubble.onDetails = { [weak self] in self?.onHistory(thread) }
         bubble.onCodex = { [weak self] in self?.onCodex(thread) }
-        bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),details:thread != nil,followsText:followsText,resetText:resetText,animateHeading:animateHeading || kind == "quotaLoading",taskStartedAt:taskStartedAt,taskKey:taskKey,taskFinishedAt:taskFinishedAt,taskStatus:taskStatus)
+        bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),details:thread != nil,followsText:followsText,resetText:resetText,animateHeading:animateHeading || kind == "quotaLoading",taskStartedAt:taskStartedAt,taskKey:taskKey,taskFinishedAt:taskFinishedAt,taskStatus:taskStatus,attentionAction:attentionAction,questions:questions)
         bubble.purpose = purpose; bubble.relatedConversation = thread
         placeBubble()
     }
@@ -438,7 +449,7 @@ final class PetController: NSObject, NSMenuDelegate {
         // 作者 size_preview 本身是空白框；按用户要求，改用 chat_ui.py 的普通对话文案填充预览。
         bubble.onDetails = { [weak self] in self?.onHistory(nil) }
         bubble.onCodex = { [weak self] in self?.onCodex(nil) }
-        bubble.show(title:preferences.petName,body:preferences.template(preferences.string("greetingTemplate")),kind:"preview",scale:Double(bubblePercent)/100,seconds:preferences.duration(purpose,text:preferences.template(preferences.string("greetingTemplate"))),details:true)
+        bubble.show(title:preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"preview",scale:Double(bubblePercent)/100,seconds:preferences.duration(purpose,text:preferences.statusLine("greetingTemplate")),details:true)
         bubble.purpose = purpose
         placeBubble()
     }
@@ -475,7 +486,13 @@ final class PetController: NSObject, NSMenuDelegate {
     func applyVisibility() {
         if hidden { dockRecallAt = nil; dockDoubleClick = false; leftDoubleClick = false; press = nil; dragged = false; if pauseTime == nil { pauseTime = now }; window.ignoresMouseEvents = true; visibilityFade.setVisible(false); bubble.hide(); quotaActive = false; onVisibility(false) }
         else { if let pauseTime { began += now-pauseTime }; pauseTime = nil; if animation != nil {visibilityFade.setVisible(true)}; interaction() }
-        updateMotionDisplayLink(); refreshMenu()
+        updateMotionDisplayLink(); refreshMenu(); greetOnFirstAppearance()
+    }
+    private func greetOnFirstAppearance() {
+        guard greetingPending,!hidden,animation != nil else {return}
+        greetingPending = false
+        guard preferences.allows(.interaction),activeTasks.isEmpty,!bubble.visible,!composerVisible else {return}
+        say(preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"greeting",purpose:.interaction,personalizeTitle:false)
     }
     func reveal() { manualHidden = false; keepOnScreen(); applyVisibility() }
     func performGesture(_ action: String) {

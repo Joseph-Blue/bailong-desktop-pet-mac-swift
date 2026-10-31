@@ -28,8 +28,85 @@ private final class GlassOpacitySlider: NSSlider {
     }
 }
 
+// 仅“称呼与个性”页使用；高亮是显示属性，偏好和剪贴板始终保留纯文本。
+private enum SettingsTemplateTokens {
+    private static func ink(_ light:(CGFloat,CGFloat,CGFloat), _ dark:(CGFloat,CGFloat,CGFloat)) -> NSColor {
+        NSColor(name:nil) {appearance in
+            let rgb = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed:rgb.0,green:rgb.1,blue:rgb.2,alpha:1)
+        }
+    }
+    static let items: [(title:String, token:String, color:NSColor)] = [
+        ("插入特定称呼：", "{特定称呼}", ink((0.12,0.34,0.68),(0.45,0.73,1))),
+        ("插入用户名：", "{用户名}", ink((0.48,0.22,0.62),(0.83,0.62,1))),
+        ("插入桌宠名：", "{桌宠名}", ink((0.62,0.27,0.02),(1,0.72,0.40)))
+    ]
+    static func ranges(in text:String, apply:(NSRange,NSColor)->Void) {
+        let value = text as NSString
+        for item in items {
+            var start = 0
+            while start < value.length {
+                let range = value.range(of:item.token,range:NSRange(location:start,length:value.length-start))
+                guard range.location != NSNotFound else {break}
+                apply(range,item.color); start = NSMaxRange(range)
+            }
+        }
+    }
+}
+private final class SettingsTemplateField: NSTextField {
+    var allowsTokens = true
+    func refreshHighlight() {
+        if let editor = currentEditor() as? SettingsTemplateEditor {editor.refreshHighlight(); return}
+        let value = NSMutableAttributedString(string:stringValue,attributes:[.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor])
+        if allowsTokens {SettingsTemplateTokens.ranges(in:stringValue) {range,color in
+            value.addAttributes([.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],range:range)
+        }
+        }
+        attributedStringValue = value
+    }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
+}
+private final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
+    var allowsTokens = true
+    override func menu(for event:NSEvent) -> NSMenu? {
+        let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
+        for (title,action) in [("剪切",#selector(NSText.cut(_:))),("拷贝",#selector(NSText.copy(_:))),("粘贴",#selector(NSText.paste(_:))),("全选",#selector(NSResponder.selectAll(_:)))] {
+            let item = NSMenuItem(title:title,action:action,keyEquivalent:""); item.target = self; menu.addItem(item)
+        }
+        guard allowsTokens else {return menu}
+        menu.addItem(.separator())
+        let font = NSFont.menuFont(ofSize:0)
+        let tab = SettingsTemplateTokens.items.map {($0.title as NSString).size(withAttributes:[.font:font]).width}.max()! + 20
+        let paragraph = NSMutableParagraphStyle(); paragraph.tabStops = [NSTextTab(textAlignment:.left,location:tab)]
+        for entry in SettingsTemplateTokens.items {
+            let title = entry.title+"\t"+entry.token
+            let item = NSMenuItem(title:title,action:#selector(insertTemplateToken(_:)),keyEquivalent:"")
+            item.attributedTitle = NSAttributedString(string:title,attributes:[.font:font,.paragraphStyle:paragraph])
+            item.representedObject = entry.token; item.target = self; menu.addItem(item)
+        }
+        return menu
+    }
+    @objc private func insertTemplateToken(_ sender:NSMenuItem) {
+        guard let token = sender.representedObject as? String else {return}
+        insertText(token,replacementRange:selectedRange())
+    }
+    override func paste(_ sender:Any?) {pasteAsPlainText(sender)}
+    override func didChangeText() {super.didChangeText(); refreshHighlight()}
+    func refreshHighlight() {
+        guard !hasMarkedText(), let layoutManager else {return}
+        let whole = NSRange(location:0,length:(string as NSString).length)
+        layoutManager.removeTemporaryAttribute(.foregroundColor,forCharacterRange:whole)
+        layoutManager.removeTemporaryAttribute(.backgroundColor,forCharacterRange:whole)
+        guard allowsTokens else {return}
+        SettingsTemplateTokens.ranges(in:string) {range,color in
+            layoutManager.addTemporaryAttributes([.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],forCharacterRange:range)
+        }
+    }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
+}
+
 final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSToolbarDelegate {
-    let window = NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:680),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+    let window = NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:820),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
     let preferences: PetPreferences
     let catalog: Catalog?
     private let splitController = NSSplitViewController()
@@ -39,6 +116,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var textActions = [ObjectIdentifier:(String)->Void]()
     private var textEndActions = [ObjectIdentifier:(String)->Void]()
     private var identityPreview: NSTextField?
+    private let templateEditor = SettingsTemplateEditor()
     private weak var updateStatusLabel: NSTextField?
     private weak var updateTimeLabel: NSTextField?
     private weak var automaticUpdateSwitch: NSSwitch?
@@ -54,13 +132,17 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var glassControls = [NSView]()
     private var accentButtons = [NSButton]()
     private var accentNames = [NSTextField]()
+    var petSymbol: () -> NSImage? = {nil}
     var onClose: () -> Void = {}
     var onPreview: (Clip) -> Void = { _ in }
     var onMessagePreview: (MessagePurpose) -> Void = { _ in }
     var onPreviewDetails: () -> Void = {}
+    var onClearLocalData: (() throws -> Void)?
+    private var storageGeneration = 0
     init(preferences: PetPreferences = .shared, catalog: Catalog? = nil) {
         self.preferences = preferences; self.catalog = catalog
         super.init()
+        templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
         window.title = "设置"; window.isReleasedWhenClosed = false; window.delegate = self
         window.styleMask.insert(.fullSizeContentView)
         window.minSize = NSSize(width:800,height:540); window.setFrameAutosaveName("BailongSettingsWindow")
@@ -157,14 +239,26 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     func tableViewSelectionDidChange(_ notification: Notification) {if let section = SettingsSection(rawValue:sidebar.selectedRow) {window.makeFirstResponder(nil); selected = section; render()}}
     func windowWillClose(_ notification: Notification) {window.makeFirstResponder(nil); dismissMaterialPreview(); NSApp.removeWindowsItem(window); onClose()}
+    func windowWillReturnFieldEditor(_ sender:NSWindow, to client:Any?) -> Any? {
+        guard let field = client as? SettingsTemplateField else {return nil}
+        templateEditor.allowsTokens = field.allowsTokens
+        return templateEditor
+    }
+    func controlTextDidBeginEditing(_ notification:Notification) {
+        (notification.object as? SettingsTemplateField)?.refreshHighlight()
+    }
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else {return}
+        if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() {return}
         textActions[ObjectIdentifier(field)]?(field.stringValue)
-        identityPreview?.stringValue = preferences.template(preferences.string("greetingTemplate"))
+        (field as? SettingsTemplateField)?.refreshHighlight()
+        identityPreview?.stringValue = preferences.statusLine("greetingTemplate")
     }
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
         textEndActions[ObjectIdentifier(field)]?(field.stringValue)
+        // 等原生 field editor 退出后，为未聚焦的输入框恢复相同高亮。
+        DispatchQueue.main.async { [weak field] in (field as? SettingsTemplateField)?.refreshHighlight() }
     }
     private func attach(_ control: NSControl, _ callback: @escaping (NSControl)->Void) {
         let action = SettingsAction(callback); actions.append(action); control.target = action; control.action = #selector(SettingsAction.invoke(_:))
@@ -176,10 +270,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         field.identifier = NSUserInterfaceItemIdentifier("settings-explanation")
         return field
     }
-    private func group(_ title: String, _ rows: [NSView]) {
+    private func group(_ title: String, _ rows: [NSView], action:NSView? = nil) {
         let section = NSStackView(); section.orientation = .vertical; section.alignment = .leading; section.spacing = 10
         let heading = label(title,bold:true); heading.font = .systemFont(ofSize:13,weight:.semibold)
-        fill(heading,in:section)
+        if let action {fill(alignedRow(leading:heading,control:action),in:section)} else {fill(heading,in:section)}
         let surface = SettingsSectionBackground(), items = NSStackView()
         items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
         surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
@@ -261,7 +355,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func choice(_ title: String, _ key: String, _ options: [(String,String)]) -> NSView {
         popup(title,options:options,value:preferences.string(key),width:key == "sendShortcut" ? 260 : key == "animationQuality" ? 250 : 190,identifier:key) { [weak self] value in
             self?.preferences.set(value,for:key)
-            self?.identityPreview?.stringValue = self?.preferences.template(self?.preferences.string("greetingTemplate") ?? "") ?? ""
+            if key == "addressMode" {self?.render()}
+            self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
     }
     @objc private func refreshAccent() {
@@ -283,14 +378,106 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             cell?.backgroundStyle = row.interiorBackgroundStyle
         }
     }
-    private func entry(_ title: String, value: String, placeholder: String = "", limit: Int = 80, changed: @escaping (String)->Void) -> NSView {
-        let field = NSTextField(string:value); field.placeholderString = placeholder; field.delegate = self
-        field.widthAnchor.constraint(equalToConstant:240).isActive = true; field.setAccessibilityLabel(title)
-        textActions[ObjectIdentifier(field)] = {text in let bounded = String(text.prefix(limit)); if bounded != text {field.stringValue = bounded}; changed(bounded)}
-        return row(title,control:field)
+    private func entry(_ title: String, value: String, placeholder: String = "", limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, changed: @escaping (String)->Void) -> NSView {
+        let field: NSTextField = selected == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
+        let templateField = field as? SettingsTemplateField
+        templateField?.allowsTokens = allowsTokens
+        field.placeholderString = placeholder; field.delegate = self
+        templateField?.refreshHighlight(); field.setAccessibilityLabel(title)
+        let count = NSTextField(labelWithString:"")
+        count.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); count.alignment = .right
+        count.widthAnchor.constraint(equalToConstant:54).isActive = true
+        let clear = NSButton(image:NSImage(systemSymbolName:"xmark.circle.fill",accessibilityDescription:"清空"+title)!,target:nil,action:nil)
+        clear.isBordered = false; clear.contentTintColor = .secondaryLabelColor
+        clear.setAccessibilityLabel("清空"+title)
+        clear.widthAnchor.constraint(equalToConstant:20).isActive = true
+        clear.heightAnchor.constraint(equalToConstant:24).isActive = true
+        let updateCount: (String)->Void = {value in
+            let length = allowsTokens ? TemplateSyntax.count(value) : value.count
+            count.stringValue = "\(length)/\(limit)"
+            count.textColor = length >= limit ? .systemRed : .secondaryLabelColor
+            count.setAccessibilityLabel("已输入 \(length) 字，上限 \(limit) 字")
+            clear.isEnabled = !value.isEmpty
+        }
+        updateCount(value)
+        textActions[ObjectIdentifier(field)] = {text in
+            let bounded = allowsTokens ? TemplateSyntax.bounded(text,limit:limit) : String(text.prefix(limit))
+            if bounded != text {
+                if let editor = field.currentEditor() as? NSTextView {
+                    let selection = editor.selectedRange(); editor.string = bounded
+                    editor.setSelectedRange(NSRange(location:min(selection.location,(bounded as NSString).length),length:0))
+                }
+                field.stringValue = bounded
+            }
+            updateCount(bounded); changed(bounded)
+        }
+        attach(clear) { [weak self,weak field] _ in
+            guard let self,let field else {return}
+            self.window.makeFirstResponder(field)
+            if let editor = field.currentEditor() as? NSTextView {
+                let all = NSRange(location:0,length:(editor.string as NSString).length)
+                if editor.shouldChangeText(in:all,replacementString:"") {editor.replaceCharacters(in:all,with:""); editor.didChangeText()}
+            } else {
+                field.stringValue = ""; self.textActions[ObjectIdentifier(field)]?(""); (field as? SettingsTemplateField)?.refreshHighlight()
+            }
+        }
+        let controls = NSStackView(views:[field,clear,count]); controls.orientation = .horizontal; controls.spacing = 6; controls.alignment = .centerY; controls.distribution = .fill
+        field.setContentHuggingPriority(.defaultLow,for:.horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        if limit >= 120 {
+            // 台词标签在上，输入横向铺满；不再给短标签留出大半行空白。
+            field.usesSingleLineMode = false; field.maximumNumberOfLines = 0
+            field.cell?.wraps = true; field.cell?.isScrollable = false
+            field.heightAnchor.constraint(equalToConstant:52).isActive = true
+            let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = 8
+            fill(label(title),in:row); fill(controls,in:row)
+            return row
+        }
+        field.widthAnchor.constraint(equalToConstant:240).isActive = true
+        let caption = identityLabel(title,token:tokenHint)
+        let leading = NSStackView(); leading.orientation = .horizontal; leading.alignment = .centerY; leading.spacing = 6
+        if let icon {
+            let image = NSImageView(image:icon); image.contentTintColor = .secondaryLabelColor
+            image.widthAnchor.constraint(equalToConstant:18).isActive = true; image.heightAnchor.constraint(equalToConstant:18).isActive = true
+            leading.addArrangedSubview(image)
+        }
+        leading.addArrangedSubview(caption)
+        return alignedRow(leading:leading,control:controls)
     }
-    private func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 80) -> NSView {
-        entry(title,value:preferences.string(key),placeholder:placeholder,limit:limit) { [weak self] value in self?.preferences.set(value,for:key) }
+    private func identityLabel(_ title:String,token:String?) -> NSTextField {
+        let caption = label(title)
+        if let token {
+            let value = NSMutableAttributedString(string:title+"  "+token,attributes:[.font:NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor])
+            SettingsTemplateTokens.ranges(in:value.string) {range,color in
+                value.addAttributes([.font:NSFont.systemFont(ofSize:11),.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],range:range)
+            }
+            caption.attributedStringValue = value
+        }
+        return caption
+    }
+    private func addressChoice() -> NSView {
+        let radios = NSStackView(); radios.orientation = .horizontal; radios.alignment = .centerY; radios.spacing = 16
+        for (key,title) in [("name","你的名字"),("custom","特定称呼")] {
+            let button = AccentChoiceButton(title:title,type:.radio)
+            button.state = preferences.string("addressMode") == key ? .on : .off
+            attach(button) { [weak self] _ in
+                guard let self else {return}
+                self.window.makeFirstResponder(nil); self.preferences.set(key,for:"addressMode"); self.render()
+            }
+            radios.addArrangedSubview(button)
+        }
+        return alignedRow(leading:identityLabel("怎么称呼你",token:"{特定称呼}"),control:radios)
+    }
+    private func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20) -> NSView {
+        let icon:NSImage?
+        switch key {
+        case "ownerName": icon = NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)
+        case "petName": icon = petSymbol()
+        case "customAddress": icon = NSImage(systemSymbolName:"bubble.left",accessibilityDescription:nil)
+        default: icon = nil
+        }
+        let token = ["ownerName":"{用户名}","petName":"{桌宠名}","customAddress":"{特定称呼}"][key]
+        return entry(title,value:preferences.string(key),placeholder:placeholder,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token) { [weak self] value in self?.preferences.set(value,for:key) }
     }
     private func slider(_ title: String, _ key: String, range: ClosedRange<Double>, step: Double = 1, suffix: String, detail: String? = nil) -> NSView {
         let slider = NSSlider(value:preferences.number(key),minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
@@ -405,12 +592,24 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         } catch {showError("登录启动设置失败",error)}
     }
     private func identity() {
-        group("我们怎么称呼彼此",[text("你的名字","ownerName",placeholder:"例如：阿哲"),choice("怎么称呼你","addressMode",[("master","主人"),("name","你的名字"),("custom","自定义称呼")]),text("自定义称呼","customAddress",placeholder:"例如：阿哲主人"),text("桌宠的名字","petName",placeholder:"白龙娘")])
-        let preview = label(preferences.template(preferences.string("greetingTemplate"))); preview.font = .systemFont(ofSize:15,weight:.medium); identityPreview = preview
-        group("见面时说",[text("问候语","greetingTemplate",limit:500),note("可使用 {称呼}、{名字}、{桌宠}。称呼会用于新的固定台词与内置会话，原始对话正文保持不变。"),alignedRow(leading:preview,control:ActionButton("预览消息") { [weak self] in self?.onMessagePreview(.preview) })])
+        fill(note("{用户名} 是你的名字，{桌宠名} 是桌宠的名字；{特定称呼} 按“怎么称呼你”的选择生成。每个变量按 1 字计数。"),in:content)
+        var names = [text("你的名字","ownerName",placeholder:"默认为“主人”"),text("桌宠的名字","petName",placeholder:"白龙娘"),addressChoice()]
+        if preferences.string("addressMode") == "custom" {names.append(text("特定称呼","customAddress",placeholder:"{桌宠名}最喜欢的{用户名}"))}
+        group("我们怎么称呼彼此",names)
+        let preview = label(preferences.statusLine("greetingTemplate")); preview.font = .systemFont(ofSize:15,weight:.medium); identityPreview = preview
+        group("见面时说",[text("问候语","greetingTemplate",limit:120),alignedRow(leading:preview,control:ActionButton("预览消息") { [weak self] in self?.onMessagePreview(.preview) })])
+        group("任务状态台词",[text("执行任务中","taskProgressTemplate",limit:120),text("等待回答","taskAnswerTemplate",limit:120),text("等待批准","taskApprovalTemplate",limit:120),text("任务成功","taskSuccessTemplate",limit:120),text("任务失败","taskFailureTemplate",limit:120),text("任务中断或取消","taskInterruptedTemplate",limit:120)])
+        group("额度查询台词",[text("正在查询","quotaLoadingTemplate",limit:120)])
         if let catalog {
             let lines = (catalog.variants+catalog.work).filter {$0.line != nil}
-            group("互动台词",lines.map {clip in entry(clip.title,value:(preferences.value("customLines") as? [String:String])?[clip.id] ?? "",placeholder:clip.line ?? "",limit:500) { [weak self] in self?.preferences.setLine($0,for:clip.id) }})
+            let restore = ActionButton("恢复默认") { [weak self] in
+                guard let self else {return}
+                self.window.makeFirstResponder(nil)
+                self.preferences.set([String:String](),for:"customLines"); self.render()
+            }
+            restore.controlSize = .small; restore.font = .systemFont(ofSize:11)
+            restore.setAccessibilityLabel("恢复全部互动台词为默认值")
+            group("互动台词",lines.map {clip in entry(clip.title,value:(preferences.value("customLines") as? [String:String])?[clip.id] ?? "",placeholder:preferences.templateSource(clip.line ?? ""),limit:120) { [weak self] in self?.preferences.setLine($0,for:clip.id) }},action:restore)
         }
     }
     private func activity() {
@@ -455,6 +654,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return stack
     }
     private func messages() {
+        group("历史记录",[toggle("记录历史","recordHistory"),note("关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
         group("输入快捷键",[
             choice("发送与换行","sendShortcut",[("commandReturn","⌘ Command + ↩ Enter 发送"),("returnToSend","↩ Enter 发送")]),
             note("默认：⌘ Command + ↩ Enter 发送，↩ Enter 换行。\n备选：↩ Enter 发送；⇧ Shift + ↩ Enter 或 ⌥ Option + ↩ Enter 换行。\n临时对话和历史对话同步生效，中文输入法选词时不会发送。")])
@@ -534,7 +734,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         previewDismissal?.cancel()
         if materialPreview == nil {materialPreview = Bubble(); materialPreview?.onDetails = { [weak self] in self?.onPreviewDetails() }}
         guard let preview = materialPreview else {return}
-        if !preview.visible {preview.show(title:preferences.petName,body:preferences.template(preferences.string("greetingTemplate")),kind:"preview",scale:preferences.number("bubblePercent")/100,seconds:0,details:true)}
+        if !preview.visible {preview.show(title:preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"preview",scale:preferences.number("bubblePercent")/100,seconds:0,details:true)}
         guard let screen = window.screen ?? NSScreen.main else {return}
         let visible = screen.visibleFrame, size = preview.targetFrame.size
         let x = min(visible.maxX-size.width-12,max(visible.minX+12,window.frame.maxX+12))
@@ -566,7 +766,53 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func advanced() {
         group("设置文件",[row("导出设置",detail:"只包含本页设置，不含会话、凭证或模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),row("导入设置",detail:"导入前检查全部字段；登录启动项不随设置文件改变。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })])
-        group("本机数据",[row("数据目录",detail:Paths.data.path,control:ActionButton("在访达中显示") {if !NSWorkspace.shared.open(Paths.data) {showError("无法打开数据目录",PetFailure(message:Paths.data.path))}})])
+        let data = label("正在统计…"), work = label("正在统计…"), cache = label("正在统计…")
+        let total = label("正在统计本应用磁盘存储…")
+        total.font = .systemFont(ofSize:11); total.textColor = .secondaryLabelColor
+        total.identifier = .init("settings-explanation")
+        let dataButton = SettingsFooterButton(title:"清空数据…",target:self,action:#selector(clearLocalData))
+        let cacheButton = SettingsFooterButton(title:"清空缓存…",target:self,action:#selector(clearLocalCache))
+        for button in [dataButton,cacheButton] {button.bezelStyle = .rounded; button.hasDestructiveAction = true}
+        group("本机存储",[total,
+            row("本机数据",detail:"聊天记录、同步副本和应用设置",control:data),
+            row("默认任务文件夹",detail:"任务创建的文件，清空数据时保留。",control:work),
+            row("磁盘缓存",detail:"不含动画帧缓冲的运行内存 (RAM)。",control:cache),
+            row("清空本机数据",control:dataButton),row("清空磁盘缓存",control:cacheButton),
+            row("数据目录",detail:Paths.data.path,control:ActionButton("在访达中显示") {if !NSWorkspace.shared.open(Paths.data) {showError("无法打开数据目录",PetFailure(message:Paths.data.path))}})],
+            action:ActionButton("刷新") { [weak self] in self?.render() })
+        storageGeneration += 1; let generation = storageGeneration
+        DispatchQueue.global(qos:.utility).async { [weak self] in
+            let result = Result {try LocalStorage.usage()}
+            DispatchQueue.main.async {
+                guard let self, self.storageGeneration == generation, self.selected == .advanced else {return}
+                switch result {
+                case .success(let usage):
+                    total.stringValue = "合计 "+ByteCountFormatter.string(fromByteCount:usage.total,countStyle:.file)+" · 以下占比以三项合计为基准"
+                    data.stringValue = usage.description(usage.data); work.stringValue = usage.description(usage.workspace); cache.stringValue = usage.description(usage.cache)
+                case .failure(let error):
+                    total.stringValue = "统计失败："+error.localizedDescription
+                    for field in [data,work,cache] {field.stringValue = "未获取"}
+                }
+            }
+        }
+    }
+    @objc private func clearLocalData() {
+        confirmStorage(title:"清空本机数据？",body:"删除桌宠的聊天记录和 Codex 同步副本，并恢复应用设置。默认任务文件夹、其他工作目录、Codex 原始记录和登录信息保留。",button:"清空数据") { [weak self] in
+            guard let action = self?.onClearLocalData else {throw PetFailure(message:"数据管理尚未就绪。")}
+            try action()
+        }
+    }
+    @objc private func clearLocalCache() {
+        confirmStorage(title:"清空磁盘缓存？",body:"删除本应用的磁盘缓存；后续使用时重新生成。聊天记录、设置和动画素材保留。",button:"清空缓存") {try LocalStorage.clearCache()}
+    }
+    private func confirmStorage(title:String,body:String,button:String,action:@escaping () throws -> Void) {
+        window.makeFirstResponder(nil)
+        let alert = NSAlert(); alert.alertStyle = .warning; alert.messageText = title; alert.informativeText = body
+        alert.addButton(withTitle:"取消"); alert.addButton(withTitle:button).hasDestructiveAction = true
+        alert.beginDangerousSheet(for:window) { [weak self] response in
+            guard response == .alertSecondButtonReturn else {return}
+            do {try action(); self?.render()} catch {showError("清理未完成",error)}
+        }
     }
     @objc private func restorePage() {window.makeFirstResponder(nil); preferences.reset(selected.keys); render(); if selected == .appearance {showMaterialPreview()} else if selected == .identity {onMessagePreview(.preview)}}
     @objc private func restoreAll() {

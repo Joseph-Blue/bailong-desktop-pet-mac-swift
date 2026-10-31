@@ -52,6 +52,22 @@ final class CodexConnection {
         guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return}
         NSWorkspace.shared.open(app)
     }
+    private static let navigationQueue = DispatchQueue(label:"白龙娘 Codex 会话定位",qos:.userInitiated)
+    static func openConversation(_ id:String?) {
+        guard let id,let url = threadURL(id) else {openDesktop(); return}
+        navigationQueue.async {
+            let lookup = Result {try DesktopSync.readTitles([id])}
+            DispatchQueue.main.async {
+                switch lookup {
+                case .success(let titles) where titles[id] != nil:
+                    if !NSWorkspace.shared.open(url) {openDesktop()}
+                default:
+                    // 会话已删除或本机索引不可读时，只打开桌面端。
+                    openDesktop()
+                }
+            }
+        }
+    }
     static func threadURL(_ id: String) -> URL? {
         guard !id.isEmpty else {return nil}
         var url = URLComponents(); url.scheme = "codex"; url.host = "threads"; url.path = "/"+id

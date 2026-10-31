@@ -1,6 +1,9 @@
 import AppKit
 
-final class MessageEditor: NSTextView {
+final class MessageEditor: AppTextView {
+    var onFocusChange: () -> Void = {}
+    override func becomeFirstResponder() -> Bool {let result = super.becomeFirstResponder(); onFocusChange(); return result}
+    override func resignFirstResponder() -> Bool {let result = super.resignFirstResponder(); onFocusChange(); return result}
     var send: () -> Void = {}
     var onTextChange: () -> Void = {}
     var placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…") {didSet {needsDisplay = true}}
@@ -27,28 +30,50 @@ final class MessageEditor: NSTextView {
     }
 
 }
+final class HistoryWindow: NSWindow {
+    var focusSearch: () -> Void = {}
+    var nextMatch: (Bool) -> Void = {_ in}
+    override func performKeyEquivalent(with event:NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command,.shift,.option,.control])
+        if modifiers == .command && event.charactersIgnoringModifiers?.lowercased() == "f" {focusSearch(); return true}
+        if (modifiers == .command || modifiers == [.command,.shift]) && event.charactersIgnoringModifiers?.lowercased() == "g" {
+            nextMatch(modifiers.contains(.shift)); return true
+        }
+        return super.performKeyEquivalent(with:event)
+    }
+}
 final class ComposerPanel: NSPanel {
     override var canBecomeKey: Bool {true}
     override var canBecomeMain: Bool {false}
 }
 final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSToolbarDelegate {
-    let composer = ComposerPanel(contentRect:NSRect(x:0,y:0,width:500,height:350),styleMask:[.borderless],backing:.buffered,defer:false)
+    let composer = ComposerPanel(contentRect:NSRect(x:0,y:0,width:500,height:350),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
     private lazy var composerMotion = BubbleMotion(window:composer)
     var composerVisible: Bool {composerMotion.presented}
     var composerFrame: NSRect {composerMotion.frame}
     func moveComposer(to origin: NSPoint) {composerMotion.move(to:origin)}
-    let history = NSWindow(contentRect:NSRect(x:0,y:0,width:920,height:700),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+    let history = HistoryWindow(contentRect:NSRect(x:0,y:0,width:920,height:700),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
     let composerEditor = MessageEditor(), historyEditor = MessageEditor(), transcript = StreamingTextView()
     private let historySplit = NSSplitViewController()
     private var historyDetailItem: NSSplitViewItem!
     private var historyInputHeight: NSLayoutConstraint!
-    let list = NSTableView(), status = label("主人，今天想让我帮什么忙呀？"), folder = label("")
-    let historyStatus = label("主人的叮嘱，我都记在这台电脑里啦")
+    let list = NSTableView(), status = label(PetPreferences.shared.fixedText("主人，今天想让我帮什么忙呀？")), folder = label("")
+    let historyStatus = label(PetPreferences.shared.fixedText("主人的叮嘱，我都记在这台电脑里啦"))
     private let composerKeys = label(""), historyKeys = label("")
     let models: ChatModelSettings
     private(set) var composerModel: ModelSelector!, historyModel: ModelSelector!
     var composerButton: ActionButton!, historyButton: ActionButton!
     var conversations: [Conversation] = []
+    private(set) var visibleConversations: [Conversation] = []
+    let searchField = NSSearchField()
+    private var searchItem: NSSearchToolbarItem?
+    private var snippets = [String:String]()
+    private let noSearchResults = label("未找到匹配记录")
+    private var findMatches = [NSRange](), matchIndex = 0
+    private let matchLabel = label("")
+    private var previousMatch: ActionButton!, nextMatch: ActionButton!
+    private var searching: Bool {!searchField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}
+    var onGoCodex: () -> Void = {}
     var selected: String?
     var onSelect: (String) -> Void = { _ in }, onSubmit: (String,Bool) -> Void = { _,_ in }
     var onStop: () -> Void = {}, onNew: () -> Void = {}, onFolder: () -> Void = {}, onContinue: () -> Void = {}, onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
@@ -56,8 +81,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let composerClose = BubbleCloseButton()
     private var localDismissMonitor: Any?, globalDismissMonitor: Any?
     var presentingFolderPicker = false
+    var isPetInteraction:(NSEvent) -> Bool = {_ in false}
     private var composerInput: NSView!
-    private var historyInput: NSBox!
+    private var historyInput: MessageInputBox!
     private var historyReadOnly = false
     private var historyDraft: (key:String?,text:String)?
     private var historyPlaceholder: String {PetPreferences.shared.fixedText("主人，我们接着聊吧…")}
@@ -110,9 +136,12 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         list.style = .plain; list.selectionHighlightStyle = .none; list.intercellSpacing = .zero
         list.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle; list.backgroundColor = .clear
         list.autoresizingMask = [.width]; column.minWidth = 0; left.hasHorizontalScroller = false; left.horizontalScrollElasticity = .none
-        list.allowsEmptySelection = false; list.setAccessibilityLabel("历史对话"); left.documentView = list
+        list.allowsEmptySelection = true; list.setAccessibilityLabel("历史对话"); left.documentView = list
         sidebar.addSubview(left); left.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([left.leadingAnchor.constraint(equalTo:sidebar.leadingAnchor),left.trailingAnchor.constraint(equalTo:sidebar.trailingAnchor),left.topAnchor.constraint(equalTo:sidebar.safeAreaLayoutGuide.topAnchor,constant:8),left.bottomAnchor.constraint(equalTo:sidebar.bottomAnchor)])
+        noSearchResults.textColor = .secondaryLabelColor; noSearchResults.alignment = .center; noSearchResults.isHidden = true
+        sidebar.addSubview(noSearchResults); noSearchResults.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([noSearchResults.leadingAnchor.constraint(equalTo:sidebar.leadingAnchor,constant:16),noSearchResults.trailingAnchor.constraint(equalTo:sidebar.trailingAnchor,constant:-16),noSearchResults.topAnchor.constraint(equalTo:left.topAnchor,constant:24)])
         let right = NSView()
         let navigation = NSViewController(); navigation.view = sidebar
         let destination = NSViewController(); destination.view = right
@@ -123,6 +152,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         history.contentViewController = historySplit
         let toolbar = NSToolbar(identifier:"白龙历史工具栏"); toolbar.delegate = self; toolbar.displayMode = .iconOnly
         history.toolbar = toolbar; history.toolbarStyle = .unified
+        history.focusSearch = { [weak self] in self?.focusHistorySearch() }
+        history.nextMatch = { [weak self] backwards in self?.navigateMatch(backwards ? -1 : 1) }
+        list.target = self; list.action = #selector(revealSearchResult)
         historySplit.splitView.setPosition(240,ofDividerAt:0)
         transcript.isEditable = false; transcript.isSelectable = true
         let reading = editorScroll(transcript); reading.drawsBackground = false
@@ -144,7 +176,16 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         folder.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         historyStatus.font = .systemFont(ofSize:11); historyStatus.textColor = .secondaryLabelColor
         historyStatus.alignment = .right; historyStatus.maximumNumberOfLines = 1; historyStatus.lineBreakMode = .byTruncatingTail
-        let metadata = NSStackView(views:[folder,NSView(),historyStatus]); metadata.spacing = 12; metadata.alignment = .firstBaseline
+        matchLabel.font = .systemFont(ofSize:11); matchLabel.textColor = .secondaryLabelColor
+        previousMatch = ActionButton("") { [weak self] in self?.navigateMatch(-1) }
+        nextMatch = ActionButton("") { [weak self] in self?.navigateMatch(1) }
+        for (button,symbol,title) in [(previousMatch!,"chevron.up","上一处匹配（⇧⌘G）"),(nextMatch!,"chevron.down","下一处匹配（⌘G）")] {
+            button.image = NSImage(systemSymbolName:symbol,accessibilityDescription:title)
+            button.imagePosition = .imageOnly; button.setAccessibilityLabel(title)
+            button.widthAnchor.constraint(equalToConstant:28).isActive = true
+        }
+        let metadata = NSStackView(views:[folder,NSView(),historyStatus,matchLabel,previousMatch!,nextMatch!]); metadata.spacing = 8; metadata.alignment = .centerY
+        [matchLabel,previousMatch!,nextMatch!].forEach {$0.isHidden = true}
         let separator = NSBox(); separator.boxType = .separator
         for view in [metadata,reading,separator,inputArea] {view.translatesAutoresizingMaskIntoConstraints = false; right.addSubview(view)}
         NSLayoutConstraint.activate([
@@ -175,7 +216,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerEditor.setAccessibilityHelp(hint); historyEditor.setAccessibilityHelp(historyReadOnly ? "只读记录" : hint)
     }
     func showComposer() {
-        composerMotion.show(key:true); NSApp.activate(ignoringOtherApps:true)
+        composerMotion.show(key:true)
         composer.makeFirstResponder(composerEditor)
         stopDismissMonitoring()
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown,.rightMouseDown,.otherMouseDown]
@@ -191,6 +232,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func dismissComposerIfOutside(_ event: NSEvent) {
         guard composerVisible, !presentingFolderPicker, composer.attachedSheet == nil else{return}
+        if isPetInteraction(event) {return}
         let point = NSEvent.mouseLocation
         if composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) {return}
         hideComposer()
@@ -211,11 +253,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         view.translatesAutoresizingMaskIntoConstraints = false; parent.addSubview(view)
         NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo:parent.leadingAnchor,constant:inset),view.trailingAnchor.constraint(equalTo:parent.trailingAnchor,constant:-inset),view.topAnchor.constraint(equalTo:parent.topAnchor,constant:verticalInset ?? inset),view.bottomAnchor.constraint(equalTo:parent.bottomAnchor,constant:-(verticalInset ?? inset))])
     }
-    private func inputBox(_ editor: NSTextView) -> NSBox {
-        let box = NSBox(); box.boxType = .custom; box.borderColor = .separatorColor; box.fillColor = .textBackgroundColor; box.cornerRadius = 8; box.borderWidth = 0.5
-        box.contentViewMargins = NSSize(width:8,height:8)
-        pin(editorScroll(editor),to:box.contentView!)
-        return box
+    private func inputBox(_ editor: MessageEditor) -> MessageInputBox {
+        MessageInputBox(scroll:editorScroll(editor),editor:editor)
     }
     func editorScroll(_ editor: NSTextView) -> NSScrollView {
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
@@ -229,9 +268,17 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         scroll.documentView = editor
         return scroll
     }
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.init("history-sidebar"),.init("history-divider"),.init("new"),.init("folder"),.flexibleSpace,.init("reveal")] }
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.init("history-sidebar"),.init("history-divider"),.init("new"),.init("folder"),.init("codex"),.init("reveal"),.flexibleSpace,.init("search")] }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {toolbarAllowedItemIdentifiers(toolbar)}
     func toolbar(_ toolbar: NSToolbar,itemForItemIdentifier id: NSToolbarItem.Identifier,willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
+        if id.rawValue == "search" {
+            let item = NSSearchToolbarItem(itemIdentifier:id)
+            searchField.placeholderString = "搜索历史记录"; searchField.setAccessibilityLabel("搜索标题和消息正文")
+            searchField.sendsSearchStringImmediately = true; searchField.target = self; searchField.action = #selector(searchHistory)
+            item.searchField = searchField; item.label = "搜索历史记录"; item.preferredWidthForSearchField = 220
+            searchItem = item
+            return item
+        }
         if id.rawValue == "history-divider" {return NSTrackingSeparatorToolbarItem(identifier:id,splitView:historySplit.splitView,dividerIndex:0)}
         let item = NSToolbarItem(itemIdentifier:id); item.target = self; item.isBordered = true
         switch id.rawValue {
@@ -240,6 +287,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             item.target = historySplit; item.action = #selector(NSSplitViewController.toggleSidebar(_:))
         case "new": item.label = "新对话"; item.image = NSImage(systemSymbolName:"square.and.pencil",accessibilityDescription:item.label); item.action = #selector(newChat)
         case "folder": item.label = "选择文件夹"; item.image = NSImage(systemSymbolName:"folder",accessibilityDescription:item.label); item.action = #selector(chooseFolder)
+        case "codex": item.label = "跳转到 Codex"; item.image = AppIcons.openAI; item.action = #selector(goCodex)
         case "reveal": item.label = "访达中打开"; item.image = NSImage(systemSymbolName:"folder.badge.gearshape",accessibilityDescription:item.label); item.action = #selector(revealFolder)
         default: return nil
         }
@@ -249,7 +297,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func resizeHistoryInput() {
         guard let height = historyInputHeight, let container = historyEditor.textContainer, let layout = historyEditor.layoutManager else {return}
         layout.ensureLayout(for:container)
-        let textHeight = layout.usedRect(for:container).height + historyEditor.textContainerInset.height * 2 + 18
+        let textHeight = layout.usedRect(for:container).height + historyEditor.textContainerInset.height * 2 + 26
         height.constant = min(160,max(76,textHeight.rounded(.up)))
     }
     @objc private func modelStateChanged() {
@@ -266,6 +314,54 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if let content = history.contentView, content.bounds.width < historyWidth {history.setContentSize(NSSize(width:historyWidth,height:content.bounds.height))}
     }
     func windowDidResize(_ notification: Notification) {if notification.object as? NSWindow === composer {onComposerResize()} else {resizeHistoryInput()}}
+    @objc private func goCodex() {onGoCodex()}
+    func focusHistorySearch() {
+        searchItem?.beginSearchInteraction()
+        history.makeFirstResponder(searchField); searchField.selectText(nil)
+    }
+    @objc private func searchHistory() {
+        matchIndex = 0; refreshList()
+        if let current = conversations.first(where:{$0.key == selected}) {
+            refresh(Array(conversations.reversed()),selected:current,busy:busy)
+        }
+        updateSearchHighlights(reveal:true)
+    }
+    @objc private func revealSearchResult() {if searching {matchIndex = 0; updateSearchHighlights(reveal:true)}}
+    private func navigateMatch(_ direction:Int) {
+        guard searching,!findMatches.isEmpty else {focusHistorySearch(); return}
+        matchIndex = (matchIndex+direction+findMatches.count)%findMatches.count
+        updateSearchHighlights(reveal:true)
+    }
+    private func updateSearchHighlights(reveal:Bool) {
+        guard let layout = transcript.layoutManager else {return}
+        let text = transcript.string, whole = NSRange(location:0,length:(text as NSString).length)
+        layout.removeTemporaryAttribute(.backgroundColor,forCharacterRange:whole)
+        findMatches = searching ? HistorySearch.ranges(in:text,query:searchField.stringValue) : []
+        matchIndex = findMatches.isEmpty ? 0 : min(matchIndex,findMatches.count-1)
+        for (index,range) in findMatches.enumerated() {
+            layout.addTemporaryAttribute(.backgroundColor,value:AppAccent.color.withAlphaComponent(index == matchIndex ? 0.38 : 0.18),forCharacterRange:range)
+        }
+        [matchLabel,previousMatch!,nextMatch!].forEach {$0.isHidden = !searching}
+        previousMatch.isEnabled = !findMatches.isEmpty; nextMatch.isEnabled = !findMatches.isEmpty
+        if searching {
+            let titleHit = conversations.first(where:{$0.key == selected}).map {!HistorySearch.ranges(in:$0.title,query:searchField.stringValue).isEmpty} ?? false
+            matchLabel.stringValue = findMatches.isEmpty ? (titleHit ? "标题匹配" : "正文无匹配") : "\(matchIndex+1) / \(findMatches.count)"
+        }
+        if reveal,!findMatches.isEmpty {transcript.scrollRangeToVisible(findMatches[matchIndex])}
+    }
+    private func refreshList() {
+        visibleConversations = HistorySearch.filter(conversations,query:searchField.stringValue)
+        noSearchResults.isHidden = !searching || !visibleConversations.isEmpty
+        snippets = Dictionary(uniqueKeysWithValues:visibleConversations.compactMap {c in HistorySearch.snippet(c,query:searchField.stringValue).map {(c.key,$0)}})
+        let snapshot = visibleConversations.map {$0.key+"\u{0}"+$0.title+"\u{0}"+(snippets[$0.key] ?? "")+"\u{0}"+searchField.stringValue}
+        updatingList = true
+        if snapshot != listSnapshot {list.reloadData(); list.noteHeightOfRows(withIndexesChanged:IndexSet(integersIn:0..<visibleConversations.count)); listSnapshot = snapshot}
+        if let row = visibleConversations.firstIndex(where:{$0.key == selected}) {
+            if list.selectedRow != row {list.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
+        } else {list.deselectAll(nil)}
+        updatingList = false
+        list.setAccessibilityLabel(searchField.stringValue.isEmpty ? "历史对话" : "搜索结果：\(visibleConversations.count) 个对话")
+    }
     @objc private func newChat() {onNew()}
     @objc private func chooseFolder() {onFolder()}
     @objc private func revealFolder() {onRevealFolder()}
@@ -294,13 +390,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     func refresh(_ conversations: [Conversation], selected: Conversation, busy: Bool) {
         let previousSelection = renderedConversation
         self.conversations = conversations.reversed(); self.selected = selected.key; self.busy = busy
-        // reloadData 会先校正选择并同步通知 delegate；这不是用户切换对话。
-        // 将重载与恢复选择视作一次更新，避免 onSelect → refresh 的递归循环。
-        let snapshot = self.conversations.map { $0.key+"\u{0}"+$0.title }
-        updatingList = true
-        if snapshot != listSnapshot {list.reloadData(); listSnapshot = snapshot}
-        if let row = self.conversations.firstIndex(where:{$0.key == selected.key}), list.selectedRow != row {list.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}
-        updatingList = false
+        refreshList()
         folder.stringValue = "文件夹："+URL(fileURLWithPath:selected.cwd).lastPathComponent; folder.toolTip = selected.cwd
         if selected.external != historyReadOnly {
             if selected.external {historyDraft = (previousSelection,historyEditor.string); historyEditor.string = ""}
@@ -323,8 +413,14 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         resizeHistoryInput()
         composerEditor.placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
         historyEditor.isEditable = !selected.external && !busy; composerEditor.isEditable = !busy
-        transcript.setContent(transcriptContent(selected),animated:streaming && PetPreferences.shared.bool("typingEffect"),reset:renderedConversation != selected.key)
+        let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
+        transcript.linkBaseDirectory = {messageDirectory}
+        let selectionChanged = renderedConversation != selected.key
+        transcript.automaticallyFollowsEnd = !searching
+        transcript.setContent(transcriptContent(selected),animated:!searching && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
+        if selectionChanged {matchIndex = 0}
         renderedConversation = selected.key
+        updateSearchHighlights(reveal:searching && selectionChanged)
     }
     @objc private func accentChanged() {
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedConversation = nil
@@ -352,7 +448,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
                 append(turn.input)
             }
-            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.address+"，完成啦！」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
+            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
             // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。
             let steps = conversation.external && turn.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : turn.steps
             for (heading,text) in [("公开思考摘要",turn.summary),("执行记录",steps)] where !text.isEmpty {
@@ -360,6 +456,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 if heading == "公开思考摘要" {appendMarkdown(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
                 else {append(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
             }
+            if let notice = turn.sensitiveQuestionNotice {append(notice,color:.secondaryLabelColor)}
+            if let notice = turn.sensitiveInputNotice {append(notice,color:.secondaryLabelColor)}
             if !turn.messages.isEmpty {appendMarkdown(turn.messages)}
             if !turn.final.isEmpty && !turn.messages.contains(turn.final) {appendMarkdown(turn.final)}
             if !turn.error.isEmpty {let failure = AppFailure.codex(turn.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
@@ -370,17 +468,18 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func turnStatus(_ value: String) -> String {
         ["pending":"准备中","running":"处理中","inProgress":"处理中","completed":"已完成","failed":"未完成","interrupted":"已停止","waitingForApproval":"等待批准","waitingForInput":"等待补充","unknown":"状态待确认"][value] ?? "状态待确认"
     }
-    func numberOfRows(in tableView: NSTableView) -> Int { conversations.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { visibleConversations.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let c = conversations[row]
-        return HistoryConversationCell(title:c.title,external:c.external)
+        let c = visibleConversations[row]
+        return HistoryConversationCell(title:c.title,external:c.external,snippet:snippets[c.key],query:searchField.stringValue)
     }
+    func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {searching ? 68 : 32}
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {AccentHistoryRow()}
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard !updatingList else { return }
         let row = list.selectedRow
-        guard row >= 0 && row < conversations.count else { return }
-        let key = conversations[row].key
+        guard row >= 0 && row < visibleConversations.count else { return }
+        let key = visibleConversations[row].key
         guard key != selected else { return }
         selected = key
         onSelect(key)
@@ -394,7 +493,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         history.miniwindowImage = NSApp.applicationIconImage
         if history.isMiniaturized {history.deminiaturize(nil)}
         NSApp.unhide(nil); history.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
-        history.contentView?.layoutSubtreeIfNeeded(); transcript.scrollToEndOfDocument(nil)
+        history.contentView?.layoutSubtreeIfNeeded()
+        if searching {updateSearchHighlights(reveal:true)} else {transcript.scrollToEndOfDocument(nil)}
     }
     func windowWillMiniaturize(_ notification: Notification) {
         if notification.object as? NSWindow === history {history.miniwindowImage = NSApp.applicationIconImage}

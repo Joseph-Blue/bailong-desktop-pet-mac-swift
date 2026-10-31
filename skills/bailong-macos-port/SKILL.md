@@ -20,12 +20,15 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 | 内容 | 文件 |
 | --- | --- |
 | 桌宠交互、素材与位置调度 | Pet.swift、Resources.swift、StreamingAnimation.swift |
-| 气泡、材质、动态效果 | NativeUI.swift、BubbleMotion.swift、WindowFade.swift |
+| 气泡、材质、动态效果 | NativeUI.swift、BubbleMotion.swift、BubblePlacement.swift、WindowFade.swift |
 | 偏好、设置、强调色 | Preferences.swift、Settings.swift、Appearance.swift |
 | 性能采样及窗口 | Diagnostics.swift、GPUStatistics.swift |
 | 内置任务、外部观察、终态文案 | ChatController.swift、Codex.swift、DesktopSync.swift、TaskOutcome.swift |
 | 额度请求、重置卡 | QuotaQuery.swift、QuotaResetCards.swift |
-| 历史及输入界面 | History.swift、HistoryViews.swift、ChatUI.swift、StreamingText.swift |
+| 历史、搜索与输入 | History.swift、HistorySearch.swift、HistoryViews.swift、ChatUI.swift、StreamingText.swift、TextInteraction.swift |
+| Markdown 与本机文件 | MarkdownText.swift、MessageFileLink.swift |
+| 问卷与桌面端回答 | QuestionForm.swift、DesktopQuestionReply.swift、Presentation.swift |
+| 变量迁移、本机清理、错误恢复 | TemplateSyntax.swift、LocalStorage.swift、Recovery.swift、RunLifecycle.swift |
 | 更新检查与版本比较 | Updates.swift、SemanticVersion.swift |
 | 跟随启动 | Autostart.swift、FollowMonitor.swift、Tools/FollowHelper/main.swift |
 | PNG 接入、构建 | Tools/NativeHEVC/ApplyPNGRepairs.swift、scripts/apply-native-png-repairs.sh、scripts/build.sh |
@@ -36,6 +39,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 - 设置和历史采用 NSSplitViewController、贯穿侧栏及统一 NSToolbar；内容区不套装饰性圆角外框。设置限制阅读宽度，关联选项使用区外标题、浅底分组和组内分隔线。历史输入区仅属于右侧会话，保留草稿、只读状态、真实停止及输入法组字保护。
 - 设置实际操作控件靠右，组合控件用 fill 与内容宽度收紧，不只对齐空容器。同类滑块轨道统一 180pt 并放在行右端，数值／单位在左；色点名称居中，单选组内部起点一致。注释使用 11pt secondaryLabelColor，不在独立注释前加分隔线。
+
 - 两个恢复按钮固定在侧栏底部，共用 SettingsFooterButton 的轮廓、28pt 高度及焦点范围。危险按钮淡红底、动态红字，禁止纯红底黑字；恢复全部二次确认。
 - 设置与历史保留原生 NSTableView，plain 样式、selectionHighlightStyle=none。AccentHistoryRow 按滚动视口绘制左右各收进 10pt、圆角 7pt 的完整选中背景；活动时用应用色，失焦用系统灰，选中图标／文字同步变白。
 - 强调色默认“跟随系统”且位于首位，手动色保留。八个预设使用架构文档中用户截图取样的 sRGB，不用 systemPink 等同名语义色替代。“自定义”色点使用 paintpalette 图标并打开原生颜色面板。
@@ -43,6 +47,16 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 普通 NSAlert 分离视觉主操作与键盘默认操作，审批仍默认拒绝。危险确认经 beginDangerousSheet 清除默认按钮并拦截 Return／小键盘 Enter，两键不执行任何操作，Esc 取消。NSAlert 保留系统 destructive 外观，不覆写 bezelColor；系统文件选择框保持原生行为。
 - 创建 NSApplication 前，仅在本应用偏好域设置 NSInitialToolTipDelay=200 毫秒，不修改全局域。设置侧栏分类无 tooltip，仅保留收起／展开按钮；气泡关闭按钮无 tooltip，保留辅助功能名，性能窗口不新增悬停说明。
 - 设置、历史和性能窗口可经 Dock／菜单召回。⌘Q 与 Dock“退出”关闭界面／取消对话框，不退出桌宠；明确的完整退出菜单和系统关机、SIGTERM/SIGINT 仍清理任务进程。关闭一个窗口不移除其他窗口的 Dock 入口。
+
+- 可选中文本右键仅剪切／拷贝／粘贴／全选，个性页模板编辑器保留变量插入；保留系统安全文本编辑器。消息与历史输入框显示原生焦点环，应用色仅映射独立焦点层。
+- 临时聊天、历史回复、问卷共用 MessageInputBox：NSBox 与原生 focus-ring 层同级、四边约束，禁止把焦点层追加到 NSBox 内容区或用零尺寸 autoresizing 推导边界。
+
+## 称呼与台词
+
+- “称呼与个性”输入菜单提供剪切／拷贝／粘贴／全选；两个名字字段无分隔线与变量插入，保持纯文本。台词和特定称呼提供 Tab 对齐变量插入，{用户名}／{桌宠名}／{特定称呼} 动态色及淡底；组字期间不截断。名字与称呼 20 字、台词 120 字，变量整体算 1 字；清空按钮和计数在输入框右侧同排，达到上限红色。长台词标签在上、输入区展开换行。姓名标签显示图标及对应变量，桌宠名复用托盘图标；你的名字在前、桌宠名紧随。特定称呼只在选中 custom 时显示，隐藏不清值。任务及额度台词空值回默认，互动组恢复只清该组。
+- TemplateSyntax 仅对特定称呼、各 Template 字段及 customLines 转换旧变量；首次启动一次迁移，旧文件导入独立转换，保留旧别名解析，不改用户名／桌宠名字面值、会话正文和历史。变量作为完整单位计数与截断，不能截掉半个变量；替换值不递归解析。
+- 称呼来源仅 name／custom，默认 name，旧 master 启动／导入归并 name。名字为空有效值为主人；特定称呼为空沿用有效名字。名字原文不自动填值，输入提示“默认为‘主人’”；用户名变量及内置人格共用有效名。“怎么称呼你”后附 {特定称呼} 色标，两种来源原生单选同排右对齐。
+- 问候语在每次启动后首次有画面且显示时触发一次，普通气泡、无 Codex／详情按钮、不写历史；遵守互动气泡及安静模式，已有任务、气泡、输入窗则跳过，不延迟补发。隐藏后召回不重复，空模板回默认。
 
 ## 气泡材质与动态效果
 
@@ -53,6 +67,8 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - bubbleMotion 默认开启并持久化，参与恢复默认及偏好导入导出。出现 160ms 淡入和 4pt 减速位移，关闭 120ms 淡出，高度 140ms，材质背景交叉过渡 160ms；正文不缩放，流式更新不重播整窗出现，桌宠移动直接跟随。
 - 过渡结束停计时器，快速关闭重开取消旧关闭状态；关闭动态效果立即完成过渡。减少动态效果取消位移、高度与材质动画，保留短淡入淡出。WindowFade 同样控制出生、隐藏和全屏避让，仅修改 alpha，首帧就绪再淡入。
 - 进展和额度加载标题前的盲文及空格仅在显示层生成，盲文约 10Hz、跟随强调色，标题替换／隐藏／销毁即停止，不写历史或任务正文。文字扫光为 1.2 秒扫过、2.8 秒停顿，不含盲文；浅色模式深字被浅带扫过，深色模式灰字被亮带扫过，遵守动态效果和减少动态效果设置。
+
+- 拖动、吸边和动画切换不得主动关闭现有气泡；回复输入窗的外部点击收起须排除实际桌宠左键事件。气泡与临时输入窗共用 BubblePlacement，按可见角色和屏幕可用区域四向避让；保留仍可用方向，拖动直接跟随，跨屏及尺寸变化重排，不清空问卷草稿。单击互动及临时聊天优先上方，新互动清除上一条消息的选边缓存。
 
 ## 动画与性能
 
@@ -70,6 +86,8 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 内置任务与外部只读观察分开，保留真实停止、审批默认拒绝、历史保护、进程回收。仅 completed 成功；中间工具错误不产生额外失败提醒。TaskOutcome 不把会话标题／首条用户输入填作助手结果；缺失回复用终态事实说明，错误 JSON 取 message，null 不作错误文本。
 - 秒表与时间同标题首行，按实际文字宽度右对齐、间隔 3pt 随气泡缩放，标题按剩余宽度换行。最小 00:00，格式 MM:SS／H:MM:SS，跨小时重排。内置任务从 Turn.date 起算，外部从 thread_turns.started_at 经既有每秒同步获取，缺失时不造时间。
 - 同任务消息更新不重置计时。结束后冻结，completed 绿色，failed／interrupted／cancelled 红色；外部优先 completed_at，否则用观察到结束时间。隐藏／销毁停刷新，不将显示计时写入历史。
+
+- 等待回答／批准使用独立台词设置：选择题、自由输入、敏感输入共用回答，命令／文件修改共用批准。敏感请求与审批气泡仅有整行高亮“转到 Codex”，停流水但继续总用时；内置任务召回原生请求窗口，外部跳对应会话。回答／批准后清理提醒，普通进展不覆盖正在等待的内置请求。敏感请求仅通用提醒；历史以“（已隐藏{桌宠名}的敏感信息提问）”与已提交后的“（已隐藏{用户名}的敏感信息输入）”替代，取消未提交不记输入；外部只读取回答关联标题，不读取答案值。
 - 普通气泡两个按钮等宽：左“转到 Codex”，右“查看记录详情”，右侧强调色。前者用 codex://threads/<thread-id>，无 ID 只打开桌面端，不创建任务；技术错误的详情／重试保留原语义。
 - 每次额度必须新请求，禁止跨查询缓存、TTL 或旧结果替代。QuotaQuery 先发 rateLimits/read，再并行 account/read；额度先显示，账号晚到只补同次结果。保留 serial／quotaActive 防过期回调，进行中的重复请求合并不等于结果缓存。
 - 重置卡只读不 consume：availableCount 为权威总数，明细可截断；expiresAt 显式 null 为不限期，缺失字段／明细为未提供，按本机时区显示。默认完整读取，不为提速跳过明细。授权测时只输出耗时与字段是否提供，不输出账号资料或凭证。
@@ -89,8 +107,28 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 - 已导出 PNG 的修复使用独立 bailong-webm-edge-repair 技能：禁止 imagegen，在新副本处理，保持透明、原尺寸与编号。原始 WebM／PNG、修复副本、备份、蒙版及报告保留本地，不进 Git 或运行包。
 - 授权接入时使用 scripts/apply-native-png-repairs.sh <PNG根目录>；加 --landing 仅处理落地。Core Image 读取 PNG，AVAssetWriter 输出 ProRes 4444，系统 avconvert 编码透明 HEVC，成功后切换 catalog 并保留旧目录。原作 WebM 目录不能直接充当运行资源。
-- 准备 HEVC catalog、sounds、图标及玻璃 PDF 后执行 scripts/build.sh arm64。仅交付 Silicon，保留 Intel 入口但不自动追加构建；主程序与 helper 必须同架构。输出 dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app。
+- 准备 HEVC catalog、sounds、应用图标、openai-logo.png 及玻璃 PDF 后执行 scripts/build.sh arm64。仅交付 Silicon，保留 Intel 入口但不自动追加构建；主程序与 helper 必须同架构。输出 dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app。
 - scripts/prepare-native-hevc.sh 仅复制已有 MOV 及 samples.json，复用 VERSION；AVPlayerLayer 预览不等于桌宠交互验收。包内不带原始素材、中间文件或用户数据。
 - VERSION 为版本单一来源；独立 SemVer，功能升次版本、兼容修复升补丁，开发用 dev 标识。中文 commit／CHANGELOG，提交、合并、推送、Release 各按授权执行，公开仓库不代表获得发布许可。
 - README 简洁介绍下载、安全拦截、特色与使用；CHANGELOG 保留版本记录，现行架构和规则写入 docs/来源与架构.md、AGENTS.md。过程与未验证项留在忽略的 docs/实施记录.md，不把迭代流水堆入技能。
-- docs 只追踪来源与架构；素材、二进制、构建输出、用户数据、Tests 及本地修边技能按 gitignore 排除，不 git add -f。自有技能项目与个人副本同步，第三方技能保持独立；历史 references/源码对照与路线评估.md 是早期 Python 调研，不作现行实现依据。
+- docs 只追踪来源与架构；素材、二进制、构建输出、用户数据、Tests 及本地修边技能按 gitignore 排除，不 git add -f。自有技能项目与个人副本同步，第三方技能保持独立。
+
+## 问卷与本机数据
+
+- 非敏感选择题支持原生单选、其他回答和补充输入，编号与标题首行对齐；交互窗口可拉伸、内容随宽度重排。填写各题后明确提交，不自动选中或超时提交；草稿仅存内存，手动隐藏保留，问题完成后清理。推荐只来自原数据，提交按钮保持失焦强调色。
+- 问卷一次显示一道题，题号／上一题／下一题／跳过，翻页保留草稿；末题明确提交非空回答，跳过仅是本地表单状态，不编造答案或冒称原端已完成。输入复用 MessageEditor 与 sendShortcut，显示发送／换行提示，保留输入法组字；输入框左右留出焦点环空间，缩放不重新挂载正在编辑的文本视图。
+- 问卷上一题／跳过置于固定底栏，不能随题目滚动；单题或全部跳过直接收起，本次运行按题 ID 抑制重新提醒，不伪造 Codex 答案。输入窗光标只在可编辑／选择文本区显示 I 形，离开恢复箭头，窗口边缘保留系统缩放光标。
+
+- 高级页本机存储分别统计数据、默认任务文件夹、专用磁盘缓存及占比；任务文件不随清空数据删除。清空数据同步清理历史内存状态并记录同步水位，防止旧记录回填；内置任务运行时先结束任务。清空缓存仅处理本应用目录，不递归跟随符号链接。破坏性确认复用 beginDangerousSheet。
+- 桌面端问题答案仅在用户明确提交时通过已核对的本机 IPC v1 回送原会话；查询状态仍只读，跨轮次按 questionItemId 消除提醒，不匹配题目文字，不读答案值。IPC 不属于稳定公开 API，失败保留草稿，不自动重试，不修改全局配置或读取凭证。敏感问题仍只跳转原窗口。
+- 卸载方案已选定应用包内置一次性清理助手，不单独安装卸载 App；尚未实现。任务文件单独列出、默认保留，不将卸载讨论当作执行删除授权。
+
+## 历史与恢复
+
+- 历史记录开关默认开启；关闭冻结本机快照，重新开启不补录关闭期间的条目或修改，不影响 Codex 原始数据。保存失败暂停自动写入，仅显式重试；读取损坏历史不得以空记录覆盖。
+- 错误恢复仅用于启动、历史读写及首段动画加载边界；可拷贝报告和局部重试，不拦截致命信号，不自动重跑任务，不安装全局异常吞错。报告不拼入错误 userInfo、原始对话或敏感字段；未正常退出标记不冒充崩溃证明。
+- 历史搜索使用原生工具栏搜索控件，内容区保持可读；标题来自 Codex 本机 threads 元数据，找不到会话或索引不可读时只打开桌面端。当前 codex://threads 链接没有滚到底部参数，不造参数或冒充已支持。
+
+- 临时聊天使用 nonactivatingPanel 获取键盘焦点，不激活应用或恢复隐藏／最小化的其他窗口。“转到 Codex”及历史跳转按钮前放官方 OpenAI 模板标志，标志资源本地保留并打包，不追踪二进制。
+
+- 历史搜索显示命中正文摘要，选中后定位并高亮；⌘F 聚焦顶部搜索，⌘G／⇧⌘G 遍历当前正文匹配。筛选不得清空草稿或自动切换会话，搜索高亮只作用于显示层。

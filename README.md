@@ -4,7 +4,7 @@
 
 参考 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet) 的功能与交互，沿用原作动画素材，独立维护。不代表原作者或 OpenAI。
 
-本项目为[公开 GitHub 仓库](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift)。当前开发版本 **0.4.0-dev.13**，位于 `codex/check-updates` 分支，尚未合并、推送或发布。
+本项目为[公开 GitHub 仓库](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift)。当前本地版本 **0.4.0**，已合并至本地 `main`，尚未推送或发布。
 
 ## 下载与首次打开
 
@@ -12,7 +12,7 @@
 
 **[前往 GitHub Releases 下载](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)**
 
-发布页提供已发布版本；本文介绍的 **0.4.0-dev.13 为本地开发版，尚未发布**。下载后解压，将 App 移入“应用程序”再打开。更新时先退出桌宠，用新版替换旧 App，设置与聊天记录保留。
+发布页提供已发布版本；本文介绍的 **0.4.0 尚未发布到 GitHub**。下载后解压，将 App 移入“应用程序”再打开。更新时先退出桌宠，用新版替换旧 App，设置与聊天记录保留。
 
 ### 遇到 macOS 安全拦截
 
@@ -30,8 +30,14 @@
 - **从气泡回到任务。** “转到 Codex”直达关联会话，“查看记录详情”打开桌宠历史。也可以在桌宠的临时输入窗或历史窗口里发起内置 Codex 任务、处理审批和停止任务。
 - **额度与重置卡，一起查看。** 双击查询套餐额度、已购买的可用点数、剩余重置卡及到期时间。每次重新请求，时间按本机时区显示；这里只查看，不消耗重置卡。
 - **原生透明动画，按需解码。** Swift + AppKit 界面配合透明 HEVC、AVFoundation 与 Core Image。默认只缓冲 24 帧，可调整画质、素材帧率与缓冲数量；桌宠的位置动画独立跟随屏幕刷新。
-- **外观跟着你的 Mac。** macOS 26 及以上默认使用液态玻璃，旧系统使用普通材质；支持系统或自定义强调色、消息大小、动态效果和即时预览。称呼、台词、互动频率及鼠标操作也可调整。
+- **外观跟着你的 Mac。** macOS 26 及以上默认使用液态玻璃，旧系统使用普通材质；支持系统或自定义强调色、消息大小、动态效果和即时预览。称呼、任务与额度查询台词、互动频率及鼠标操作也可调整；台词支持彩色指代符、字数计数和一键恢复。
 - **性能信息看得见。** 独立窗口显示 FPS 曲线、CPU、GPU、运行内存 (RAM)、缓冲与预加载状态，并区分 Codex 桌面端和桌宠自有 CLI 的连接情况。窗口可置顶、拷贝信息，关闭即停止统计。
+
+- **问卷直接回答。** 气泡支持选择和补充输入，已回答状态与 Codex 同步；敏感问题转到原窗口处理。
+- **历史查找与记录开关。** 按标题和消息正文搜索，显示命中摘要、高亮及定位；⌘F 聚焦搜索，⌘G／⇧⌘G 遍历匹配。同步 Codex 会话标题，并从工具栏跳回原会话。关闭“记录历史”后保留已有记录，不补写关闭期间的消息。
+- **出错后就地处理。** 初始化或历史读写失败时，可拷贝错误报告并重试；原始历史保留，保存失败时暂停自动写盘。
+- **文件与表格直接阅读。** 本机文件链接在访达中选中文件，Markdown 表格按列显示；图片链接可打开文件，内嵌图片预览尚未实现。
+- **本机存储可管理。** 高级页显示数据和磁盘缓存占比，分别清理，保留任务文件。
 
 桌宠保留随机互动、拖拽与落地、左右吸边、全屏避让和随 Codex 桌面端启动。设置与历史窗口可从 Dock 找回；关闭界面不会退出桌宠，完整退出请使用桌宠菜单中的“退出”。
 
@@ -74,7 +80,7 @@
 
 需要 Apple Command Line Tools，运行和素材工具均使用 Apple 原生框架。旧 FFmpeg 运行及离线转码方案已移除。
 
-当前本地产物位于 `dist/native-hevc/0.4.0-dev.13/arm64/白龙娘桌宠MacOS-Swift版.app`。应用包包含运行用透明 HEVC 动画、音效、图标和同架构跟随启动 helper，不携带 Python 或第三方视频解码器。
+当前本地产物位于 `dist/native-hevc/0.4.0/arm64/白龙娘桌宠MacOS-Swift版.app`。应用包包含运行用透明 HEVC 动画、音效、图标和同架构跟随启动 helper，不携带 Python 或第三方视频解码器。
 
 仓库不含素材、图标或构建产物。构建使用已准备好的原生素材目录；可从本机已有原生版 App 的 `Contents/Resources/outputs/白龙桌宠素材` 复制清单和透明 HEVC 子目录。原作的 WebM 发布包不能直接用作本版运行资源。
 
@@ -86,6 +92,7 @@ local-assets/
   glass-symbols/                      # 玻璃滑块的两个 PDF 符号
   sounds/来源.txt
   BailongPet.icns
+  openai-logo.png                     # OpenAI 官方模板标志
 ```
 
 ```sh
@@ -105,3 +112,5 @@ Intel 构建入口 `./scripts/build.sh x86_64` 保留；本次仅构建 Silicon�
 反馈提交到 [Issues](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)，附版本、macOS 版本和复现步骤。
 
 玻璃符号资源在 macOS 27 上使用 `Tools/ExportGlassSymbols/main.swift` 导出至 `local-assets/glass-symbols`，构建时复制到应用。旧系统构建可使用已准备的这两个 PDF，不依赖其系统符号库包含新符号。
+
+OpenAI 标志使用已安装桌面端的 `Contents/Resources/chatgptTemplate@2x.png`，本地资源命名为 `openai-logo.png`；也可从本版应用的 `Contents/Resources` 复制。该资源随应用构建，未加入 Git。

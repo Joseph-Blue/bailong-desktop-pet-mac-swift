@@ -7,9 +7,9 @@ enum SettingsSection: Int, CaseIterable {
     var keys: [String] {
         switch self {
         case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
-        case .identity: return ["ownerName","addressMode","customAddress","petName","greetingTemplate","customLines"]
+        case .identity: return ["ownerName","addressMode","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"]
         case .activity: return ["singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
-        case .messages: return ["sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .messages: return ["recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
         case .appearance: return ["petPercent","bubblePercent","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
         case .advanced: return []
         case .updates: return ["automaticallyCheckUpdates"]
@@ -44,12 +44,17 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
+        "recordHistory":true,
         "automaticallyCheckUpdates":true,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"512","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
-        "ownerName":"","addressMode":"master","customAddress":"","petName":"白龙娘",
-        "greetingTemplate":"{称呼}，{桌宠}已经准备好啦。","customLines":[String:String](),
+        "ownerName":"","addressMode":"name","customAddress":"","petName":"白龙娘",
+        "greetingTemplate":"{特定称呼}，{桌宠名}已经准备好啦。","customLines":[String:String](),
+        "taskProgressTemplate":"{特定称呼}，我还在留意进展…","taskSuccessTemplate":"{特定称呼}，完成啦！",
+        "taskFailureTemplate":"{特定称呼}，这次任务执行失败。","taskInterruptedTemplate":"{特定称呼}，任务已中断。",
+        "quotaLoadingTemplate":"让我看看额度还有多少……",
+        "taskAnswerTemplate":"{特定称呼}，这一步需要你选一下。","taskApprovalTemplate":"{特定称呼}，这一步需要你批准。",
         "singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat",
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
         "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"favorites":[String](),"taskOpening":true,"taskCelebration":true,
@@ -66,11 +71,13 @@ final class PetPreferences {
     ]
     static var glassAvailable: Bool {if #available(macOS 26.0, *) {return true}; return false}
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
-    static let choices = ["bubbleMaterial":["glass","plain"],"animationQuality":["512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"addressMode":["master","name","custom"],"movementRange":["still","nearby","screen"],
+    static let choices = ["bubbleMaterial":["glass","plain"],"animationQuality":["512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"addressMode":["name","custom"],"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
     let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
+        if defaults.string(forKey:"addressMode") == "master" {defaults.set("name",forKey:"addressMode")}
         if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
     }
     static func displayID(_ screen: NSScreen) -> String {(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? ""}
@@ -82,7 +89,7 @@ final class PetPreferences {
     var animationResolution: Int { Int(string("animationQuality"))! }
     func animationFPS(native: Double) -> Double { string("animationFPSLimit") == "full" ? native : min(native,Double(string("animationFPSLimit"))!) }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
-    func set(_ value: Any, for key: String) {defaults.set(value,forKey:key); notify([key])}
+    func set(_ value: Any, for key: String) {defaults.set(TemplateSyntax.migrate([key:value])[key]!,forKey:key); notify([key])}
     private func notify(_ keys: [String]) {
         NotificationCenter.default.post(name:Self.didChange,object:self,userInfo:["keys":keys])
     }
@@ -91,18 +98,32 @@ final class PetPreferences {
     // 产品身份固定；petName 只用于角色称呼和互动文案。
     static let productName = "白龙娘"
     var appName: String {Self.productName+"桌宠MacOS-Swift版"}
+    var ownerName:String {
+        let name = string("ownerName").trimmingCharacters(in:.whitespacesAndNewlines)
+        return name.isEmpty ? "主人" : name
+    }
+    // 显式选择来源；特定称呼留空沿用用户名，名字留空使用主人。
     var address: String {
-        let key = string("addressMode") == "name" ? "ownerName" : "customAddress"
-        if string("addressMode") == "master" {return "主人"}
-        let s = string(key).trimmingCharacters(in:.whitespacesAndNewlines)
-        return s.isEmpty ? "主人" : s
+        guard string("addressMode") == "custom" else {return ownerName}
+        let custom = string("customAddress").trimmingCharacters(in:.whitespacesAndNewlines)
+        if custom.isEmpty {return ownerName}
+        return TemplateSyntax.render(custom,values:["{桌宠名}":petName,"{用户名}":ownerName])
     }
     func template(_ text: String) -> String {
-        text.replacingOccurrences(of:"{称呼}",with:address).replacingOccurrences(of:"{桌宠}",with:petName)
-            .replacingOccurrences(of:"{名字}",with:string("ownerName"))
+        TemplateSyntax.render(text,values:["{特定称呼}":address,"{桌宠名}":petName,"{用户名}":ownerName])
+    }
+    func statusLine(_ key:String) -> String {
+        let value = string(key)
+        return template(value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? Self.defaults[key] as? String ?? "" : value)
+    }
+    var sensitiveQuestionNotice: String {template("（已隐藏{桌宠名}的敏感信息提问）")}
+    var sensitiveInputNotice: String {template("（已隐藏{用户名}的敏感信息输入）")}
+    func taskResultLine(_ status:String) -> String {
+        statusLine(status == "completed" ? "taskSuccessTemplate" : ["interrupted","cancelled","canceled"].contains(status) ? "taskInterruptedTemplate" : "taskFailureTemplate")
     }
     // 只传入应用自带文案，不对用户消息、模型正文或历史记录做全局替换。
-    func fixedText(_ text: String) -> String {template(text.replacingOccurrences(of:"白龙娘",with:"{桌宠}").replacingOccurrences(of:"白龙",with:"{桌宠}").replacingOccurrences(of:"主人",with:"{称呼}"))}
+    func templateSource(_ text:String) -> String {text.replacingOccurrences(of:"白龙娘",with:"{桌宠名}").replacingOccurrences(of:"白龙",with:"{桌宠名}").replacingOccurrences(of:"主人",with:"{特定称呼}")}
+    func fixedText(_ text: String) -> String {template(templateSource(text))}
     func line(for clip: Clip) -> String? {
         if let custom = (value("customLines") as? [String:String])?[clip.id], !custom.isEmpty {return template(custom)}
         return clip.line.map(fixedText)
@@ -170,6 +191,7 @@ final class PetPreferences {
               document["schemaVersion"] as? Int == 1, var values = document["settings"] as? [String:Any] else {
             throw PetFailure(message:"请选择本应用导出的设置文件。")
         }
+        values = TemplateSyntax.migrate(values)
         if let old = values["animationFPSLimit"] as? String, ["24","30"].contains(old) {values["animationFPSLimit"] = "full"}
         for (key,value) in values {
             // dev.7 / dev.8 导出包含旧开关；统一流式后只校验类型，不恢复旧播放策略。
@@ -188,7 +210,7 @@ final class PetPreferences {
             return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0,1,3,4,6].contains($0.value.doubleValue) && ($0.key != "idle" || $0.value.intValue > 0)}
         }
         if key == "animationSpeeds", let map = value as? [String:NSNumber] {return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0.75,1,1.25,1.5].contains($0.value.doubleValue)}}
-        if key == "customLines", let map = value as? [String:String] {return map.allSatisfy {clipIDs.contains($0.key) && $0.value.count <= 500}}
+        if key == "customLines", let map = value as? [String:String] {return map.allSatisfy {clipIDs.contains($0.key) && TemplateSyntax.count($0.value) <= 120}}
         if key == "favorites", let list = value as? [String] {return list.allSatisfy {clipIDs.contains($0)}}
         if key == "accentRGB", let rgb = value as? [NSNumber] {return rgb.count == 3 && rgb.allSatisfy {CFGetTypeID($0) != CFBooleanGetTypeID() && (0...1).contains($0.doubleValue)}}
         if let range = ranges[key], let n = value as? NSNumber {
@@ -196,7 +218,7 @@ final class PetPreferences {
             return CFGetTypeID(n) != CFBooleanGetTypeID() && range.contains(n.doubleValue) && (!integer || n.doubleValue.rounded() == n.doubleValue)
         }
         if let b = baseline as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID() {return (value as? NSNumber).map {CFGetTypeID($0) == CFBooleanGetTypeID()} ?? false}
-        if baseline is String, let s = value as? String {return s.count <= (key == "greetingTemplate" ? 500 : 80) && (choices[key]?.contains(s) ?? true)}
+        if baseline is String, let s = value as? String {return (TemplateSyntax.isTemplateKey(key) ? TemplateSyntax.count(s) : s.count) <= (key.hasSuffix("Template") ? 120 : ["ownerName","customAddress","petName"].contains(key) ? 20 : 80) && (choices[key]?.contains(s) ?? true)}
         return false
     }
 }

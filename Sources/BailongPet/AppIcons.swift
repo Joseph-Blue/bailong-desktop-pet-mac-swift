@@ -1,6 +1,23 @@
 import AppKit
 
 enum AppIcons {
+    // 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png；原图随本地资源打包。
+    static let openAI: NSImage? = {
+        if let image = NSImage(contentsOf:Paths.resources.appendingPathComponent("openai-logo.png")) {
+            image.size = NSSize(width:18,height:18); image.isTemplate = true
+            image.accessibilityDescription = "OpenAI"; return image
+        }
+        for app in CodexConnection.desktopApplications() {
+            for name in ["chatgptTemplate@2x.png","chatgptTemplate.png"] {
+                if let image = NSImage(contentsOf:app.appendingPathComponent("Contents/Resources/"+name)) {
+                    image.size = NSSize(width:18,height:18); image.isTemplate = true
+                    image.accessibilityDescription = "OpenAI"; return image
+                }
+            }
+        }
+        return nil
+    }()
+
     static var application: NSImage? {NSImage(contentsOf:Paths.resources.appendingPathComponent("BailongPet.icns"))}
     private static let about = AboutWindowController()
     static func showAbout() {
@@ -127,7 +144,7 @@ private final class AboutWindowController: NSWindowController {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
-        let text = NSTextView(frame:NSRect(x:0,y:0,width:560,height:360))
+        let text = AppTextView(frame:NSRect(x:0,y:0,width:560,height:360))
         text.isEditable = false
         text.isSelectable = false
         // 说明文字不允许选中；链接通过点击手势打开，不依赖 NSTextView 的选择行为。

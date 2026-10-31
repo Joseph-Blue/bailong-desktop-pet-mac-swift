@@ -27,7 +27,7 @@ mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources/outputs/白龙�
 cp ".build/$target_arch/BailongPet" "$staging/Contents/MacOS/BailongPet"
 cp "$assets/素材清单.json" "$staging/Contents/Resources/outputs/白龙桌宠素材/"
 cp -R "$assets/透明HEVC" "$staging/Contents/Resources/outputs/白龙桌宠素材/"
-for resource in sounds BailongPet.icns glass-symbols; do
+for resource in sounds BailongPet.icns glass-symbols openai-logo.png; do
     cp -R "local-assets/$resource" "$staging/Contents/Resources/"
 done
 cp VERSION "$staging/Contents/Resources/VERSION"

@@ -23,26 +23,44 @@ final class AccentHistoryRow: NSTableRowView {
 }
 final class HistoryConversationCell: NSTableCellView {
     private let titleLabel = NSTextField(labelWithString:"")
+    private let snippetLabel = NSTextField(wrappingLabelWithString:"")
     private let sourceIcon = NSImageView()
-    init(title: String, external: Bool = false, symbol:String? = nil) {
+    private let titleText:String, snippetText:String?, query:String
+    init(title: String, external: Bool = false, symbol:String? = nil, snippet:String? = nil, query:String = "") {
+        titleText = title; snippetText = snippet; self.query = query
         super.init(frame:.zero)
-        titleLabel.stringValue = title; titleLabel.font = .systemFont(ofSize:13)
         titleLabel.maximumNumberOfLines = 1; titleLabel.usesSingleLineMode = true; titleLabel.lineBreakMode = .byTruncatingTail
+        snippetLabel.maximumNumberOfLines = 2; snippetLabel.lineBreakMode = .byTruncatingTail
         sourceIcon.image = NSImage(systemSymbolName:symbol ?? (external ? "arrow.down.doc" : "bubble.left"),accessibilityDescription:symbol == nil ? (external ? "Codex 同步记录" : "桌宠对话") : title)
         addSubview(sourceIcon); addSubview(titleLabel); textField = titleLabel; imageView = sourceIcon
-        toolTip = title; setAccessibilityLabel(symbol == nil ? (external ? "Codex 同步记录，" : "桌宠对话，")+title : title)
+        toolTip = [title,snippet].compactMap {$0}.joined(separator:"\n")
+        setAccessibilityLabel((symbol == nil ? (external ? "Codex 同步记录，" : "桌宠对话，") : "")+title+(snippet.map {"，"+$0} ?? ""))
         sourceIcon.translatesAutoresizingMaskIntoConstraints = false; titleLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            sourceIcon.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),sourceIcon.centerYAnchor.constraint(equalTo:centerYAnchor),sourceIcon.widthAnchor.constraint(equalToConstant:18),sourceIcon.heightAnchor.constraint(equalToConstant:18),
-            titleLabel.leadingAnchor.constraint(equalTo:sourceIcon.trailingAnchor,constant:8),titleLabel.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-20),titleLabel.centerYAnchor.constraint(equalTo:centerYAnchor)
+            sourceIcon.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),sourceIcon.centerYAnchor.constraint(equalTo:titleLabel.centerYAnchor),sourceIcon.widthAnchor.constraint(equalToConstant:18),sourceIcon.heightAnchor.constraint(equalToConstant:18),
+            titleLabel.leadingAnchor.constraint(equalTo:sourceIcon.trailingAnchor,constant:8),titleLabel.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-20)
         ])
+        if snippet != nil {
+            addSubview(snippetLabel); snippetLabel.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([titleLabel.topAnchor.constraint(equalTo:topAnchor,constant:7),snippetLabel.topAnchor.constraint(equalTo:titleLabel.bottomAnchor,constant:3),snippetLabel.leadingAnchor.constraint(equalTo:titleLabel.leadingAnchor),snippetLabel.trailingAnchor.constraint(equalTo:titleLabel.trailingAnchor),snippetLabel.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor,constant:-6)])
+        } else {titleLabel.centerYAnchor.constraint(equalTo:centerYAnchor).isActive = true}
+        updateColors()
     }
     required init?(coder:NSCoder) {fatalError()}
-    override var backgroundStyle: NSView.BackgroundStyle {
-        didSet {
-            titleLabel.textColor = backgroundStyle == .emphasized ? .alternateSelectedControlTextColor : .labelColor
-            titleLabel.font = .systemFont(ofSize:13,weight:backgroundStyle == .emphasized ? .semibold : .regular)
-            sourceIcon.contentTintColor = backgroundStyle == .emphasized ? .alternateSelectedControlTextColor : AppAccent.color
+    override var backgroundStyle: NSView.BackgroundStyle {didSet {updateColors()}}
+    private func updateColors() {
+        let selected = backgroundStyle == .emphasized
+        let foreground:NSColor = selected ? .alternateSelectedControlTextColor : .labelColor
+        let secondary:NSColor = selected ? .alternateSelectedControlTextColor : .secondaryLabelColor
+        func styled(_ text:String,size:CGFloat,color:NSColor) -> NSAttributedString {
+            let value = NSMutableAttributedString(string:text,attributes:[.font:NSFont.systemFont(ofSize:size,weight:selected ? .semibold : .regular),.foregroundColor:color])
+            for range in HistorySearch.ranges(in:text,query:query) {
+                value.addAttributes([.font:NSFont.systemFont(ofSize:size,weight:.semibold),.backgroundColor:(selected ? NSColor.white : AppAccent.color).withAlphaComponent(0.2)],range:range)
+            }
+            return value
         }
+        titleLabel.attributedStringValue = styled(titleText,size:13,color:foreground)
+        snippetLabel.attributedStringValue = styled(snippetText ?? "",size:11,color:secondary)
+        sourceIcon.contentTintColor = selected ? .alternateSelectedControlTextColor : AppAccent.color
     }
 }

@@ -58,7 +58,7 @@ enum AppAccent {
 
 // NSSwitch 没有公开 tint 属性。公开 contentFilters 仅映射原生绘制的颜色，
 // 不访问内部子视图、不重画形状，也不替换系统动画、键盘或辅助功能。
-private enum NativeAccentTint {
+enum NativeAccentTint {
     private static let workingSpace = NSColorSpace(cgColorSpace:CGColorSpace(name:CGColorSpace.extendedLinearSRGB)!)!
     static func apply(to view:NSView) {
         view.wantsLayer = true

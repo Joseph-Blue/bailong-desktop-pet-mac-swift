@@ -213,10 +213,10 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
     private let explanation = NSTextField(wrappingLabelWithString:"")
     private let versions = NSTextField(labelWithString:"")
     private let timestamp = NSTextField(labelWithString:"")
-    private let notes = NSTextView(frame:NSRect(x:0,y:0,width:540,height:220))
+    private let notes = AppTextView(frame:NSRect(x:0,y:0,width:540,height:220))
     private let notesScroll = NSScrollView()
     private var notesHeight: NSLayoutConstraint!
-    private let details = NSTextView(frame:NSRect(x:0,y:0,width:540,height:110))
+    private let details = AppTextView(frame:NSRect(x:0,y:0,width:540,height:110))
     private let detailsScroll = NSScrollView()
     private var detailsHeight: NSLayoutConstraint!
     private let detailsRow = NSStackView()

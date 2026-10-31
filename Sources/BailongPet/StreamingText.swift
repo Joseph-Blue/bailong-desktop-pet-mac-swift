@@ -1,12 +1,17 @@
 import AppKit
 
 // 仅逐步显示已收到的文本；不制造内容，也不等待整段回复结束。
-final class StreamingTextView: NSTextView {
+final class StreamingTextView: AppTextView {
     private var targetText = NSAttributedString(string:"")
     private var revealTimer: Timer?
     private var followsEnd = true
     var automaticallyFollowsEnd = true
+    var linkBaseDirectory: (() -> URL?)?
     var isRevealing: Bool {revealTimer != nil}
+    override func clicked(onLink link: Any, at charIndex: Int) {
+        if MessageFileLink.reveal(link,relativeTo:linkBaseDirectory?()) {return}
+        super.clicked(onLink:link,at:charIndex)
+    }
     func setContent(_ value: NSAttributedString, animated: Bool, reset: Bool = false) {
         if !reset && targetText.isEqual(to:value) {if !animated {finishReveal()}; return}
         let follows = automaticallyFollowsEnd && (reset || isAtEnd)

@@ -48,6 +48,10 @@ final class BubbleMotion: NSObject {
         frame.origin = origin
         render()
     }
+    func adoptUserFrame() {
+        guard let window else {return}
+        resizeFrom = nil; frame = window.frame
+    }
     func resize(to size: NSSize) {
         guard let window else {return}
         guard frame.size != size else {onResize?(window.frame.size); return}

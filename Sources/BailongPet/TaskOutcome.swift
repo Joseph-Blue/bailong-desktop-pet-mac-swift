@@ -1,13 +1,6 @@
 import Foundation
 
 enum TaskOutcome {
-    static func title(_ status: String) -> String {
-        switch status {
-        case "completed": return "主人，完成啦！"
-        case "interrupted": return "主人，任务已中断。"
-        default: return "主人，这次任务执行失败。"
-        }
-    }
     /// 会话标题来自用户，禁止将它回填为助手的结果正文。
     static func body(status: String, error: String, final: String) -> String {
         let raw = error.trimmingCharacters(in:.whitespacesAndNewlines)

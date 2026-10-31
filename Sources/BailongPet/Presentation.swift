@@ -1,5 +1,50 @@
 import AppKit
 
+enum TaskAttentionKind: String {
+    case answer, approval
+    var templateKey: String {self == .answer ? "taskAnswerTemplate" : "taskApprovalTemplate"}
+    var status: String {self == .answer ? "waitingForInput" : "waitingForApproval"}
+}
+struct TaskQuestionOption {
+    let title: String
+    let detail: String?
+    let recommended: Bool
+}
+struct TaskQuestion {
+    let prompt: String
+    let options: [TaskQuestionOption]
+    var id: String = ""
+}
+struct TaskAttention {
+    let kind: TaskAttentionKind
+    let body: String
+    var isSensitive = false
+    var questions: [TaskQuestion] = []
+    static func question(_ question: [String:Any]) -> TaskAttention {
+        if question["isSecret"] as? Bool == true {
+            return TaskAttention(kind:.answer,body:"需要输入敏感信息，请前往处理。",isSensitive:true)
+        }
+        let prompt = question["question"] as? String ?? question["title"] as? String ?? "请补充信息。"
+        let options = (question["options"] as? [Any] ?? []).compactMap {value -> TaskQuestionOption? in
+            let object = value as? [String:Any]
+            guard let title = value as? String ?? object?["label"] as? String else {return nil}
+            // 推荐标签只来自原数据标记或原始名称，不根据位置推断。
+            let suffixes = [" (Recommended)","（推荐）"," (推荐)"]
+            let suffix = suffixes.first {title.hasSuffix($0)}
+            return TaskQuestionOption(title:suffix.map {String(title.dropLast($0.count))} ?? title,
+                detail:object?["description"] as? String,
+                recommended:object?["recommended"] as? Bool == true || suffix != nil)
+        }
+        return TaskAttention(kind:.answer,body:([prompt]+options.map {"• "+$0.title+($0.recommended ? "（推荐）" : "")+($0.detail.map {"："+$0} ?? "")}).joined(separator:"\n"),
+            questions:[TaskQuestion(prompt:prompt,options:options,id:question["id"] as? String ?? "")])
+    }
+
+    static func approval(fileChange: Bool, reason: String?) -> TaskAttention {
+        let action = fileChange ? "等待批准文件修改。" : "等待批准执行操作。"
+        return TaskAttention(kind:.approval,body:[action,reason ?? ""].filter {!$0.isEmpty}.joined(separator:"\n"))
+    }
+}
+
 struct AppFailure {
     let title: String, message: String, detail: String
     var openDesktop = false
@@ -28,7 +73,7 @@ struct AppFailure {
     func showDetails() {
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
         let scroll = NSScrollView(frame:NSRect(x:0,y:0,width:480,height:180))
-        let text = NSTextView(frame:scroll.bounds); text.isEditable = false; text.isSelectable = true
+        let text = AppTextView(frame:scroll.bounds); text.isEditable = false; text.isSelectable = true
         text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = detail
         text.isHorizontallyResizable = false; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         scroll.documentView = text; scroll.hasVerticalScroller = true; alert.accessoryView = scroll
