@@ -15,7 +15,7 @@ enum Paths {
         NSHomeDirectory() + "/Library/Application Support/BailongPetAppKit")
     static var version: String {
         let url = Bundle.main.bundleURL.pathExtension == "app" ? resources.appendingPathComponent("VERSION") : project.appendingPathComponent("VERSION")
-        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.3.0-dev.3"
+        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.3.0"
     }
 }
 
@@ -58,156 +58,123 @@ struct Frame {
     let image: CGImage
     let pixels: Data
     let bounds: CGRect
+    var alphaOnly = false
+    var cost: Int { image.bytesPerRow * image.height + (alphaOnly ? pixels.count : 0) }
     func alpha(x: Int, y: Int) -> UInt8 {
         guard (0..<512).contains(x), (0..<512).contains(y) else { return 0 }
-        return pixels[y * image.bytesPerRow + x * 4 + 3]
+        let px = min(image.width - 1, x * image.width / 512)
+        let py = min(image.height - 1, y * image.height / 512)
+        return pixels[alphaOnly ? py * image.width + px : py * image.bytesPerRow + px * 4 + 3]
     }
 }
 // 帧数组构造后不再改变，CGImage 与 Data 均以只读方式跨队列使用。
 final class Animation: NSObject, @unchecked Sendable {
     let frames: [Frame]
-    init(_ frames: [Frame]) { self.frames = frames }
-    var cost: Int { frames.count * 512 * 512 * 4 }
+    let stream: StreamingAnimation?
+    init(_ frames: [Frame], stream: StreamingAnimation? = nil) { self.frames = frames; self.stream = stream }
+    var frameCount: Int { stream?.frameCount ?? frames.count }
+    var residentCount: Int { stream.map { $0.statistics(retaining: frames.first).frames } ?? frames.count }
+    var cost: Int { stream?.statistics(retaining: frames.first).bytes ?? frames.reduce(0) { $0 + $1.cost } }
 }
 
-// 可变解码状态由 lock 保护；NSCache / CIContext 自身支持并发访问。
+private final class WeakAnimation {
+    weak var value: Animation?
+    init(_ value: Animation) { self.value = value }
+}
+
+// 可变解码状态由 lock 保护；Core Image 上下文复用，默认流式读取，整段预加载按偏好启用。
 final class Decoder: @unchecked Sendable {
     private let lock = NSLock()
     private let group = DispatchGroup()
     private var worker: Task<Void, Never>?
-    private var reader: AVAssetReader?
+    private var stream: StreamingAnimation?
     private var generation = 0
-    private let cache = NSCache<NSString, Animation>()
-    private var pinned = [String: Animation]()
-    private let pinnedIDs: Set<String> = ["idle", "idle2", "drag", "landing"]
+    private var bufferCapacity = 24
+    private var resolution = 512
+    private var preloadWhole = false
+    private var preloadProgress: (id: String, frames: Int, total: Int)?
+    func preloadingStatistics() -> (id: String, frames: Int, total: Int)? { lock.withLock { preloadProgress } }
+    private var resident = [String: WeakAnimation]()
     private let context = CIContext(options: [.cacheIntermediates: false, .outputPremultiplied: true])
-    private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-    init() { cache.totalCostLimit = 192 * 1024 * 1024 }
-    private func cached(_ id: String) -> Animation? {
-        lock.withLock { pinned[id] } ?? cache.object(forKey: id as NSString)
+    func residentFrameStatistics() -> (clips: Int, frames: Int, bytes: Int) {
+        lock.withLock {
+            let live = resident.values.compactMap { $0.value }
+            return (live.count, live.reduce(0) { $0 + $1.residentCount }, live.reduce(0) { $0 + $1.cost })
+        }
     }
-    func thumbnail(_ clip: Clip) -> NSImage? {
-        cached(clip.id)?.frames.first.map { NSImage(cgImage: $0.image, size: NSSize(width: 36, height: 36)) }
-    }
-    // 保留原有首帧、基础动作预热和缓存接口，动画调度与透明命中继续使用同一帧。
-    func warm(_ clips: [Clip]) {
-        let token = lock.withLock { generation }
-        group.enter()
-        lock.withLock { worker = Task.detached(priority: .userInitiated) { [self] in
-            defer { group.leave() }
-            for clip in clips where cached(clip.id) == nil {
-                guard current(token) else { return }
-                await decode(clip, token: token, first: { _ in }, completion: { result in
-                    if case .failure(let error) = result { NSLog("动画预热失败：%@", error.localizedDescription) }
-                })
-            }
-        } }
+    func configure(bufferCapacity: Int, resolution: Int, preloadWhole: Bool) {
+        cancel()
+        lock.withLock {
+            self.bufferCapacity = bufferCapacity; self.resolution = resolution; self.preloadWhole = preloadWhole
+            resident.removeAll()
+        }
+        context.clearCaches()
     }
     func cancel() {
-        let (active, pending) = lock.withLock { () -> (AVAssetReader?, Task<Void, Never>?) in
-            generation += 1
-            return (reader, worker)
+        let (pending, streaming) = lock.withLock { () -> (Task<Void, Never>?, StreamingAnimation?) in
+            generation += 1; preloadProgress = nil
+            let oldStream = stream; stream = nil
+            return (worker, oldStream)
         }
-        pending?.cancel()
-        active?.cancelReading()
+        streaming?.stop(); pending?.cancel()
     }
     func close() {
-        cancel()
-        // 只有本进程内的原生 reader；等待取消完成，不启动或遗留解码子进程。
-        group.wait()
-        cache.removeAllObjects()
-        lock.withLock { pinned.removeAll() }
+        let activeStream = lock.withLock { stream }
+        cancel(); activeStream?.waitUntilStopped(); group.wait()
+        context.clearCaches()
+        lock.withLock { resident.removeAll() }
     }
     private func current(_ token: Int) -> Bool { lock.withLock { generation == token } }
     func load(_ clip: Clip, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
         cancel()
-        let token = lock.withLock { generation }
-        if let value = cached(clip.id) { completion(.success(value)); return }
+        let (token, capacity, side, preload) = lock.withLock { (generation, bufferCapacity, resolution, preloadWhole) }
         group.enter()
         lock.withLock { worker = Task.detached(priority: .userInitiated) { [self] in
             defer { group.leave() }
-            await decode(clip, token: token, first: first, completion: completion)
-        } }
-    }
-    private func decode(_ clip: Clip, token: Int, first: @escaping (Frame) -> Void,
-                        completion: @escaping (Result<Animation, Error>) -> Void) async {
-        guard current(token) else { return }
-        if let value = cached(clip.id) {
-            DispatchQueue.main.async { if self.current(token) { completion(.success(value)) } }; return
-        }
-        do {
-            let asset = AVURLAsset(url: Paths.assets.appendingPathComponent(clip.playbackFile ?? clip.file))
-            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-                throw PetFailure(message: "「\(clip.title)」没有视频轨道。")
-            }
-            guard current(token) else { return }
-            let decoding = try AVAssetReader(asset: asset)
-            let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ])
-            output.alwaysCopiesSampleData = false
-            decoding.add(output)
-            let started = lock.withLock { () -> Bool in
-                guard generation == token else { return false }
-                reader = decoding
-                return decoding.startReading()
-            }
-            defer {
-                decoding.cancelReading()
-                lock.withLock { if reader === decoding { reader = nil } }
-            }
-            guard current(token) else { return }
-            guard started else { throw decoding.error ?? PetFailure(message: "无法开始解码「\(clip.title)」。") }
-            var frames = [Frame]()
-            var referenceBounds = CGRect.zero
-            while current(token) {
-                let frame: Frame? = try autoreleasepool {
-                    guard let sample = output.copyNextSampleBuffer() else { return nil }
-                    guard let buffer = CMSampleBufferGetImageBuffer(sample) else {
-                        throw PetFailure(message: "「\(clip.title)」包含无像素数据的视频帧。")
-                    }
-                    let source = CIImage(cvPixelBuffer: buffer)
-                    let scaled = source.applyingFilter("CILanczosScaleTransform", parameters: [
-                        kCIInputScaleKey: 512 / source.extent.height,
-                        kCIInputAspectRatioKey: source.extent.height / source.extent.width
-                    ])
-                    // 由 Core Image 创建标准 CGImage，显示和命中读取同一张图的 RGBA 数据。
-                    // 不手工重排视频缓冲区的行方向，也不把 BGRA 当成 RGBA。
-                    guard let image = context.createCGImage(scaled,
-                        from: CGRect(x: 0, y: 0, width: 512, height: 512), format: .RGBA8, colorSpace: colorSpace),
-                        let data = image.dataProvider?.data else {
-                        throw PetFailure(message: "无法创建「\(clip.title)」的透明画面。")
-                    }
-                    let pixels = data as Data
-                    if frames.isEmpty {
-                        var x0 = 512, y0 = 512, x1 = -1, y1 = -1
-                        pixels.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
-                            for y in 0..<512 { for x in 0..<512 where bytes[y * image.bytesPerRow + x * 4 + 3] > 0 {
-                                x0 = min(x0, x); y0 = min(y0, y); x1 = max(x1, x); y1 = max(y1, y)
-                            } }
-                        }
-                        referenceBounds = x1 < 0 ? .zero : CGRect(x: x0, y: y0, width: x1-x0+1, height: y1-y0+1)
-                    }
-                    return Frame(image: image, pixels: pixels, bounds: referenceBounds)
+            do {
+                let asset = AVURLAsset(url: Paths.assets.appendingPathComponent(clip.playbackFile ?? clip.file))
+                guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+                    throw PetFailure(message: "「\(clip.title)」没有视频轨道。")
                 }
-                guard let frame else { break }
-                frames.append(frame)
-                if frames.count == 1 { DispatchQueue.main.async { if self.current(token) { first(frame) } } }
+                guard current(token) else { return }
+                let rate = try await track.load(.nominalFrameRate)
+                let range = try await track.load(.timeRange)
+                guard current(token) else { return }
+                let streaming = StreamingAnimation(asset: asset, track: track, context: context, capacity: capacity, resolution: side,
+                    frameCount: max(1, Int((range.duration.seconds * Double(rate)).rounded())),
+                    startTime: range.start.seconds, onFailure: { [weak self] error in
+                        if self?.current(token) == true { completion(.failure(error)) }
+                    })
+                if preload {
+                    lock.withLock { if generation == token { preloadProgress = (clip.id, 0, streaming.frameCount) } }
+                    defer { lock.withLock { if generation == token { preloadProgress = nil } } }
+                    guard let frames = try streaming.preload(isCurrent: { self.current(token) }, progress: { count in
+                        self.lock.withLock { if self.generation == token { self.preloadProgress = (clip.id, count, streaming.frameCount) } }
+                    }), current(token) else { return }
+                    guard let firstFrame = frames.first else { throw PetFailure(message: "「\(clip.title)」没有可播放的帧。") }
+                    let animation = Animation(frames)
+                    lock.withLock { if generation == token { resident[clip.id] = WeakAnimation(animation) } }
+                    DispatchQueue.main.async {
+                        if self.current(token) { first(firstFrame); completion(.success(animation)) }
+                    }
+                    return
+                }
+                let firstFrame = try streaming.prime()
+                let animation = Animation([firstFrame], stream: streaming)
+                let accepted = lock.withLock { () -> Bool in
+                    guard generation == token else { return false }
+                    stream = streaming; resident[clip.id] = WeakAnimation(animation); return true
+                }
+                guard accepted else { streaming.stop(); return }
+                DispatchQueue.main.async {
+                    if self.current(token) {
+                        first(firstFrame); completion(.success(animation)); streaming.request(0)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async { if self.current(token) { completion(.failure(error)) } }
             }
-            guard current(token) else { return }
-            guard decoding.status == .completed, !frames.isEmpty else {
-                throw decoding.error ?? PetFailure(message: "「\(clip.title)」的视频解码没有完整结束。")
-            }
-            let animation = Animation(frames)
-            lock.withLock {
-                guard generation == token else { return }
-                if pinnedIDs.contains(clip.id) { pinned[clip.id] = animation }
-                else { cache.setObject(animation, forKey: clip.id as NSString, cost: animation.cost) }
-            }
-            DispatchQueue.main.async { if self.current(token) { completion(.success(animation)) } }
-        } catch {
-            DispatchQueue.main.async { if self.current(token) { completion(.failure(error)) } }
-        }
+        } }
     }
 }
 

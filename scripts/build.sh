@@ -10,13 +10,13 @@ case "$target_arch" in
     *) print -u2 "不支持的架构：$target_arch"; exit 2 ;;
 esac
 assets="local-assets/native-hevc/catalog"
-[[ -f "$assets/素材清单.json" ]] || { print -u2 "请先运行 scripts/prepare-native-assets.sh 准备完整透明 HEVC 素材。"; exit 1; }
+[[ -f "$assets/素材清单.json" ]] || { print -u2 "请先按 README 准备 local-assets/native-hevc/catalog 原生素材。"; exit 1; }
 version="$(<VERSION)"
 output="dist/native-hevc/$version/$target_arch"
 mkdir -p ".build/$target_arch" .build/module-cache "$output"
 xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache Sources/BailongPet/*.swift \
-    -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -lsqlite3
+    -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3
 xcrun swiftc -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache Sources/BailongPet/FollowMonitor.swift Tools/FollowHelper/main.swift \
     -framework AppKit -o ".build/$target_arch/BailongFollow"
@@ -69,7 +69,7 @@ cat > "$helper/Contents/Info.plist" <<PLIST
 PLIST
 codesign --force --sign - "$helper"
 codesign --force --sign - "$staging"
-# 输出目录按版本隔离，干净组包避免旧 FFmpeg 或 WebM 留在包内。
+# 输出目录按版本隔离，只组装原生运行资源。
 if [[ -d "$app" ]]; then rm -rf "$app"; fi
 mv "$staging" "$app"
 print "已构建 $app（$version，$target_arch，本地签名）"

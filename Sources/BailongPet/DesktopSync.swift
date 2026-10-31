@@ -44,6 +44,7 @@ final class DesktopSync {
     private var tracked = [String:PublicSnapshot]()
     private var fingerprints = [String:String](), changedAt = [String:Double](), noticedAt = [String:Double]()
     private var running = Set<String>()
+    private(set) var diagnostics = "等待同步"
     var status = "正在准备读取本机 Codex 的任务记录。\n读取成功后，这里会显示任务数量、当前状态和最近刷新时间。"
     init(chat: ChatController) {
         self.chat = chat
@@ -56,7 +57,7 @@ final class DesktopSync {
         queue.async { [weak self] in
             guard let self else{return}
             do {let values = try Self.read(excluded:excluded,watched:Array(watched)); DispatchQueue.main.async {self.reading = false; if !self.stopped {self.accept(values)}}}
-            catch {DispatchQueue.main.async {self.reading = false; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
+            catch {DispatchQueue.main.async {self.reading = false; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
         }
     }
     private static func read(excluded: Set<String>, watched: [PublicSnapshot]) throws -> [PublicSnapshot] {
@@ -138,7 +139,7 @@ final class DesktopSync {
                     let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.messages.components(separatedBy:"\n\n").last!
                     let signature = text
                     if !text.isEmpty && (turn.notices[signature] == nil || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say("主人，我还在留意进展…",body:text,kind:"task",thread:conversation.key,followsText:false,purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress)
+                        chat.pet.say("主人，我还在留意进展…",body:text,kind:"task",thread:conversation.key,followsText:false,purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress,animateHeading:true)
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
                     }
                 }
@@ -152,6 +153,7 @@ final class DesktopSync {
         }
         initial = false
         let present = Set(values.map{$0.key}), missing = running.subtracting(present)
+        diagnostics = "\(values.count) 条 · 活跃 \(running.count) · 待更新 \(missing.count) · " + Date().formatted(.dateTime.hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))
         status = Self.describeStatus(values,missing:missing.count)
         if changed {chat.persist()}
     }
@@ -182,5 +184,5 @@ final class DesktopSync {
         ]
         return lines.joined(separator:"\n")
     }
-    func close() {stopped = true; timer?.invalidate(); status = "任务同步已停止，当前不会读取新的任务状态。"}
+    func close() {diagnostics = "已停止"; stopped = true; timer?.invalidate(); status = "任务同步已停止，当前不会读取新的任务状态。"}
 }

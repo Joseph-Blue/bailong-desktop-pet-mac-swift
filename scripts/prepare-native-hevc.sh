@@ -2,35 +2,14 @@
 set -eu
 cd "${0:A:h:h}"
 
-if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != "--reuse-assets" ]]; }; then
-    print -u2 "用法：$0 [--reuse-assets]"; exit 2
-fi
-
-host_arch="$(uname -m)"
-case "$host_arch" in
-    arm64) encoder="local-assets/tools/ffmpeg" ;;
-    x86_64) encoder="local-assets/tools/x86_64/ffmpeg" ;;
-    *) print -u2 "不支持的构建主机：$host_arch"; exit 2 ;;
-esac
+(( $# == 0 )) || { print -u2 "用法：$0"; exit 2; }
 workspace=".build/native-hevc"
-samples="local-assets/native-hevc/samples"
-version="$(<Tools/NativeHEVC/VERSION)"
-mkdir -p "$workspace/module-cache" local-assets/native-hevc
+samples="local-assets/native-hevc/catalog"
+version="$(<VERSION)"
+[[ -f "$samples/samples.json" ]] || { print -u2 "请先按 README 准备原生素材目录。"; exit 1; }
+mkdir -p "$workspace/module-cache"
 
-if [[ "${1:-}" != "--reuse-assets" ]]; then
-    [[ -x "$encoder" ]] || { print -u2 "缺少构建时转码器：$encoder"; exit 1; }
-    xcrun lipo -verify_arch "$host_arch" "$encoder"
-    xcrun swiftc -O -swift-version 5 -parse-as-library \
-        -target "$host_arch-apple-macosx14.0" -module-cache-path "$workspace/module-cache" \
-        Tools/NativeHEVC/AssetInfo.swift -framework AVFoundation \
-        -o "$workspace/PrepareNativeSamples"
-    "$workspace/PrepareNativeSamples" \
-        "local-assets/outputs/白龙桌宠素材" "$encoder" "$samples" "$version"
-else
-    [[ -f "$samples/samples.json" ]] || { print -u2 "尚无已完成的素材，请先不带参数运行。"; exit 1; }
-fi
-
-# 预览与正式桌宠使用不同名称、包标识和输出目录；无 FFmpeg 运行依赖。
+# 预览只复用原生素材，独立包标识，不读取桌宠数据。
 for target_arch in arm64 x86_64; do
     output="dist/native-hevc/$version/$target_arch"
     mkdir -p "$output"
@@ -41,7 +20,9 @@ for target_arch in arm64 x86_64; do
         -target "$target_arch-apple-macosx14.0" -module-cache-path "$workspace/module-cache" \
         Tools/NativeHEVC/Preview.swift -framework AppKit -framework AVFoundation \
         -o "$staging/Contents/MacOS/NativeHEVCPreview"
-    cp -R "$samples" "$staging/Contents/Resources/samples"
+    mkdir -p "$staging/Contents/Resources/samples"
+    cp "$samples/samples.json" "$staging/Contents/Resources/samples/"
+    cp "$samples/透明HEVC/"*.mov "$staging/Contents/Resources/samples/"
     cp local-assets/BailongPet.icns "$staging/Contents/Resources/"
     cat > "$staging/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -52,7 +33,7 @@ for target_arch in arm64 x86_64; do
 <key>CFBundleExecutable</key><string>NativeHEVCPreview</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
-<key>CFBundleVersion</key><string>${version##*.}</string>
+<key>CFBundleVersion</key><string>${version%%-*}</string>
 <key>BailongVersion</key><string>$version</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>

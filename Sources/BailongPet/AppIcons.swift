@@ -10,7 +10,8 @@ enum AppIcons {
     }
     // 保留素材的透明轮廓，菜单栏交由系统按背景绘制为白/黑剪影。
     static func petSilhouette(_ frame: Frame) -> NSImage {
-        let crop = frame.image.cropping(to:frame.bounds.integral) ?? frame.image
+        let pixelBounds = frame.bounds.applying(CGAffineTransform(scaleX: Double(frame.image.width)/512, y: Double(frame.image.height)/512))
+        let crop = frame.image.cropping(to:pixelBounds.integral) ?? frame.image
         let source = NSImage(cgImage:crop,size:NSSize(width:crop.width,height:crop.height))
         let image = NSImage(size:NSSize(width:18,height:18),flipped:false) { rect in
             let scale = min(rect.width/source.size.width,rect.height/source.size.height)
@@ -200,17 +201,8 @@ private final class AboutWindowController: NSWindowController {
         link("音效及来源说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds",to:text)
 
         heading("原生透明动画",to:text)
-        paragraph("角色动画在构建时转换为 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 与 Core Image 解码和缩放。本应用不附带 FFmpeg 或 Python 运行环境。",to:text)
+        paragraph("角色动画使用 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 与 Core Image 解码和缩放。PNG 素材接入由 AVAssetWriter 和 Apple avconvert 完成。",to:text)
         link("Apple 透明 HEVC 说明",url:"https://developer.apple.com/videos/play/wwdc2019/506/",to:text)
-
-        heading("FFmpeg / libvpx · 离线素材准备",to:text)
-        paragraph("构建工具使用 FFmpeg 读取原 VP9 透明动画并生成 ProRes 4444 中间素材，再由 Apple avconvert 完成透明 HEVC 编码。libvpx 来自 The WebM Project，采用 BSD 3-Clause；这些工具不随应用包分发。",to:text)
-        link("FFmpeg 项目与许可说明",url:"https://ffmpeg.org/legal.html",to:text)
-        link("libvpx 许可证",url:"https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/LICENSE",to:text)
-
-        heading("imageio-ffmpeg · 构建工具来源",to:text)
-        paragraph("本地使用的 FFmpeg 二进制取自 imageio-ffmpeg 0.6.0，未使用其 Python 封装。各构建工具仍遵循各自许可。",to:text)
-        link("imageio-ffmpeg 项目",url:"https://github.com/imageio/imageio-ffmpeg",to:text)
 
         heading("SQLite · 本机任务记录读取",to:text)
         paragraph("使用 macOS 提供的 SQLite 动态库，不另附数据库运行库。SQLite 项目声明其发布代码与文档属于公有领域。",to:text)

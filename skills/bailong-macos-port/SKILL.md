@@ -1,64 +1,65 @@
 ---
 name: bailong-macos-port
-description: 维护白龙娘桌宠的 macOS 移植，按目标工程区分 Swift/AppKit 与旧 Python/PySide6 路线；用于原生界面、动画交互、Codex 对接、架构打包和来源对照。
+description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、界面、性能、Codex 对接、打包与来源记录；与历史 Python 工程严格区分。
 ---
 
 # 白龙娘桌宠 macOS 维护
 
-## 先确定工程
+## 工程与授权
 
-读取目标仓库 AGENTS.md、VERSION 与 Git 状态，再查看相关函数。当前 Swift 仓库名为 `bailong-desktop-pet-mac-swift`，本地旧目录名可能仍为 `bailong-desktop-pet-appkit`。旧 `bailong-desktop-pet-mac` 为 Python/PySide6 路线，不能把两者的运行依赖、数据路径或构建命令混用。
+先读目标 AGENTS.md、VERSION 与 Git 状态。Swift 工程位于 bailong-desktop-pet-appkit，仓库名 bailong-desktop-pet-mac-swift；旧 bailong-desktop-pet-mac 的 Python/PySide6 路线只作参考，不混用依赖和数据目录。不派发其他 agent。
 
-- Swift 工程使用 Swift + AppKit，动画也使用原生视图；`codex/native-hevc-alpha` 分支使用透明 HEVC、AVFoundation 与 Core Image，FFmpeg 仅用于离线素材准备，包内不携带。旧 0.2.x 的随包 FFmpeg 路线只作历史，不引入 Python/PySide6 运行依赖。
-- 只有明确在旧 Python 工程工作时，才保留 PySide6 动画和 AppKit 辅助窗口；不得据旧路线结论回退 Swift 工程。
-- 作者 `jingh12312-rgb/bailong-desktop-pet` 只读参考，已采用基线为 v0.5.1 / b102e73。行为对照只读相关函数，不整仓复制、不默认更新基线，不运行 Windows EXE。
-- 用户本轮指令优先；未要求运行验收或发布时，不自动执行这些操作。当前工程不派发其他 agent。
+当前本地 main 为 0.3.0，运行采用 Swift + AppKit、AVFoundation、Core Image、透明 HEVC。FFmpeg 旧运行／打包及离线 WebM 转码入口已删除，禁止重新引入。原始 WebM、原始／修复 PNG、现有 HEVC 与旧素材备份保留本地，不追踪进 Git。
 
-## Swift 实施入口
+原作基线 v0.5.1 / b102e73；只读相关函数，不整仓复制、不修改参考仓库、不运行 Windows EXE。素材修复及反哺同意不扩大为其他许可，不擅自添加许可证。
 
-| 改动 | 入口 |
-| --- | --- |
-| 动画、吸边、移动、鼠标、气泡调度 | Sources/BailongPet/Pet.swift、Resources.swift |
-| 分类设置、重置、偏好与快捷键规则 | Settings.swift、Preferences.swift |
-| 临时聊天、历史、输入、侧栏 | ChatUI.swift、HistoryViews.swift、History.swift |
-| 气泡与 Markdown、逐步显示 | NativeUI.swift、MarkdownText.swift、StreamingText.swift |
-| 内置任务、模型选择 | ChatController.swift、Codex.swift、ModelSelection.swift |
-| 外部只读观察 | DesktopSync.swift |
-| 名称、图标、关于、启动 | AppIcons.swift、main.swift、Autostart.swift、FollowMonitor.swift、Tools/FollowHelper/main.swift |
-| 完整素材准备、打包 | Tools/NativeHEVC/AssetInfo.swift、scripts/prepare-native-assets.sh、scripts/build.sh、VERSION |
-| 独立预览 | Tools/NativeHEVC/Preview.swift、Tools/NativeHEVC/VERSION、scripts/prepare-native-hevc.sh |
+## 入口
 
-## 原生动画路线
+| 内容 | 文件 |
+|---|---|
+| 桌宠交互和调度 | Sources/BailongPet/Pet.swift |
+| 动画解码与缓冲 | Resources.swift、StreamingAnimation.swift |
+| 性能设置和窗口 | Preferences.swift、Settings.swift、Diagnostics.swift、GPUStatistics.swift |
+| 气泡和盲文动画 | NativeUI.swift、Pet.swift、DesktopSync.swift |
+| 内置任务与外部观察 | ChatController.swift、Codex.swift、DesktopSync.swift |
+| 历史与对话界面 | History.swift、HistoryViews.swift、ChatUI.swift、StreamingText.swift |
+| 跟随启动 | Autostart.swift、FollowMonitor.swift、Tools/FollowHelper/main.swift |
+| 素材接入 | Tools/NativeHEVC/ApplyPNGRepairs.swift、scripts/apply-native-png-repairs.sh |
+| 构建与架构 | scripts/build.sh、scripts/run-dev.sh、Package.swift、VERSION |
+| 记录 | docs/来源与架构.md（追踪）；docs/实施记录.md（本地忽略） |
 
-- 完整桌宠使用 AVAssetReader 输出 BGRA，Core Image Lanczos 缩放为 512×512 的预乘 RGBA CGImage；显示与透明命中读取同一帧。保留首帧回调、基础动作预热和整段帧缓存，非固定缓存预算 192 MiB 不等于进程总内存上限，也不代表流式播放或内存改善已验收。
-- 解码取消使用 generation 和 cancelReading，过期回调不能进入界面；退出等待本进程内解码结束。不得重新引入 FFmpeg 运行子进程。
-- 离线链路为原 VP9 alpha WebM → FFmpeg 的 ProRes 4444 中间文件 → 系统 avconvert 的 PresetHEVCHighestQualityWithAlpha → MOV。保留原 WebM、清单参数及顺序；不宣称无损。生成工具已有原生首帧解码检查，元数据正常不代表可解码。
-- 独立预览使用 AVPlayerLooper / AVPlayerLayer，与完整桌宠的 AVAssetReader 链路不同；预览可播放不代表完整交互已验收。技术栈与来源见目标仓库 `docs/来源与架构.md`，阶段证据见本地 `docs/实施记录.md`。
+## 动画与性能约束
 
-## 交互约定
+- 默认流式读取，首帧就绪即播放；512×512、24 帧后续缓冲、满帧。画质可选 384／256；缓冲为整数 6～240，右对齐刻度滑块和输入框，两端标注，非法值结束编辑恢复 24，滑块松开才提交。容量不预分配、不跨动作预读。
+- FPS 上限可选满帧／30／24／20／15。满帧沿用 30 Hz 调度当前 24／30 fps 素材；不插帧、不改动作时长。拖动位置跟随鼠标，动画画面不绕过定时器。
+- 画质、帧率上限、缓冲帧数、整段预加载依序排列。整段预加载默认关闭，启用后缓冲置灰且保留值，当前动作完整解码后播放，同动作循环复用；不预热整个素材库。提示“不推荐，会显著增加运行内存 (RAM) 占用。”
+- 图像和 Alpha 命中同分辨率，首帧边界映射到 512 逻辑坐标，菜单栏剪影裁剪映射到实际像素。generation 取消过期任务，循环 epoch 丢弃旧帧，退出等待当前后台解码完成。
+- 性能统计独立 NSWindow、默认关闭；开启显示 Dock，关闭销毁窗口及采样，禁用绿灯。设置开关保留设置 key window；Dock／菜单主动召回可激活统计。底栏 pin 开关与右侧关闭／拷贝 centerY 对齐，置顶默认 true 并记忆。
+- FPS／HI／LO 醒目，CPU 总体在前、单核基准在后；GPU 明确应用资源组时间比例，失败不报零；Swap 区分系统交换空间、进程压缩和累计换入。运行内存 (RAM) 与磁盘存储分别标注。不把像素预算当进程总占用，也不把 dev.7 用户反馈的 280～300 MB 当新版测量结果。
+- 统计窗口不添加 hover 废话，不留固定大块空白；拷贝只复制当前显示信息。页面不加重复的“显示窗口”行。
 
-- 只有吸边状态保留 250ms：单击松手后到期只召回，不执行自定义单击动作；期间第二次按下取消召回并执行双击动作，默认查询额度。吸边拖动立即召回，不受等待限制。普通拖动保留拖拽及落地动画。
-- 普通单击不延迟，因此双击第一下已执行单击动作。右键按下立即弹菜单；右键双击先关闭菜单，再执行所选动作，默认临时聊天。不要重加所有点击的统一等待。
-- 移动按整条路径缩短，保持方向；播放速度同时影响帧和位移时间窗。随机频率不代替拖拽、落地、额度等事件触发。不要为修边默认重生成素材；原素材和试修输出分开，试修被停用时保持原素材路径。
-- 角色名字默认白龙娘，可自定义，仅用于角色称呼与互动文案；菜单、关于、设置导出、历史标题等产品身份保持固定，应用包名为“白龙娘桌宠MacOS-Swift版”。用户消息、模型正文、原作署名、资源目录和持久化标识不作全局替换。
-- 设置项左侧名称／说明、右侧控件，动画用影片符号，设置不单列关于。页脚文案“恢复本页设置为默认值”；全部恢复只处理已知偏好，不删除历史、素材或改变系统登录项。
-- 两处输入共用 SendShortcut；写全按键：默认 ⌘ Command + ↩ Enter 发送、↩ Enter 换行；备选 ↩ Enter 发送、⇧ Shift + ↩ Enter 或 ⌥ Option + ↩ Enter 换行。输入法组字时不发送，所有提示随设置更新。
+## 气泡、任务与数据
 
-## 任务与数据边界
+- 临时气泡“我还在留意进展…”及“让我看看额度…”前显示盲文滚动字符和一个空格。动画由 Bubble 的独立 Timer 更新，只改标签；正文更新不重置动画，标题替换／隐藏／销毁停止，不写入 History 或原任务文本。
+- 吸边单击保留作者 250ms 判定，第二次按下取消召回并查询额度；吸边拖动召回，普通拖拽播放拖拽及落地。移动按射线裁短，不分轴剪裁。
+- 产品身份固定为白龙娘桌宠MacOS-Swift版，自定义名字只用于称呼及互动。非交互文案不选中，历史、任务回复、输入与技术错误等保留复制。
+- 内置任务和外部只读观察分开，真实停止、默认拒绝审批、历史保护及进程回收必须保留；仅 completed 可宣告成功。外部工具中间失败不生成额外失败提醒，保留最终失败、审批及补充输入。
+- 数据目录 ~/Library/Application Support/BailongPetAppKit，不读凭证、不改全局 Codex 连接配置、不自动启用 LaunchAgent。跟随启动仅识别 Codex／ChatGPT 桌面应用，按标识与启动周期识别，拒绝临时路径；用户主动修复／更新配置。
 
-- 内置任务与外部只读观察分开；只有 completed 宣告成功。真实停止、默认拒绝审批、取消补充输入停止任务、历史保护和自有进程回收必须保留。
-- 外部工具中间失败不再自动包装为桌宠错误通知；保留公开进展、最终回复、待审批／输入及最终失败。过滤旧合成提醒只作用展示，不删原始记录。
-- Swift 数据目录是 `~/Library/Application Support/BailongPetAppKit`，包标识 `com.bailongpet.appkit`；改名和版本更新不迁移到旧 Python 数据目录。不得读取凭证或更改全局 Codex 配置，登录项只在用户主动启用时注册。
-- 跟随启动仅面向 Codex／ChatGPT 桌面应用，不识别 CLI；独立 BailongFollow.app 通过 bundle identifier（com.openai.codex / com.openai.chat）、PID 与启动时间识别运行周期，手动退出只抑制当前周期。拒绝注册 AppTranslocation 临时路径；旧配置由用户从固定位置打开完整应用后，在设置中修复／更新，不自动修改 LaunchAgent。
+## 原生素材与构建
 
-## 构建、验证与提交
+准备已有 HEVC catalog、sounds 和图标后，运行 `scripts/build.sh arm64`。当前仅交付 Silicon；Intel 入口保留但不自动追加构建。主程序与 helper 同架构，包内不带原始素材、中间文件或用户数据，输出 `dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app`。
 
-- 开发运行使用 `scripts/run-dev.sh`；仅编译使用 `scripts/run-dev.sh --build-only`，当前开发脚本面向 arm64。
-- 首次运行 `scripts/prepare-native-assets.sh` 准备完整素材，输出 `local-assets/native-hevc/catalog`；已有目录时停止，重新转码前保留并移走旧目录。FFmpeg 按构建主机架构选用 `local-assets/tools/ffmpeg` 或 `local-assets/tools/x86_64/ffmpeg`，不是按应用目标架构选择；只用于离线转码，其许可不等同于应用运行依赖。
-- 打包使用 `scripts/build.sh arm64` 或 `scripts/build.sh x86_64`，最低 macOS 14。输出在 `dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app`；主程序与 `Contents/Library/Helpers/BailongFollow.app` 必须同架构，包内不携带 FFmpeg、WebM 或 ProRes 中间文件。
-- 关于页按编译目标显示 Apple Silicon（arm64）或 Intel（x86_64）。交叉编译、签名和架构静态检查不等于 Intel 真机验收；本地 ad-hoc 签名不等于 Developer ID 或公证。
-- 按改动做必要编译和静态检查；不自动跑 SHA-256、截图、视觉、自检、冒烟或模型请求。已有测试按授权范围使用，证据不足要明确未验收。
-- 独立 SemVer；以 VERSION 为准。中文 commit 与 CHANGELOG。提交、推送和 Release 是分别授权的操作，已有明确授权时直接完成，不反复确认。
-- 原生 HEVC 分支完成后构建两架构完整应用供用户 review；未经 review 后的新指令不合并 main。完整应用与预览分别使用根目录 VERSION 和 Tools/NativeHEVC/VERSION，不能混用；纯文档更新不重复构建。
-- 素材、FFmpeg、应用包、用户数据、备份、内部计划／对比／调查／实施记录不进 Git；只有可复用 skill、源码、构建说明及正式来源文档参与版本。旧历史已含排除内容时，仅取消追踪不够；首次远端发布按用户选择使用干净快照，旧历史只留本地，不推备份分支或 tags。
-- 独立仓库维护，不创建上游 Fork；远端现状与操作授权分开，以当轮指令为准，不凭旧文档断言可见性，不自动改变可见性或创建 Release。保留原作来源，不能擅自给素材或原作添加许可。实施进展写入本地 `docs/实施记录.md`，该文件由 Git 忽略。
+PNG 接入用 `scripts/apply-native-png-repairs.sh <PNG根目录>`；追加 `--landing` 仅处理落地。Core Image 读取透明 PNG，AVAssetWriter 输出 ProRes 4444，再由系统 avconvert 编码 HEVC with Alpha。成功后切换 catalog 并保留旧目录。新原生编码工具在 0.3.0 只完成编译，未重编码现有素材，不宣称已视觉验收。
+
+独立预览 `scripts/prepare-native-hevc.sh` 只复制现有原生 MOV 和 samples.json，复用根 VERSION；AVPlayerLayer 预览不代表完整桌宠交互验收。没有旧 WebM 转码入口，不能把原版 WebM 目录直接当运行资源。
+
+仅做必要编译和针对改动的静态检查，不自动执行截图、视觉、SHA-256、自检、冒烟或模型请求。历史本地 Tests 仅在用户授权时运行，不把构建成功写成运行验收。
+
+## 版本、文档与下一步
+
+SemVer 独立维护，新增功能升次版本、修复升补丁版本，开发中用 dev 标识；中文 commit 与 CHANGELOG。合并、推送和 Release 分别按用户授权执行，当前只授权本地 main 合并，不推送、不创建 Release、不改变可见性。
+
+当前状态写入 README、CHANGELOG、追踪的 docs/来源与架构.md 和 AGENTS.md；过程细节留在本地实施记录，不把预发布流水堆入当前架构说明。技能项目副本与个人副本同步。
+
+下一项功能为“检查更新”，尚未实现。不要把计划写成已具备网络版本查询、自动下载或安装。

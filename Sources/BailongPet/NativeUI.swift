@@ -92,6 +92,10 @@ final class Bubble {
     private var details: ActionButton!
     private var retryButton: ActionButton!
     private var timer: Timer?
+    private var headingTimer: Timer?
+    private var plainHeading = ""
+    private var headingPhase = 0
+    private let headingFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     private var scale = 1.0
     var preferences = PetPreferences.shared
     var purpose: MessagePurpose = .interaction
@@ -143,7 +147,7 @@ final class Bubble {
         retryButton.frame = NSRect(x:w-margin-82,y:12,width:82,height:28)
         details.frame = retryButton.isHidden ? NSRect(x:margin,y:12,width:w-2*margin,height:28) : NSRect(x:margin,y:12,width:w-2*margin-94,height:28)
     }
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, followsText: Bool = true, resetText: Bool = false) {
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, followsText: Bool = true, resetText: Bool = false, animateHeading: Bool = false) {
         timer?.invalidate()
         let same = self.kind == kind && scroll.documentView === text && text.automaticallyFollowsEnd == followsText
         text.automaticallyFollowsEnd = followsText
@@ -153,7 +157,8 @@ final class Bubble {
         if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
         currentBody = body; relatedConversation = nil
         if scroll.documentView !== text {scroll.documentView = text}
-        title.stringValue = heading; title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
+        title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
+        setHeading(heading, animated: animateHeading)
         text.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale)
         details.title = "详情"; details.isHidden = !enabled; details.emphasize(); retryButton.isHidden = true
         let rendered = kind == "task" ? MarkdownText.render(body,font:text.font!,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:text.font!,.foregroundColor:NSColor.labelColor])
@@ -162,6 +167,21 @@ final class Bubble {
         text.setContent(rendered,animated:preferences.bool("typingEffect") && kind == "task" && followsText,reset:!same || resetText)
         window.orderFrontRegardless()
         startCountdown(seconds)
+    }
+    private func setHeading(_ heading: String, animated: Bool) {
+        plainHeading = heading
+        if !animated {
+            headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0
+            title.stringValue = heading; return
+        }
+        title.stringValue = headingFrames[headingPhase] + " " + plainHeading
+        guard headingTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.headingPhase = (self.headingPhase + 1) % self.headingFrames.count
+            self.title.stringValue = self.headingFrames[self.headingPhase] + " " + self.plainHeading
+        }
+        headingTimer = timer; RunLoop.main.add(timer, forMode: .common)
     }
     private func startCountdown(_ seconds: Double) {
         timer?.invalidate(); timer = nil
@@ -258,5 +278,6 @@ final class Bubble {
         let origin = NSPoint(x:max(a.minX,min(x,a.maxX-s.width)).rounded(),y:max(a.minY,min(y,a.maxY-s.height)).rounded())
         if origin != window.frame.origin {window.setFrameOrigin(origin)}
     }
-    func hide() {text.finishReveal(); timer?.invalidate(); window.orderOut(nil); kind = ""; relatedConversation = nil}
+    deinit { timer?.invalidate(); headingTimer?.invalidate() }
+    func hide() {text.finishReveal(); headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; timer?.invalidate(); window.orderOut(nil); kind = ""; relatedConversation = nil}
 }

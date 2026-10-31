@@ -15,7 +15,13 @@ final class CodexConnection {
     private var generation = 0
     private var expiration: Timer?
     private let reader = DispatchQueue(label:"白龙娘 Codex 协议")
+    private var connectionError: String?
     private(set) var executableURL: URL?
+    var diagnostics: String {
+        let state = ready ? "协议已连接" : process?.isRunning == true ? "正在初始化" : (connectionError.map { "连接失败：" + $0 } ?? "未连接")
+        let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"
+        return "\(state) · 进程 \(executableURL?.lastPathComponent ?? "codex") · PID \(pid) · 待回复 \(pending.count)\n可执行文件：\(executableURL?.path ?? "尚未启动")"
+    }
     static func desktopApplications() -> [URL] {
         let running = NSWorkspace.shared.runningApplications.compactMap { app -> URL? in
             guard ["Codex","ChatGPT"].contains(app.localizedName ?? "") else { return nil }
@@ -51,7 +57,7 @@ final class CodexConnection {
         waiting.append(callback)
         if process?.isRunning == true { return }
         do {
-            closing = false; generation += 1; let token = generation
+            connectionError = nil; closing = false; generation += 1; let token = generation
             let task = Process(), stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
             task.executableURL = try Self.executable(); executableURL = task.executableURL; task.arguments = ["app-server","--listen","stdio://"]
             var env = ProcessInfo.processInfo.environment
@@ -117,7 +123,7 @@ final class CodexConnection {
     }
     private func fail(_ error: Error) {
         let callbacks = waiting, calls = pending.values.map{$0.0}
-        waiting.removeAll(); pending.removeAll(); close()
+        waiting.removeAll(); pending.removeAll(); close(); connectionError = error.localizedDescription
         callbacks.forEach{$0(error)}; calls.forEach{$0(.failure(error))}; disconnected(error)
     }
     func close() {

@@ -24,7 +24,11 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let resetButton = ActionButton("恢复本页设置为默认值") {}
     private var actions = [SettingsAction]()
     private var textActions = [ObjectIdentifier:(String)->Void]()
+    private var textEndActions = [ObjectIdentifier:(String)->Void]()
     private var identityPreview: NSTextField?
+    private weak var diagnosticsSwitch: NSSwitch?
+    private var bufferControls = [NSControl]()
+    private weak var bufferRow: NSView?
     private var selected: SettingsSection = .general
     private var hasShown = false
     var onClose: () -> Void = {}
@@ -62,7 +66,17 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         ])
         sidebar.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshAccent),name:AppAccent.didChange,object:nil)
+        NotificationCenter.default.addObserver(self,selector:#selector(refreshDiagnosticsSwitch),name:PetPreferences.didChange,object:preferences)
         render()
+    }
+    @objc private func refreshDiagnosticsSwitch() {
+        diagnosticsSwitch?.state = preferences.bool("showDiagnostics") ? .on : .off
+        updateBufferAvailability()
+    }
+    private func updateBufferAvailability() {
+        let enabled = !preferences.bool("preloadWholeAnimation")
+        for control in bufferControls { control.isEnabled = enabled }
+        bufferRow?.alphaValue = enabled ? 1 : 0.45
     }
     func show(section: SettingsSection? = nil) {
         if let section {select(section)} else {render()}
@@ -80,12 +94,16 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         NSLayoutConstraint.activate([icon.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:8),icon.centerYAnchor.constraint(equalTo:view.centerYAnchor),icon.widthAnchor.constraint(equalToConstant:20),icon.heightAnchor.constraint(equalToConstant:20),text.leadingAnchor.constraint(equalTo:icon.trailingAnchor,constant:8),text.centerYAnchor.constraint(equalTo:view.centerYAnchor),text.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-4)])
         return view
     }
-    func tableViewSelectionDidChange(_ notification: Notification) {if let section = SettingsSection(rawValue:sidebar.selectedRow) {selected = section; render()}}
+    func tableViewSelectionDidChange(_ notification: Notification) {if let section = SettingsSection(rawValue:sidebar.selectedRow) {window.makeFirstResponder(nil); selected = section; render()}}
     func windowWillClose(_ notification: Notification) {window.makeFirstResponder(nil); onClose()}
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else {return}
         textActions[ObjectIdentifier(field)]?(field.stringValue)
         identityPreview?.stringValue = preferences.template(preferences.string("greetingTemplate"))
+    }
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        textEndActions[ObjectIdentifier(field)]?(field.stringValue)
     }
     private func attach(_ control: NSControl, _ callback: @escaping (NSControl)->Void) {
         let action = SettingsAction(callback); actions.append(action); control.target = action; control.action = #selector(SettingsAction.invoke(_:))
@@ -133,6 +151,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func toggle(_ title: String, _ key: String, detail: String? = nil) -> NSView {
         let control = NSSwitch(); control.state = preferences.bool(key) ? .on : .off; control.setAccessibilityLabel(title)
+        if key == "showDiagnostics" { diagnosticsSwitch = control }
         attach(control) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:key) }
         return row(title,detail:detail,control:control)
     }
@@ -144,7 +163,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return row(title,control:menu)
     }
     private func choice(_ title: String, _ key: String, _ options: [(String,String)]) -> NSView {
-        popup(title,options:options,value:preferences.string(key),width:key == "sendShortcut" ? 260 : 190,identifier:key) { [weak self] value in
+        popup(title,options:options,value:preferences.string(key),width:key == "sendShortcut" ? 260 : key == "animationQuality" ? 250 : 190,identifier:key) { [weak self] value in
             self?.preferences.set(value,for:key)
             self?.identityPreview?.stringValue = self?.preferences.template(self?.preferences.string("greetingTemplate") ?? "") ?? ""
         }
@@ -187,6 +206,42 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let controls = NSStackView(views:[slider,number,unit]); controls.spacing = 6
         return row(title,detail:detail,control:controls)
     }
+    private func bufferFrames() -> NSView {
+        let slider = NSSlider(value: Double(preferences.animationBufferFrames), minValue: 6, maxValue: 240, target: nil, action: nil)
+        slider.isContinuous = false; slider.trackFillColor = AppAccent.color
+        slider.numberOfTickMarks = 7; slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false
+        slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        slider.setAccessibilityLabel("动画缓冲帧数")
+        let minimum = label("6 帧"), maximum = label("240 帧")
+        for label in [minimum, maximum] { label.font = .systemFont(ofSize: 10); label.textColor = .secondaryLabelColor }
+        let limits = NSView()
+        for label in [minimum, maximum] { limits.addSubview(label); label.translatesAutoresizingMaskIntoConstraints = false }
+        NSLayoutConstraint.activate([
+            limits.widthAnchor.constraint(equalToConstant: 180), limits.heightAnchor.constraint(equalToConstant: 14),
+            minimum.leadingAnchor.constraint(equalTo: limits.leadingAnchor), minimum.centerYAnchor.constraint(equalTo: limits.centerYAnchor),
+            maximum.trailingAnchor.constraint(equalTo: limits.trailingAnchor), maximum.centerYAnchor.constraint(equalTo: limits.centerYAnchor)
+        ])
+        let track = NSStackView(views: [slider, limits]); track.orientation = .vertical; track.spacing = 0
+        let number = NSTextField(string: String(preferences.animationBufferFrames))
+        number.alignment = .right; number.widthAnchor.constraint(equalToConstant: 54).isActive = true
+        number.setAccessibilityLabel("输入动画缓冲帧数"); number.delegate = self
+        // 不用 formatter 阻止退出非法输入；提交时统一回到默认值。
+        let commit: (String) -> Void = { [weak self] text in
+            guard let self else { return }
+            let parsed = Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            let value = parsed.flatMap { (6...240).contains($0) ? $0 : nil } ?? (PetPreferences.defaults["animationBufferFrames"] as! Int)
+            number.integerValue = value; slider.integerValue = value
+            if self.preferences.animationBufferFrames != value { self.preferences.set(value, for: "animationBufferFrames") }
+        }
+        textEndActions[ObjectIdentifier(number)] = commit
+        attach(number) { sender in commit(sender.stringValue) }
+        attach(slider) { sender in commit(String(Int(sender.doubleValue.rounded()))) }
+        let controls = NSStackView(views: [track, number, label("帧")]); controls.orientation = .horizontal
+        controls.alignment = .centerY; controls.spacing = 8
+        let result = row("动画缓冲帧数", control: controls)
+        bufferControls = [slider, number]; bufferRow = result; updateBufferAvailability()
+        return result
+    }
     private func time(_ title: String, _ key: String) -> NSView {
         let picker = NSDatePicker(); picker.datePickerStyle = .textFieldAndStepper; picker.datePickerElements = [.hourMinute]; picker.locale = Locale(identifier:"zh_CN")
         let minutes = Int(preferences.number(key)); picker.dateValue = Calendar.current.date(from:DateComponents(year:2026,month:1,day:1,hour:minutes/60,minute:minutes%60))!
@@ -197,7 +252,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func render() {
         guard window.contentView != nil else {return}
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
-        actions.removeAll(); textActions.removeAll(); identityPreview = nil
+        actions.removeAll(); textActions.removeAll(); textEndActions.removeAll(); bufferControls.removeAll(); bufferRow = nil; identityPreview = nil
         let heading = label(selected.title,bold:true); heading.font = .systemFont(ofSize:24,weight:.bold); fill(heading,in:content)
         resetButton.isHidden = selected == .advanced
         switch selected {
@@ -207,6 +262,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .messages: messages()
         case .appearance: appearance()
         case .advanced: advanced()
+        case .developer:
+            group("动画", [choice("画质", "animationQuality", [("512", "清晰 · 512×512"), ("384", "均衡 · 384×384"), ("256", "省运行内存 (RAM) · 256×256")]),
+                choice("帧率上限", "animationFPSLimit", [("full", "满帧"), ("30", "30 FPS"), ("24", "24 FPS"), ("20", "20 FPS"), ("15", "15 FPS")]),
+                bufferFrames(),
+                toggle("整段动画预加载", "preloadWholeAnimation", detail: "不推荐，会显著增加运行内存 (RAM) 占用。")])
+            group("应用统计", [toggle("开启应用性能信息统计浮窗", "showDiagnostics")])
         }
         scroll.contentView.scroll(to:.zero)
     }

@@ -3,6 +3,9 @@
 .swiftpm/
 /dist/
 /local-assets/
+# 离线修边的副本、图片、蒙版、视频及记录统一放 local-assets，禁止追踪。
+# 独立修边 skill 仅本地使用；个人技能目录另行同步。
+/skills/bailong-webm-edge-repair/
 *.xcuserstate
 # 本地环境、用户数据与临时输出
 .env

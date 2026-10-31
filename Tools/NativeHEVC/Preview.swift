@@ -54,7 +54,7 @@ private final class PreviewApp: NSObject, NSApplicationDelegate {
         #else
         let architecture = "Intel"
         #endif
-        window.title = "白龙娘原生动画预览 · \(catalog.version) · \(architecture)"
+        window.title = "白龙娘原生动画预览 · \(Bundle.main.object(forInfoDictionaryKey: "BailongVersion") as? String ?? catalog.version) · \(architecture)"
         window.minSize = NSSize(width: 460, height: 540)
         let content = window.contentView!
         let controls = NSStackView()

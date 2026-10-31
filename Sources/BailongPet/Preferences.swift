@@ -1,9 +1,9 @@
 import AppKit
 
 enum SettingsSection: Int, CaseIterable {
-    case general, identity, activity, messages, appearance, advanced
-    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级"][rawValue] }
-    var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3"][rawValue] }
+    case general, identity, activity, messages, appearance, advanced, developer
+    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","性能"][rawValue] }
+    var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer"][rawValue] }
     var keys: [String] {
         switch self {
         case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
@@ -12,6 +12,7 @@ enum SettingsSection: Int, CaseIterable {
         case .messages: return ["sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
         case .appearance: return ["petPercent","bubblePercent","messageFontSize","appearanceMode","accentStyle","accentRGB"]
         case .advanced: return []
+        case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit"]
         }
     }
 }
@@ -42,6 +43,7 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
+        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"512","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","addressMode":"master","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{称呼}，{桌宠}已经准备好啦。","customLines":[String:String](),
@@ -55,11 +57,11 @@ final class PetPreferences {
         "petPercent":100,"bubblePercent":100,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"purple","accentRGB":[0.60,0.40,0.74]
     ]
     static let ranges: [String:ClosedRange<Double>] = [
-        "leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,
+        "animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"messageFontSize":11...20
     ]
-    static let choices = ["singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"addressMode":["master","name","custom"],"movementRange":["still","nearby","screen"],
+    static let choices = ["animationQuality":["512","384","256"],"animationFPSLimit":["full","30","24","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"addressMode":["master","name","custom"],"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
     let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) {self.defaults = defaults}
@@ -68,6 +70,9 @@ final class PetPreferences {
     func bool(_ key: String) -> Bool {value(key) as? Bool ?? false}
     func number(_ key: String) -> Double {(value(key) as? NSNumber)?.doubleValue ?? 0}
     func string(_ key: String) -> String {value(key) as? String ?? ""}
+    var animationBufferFrames: Int { Int(number("animationBufferFrames")) }
+    var animationResolution: Int { Int(string("animationQuality"))! }
+    var animationFPS: Double { string("animationFPSLimit") == "full" ? 30 : Double(string("animationFPSLimit"))! }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
     func set(_ value: Any, for key: String) {defaults.set(value,forKey:key); notify([key])}
     private func notify(_ keys: [String]) {
@@ -158,13 +163,15 @@ final class PetPreferences {
             throw PetFailure(message:"请选择本应用导出的设置文件。")
         }
         for (key,value) in values {
+            // dev.7 / dev.8 导出包含旧开关；统一流式后只校验类型，不恢复旧播放策略。
+            if key == "lowResourceMode", let n = value as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() { continue }
             guard let baseline = Self.defaults[key], Self.valid(value,key:key,baseline:baseline,clipIDs:clipIDs) else {
                 throw PetFailure(message:"设置项「\(key)」不受支持或数值超出范围，尚未导入任何更改。")
             }
         }
         // 全部验证后才一次应用；未提供的已知设置回到默认值。
         for key in Self.defaults.keys {defaults.removeObject(forKey:key)}
-        for (key,value) in values {defaults.set(value,forKey:key)}
+        for (key,value) in values where key != "lowResourceMode" {defaults.set(value,forKey:key)}
         notify(Array(Self.defaults.keys))
     }
     private static func valid(_ value: Any, key: String, baseline: Any, clipIDs: Set<String>) -> Bool {
@@ -176,7 +183,7 @@ final class PetPreferences {
         if key == "favorites", let list = value as? [String] {return list.allSatisfy {clipIDs.contains($0)}}
         if key == "accentRGB", let rgb = value as? [NSNumber] {return rgb.count == 3 && rgb.allSatisfy {CFGetTypeID($0) != CFBooleanGetTypeID() && (0...1).contains($0.doubleValue)}}
         if let range = ranges[key], let n = value as? NSNumber {
-            let integer = ["petPercent","bubblePercent","quietStart","quietEnd"].contains(key)
+            let integer = ["petPercent","bubblePercent","quietStart","quietEnd","animationBufferFrames"].contains(key)
             return CFGetTypeID(n) != CFBooleanGetTypeID() && range.contains(n.doubleValue) && (!integer || n.doubleValue.rounded() == n.doubleValue)
         }
         if let b = baseline as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID() {return (value as? NSNumber).map {CFGetTypeID($0) == CFBooleanGetTypeID()} ?? false}

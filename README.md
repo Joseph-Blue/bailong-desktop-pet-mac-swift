@@ -1,35 +1,30 @@
 # 白龙娘桌宠MacOS-Swift版
 
-## 项目简介
-
 **白龙娘桌宠的非官方 macOS 原生重写版，使用 Swift + AppKit，由 Codex 重写。**
 
 参考 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet) 的功能与交互，沿用原作动画素材，独立维护。不代表原作者或 OpenAI。
 
-当前版本 **0.2.1**，功能仍在早期阶段，很可能有不少问题，欢迎反馈。
+当前源码版本 **0.3.0**。本版本仅在本地构建、提交，尚未推送或发布。
 
-## 下载与安装
+## 安装与运行
 
-需要 **Apple Silicon Mac 和 macOS 14 或更新版本**。
+需要 **Apple Silicon Mac 和 macOS 14 或更新版本**。当前本地应用输出：
 
-**[下载安装包 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/%E7%99%BD%E9%BE%99%E5%A8%98%E6%A1%8C%E5%AE%A0v0.2.1/bailong-desktop-pet-v0.2.1-macos-apple-silicon.zip)** · [发布说明](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/%E7%99%BD%E9%BE%99%E5%A8%98%E6%A1%8C%E5%AE%A0v0.2.1) · [全部版本](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)
+`dist/native-hevc/0.3.0/arm64/白龙娘桌宠MacOS-Swift版.app`
 
-解压后，将 `白龙娘桌宠MacOS-Swift版.app` 拖入「应用程序」。安装包已包含动画、音效和解码器；聊天与任务功能另需本机安装并登录 Codex。
+应用包包含透明 HEVC 动画、音效、图标及同架构跟随启动 helper，使用 macOS 原生解码；不携带第三方视频解码器或 Python。聊天与任务功能另需本机安装并登录 Codex。
 
-### 首次打开
+[已发布版本](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)仍为此前版本，不能当作 0.3.0 下载。当前应用采用本地 ad-hoc 签名，没有 Apple 公证或 Developer ID 签名。下载旧版后的首次打开说明见 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。
 
-**本项目没有 Apple 公证和 Developer ID 签名。通过浏览器下载后，在 macOS 默认安全设置下，首次打开一定会被拦截。**
-
-尝试打开一次后，前往「系统设置 → 隐私与安全性」，找到对应提示，点击「仍要打开」。详见 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。本地自行编译不属于上述下载场景。
-
-更新时，退出桌宠后用新版替换旧 App 即可，聊天记录保留。当前没有自动更新。
+更新时先退出桌宠，再用新版替换旧 App，设置和聊天记录保留。**检查更新**是下一项计划功能，当前没有更新检查或自动下载安装。
 
 ## 功能与操作
 
 - 桌面动画、随机互动、拖拽与落地、左右吸边、全屏隐藏。
 - 在聊天气泡或历史窗口中使用 Codex，查看进展、回复和额度，处理审批或停止任务。
-- 只读观察外部 Codex 对话；外部任务的审批和补充输入仍在原窗口处理。
+- 只读观察外部 Codex 对话；外部审批和补充输入仍在原窗口处理。
 - 自定义称呼、台词、鼠标动作、活动频率、消息提醒、大小和外观。
+- “我还在留意进展…”和“让我看看额度…”气泡标题显示盲文滚动动画，历史记录不添加这些动画字符。
 
 | 默认操作 | 行为 |
 | --- | --- |
@@ -39,56 +34,52 @@
 | ⌘ Command + ↩ Enter | 发送消息；单独 Enter 换行 |
 | ⌘, | 打开设置 |
 
-鼠标动作和发送快捷键可在设置中调整。关闭聊天窗口不会停止任务，需要中止时请点击「停止」。聊天记录与输入框支持选择、复制。
+鼠标动作和发送快捷键可在设置中调整。关闭聊天窗口不会停止任务，需要中止时点击“停止”。聊天历史位于 `~/Library/Application Support/BailongPetAppKit/conversations.json`；恢复默认设置不会删除历史。
 
-聊天历史保存在 `~/Library/Application Support/BailongPetAppKit/conversations.json`，可从设置打开数据目录备份。恢复默认设置不会删除聊天记录。
+“随 Codex 启动”仅识别 Codex／ChatGPT 桌面应用。先将 App 放到固定位置，再从“设置 → 通用”配置；移动应用后使用“修复／更新”绑定新位置。
+
+## 性能设置
+
+| 项目 | 默认值 | 可选范围 |
+| --- | --- | --- |
+| 画质 | 清晰 512×512 | 均衡 384×384、节省运行内存 (RAM) 256×256 |
+| 帧率上限 | 满帧 | 30／24／20／15 FPS |
+| 动画缓冲帧数 | 24 | 6～240；刻度滑块及输入框，非法输入结束编辑时恢复 24 |
+| 整段动画预加载 | 关闭 | 开启后缓冲帧数置灰，关闭恢复原值 |
+
+默认流式读取，首帧就绪即播放；缓冲满后停止预读。整段预加载完整读取当前动作再播放，同动作循环复用帧，提示“不推荐，会显著增加运行内存 (RAM) 占用。”设置保存到本机，帧率上限不改变动画时长。
+
+性能页还可开启“应用性能信息统计”：显示 FPS／HI／LO、折线图、CPU 总体与单核基准、GPU 应用组时间占比、运行内存 (RAM)、缓冲与预加载、版本及设备架构，分别列出 Codex 桌面端和桌宠自有 CLI 状态。
+
+统计窗口默认左上角置顶，可从 Dock／菜单召回，关闭窗口即停止采样。左下角 pin 开关控制置顶，右侧为关闭和拷贝信息。设置中开关统计窗口保留设置焦点。Swap 区分系统交换空间、本进程压缩及累计换入，不将系统用量当成本进程磁盘占用。
 
 ## 从源码构建
 
-需要 Apple Command Line Tools。当前原生动画分支使用 AppKit、AVFoundation 与 Core Image；FFmpeg 仅用于离线准备素材，应用运行不依赖 FFmpeg 或 Python。
+需要 Apple Command Line Tools，运行和素材工具均使用 Apple 原生框架。旧 FFmpeg 运行及离线转码方案已移除。
 
-仓库不含素材、解码器和图标，构建前需自行准备：
-
-| 文件 | 来源 |
-| --- | --- |
-| 动画与素材清单 | [原作 v0.5.1 发布包](https://github.com/jingh12312-rgb/bailong-desktop-pet/releases/tag/v0.5.1)中的 `outputs`，解压提取即可 |
-| 构建时 FFmpeg | 当前使用 [imageio-ffmpeg 0.6.0](https://pypi.org/project/imageio-ffmpeg/0.6.0/) 的 macOS 二进制，需支持 `libvpx-vp9` 和 `prores_ks`，架构与构建主机一致 |
-| 音效与来源说明 | [原作 app/sounds](https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds) |
-| 应用图标 | 本地从待机首帧生成，暂未提供生成脚本或独立下载 |
-
-按以下结构放置资源，其中 `ffmpeg` 需有执行权限：
+仓库不含素材、图标或构建产物。构建使用已准备好的原生素材目录；可从本机已有原生版 App 的 `Contents/Resources/outputs/白龙桌宠素材` 复制清单和透明 HEVC 子目录。原作的 WebM 发布包不能直接用作本版运行资源。
 
 ```text
 local-assets/
-  outputs/白龙桌宠素材/素材清单.json
-  outputs/白龙桌宠素材/透明WebM/*.webm
-  tools/ffmpeg
-  tools/x86_64/ffmpeg             # 仅在 Intel 主机上转码时需要
+  native-hevc/catalog/素材清单.json
+  native-hevc/catalog/透明HEVC/*.mov
   sounds/click.wav
   sounds/来源.txt
   BailongPet.icns
 ```
 
-在仓库根目录执行：
-
 ```sh
-./scripts/prepare-native-assets.sh # 首次准备完整 HEVC 素材；保留原 WebM
-./scripts/build.sh arm64            # 打包 Apple Silicon 应用
-./scripts/build.sh x86_64           # 打包 Intel 应用
-./scripts/run-dev.sh                # 开发运行
-./scripts/run-dev.sh --build-only   # 仅编译
+./scripts/build.sh arm64          # Apple Silicon 完整应用
+./scripts/run-dev.sh --build-only # 开发版仅编译
+./scripts/run-dev.sh              # 开发运行
 ```
 
-当前 review 版本为 `0.3.0-dev.3`，应用输出至 `dist/native-hevc/0.3.0-dev.3/<架构>/白龙娘桌宠MacOS-Swift版.app`，采用本地 ad-hoc 签名。两份应用均包含完整功能与原生动画，不是之前的独立预览程序。Intel 实机表现待 review。
+Intel 构建入口 `./scripts/build.sh x86_64` 保留；本次仅构建 Silicon。主程序与 helper 使用同一架构。
 
-开发运行或 review 前请退出已有桌宠，新旧版本沿用同一设置与历史目录。素材准备输出位于 `local-assets/native-hevc/catalog`，已有输出时不会覆盖；重新转码前先移走旧目录。
+已修复的编号 PNG 通过 `./scripts/apply-native-png-repairs.sh <PNG根目录>` 接入待机、第二待机、拖拽；加 `--landing` 单独接入落地。工具使用 AVAssetWriter 生成 ProRes 4444，再用系统 avconvert 生成透明 HEVC。成功后切换素材目录并保留旧目录，原始 WebM、原始及修复 PNG 全部本地保留。输入结构见 [素材工具说明](Tools/NativeHEVC/README.md)。
 
-启用“随 Codex 启动”前，建议先用访达将 `.app` 放到“应用程序”等固定位置。旧版本用户在新版“设置 → 通用 → 随 Codex 启动 → 配置…”中选择“修复／更新”，将已有启动项绑定到新版。系统临时位置运行的应用不能注册；移动应用后也需要更新启动项。仅识别 Codex／ChatGPT 桌面应用，不监测 CLI。
+## 来源与反馈
 
-## 反馈与来源
+原作基线为 **v0.5.1 / b102e73**。素材来源与授权范围见 [来源与架构](docs/来源与架构.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。不将公开源码或本地素材修复同意扩大解释为其他授权。
 
-问题请提交至 [Issues](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)，附应用版本、macOS 版本和复现步骤。聊天问题请注明是桌宠内任务还是外部对话观察，截图前记得遮住私人内容。
-
-原作基线为 **v0.5.1 / b102e73**，未指定开源许可证；素材再分发授权仍待确认。FFmpeg 和音效遵循各自许可，详见 [来源与架构](docs/来源与架构.md)。
-
-[版本记录](CHANGELOG.md)
+反馈提交到 [Issues](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)，附版本、macOS 版本和复现步骤。

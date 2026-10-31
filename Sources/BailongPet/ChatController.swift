@@ -46,6 +46,10 @@ final class ChatController {
         connection.event = { [weak self] method,p in self?.receive(method,p) }
         connection.request = { [weak self] id,method,p in self?.requests.append((id,method,p)); self?.nextRequest() }
         connection.disconnected = { [weak self] error in if self?.running != nil {self?.finish("interrupted",error:error.localizedDescription)} }
+        pet.cliDiagnostics = { [weak self] in
+            guard let self else { return "连接已关闭" }
+            return self.connection.diagnostics + "\n内置任务：" + (self.running?.1.status ?? "空闲")
+        }
         pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
         pet.onQuota = { [weak self] in self?.quota() }
         pet.onGeometry = { [weak self] in self?.positionComposer() }

@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let chat = try ChatController(pet:pet); self.chat = chat
                 let sync = DesktopSync(chat:chat); self.sync = sync
+                pet.syncDiagnostics = { [weak sync] in sync?.diagnostics ?? "已停止" }
                 pet.syncStatus = { [weak sync] in sync?.status ?? "任务同步已停止，当前不会读取新的任务状态。" }
             } catch {showError("无法读取会话历史，原文件已保留",error)}
         } catch {showError(PetPreferences.shared.appName+"无法启动",error); NSApp.terminate(nil)}
@@ -73,6 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.addItem(MenuAction("新对话") { [weak self] in self?.chat?.newConversation(); self?.chat?.showHistory(nil) })
         commands.addItem(MenuAction("选择任务文件夹…") { [weak self] in self?.chat?.chooseFolder() })
         commands.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.chat?.showHistory(nil) })
+        let windowsItem = NSMenuItem(title:"窗口",action:nil,keyEquivalent:"")
+        let windows = NSMenu(title:"窗口"); windowsItem.submenu = windows; bar.addItem(windowsItem)
+        windows.addItem(MenuAction("应用性能信息统计",symbol:"chart.xyaxis.line") { [weak self] in self?.pet?.showDiagnostics() })
+        windows.addItem(NSMenuItem(title:"最小化",action:#selector(NSWindow.performMiniaturize(_:)),keyEquivalent:"m"))
+        windows.addItem(.separator()); NSApp.windowsMenu = windows
         NSApp.mainMenu = bar
     }
     @objc func updateNames() {
@@ -86,10 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func quitFromMenu() {FollowSessions.markManualExit(); NSApp.terminate(nil)}
     @objc func reveal() {pet?.reveal()}
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        chat?.showHistory(nil); return false
+        if pet?.preferences.bool("showDiagnostics") == true { pet?.showDiagnostics() }
+        else { chat?.showHistory(nil) }
+        return false
     }
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
+        menu.addItem(MenuAction("应用性能信息统计") { [weak self] in self?.pet?.showDiagnostics() })
         menu.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.chat?.showHistory(nil) })
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.chat?.toggleComposer() })
         return menu
