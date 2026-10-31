@@ -1,6 +1,8 @@
 # 原生透明动画实验环境
 
-本目录提供独立的素材准备工具和 AppKit / AVFoundation 预览程序。预览版本由本目录 `VERSION` 定义，当前为 `0.3.0-dev.2`；正式桌宠的 `VERSION` 与运行链路仍保留原状。
+本目录提供素材准备工具和独立的 AppKit / AVFoundation 预览程序。预览版本由本目录 `VERSION` 定义，当前为 `0.3.0-dev.2`；完整桌宠已在 `codex/native-hevc-alpha` 分支接入原生解码，根目录 `VERSION` 为 `0.3.0-dev.3`。两者独立构建，技术栈见 [来源与架构](../../docs/来源与架构.md)。
+
+完整桌宠使用 `scripts/prepare-native-assets.sh` 准备全部动作，再以 `scripts/build.sh arm64` 或 `scripts/build.sh x86_64` 打包，输出 `dist/native-hevc/<根目录 VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app`。以下命令与操作说明仅针对三动作独立预览。
 
 ## 构建
 
