@@ -2,4 +2,4 @@
 import PackageDescription
 let package = Package(name: "BailongPet", platforms: [.macOS(.v14)],
     products: [.executable(name: "BailongPet", targets: ["BailongPet"])],
-    targets: [.executableTarget(name: "BailongPet", linkerSettings: [.linkedFramework("AppKit"), .linkedLibrary("sqlite3")])])
+    targets: [.executableTarget(name: "BailongPet", linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("AVFoundation"), .linkedFramework("CoreImage"), .linkedLibrary("sqlite3")])])

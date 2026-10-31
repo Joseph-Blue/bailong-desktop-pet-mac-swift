@@ -215,7 +215,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let loginText = login == .enabled ? "已启用" : login == .requiresApproval ? "等待系统批准" : "未启用"
         group("启动",[
             row("登录时启动",detail:loginText,control:ActionButton(login == .enabled ? "停用…" : login == .requiresApproval ? "打开登录项…" : "启用…") { [weak self] in self?.configureLogin() }),
-            row("随 Codex 启动",detail:FileManager.default.fileExists(atPath:FollowLauncher.plist.path) ? "已启用跟随启动" : "打开 Codex 或 ChatGPT 时启动桌宠",control:ActionButton("配置…") { [weak self] in FollowLauncher.configure(); self?.render() }),
+            row("随 Codex 启动",detail:FollowLauncher.statusText,control:ActionButton("配置…") { [weak self] in FollowLauncher.configure(); self?.render() }),
             toggle("启动后显示桌宠","showOnLaunch"),toggle("记住上次位置","rememberPosition")])
         var displays = [("","跟随当前屏幕")] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
         let saved = preferences.string("preferredDisplay")

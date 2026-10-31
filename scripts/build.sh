@@ -6,26 +6,32 @@ if (( $# > 1 )); then
 fi
 target_arch="${1:-arm64}"
 case "$target_arch" in
-    arm64) decoder="local-assets/tools/ffmpeg" ;;
-    x86_64) decoder="local-assets/tools/x86_64/ffmpeg" ;;
+    arm64|x86_64) ;;
     *) print -u2 "不支持的架构：$target_arch"; exit 2 ;;
 esac
-# 两份应用各自携带对应架构的解码器，避免 Intel 包误装 arm64 二进制。
-[[ -x "$decoder" ]] || { print -u2 "缺少 $target_arch 解码器：$decoder"; exit 1; }
-xcrun lipo -verify_arch "$target_arch" "$decoder"
-mkdir -p ".build/$target_arch" .build/module-cache "dist/$target_arch"
-xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" -module-cache-path .build/module-cache Sources/BailongPet/*.swift -o ".build/$target_arch/BailongPet" -framework AppKit -lsqlite3
-app="dist/$target_arch/白龙娘桌宠MacOS-Swift版.app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/tools"
-cp ".build/$target_arch/BailongPet" "$app/Contents/MacOS/BailongPet"
-# 仅打包运行资源；素材试修、源码副本和离线脚本不进入应用包。
-for resource in outputs sounds BailongPet.icns; do
-    cp -R "local-assets/$resource" "$app/Contents/Resources/"
+assets="local-assets/native-hevc/catalog"
+[[ -f "$assets/素材清单.json" ]] || { print -u2 "请先运行 scripts/prepare-native-assets.sh 准备完整透明 HEVC 素材。"; exit 1; }
+version="$(<VERSION)"
+output="dist/native-hevc/$version/$target_arch"
+mkdir -p ".build/$target_arch" .build/module-cache "$output"
+xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
+    -module-cache-path .build/module-cache Sources/BailongPet/*.swift \
+    -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -lsqlite3
+xcrun swiftc -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
+    -module-cache-path .build/module-cache Sources/BailongPet/FollowMonitor.swift Tools/FollowHelper/main.swift \
+    -framework AppKit -o ".build/$target_arch/BailongFollow"
+
+app="$output/白龙娘桌宠MacOS-Swift版.app"
+staging="$(mktemp -d "$output/.pet-XXXXXX")"
+mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources/outputs/白龙桌宠素材"
+cp ".build/$target_arch/BailongPet" "$staging/Contents/MacOS/BailongPet"
+cp "$assets/素材清单.json" "$staging/Contents/Resources/outputs/白龙桌宠素材/"
+cp -R "$assets/透明HEVC" "$staging/Contents/Resources/outputs/白龙桌宠素材/"
+for resource in sounds BailongPet.icns; do
+    cp -R "local-assets/$resource" "$staging/Contents/Resources/"
 done
-cp "$decoder" "$app/Contents/Resources/tools/ffmpeg"
-cp VERSION "$app/Contents/Resources/VERSION"
-version="$(cat VERSION)"
-cat > "$app/Contents/Info.plist" <<PLIST
+cp VERSION "$staging/Contents/Resources/VERSION"
+cat > "$staging/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -33,6 +39,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleName</key><string>白龙娘桌宠MacOS-Swift版</string>
 <key>CFBundleDisplayName</key><string>白龙娘桌宠MacOS-Swift版</string>
 <key>CFBundleExecutable</key><string>BailongPet</string>
+<key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
 <key>BailongVersion</key><string>$version</string>
@@ -44,5 +51,25 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleIconFile</key><string>BailongPet</string>
 </dict></plist>
 PLIST
-codesign --force --deep --sign - "$app"
+helper="$staging/Contents/Library/Helpers/BailongFollow.app"
+mkdir -p "$helper/Contents/MacOS"
+cp ".build/$target_arch/BailongFollow" "$helper/Contents/MacOS/BailongFollow"
+cat > "$helper/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.bailongpet.appkit.follow-helper</string>
+<key>CFBundleName</key><string>白龙娘跟随启动监测器</string>
+<key>CFBundleExecutable</key><string>BailongFollow</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>${version%%-*}</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSUIElement</key><true/>
+</dict></plist>
+PLIST
+codesign --force --sign - "$helper"
+codesign --force --sign - "$staging"
+# 输出目录按版本隔离，干净组包避免旧 FFmpeg 或 WebM 留在包内。
+if [[ -d "$app" ]]; then rm -rf "$app"; fi
+mv "$staging" "$app"
 print "已构建 $app（$version，$target_arch，本地签名）"

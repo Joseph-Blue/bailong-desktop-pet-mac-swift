@@ -34,7 +34,7 @@ if (( rebuild )); then
 PLIST
     xcrun swiftc -O -whole-module-optimization -swift-version 5 \
         -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache \
-        Sources/BailongPet/*.swift -framework AppKit -lsqlite3 \
+        Sources/BailongPet/*.swift -framework AppKit -framework AVFoundation -framework CoreImage -lsqlite3 \
         -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker .build/dev/Info.plist \
         -o "$binary.next"
     mv "$binary.next" "$binary"
@@ -43,6 +43,7 @@ else
 fi
 
 [[ "${1:-}" != "--build-only" ]] || exit 0
+[[ -f "local-assets/native-hevc/catalog/素材清单.json" ]] || { print -u2 "请先运行 scripts/prepare-native-assets.sh。"; exit 1; }
 print "前台运行中，按 Ctrl+C 退出。若已有桌宠在运行，请先从其菜单退出。"
 export BAILONG_DEV_RUN=1
 exec "$binary"

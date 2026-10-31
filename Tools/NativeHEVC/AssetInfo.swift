@@ -26,6 +26,26 @@ struct NativeFailure: LocalizedError {
 // 这是构建工具，不随桌宠运行。FFmpeg 只生成中间素材，Apple 工具负责透明 HEVC。
 @main
 struct PrepareNativeSamples {
+    static func clips(in value: Any) -> [[String: Any]] {
+        if let object = value as? [String: Any] {
+            if object["id"] is String, object["file"] is String { return [object] }
+            return object.keys.sorted().flatMap { clips(in: object[$0]!) }
+        }
+        return (value as? [Any] ?? []).flatMap { clips(in: $0) }
+    }
+    static func nativeCatalog(_ value: Any) -> Any {
+        if var object = value as? [String: Any] {
+            if let id = object["id"] as? String, object["file"] is String {
+                object["sourceFile"] = object["playbackFile"] ?? object["file"]
+                object["file"] = "透明HEVC/\(id).mov"
+                object["playbackFile"] = object["file"]
+                return object
+            }
+            return object.mapValues { nativeCatalog($0) }
+        }
+        if let array = value as? [Any] { return array.map { nativeCatalog($0) } }
+        return value
+    }
     static func run(_ executable: URL, _ arguments: [String]) throws {
         let task = Process()
         task.executableURL = executable
@@ -39,13 +59,15 @@ struct PrepareNativeSamples {
 
     static func main() async {
         do {
-            guard CommandLine.arguments.count == 5 else {
-                throw NativeFailure(message: "用法：PrepareNativeSamples <素材目录> <ffmpeg> <输出目录> <预览版本>")
+            guard [5,6].contains(CommandLine.arguments.count),
+                  CommandLine.arguments.count == 5 || CommandLine.arguments[5] == "--catalog" else {
+                throw NativeFailure(message: "用法：PrepareNativeSamples <素材目录> <ffmpeg> <输出目录> <版本> [--catalog]")
             }
             let source = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
             let encoder = URL(fileURLWithPath: CommandLine.arguments[2])
             let destination = URL(fileURLWithPath: CommandLine.arguments[3], isDirectory: true)
             let version = CommandLine.arguments[4]
+            let fullCatalog = CommandLine.arguments.count == 6
             let manager = FileManager.default
             // 输出为独立目录；存在时显式报错，避免误覆盖上次 review 的素材。
             guard !manager.fileExists(atPath: destination.path) else {
@@ -58,13 +80,26 @@ struct PrepareNativeSamples {
             // 临时目录完成后才成为可打包目录；转码失败时保留错误，不生成有效清单。
             let staging = destination.deletingLastPathComponent().appendingPathComponent("samples-\(UUID().uuidString).partial")
             try manager.createDirectory(at: staging, withIntermediateDirectories: true)
-            var samples = [NativeSample]()
-            for (key, name) in [("idle", "待机"), ("dragAnimation", "拖拽"), ("landingAnimation", "落地")] {
-                guard let clip = catalog[key] as? [String: Any], let id = clip["id"] as? String,
-                      let path = (clip["playbackFile"] ?? clip["file"]) as? String else {
-                    throw NativeFailure(message: "素材清单缺少 \(key) 的 id 或文件路径")
+            let movieRoot = fullCatalog ? staging.appendingPathComponent("透明HEVC") : staging
+            try manager.createDirectory(at: movieRoot, withIntermediateDirectories: true)
+            let selected: [[String: Any]]
+            if fullCatalog { selected = clips(in: catalog) }
+            else {
+                selected = try ["idle", "dragAnimation", "landingAnimation"].map { key in
+                    guard let clip = catalog[key] as? [String: Any] else {
+                        throw NativeFailure(message: "素材清单缺少 \(key)")
+                    }
+                    return clip
                 }
-                let output = staging.appendingPathComponent(id + ".mov")
+            }
+            var samples = [NativeSample]()
+            for clip in selected {
+                guard let id = clip["id"] as? String,
+                      let path = (clip["playbackFile"] ?? clip["file"]) as? String else {
+                    throw NativeFailure(message: "素材清单缺少 id 或文件路径")
+                }
+                let name = clip["name"] as? String ?? id
+                let output = movieRoot.appendingPathComponent(id + ".mov")
                 let intermediate = staging.appendingPathComponent(id + "-prores4444.mov")
                 print("转码：\(name) → \(output.lastPathComponent)")
                 // FFmpeg 7.1 直接封装的透明 HEVC 在本机 AVAssetReader 中报 -11801/-12713。
@@ -111,6 +146,10 @@ struct PrepareNativeSamples {
             json.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             try json.encode(NativeSamples(version: version, samples: samples))
                 .write(to: staging.appendingPathComponent("samples.json"), options: .atomic)
+            if fullCatalog {
+                try JSONSerialization.data(withJSONObject: nativeCatalog(catalog), options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+                    .write(to: staging.appendingPathComponent("素材清单.json"), options: .atomic)
+            }
             try manager.moveItem(at: staging, to: destination)
             print("素材准备完成：\(destination.path)")
         } catch {

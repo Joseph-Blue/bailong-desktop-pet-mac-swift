@@ -199,31 +199,25 @@ private final class AboutWindowController: NSWindowController {
         paragraph("来自原作 app/sounds/click.wav。随附来源说明标注为程序合成的柔和点击音，无外部录音采样；来源说明未另列许可证。",to:text)
         link("音效及来源说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds",to:text)
 
-        heading("FFmpeg · 动画解码",to:text)
-        #if arch(x86_64)
-        paragraph("当前随包版本：7.1（Intel x86_64）。Copyright © 2000–2024 the FFmpeg developers。此二进制启用了 --enable-nonfree，自带许可声明为 nonfree and unredistributable；当前仅作私有开发验证，公开发行前需替换解码器。",to:text)
-        link("FFmpeg 项目与许可说明",url:"https://ffmpeg.org/legal.html",to:text)
-        #else
-        paragraph("当前随包版本：7.1。Copyright © 2000–2024 the FFmpeg developers。当前二进制自带许可声明为 GNU GPL 第 2 版或后续版本；其中集成的第三方组件另有各自许可。",to:text)
-        link("FFmpeg 项目与许可说明",url:"https://ffmpeg.org/legal.html",to:text)
-        link("GNU GPL 第 2 版全文",url:"https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",to:text)
-        #endif
+        heading("原生透明动画",to:text)
+        paragraph("角色动画在构建时转换为 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 与 Core Image 解码和缩放。本应用不附带 FFmpeg 或 Python 运行环境。",to:text)
+        link("Apple 透明 HEVC 说明",url:"https://developer.apple.com/videos/play/wwdc2019/506/",to:text)
 
-        heading("libvpx · WebM 透明动画解码",to:text)
-        paragraph("The WebM Project。在 FFmpeg 中提供 VP9 解码，保留角色动画透明通道。许可：BSD 3-Clause。",to:text)
-        link("libvpx 源码及许可证全文",url:"https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/LICENSE",to:text)
+        heading("FFmpeg / libvpx · 离线素材准备",to:text)
+        paragraph("构建工具使用 FFmpeg 读取原 VP9 透明动画并生成 ProRes 4444 中间素材，再由 Apple avconvert 完成透明 HEVC 编码。libvpx 来自 The WebM Project，采用 BSD 3-Clause；这些工具不随应用包分发。",to:text)
+        link("FFmpeg 项目与许可说明",url:"https://ffmpeg.org/legal.html",to:text)
+        link("libvpx 许可证",url:"https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/LICENSE",to:text)
 
-        heading("imageio-ffmpeg · 解码器来源",to:text)
-        paragraph("FFmpeg 二进制取自 imageio-ffmpeg 0.6.0。本应用未集成其 Python 封装。imageio-ffmpeg 封装采用 BSD 2-Clause，FFmpeg 二进制仍遵循上述自身许可。",to:text)
+        heading("imageio-ffmpeg · 构建工具来源",to:text)
+        paragraph("本地使用的 FFmpeg 二进制取自 imageio-ffmpeg 0.6.0，未使用其 Python 封装。各构建工具仍遵循各自许可。",to:text)
         link("imageio-ffmpeg 项目",url:"https://github.com/imageio/imageio-ffmpeg",to:text)
-        link("imageio-ffmpeg 许可证全文",url:"https://github.com/imageio/imageio-ffmpeg/blob/v0.6.0/LICENSE",to:text)
 
         heading("SQLite · 本机任务记录读取",to:text)
         paragraph("使用 macOS 提供的 SQLite 动态库，不另附数据库运行库。SQLite 项目声明其发布代码与文档属于公有领域。",to:text)
         link("SQLite 官方版权说明",url:"https://www.sqlite.org/copyright.html",to:text)
 
         heading("开发技术与系统服务",to:text)
-        paragraph("使用 Swift、AppKit、Foundation、Core Graphics 及 macOS 系统符号构建原生界面。这些系统技术单独列出，不将 AppKit 标注为第三方开源组件。对话功能调用用户已安装的 Codex，不随本应用分发 Codex。",to:text)
+        paragraph("使用 Swift、AppKit、Foundation、AVFoundation、Core Image、Core Graphics 及 macOS 系统符号构建原生界面。这些系统技术单独列出，不将 AppKit 标注为第三方开源组件。对话功能调用用户已安装的 Codex，不随本应用分发 Codex。",to:text)
         return text
     }
 

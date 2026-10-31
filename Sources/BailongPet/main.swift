@@ -27,9 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 NSApp.terminate(nil); return
             }
-            UserDefaults.standard.set(false,forKey:"manualQuit")
+            FollowSessions.clearManualExit()
             let pet = PetController(catalog:try Catalog.load()); self.pet = pet
-            pet.onQuit = {UserDefaults.standard.set(true,forKey:"manualQuit"); NSApp.terminate(nil)}
+            pet.onQuit = {FollowSessions.markManualExit(); NSApp.terminate(nil)}
             pet.onAutostart = {FollowLauncher.configure()}
             localEvents = NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.keyDown,.scrollWheel]) { [weak pet] event in
                 pet?.interaction(); return event
@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func showSettings() {pet?.showSettings()}
     @objc func showAbout() {AppIcons.showAbout()}
-    @objc func quitFromMenu() {UserDefaults.standard.set(true,forKey:"manualQuit"); NSApp.terminate(nil)}
+    @objc func quitFromMenu() {FollowSessions.markManualExit(); NSApp.terminate(nil)}
     @objc func reveal() {pet?.reveal()}
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         chat?.showHistory(nil); return false

@@ -45,14 +45,14 @@
 
 ## 从源码构建
 
-需要 Apple Command Line Tools。界面使用系统 AppKit，透明 WebM 由 FFmpeg 解码，无需 Python 运行环境。
+需要 Apple Command Line Tools。当前原生动画分支使用 AppKit、AVFoundation 与 Core Image；FFmpeg 仅用于离线准备素材，应用运行不依赖 FFmpeg 或 Python。
 
 仓库不含素材、解码器和图标，构建前需自行准备：
 
 | 文件 | 来源 |
 | --- | --- |
 | 动画与素材清单 | [原作 v0.5.1 发布包](https://github.com/jingh12312-rgb/bailong-desktop-pet/releases/tag/v0.5.1)中的 `outputs`，解压提取即可 |
-| FFmpeg | 当前使用 [imageio-ffmpeg 0.6.0](https://pypi.org/project/imageio-ffmpeg/0.6.0/) 中的 macOS arm64 二进制，需支持 `libvpx-vp9` |
+| 构建时 FFmpeg | 当前使用 [imageio-ffmpeg 0.6.0](https://pypi.org/project/imageio-ffmpeg/0.6.0/) 的 macOS 二进制，需支持 `libvpx-vp9` 和 `prores_ks`，架构与构建主机一致 |
 | 音效与来源说明 | [原作 app/sounds](https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds) |
 | 应用图标 | 本地从待机首帧生成，暂未提供生成脚本或独立下载 |
 
@@ -63,6 +63,7 @@ local-assets/
   outputs/白龙桌宠素材/素材清单.json
   outputs/白龙桌宠素材/透明WebM/*.webm
   tools/ffmpeg
+  tools/x86_64/ffmpeg             # 仅在 Intel 主机上转码时需要
   sounds/click.wav
   sounds/来源.txt
   BailongPet.icns
@@ -71,12 +72,18 @@ local-assets/
 在仓库根目录执行：
 
 ```sh
-./scripts/build.sh arm64            # 打包应用
+./scripts/prepare-native-assets.sh # 首次准备完整 HEVC 素材；保留原 WebM
+./scripts/build.sh arm64            # 打包 Apple Silicon 应用
+./scripts/build.sh x86_64           # 打包 Intel 应用
 ./scripts/run-dev.sh                # 开发运行
 ./scripts/run-dev.sh --build-only   # 仅编译
 ```
 
-应用输出至 `dist/arm64/白龙娘桌宠MacOS-Swift版.app`，采用本地 ad-hoc 签名。开发运行前请退出已有桌宠，两者共用默认数据目录。
+当前 review 版本为 `0.3.0-dev.3`，应用输出至 `dist/native-hevc/0.3.0-dev.3/<架构>/白龙娘桌宠MacOS-Swift版.app`，采用本地 ad-hoc 签名。两份应用均包含完整功能与原生动画，不是之前的独立预览程序。Intel 实机表现待 review。
+
+开发运行或 review 前请退出已有桌宠，新旧版本沿用同一设置与历史目录。素材准备输出位于 `local-assets/native-hevc/catalog`，已有输出时不会覆盖；重新转码前先移走旧目录。
+
+启用“随 Codex 启动”前，建议先用访达将 `.app` 放到“应用程序”等固定位置。旧版本用户在新版“设置 → 通用 → 随 Codex 启动 → 配置…”中选择“修复／更新”，将已有启动项绑定到新版。系统临时位置运行的应用不能注册；移动应用后也需要更新启动项。仅识别 Codex／ChatGPT 桌面应用，不监测 CLI。
 
 ## 反馈与来源
 
