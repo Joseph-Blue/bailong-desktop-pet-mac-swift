@@ -5,61 +5,92 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 # 白龙娘桌宠 macOS 维护
 
-## 工程与授权
+## 工作边界
 
-先读目标 AGENTS.md、VERSION 与 Git 状态。Swift 工程位于 bailong-desktop-pet-appkit，仓库名 bailong-desktop-pet-mac-swift；旧 bailong-desktop-pet-mac 的 Python/PySide6 路线只作参考，不混用依赖和数据目录。不派发其他 agent。
+- 先读目标 AGENTS.md、VERSION 与 Git 状态。当前工程为 bailong-desktop-pet-appkit，公开仓库 Joseph-Blue/bailong-desktop-pet-mac-swift；旧 Python/PySide6 工程仅供交互参考，不混用依赖、构建和数据目录。不派发其他 agent。
+- 原作基线 v0.5.1 / b102e73；只读相关函数，不整仓复制、不修改参考仓库、不运行 Windows EXE。素材修复及反哺同意不扩大为其他许可，不擅自添加许可证。
+- 使用 Swift + AppKit、AVFoundation、Core Image 和透明 HEVC。FFmpeg 旧运行、打包及离线转码路线已移除，禁止重新引入。
+- 按改动做必要编译与静态检查；不自动执行截图、视觉、SHA-256、自检、冒烟或模型请求。定向运行测试按用户当次授权执行。独立组件预览不等于真实任务链路验收，构建成功不等于运行验收。
+- 产品文案直接说明行为、影响和操作，运行内存统一写作“运行内存 (RAM)”并与磁盘存储区分。真实未知、未测量及未验收事项按事实标明，不添加猜测性兼容或免责文案。
 
-当前本地 main 为 0.3.0，运行采用 Swift + AppKit、AVFoundation、Core Image、透明 HEVC。FFmpeg 旧运行／打包及离线 WebM 转码入口已删除，禁止重新引入。原始 WebM、原始／修复 PNG、现有 HEVC 与旧素材备份保留本地，不追踪进 Git。
+## 代码入口
 
-原作基线 v0.5.1 / b102e73；只读相关函数，不整仓复制、不修改参考仓库、不运行 Windows EXE。素材修复及反哺同意不扩大为其他许可，不擅自添加许可证。
-
-## 入口
+以下 Swift 文件除注明外位于 Sources/BailongPet；精确参数、来源及现行架构见 docs/来源与架构.md。
 
 | 内容 | 文件 |
-|---|---|
-| 桌宠交互和调度 | Sources/BailongPet/Pet.swift |
-| 动画解码与缓冲 | Resources.swift、StreamingAnimation.swift |
-| 性能设置和窗口 | Preferences.swift、Settings.swift、Diagnostics.swift、GPUStatistics.swift |
-| 气泡和盲文动画 | NativeUI.swift、Pet.swift、DesktopSync.swift |
-| 内置任务与外部观察 | ChatController.swift、Codex.swift、DesktopSync.swift |
-| 历史与对话界面 | History.swift、HistoryViews.swift、ChatUI.swift、StreamingText.swift |
+| --- | --- |
+| 桌宠交互、素材与位置调度 | Pet.swift、Resources.swift、StreamingAnimation.swift |
+| 气泡、材质、动态效果 | NativeUI.swift、BubbleMotion.swift、WindowFade.swift |
+| 偏好、设置、强调色 | Preferences.swift、Settings.swift、Appearance.swift |
+| 性能采样及窗口 | Diagnostics.swift、GPUStatistics.swift |
+| 内置任务、外部观察、终态文案 | ChatController.swift、Codex.swift、DesktopSync.swift、TaskOutcome.swift |
+| 额度请求、重置卡 | QuotaQuery.swift、QuotaResetCards.swift |
+| 历史及输入界面 | History.swift、HistoryViews.swift、ChatUI.swift、StreamingText.swift |
+| 更新检查与版本比较 | Updates.swift、SemanticVersion.swift |
 | 跟随启动 | Autostart.swift、FollowMonitor.swift、Tools/FollowHelper/main.swift |
-| 素材接入 | Tools/NativeHEVC/ApplyPNGRepairs.swift、scripts/apply-native-png-repairs.sh |
-| 构建与架构 | scripts/build.sh、scripts/run-dev.sh、Package.swift、VERSION |
-| 记录 | docs/来源与架构.md（追踪）；docs/实施记录.md（本地忽略） |
+| PNG 接入、构建 | Tools/NativeHEVC/ApplyPNGRepairs.swift、scripts/apply-native-png-repairs.sh、scripts/build.sh |
 
-## 动画与性能约束
+## 原生界面与外观
 
-- 默认流式读取，首帧就绪即播放；512×512、24 帧后续缓冲、满帧。画质可选 384／256；缓冲为整数 6～240，右对齐刻度滑块和输入框，两端标注，非法值结束编辑恢复 24，滑块松开才提交。容量不预分配、不跨动作预读。
-- FPS 上限可选满帧／30／24／20／15。满帧沿用 30 Hz 调度当前 24／30 fps 素材；不插帧、不改动作时长。拖动位置跟随鼠标，动画画面不绕过定时器。
-- 画质、帧率上限、缓冲帧数、整段预加载依序排列。整段预加载默认关闭，启用后缓冲置灰且保留值，当前动作完整解码后播放，同动作循环复用；不预热整个素材库。提示“不推荐，会显著增加运行内存 (RAM) 占用。”
-- 图像和 Alpha 命中同分辨率，首帧边界映射到 512 逻辑坐标，菜单栏剪影裁剪映射到实际像素。generation 取消过期任务，循环 epoch 丢弃旧帧，退出等待当前后台解码完成。
-- 性能统计独立 NSWindow、默认关闭；开启显示 Dock，关闭销毁窗口及采样，禁用绿灯。设置开关保留设置 key window；Dock／菜单主动召回可激活统计。底栏 pin 开关与右侧关闭／拷贝 centerY 对齐，置顶默认 true 并记忆。
-- FPS／HI／LO 醒目，CPU 总体在前、单核基准在后；GPU 明确应用资源组时间比例，失败不报零；Swap 区分系统交换空间、进程压缩和累计换入。运行内存 (RAM) 与磁盘存储分别标注。不把像素预算当进程总占用，也不把 dev.7 用户反馈的 280～300 MB 当新版测量结果。
-- 统计窗口不添加 hover 废话，不留固定大块空白；拷贝只复制当前显示信息。页面不加重复的“显示窗口”行。
+编辑界面时读取已安装的 [macos-golden-gate-design](https://github.com/gambadio/macos-golden-gate-design) 技能，继续使用 AppKit；不顺带修改第三方技能。
 
-## 气泡、任务与数据
+- 设置和历史采用 NSSplitViewController、贯穿侧栏及统一 NSToolbar；内容区不套装饰性圆角外框。设置限制阅读宽度，关联选项使用区外标题、浅底分组和组内分隔线。历史输入区仅属于右侧会话，保留草稿、只读状态、真实停止及输入法组字保护。
+- 设置实际操作控件靠右，组合控件用 fill 与内容宽度收紧，不只对齐空容器。同类滑块轨道统一 180pt 并放在行右端，数值／单位在左；色点名称居中，单选组内部起点一致。注释使用 11pt secondaryLabelColor，不在独立注释前加分隔线。
+- 两个恢复按钮固定在侧栏底部，共用 SettingsFooterButton 的轮廓、28pt 高度及焦点范围。危险按钮淡红底、动态红字，禁止纯红底黑字；恢复全部二次确认。
+- 设置与历史保留原生 NSTableView，plain 样式、selectionHighlightStyle=none。AccentHistoryRow 按滚动视口绘制左右各收进 10pt、圆角 7pt 的完整选中背景；活动时用应用色，失焦用系统灰，选中图标／文字同步变白。
+- 强调色默认“跟随系统”且位于首位，手动色保留。八个预设使用架构文档中用户截图取样的 sRGB，不用 systemPink 等同名语义色替代。“自定义”色点使用 paintpalette 图标并打开原生颜色面板。
+- 开关、单选和复选保持 NSSwitch／NSButton 原生形状及交互。NativeAccentTint 使用公开 contentFilters 映射应用色，关闭状态也保持挂载以覆盖切换动画；仅跟随系统时移除。不访问私有控件，不把颜色滤镜称为原生 tint API。危险及警告保留语义色。
+- 普通 NSAlert 分离视觉主操作与键盘默认操作，审批仍默认拒绝。危险确认经 beginDangerousSheet 清除默认按钮并拦截 Return／小键盘 Enter，两键不执行任何操作，Esc 取消。NSAlert 保留系统 destructive 外观，不覆写 bezelColor；系统文件选择框保持原生行为。
+- 创建 NSApplication 前，仅在本应用偏好域设置 NSInitialToolTipDelay=200 毫秒，不修改全局域。设置侧栏分类无 tooltip，仅保留收起／展开按钮；气泡关闭按钮无 tooltip，保留辅助功能名，性能窗口不新增悬停说明。
+- 设置、历史和性能窗口可经 Dock／菜单召回。⌘Q 与 Dock“退出”关闭界面／取消对话框，不退出桌宠；明确的完整退出菜单和系统关机、SIGTERM/SIGINT 仍清理任务进程。关闭一个窗口不移除其他窗口的 Dock 入口。
 
-- 临时气泡“我还在留意进展…”及“让我看看额度…”前显示盲文滚动字符和一个空格。动画由 Bubble 的独立 Timer 更新，只改标签；正文更新不重置动画，标题替换／隐藏／销毁停止，不写入 History 或原任务文本。
-- 吸边单击保留作者 250ms 判定，第二次按下取消召回并查询额度；吸边拖动召回，普通拖拽播放拖拽及落地。移动按射线裁短，不分轴剪裁。
-- 产品身份固定为白龙娘桌宠MacOS-Swift版，自定义名字只用于称呼及互动。非交互文案不选中，历史、任务回复、输入与技术错误等保留复制。
-- 内置任务和外部只读观察分开，真实停止、默认拒绝审批、历史保护及进程回收必须保留；仅 completed 可宣告成功。外部工具中间失败不生成额外失败提醒，保留最终失败、审批及补充输入。
-- 数据目录 ~/Library/Application Support/BailongPetAppKit，不读凭证、不改全局 Codex 连接配置、不自动启用 LaunchAgent。跟随启动仅识别 Codex／ChatGPT 桌面应用，按标识与启动周期识别，拒绝临时路径；用户主动修复／更新配置。
+## 气泡材质与动态效果
 
-## 原生素材与构建
+- 消息气泡和临时输入窗共用 BubbleBackgroundView：正文永久位于稳定根视图，玻璃在底层、普通背景覆盖层在中间，不随材质重新挂载正文或输入框。
+- macOS 26 起默认液态玻璃并跟随系统，旧系统有效值固定普通材质且选择置灰，不覆盖保存的用户选择；旧系统不执行玻璃 API。降低透明度时用实色。手动不透明度 0～1、默认 0.5，只调背景衬底，不改正文或整窗 alpha。
+- 材质预览复用默认角色名、问候、气泡比例和详情入口，独立显示、不抢焦点、不覆盖任务或写历史；拖动结束三秒收起，离开页面／关闭设置清理。
+- 玻璃滑块使用 capsule.on.rectangle.liquid.glass 及 fill 符号。Tools/ExportGlassSymbols/main.swift 在 macOS 27 导出两份 PDF 到忽略的 local-assets/glass-symbols，构建带入以支持 macOS 26。
+- bubbleMotion 默认开启并持久化，参与恢复默认及偏好导入导出。出现 160ms 淡入和 4pt 减速位移，关闭 120ms 淡出，高度 140ms，材质背景交叉过渡 160ms；正文不缩放，流式更新不重播整窗出现，桌宠移动直接跟随。
+- 过渡结束停计时器，快速关闭重开取消旧关闭状态；关闭动态效果立即完成过渡。减少动态效果取消位移、高度与材质动画，保留短淡入淡出。WindowFade 同样控制出生、隐藏和全屏避让，仅修改 alpha，首帧就绪再淡入。
+- 进展和额度加载标题前的盲文及空格仅在显示层生成，盲文约 10Hz、跟随强调色，标题替换／隐藏／销毁即停止，不写历史或任务正文。文字扫光为 1.2 秒扫过、2.8 秒停顿，不含盲文；浅色模式深字被浅带扫过，深色模式灰字被亮带扫过，遵守动态效果和减少动态效果设置。
 
-准备已有 HEVC catalog、sounds 和图标后，运行 `scripts/build.sh arm64`。当前仅交付 Silicon；Intel 入口保留但不自动追加构建。主程序与 helper 同架构，包内不带原始素材、中间文件或用户数据，输出 `dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app`。
+## 动画与性能
 
-PNG 接入用 `scripts/apply-native-png-repairs.sh <PNG根目录>`；追加 `--landing` 仅处理落地。Core Image 读取透明 PNG，AVAssetWriter 输出 ProRes 4444，再由系统 avconvert 编码 HEVC with Alpha。成功后切换 catalog 并保留旧目录。新原生编码工具在 0.3.0 只完成编译，未重编码现有素材，不宣称已视觉验收。
+- 默认 512×512、流式读取、24 帧后续缓冲、满帧，首帧就绪即播；画质另选 384／256。缓冲整数 6～240，非法值结束编辑恢复 24，滑块松开才提交，不预分配容量、不跨动作预读。
+- 性能页依次为画质、素材帧率上限、缓冲、整段预加载。预加载默认关，启用后缓冲置灰且保留值；完整读取当前动作后播放，同动作循环复用，不预热整个素材库。提示“不推荐，会显著增加运行内存 (RAM) 占用。”
+- 素材选项“满帧 (≥ 24 FPS)”／20／15；满帧按源帧率乘播放速度，限帧不改时长、不插帧，旧 24／30 偏好及导入值迁移 full。当前素材 33 段 24fps，move03left／move03right 为 30fps，修改素材后重新读取元数据。
+- 素材选帧定时器与几何动画分开。macOS 14+ NSView.displayLink 随视图屏幕刷新位移／旋转，弱 target 避免循环引用，只在活动期间启用，隐藏／结束暂停，关闭释放。复用当前图像，不随屏幕刷新增加解码请求；统计 FPS 计不同图像，draws 可重复。
+- 吸边单击沿用作者 250ms 判定，第二次按下取消召回并查询额度；吸边展开保留 300ms 缓动，自主移动沿素材时间轴、按射线裁短。拖拽直接跟随鼠标，保留拖拽及落地动画。
+- 图像与 Alpha 命中使用同分辨率，首帧边界映射 512 逻辑坐标，剪影裁剪映射实际像素。generation／循环 epoch 丢弃过期解码结果，退出等待当前后台解码完成。
+- 性能统计独立窗口，默认关，关闭停止采样并销毁，禁用绿灯。默认屏幕左上角、置顶并记忆；设置开关不抢设置焦点。底栏左侧 pin 开关与右侧关闭／拷贝对齐，不留大块固定空白，拷贝当前显示信息。
+- FPS／HI／LO 醒目；CPU 总体在前、单核基准在后；GPU 明确应用资源组时间占比，采样失败不填零。Swap 区分系统交换空间、进程压缩与累计换入，不将系统用量当本进程用量，不将帧预算或旧版用户反馈当新版进程测量结果。
 
-独立预览 `scripts/prepare-native-hevc.sh` 只复制现有原生 MOV 和 samples.json，复用根 VERSION；AVPlayerLayer 预览不代表完整桌宠交互验收。没有旧 WebM 转码入口，不能把原版 WebM 目录直接当运行资源。
+## Codex、额度与数据
 
-仅做必要编译和针对改动的静态检查，不自动执行截图、视觉、SHA-256、自检、冒烟或模型请求。历史本地 Tests 仅在用户授权时运行，不把构建成功写成运行验收。
+- 内置任务与外部只读观察分开，保留真实停止、审批默认拒绝、历史保护、进程回收。仅 completed 成功；中间工具错误不产生额外失败提醒。TaskOutcome 不把会话标题／首条用户输入填作助手结果；缺失回复用终态事实说明，错误 JSON 取 message，null 不作错误文本。
+- 秒表与时间同标题首行，按实际文字宽度右对齐、间隔 3pt 随气泡缩放，标题按剩余宽度换行。最小 00:00，格式 MM:SS／H:MM:SS，跨小时重排。内置任务从 Turn.date 起算，外部从 thread_turns.started_at 经既有每秒同步获取，缺失时不造时间。
+- 同任务消息更新不重置计时。结束后冻结，completed 绿色，failed／interrupted／cancelled 红色；外部优先 completed_at，否则用观察到结束时间。隐藏／销毁停刷新，不将显示计时写入历史。
+- 普通气泡两个按钮等宽：左“转到 Codex”，右“查看记录详情”，右侧强调色。前者用 codex://threads/<thread-id>，无 ID 只打开桌面端，不创建任务；技术错误的详情／重试保留原语义。
+- 每次额度必须新请求，禁止跨查询缓存、TTL 或旧结果替代。QuotaQuery 先发 rateLimits/read，再并行 account/read；额度先显示，账号晚到只补同次结果。保留 serial／quotaActive 防过期回调，进行中的重复请求合并不等于结果缓存。
+- 重置卡只读不 consume：availableCount 为权威总数，明细可截断；expiresAt 显式 null 为不限期，缺失字段／明细为未提供，按本机时区显示。默认完整读取，不为提速跳过明细。授权测时只输出耗时与字段是否提供，不输出账号资料或凭证。
+- 数据位于 ~/Library/Application Support/BailongPetAppKit；不读取凭证、不改全局 Codex 配置、不自动启用 LaunchAgent。跟随启动仅识别 Codex／ChatGPT 桌面应用、不监测 CLI，拒绝 AppTranslocation 临时路径，由用户主动修复／更新配置。
+- 产品名固定为白龙娘桌宠MacOS-Swift版，自定义名字只用于称呼互动。历史、任务回复、输入与技术错误保留复制，非交互标签不选中。
 
-## 版本、文档与下一步
+## 更新检查
 
-SemVer 独立维护，新增功能升次版本、修复升补丁版本，开发中用 dev 标识；中文 commit 与 CHANGELOG。合并、推送和 Release 分别按用户授权执行，当前只授权本地 main 合并，不推送、不创建 Release、不改变可见性。
+- URLSession 读取公开仓库 releases/latest，沿用系统代理，TUN 由系统路由处理；不读凭证、不硬编码端口、不改全局网络配置。这不代表改变 Codex CLI 的联网配置。
+- SemVer 比较支持普通版本、v 前缀及既有中文“白龙娘桌宠v”标签，过滤草稿／预发布，区分本地领先，不引导降级。
+- 更新页含当前版本、手动检查、发布页、自动检查、上次完成时间及结果。启动自动检查默认开并记忆，仅发现新版提醒，失败仅记录更新页。自动提醒中的“😡 不许打扰我，禁用自动更新检查”放在重新检查右侧并同步设置，手动提醒不显示。
+- 手动失败允许重试；错误短标题加一句原因，原始错误／HTTP 状态放可拷贝的折叠技术详情，不伪报最新版。仅系统明确离线才说未联网，GitHub 失败／超时不等于断网，不猜代理故障、不要求开启 TUN；访问拒绝与明确限流分开，有恢复时间再显示。
+- 已打开的手动检查超过 8 秒显示连接较慢并保留加载／取消，不新增后台提醒。完成／取消／退出清理计时器，generation 丢弃过期回调。
+- 当前仅查看版本、说明和打开发布页，没有自动下载／安装，不退出或替换运行中的 App。API 请求与编译通过不代表代理／PAC／TUN 或窗口真机验收。
 
-当前状态写入 README、CHANGELOG、追踪的 docs/来源与架构.md 和 AGENTS.md；过程细节留在本地实施记录，不把预发布流水堆入当前架构说明。技能项目副本与个人副本同步。
+## 素材、交付与记录
 
-下一项功能为“检查更新”，尚未实现。不要把计划写成已具备网络版本查询、自动下载或安装。
+- 已导出 PNG 的修复使用独立 bailong-webm-edge-repair 技能：禁止 imagegen，在新副本处理，保持透明、原尺寸与编号。原始 WebM／PNG、修复副本、备份、蒙版及报告保留本地，不进 Git 或运行包。
+- 授权接入时使用 scripts/apply-native-png-repairs.sh <PNG根目录>；加 --landing 仅处理落地。Core Image 读取 PNG，AVAssetWriter 输出 ProRes 4444，系统 avconvert 编码透明 HEVC，成功后切换 catalog 并保留旧目录。原作 WebM 目录不能直接充当运行资源。
+- 准备 HEVC catalog、sounds、图标及玻璃 PDF 后执行 scripts/build.sh arm64。仅交付 Silicon，保留 Intel 入口但不自动追加构建；主程序与 helper 必须同架构。输出 dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app。
+- scripts/prepare-native-hevc.sh 仅复制已有 MOV 及 samples.json，复用 VERSION；AVPlayerLayer 预览不等于桌宠交互验收。包内不带原始素材、中间文件或用户数据。
+- VERSION 为版本单一来源；独立 SemVer，功能升次版本、兼容修复升补丁，开发用 dev 标识。中文 commit／CHANGELOG，提交、合并、推送、Release 各按授权执行，公开仓库不代表获得发布许可。
+- README 简洁介绍下载、安全拦截、特色与使用；CHANGELOG 保留版本记录，现行架构和规则写入 docs/来源与架构.md、AGENTS.md。过程与未验证项留在忽略的 docs/实施记录.md，不把迭代流水堆入技能。
+- docs 只追踪来源与架构；素材、二进制、构建输出、用户数据、Tests 及本地修边技能按 gitignore 排除，不 git add -f。自有技能项目与个人副本同步，第三方技能保持独立；历史 references/源码对照与路线评估.md 是早期 Python 调研，不作现行实现依据。

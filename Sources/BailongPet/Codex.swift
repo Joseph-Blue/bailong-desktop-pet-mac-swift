@@ -52,6 +52,11 @@ final class CodexConnection {
         guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return}
         NSWorkspace.shared.open(app)
     }
+    static func threadURL(_ id: String) -> URL? {
+        guard !id.isEmpty else {return nil}
+        var url = URLComponents(); url.scheme = "codex"; url.host = "threads"; url.path = "/"+id
+        return url.url
+    }
     func connect(_ callback: @escaping (Error?) -> Void) {
         if ready { callback(nil); return }
         waiting.append(callback)

@@ -168,7 +168,7 @@ final class ModelSelectorContent: NSViewController {
         slider.target = self; slider.action = #selector(effortChanged)
         slider.allowsTickMarkValuesOnly = true; slider.isContinuous = true; slider.setAccessibilityLabel("推理强度")
         for text in [explanation,defaultInfo,caution] {text.font = .systemFont(ofSize:12); text.isSelectable = false}
-        explanation.textColor = .secondaryLabelColor; defaultInfo.textColor = .systemBlue
+        explanation.textColor = .secondaryLabelColor; defaultInfo.textColor = AppAccent.color
         refresh.frame = NSRect(x:16,y:9,width:88,height:28); refresh.callback = { [weak self] in self?.settings.onLoad(true) }
         luna.frame = NSRect(x:112,y:9,width:176,height:28); luna.callback = { [weak self] in self?.settings.chooseLunaMinimum() }
         sync.frame = NSRect(x:304,y:9,width:140,height:28); sync.emphasize(); sync.callback = { [weak self] in self?.settings.syncWithCodex() }
@@ -195,7 +195,7 @@ final class ModelSelectorContent: NSViewController {
             view.addSubview(mark); return mark
         }
         effort.stringValue = "推理强度 · "+settings.effortTitle
-        effort.textColor = AppAccent.color
+        effort.textColor = AppAccent.color; defaultInfo.textColor = AppAccent.color
         explanation.stringValue = settings.loading ? "正在读取可用模型…" : settings.error != nil ? "模型列表暂不可用，请点击刷新模型重试。" : options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation
         defaultInfo.isHidden = settings.loading || settings.error != nil || settings.selectedEffort != nil || options.isEmpty
         caution.stringValue = settings.caution ?? ""

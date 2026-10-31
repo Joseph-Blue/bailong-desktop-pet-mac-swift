@@ -1,0 +1,35 @@
+import Foundation
+
+/// 仅保存本次查询的回复，不能跨查询复用额度。
+final class QuotaQuery {
+    typealias Reply = (Result<[String:Any],Error>) -> Void
+    typealias Call = (String,[String:Any],@escaping Reply) -> Void
+    struct Snapshot {
+        let value: [String:Any]
+        let account: [String:Any]?
+    }
+    private var account: [String:Any]?
+    private var value: [String:Any]?
+    private let update: (Result<Snapshot,Error>) -> Void
+
+    init(update: @escaping (Result<Snapshot,Error>) -> Void) { self.update = update }
+
+    func start(call: Call) {
+        // 额度立即发出，账号仅补充套餐显示，不作为额度请求的前置条件。
+        call("account/rateLimits/read",[:]) { [self] result in
+            switch result {
+            case .success(let value):
+                self.value = value
+                update(.success(Snapshot(value:value,account:account)))
+            case .failure(let error): update(.failure(error))
+            }
+        }
+        call("account/read",["refreshToken":false]) { [self] result in
+            guard case .success(let response) = result,
+                  let account = response["account"] as? [String:Any] else {return}
+            self.account = account
+            // 账号晚到只补齐同一次查询的套餐，不等待它，也不重放加载动画。
+            if let value {update(.success(Snapshot(value:value,account:account)))}
+        }
+    }
+}

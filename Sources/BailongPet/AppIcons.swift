@@ -179,7 +179,9 @@ private final class AboutWindowController: NSWindowController {
         let text = NSMutableAttributedString(string:"")
         paragraph("基于 jingh12312-rgb 的《GPT白龙娘动态桌宠》，进行非官方 macOS 移植及 Swift + AppKit 原生重写，独立维护。",to:text)
         paragraph("本项目采用与原版不同的技术栈，功能适配与后续维护均需独立进行，目前属于实验性项目。如果更重视长期使用，建议同时了解沿用原版技术栈、持续维护并明确支持 macOS 的社区移植版本。",to:text)
-        link("本项目仓库（私有，需访问权限）",url:Self.repositoryURL.absoluteString,to:text)
+        link("本项目公开仓库 · GitHub",url:Self.repositoryURL.absoluteString,to:text)
+        paragraph("更新入口位于设置的“更新”页及应用菜单；通过 GitHub 正式发布检查版本。运行与素材接入均采用 Apple 原生框架。",to:text)
+        link("GitHub 发布与更新说明",url:UpdateChecker.releases.absoluteString,to:text)
         link("原作：GPT白龙娘动态桌宠 · jingh12312-rgb",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
         return text
     }

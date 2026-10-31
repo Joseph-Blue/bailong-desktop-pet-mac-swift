@@ -19,6 +19,7 @@ final class ChatController {
     var alert: NSAlert?
     var requests = [(Any,String,[String:Any])]()
     var quotaSerial = 0
+    var quotaRequestInFlight = false
     var quotaAccount: [String:Any]?
     var modelDirectory: String?
     var onFinishedShutdown: (() -> Void)?
@@ -51,6 +52,11 @@ final class ChatController {
             return self.connection.diagnostics + "\n内置任务：" + (self.running?.1.status ?? "空闲")
         }
         pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
+        pet.onCodex = { [weak self] key in
+            guard let id = self?.store.conversations.first(where:{$0.key == key})?.threadID,
+                  let url = CodexConnection.threadURL(id) else {CodexConnection.openDesktop(); return}
+            if !NSWorkspace.shared.open(url) {showError("无法转到 Codex",PetFailure(message:"请安装或打开 Codex 桌面应用后重试。"))}
+        }
         pet.onQuota = { [weak self] in self?.quota() }
         pet.onGeometry = { [weak self] in self?.positionComposer() }
         pet.onVisibility = { [weak self] shown in if !shown {self?.ui.hideComposer()} }
@@ -70,7 +76,7 @@ final class ChatController {
     }
     func approvalParent() -> NSWindow {
         if ui.history.isVisible { return ui.history }
-        if !ui.composer.isVisible { toggleComposer() }
+        if !ui.composerVisible { toggleComposer() }
         return ui.composer
     }
     func persist() { store.save(); refresh() }
@@ -89,7 +95,7 @@ final class ChatController {
         }
     }
     func toggleComposer() {
-        if ui.composer.isVisible { ui.hideComposer(); return }
+        if ui.composerVisible { ui.hideComposer(); return }
         if selected.external && running == nil { newConversation() }
         pet.reveal(); pet.undock(); pet.composerVisible = true; pet.interaction()
         positionComposer(); loadModels()
@@ -98,11 +104,11 @@ final class ChatController {
     func positionComposer() {
         guard pet.composerVisible else{return}
         // 以稳定的可见桌宠边界定位，避免透明画布使下方空间被误判为不足。
-        let a = pet.screen.visibleFrame, s = ui.composer.frame.size, r = pet.visiblePetFrame
+        let a = pet.screen.visibleFrame, s = ui.composerFrame.size, r = pet.visiblePetFrame
         let below = r.minY-s.height-8
         let y = below >= a.minY ? below : r.maxY+8
         let origin = CGPoint(x:max(a.minX,min(r.midX-s.width/2,a.maxX-s.width)).rounded(),y:max(a.minY,min(y,a.maxY-s.height)).rounded())
-        if origin != ui.composer.frame.origin {ui.composer.setFrameOrigin(origin)}
+        ui.moveComposer(to:origin)
     }
     func showHistory(_ key: String?) { if let key, let c = store.conversations.first(where:{$0.key == key}) {selected = c}; refresh(); ui.openHistory() }
     func continueExternal() {
@@ -162,7 +168,7 @@ final class ChatController {
         running = (c,turn); cancelled = false; messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
         ui.composerEditor.string = ""; ui.historyEditor.string = ""
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); pet.say("主人，我收到啦！",body:text,kind:"task",thread:c.key); persist()
+        pet.taskStarted("own"); pet.say("主人，我收到啦！",body:text,kind:"task",thread:c.key,taskStartedAt:turn.date,taskKey:"own"); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}
@@ -241,7 +247,7 @@ final class ChatController {
             let text = self.lastKind == "summary" ? t.summary : self.lastKind == "progress" ? t.steps : t.messages
             if !text.isEmpty && text != self.lastPreview {
                 self.lastPreview = text
-                self.pet.say(self.lastKind == "summary" ? "主人，我正在理清思路…（公开摘要）" : self.lastKind == "progress" ? "主人，我忙到这一步啦…" : "主人，我正在回复你…",body:text,kind:"task",thread:c.key)
+                self.pet.say(self.lastKind == "summary" ? "主人，我正在理清思路…（公开摘要）" : self.lastKind == "progress" ? "主人，我忙到这一步啦…" : "主人，我正在回复你…",body:text,kind:"task",thread:c.key,taskStartedAt:t.date,taskKey:"own")
             }
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)
@@ -264,10 +270,10 @@ final class ChatController {
             }
             if !pet.hidden {
                 pet.quotaActive = false
-                pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100)
+                pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title,body:t.final,kind:"task",thread:c.key,purpose:status == "completed" ? .result : .attention)}
+        } else {pet.say(title,body:t.final,kind:"task",thread:c.key,purpose:status == "completed" ? .result : .attention,taskStartedAt:t.date,taskKey:"own",taskFinishedAt:Date(),taskStatus:status)}
         if closing {finishShutdown()}
     }
     func stop() { guard running != nil else{return}; cancelled = true; dismissRequests(); ui.status.stringValue = "正在停止任务…"; interrupt() }
@@ -322,22 +328,30 @@ final class ChatController {
         alert = nil
     }
     func quota() {
-        guard !pet.quotaActive else{return}; pet.quotaActive = true; quotaSerial += 1; let serial = quotaSerial
+        guard !(quotaRequestInFlight && pet.quotaActive) else {return}
+        quotaRequestInFlight = true; pet.quotaActive = true; quotaSerial += 1; let serial = quotaSerial
+        quotaAccount = nil
         if pet.dock == nil {pet.play(pet.catalog.quotaAnimation,"quota")}
         pet.say("让我看看额度还有多少……",kind:"quotaLoading")
         connection.connect { [weak self] error in
             guard let self else{return}
             if let error {self.quotaResult(serial,.failure(error));return}
-            self.connection.call("account/read",["refreshToken":false]) { [weak self] result in
-                guard let self, serial == self.quotaSerial, self.pet.quotaActive else {return}
-                if case .success(let value) = result {self.quotaAccount = value["account"] as? [String:Any]}
-                else {self.quotaAccount = nil}
-                self.connection.call("account/rateLimits/read",[:]) { [weak self] result in self?.quotaResult(serial,result) }
+            guard serial == self.quotaSerial, self.pet.quotaActive, !self.closing else {return}
+            let query = QuotaQuery { [weak self] result in
+                guard let self, serial == self.quotaSerial, self.pet.quotaActive, !self.closing else {return}
+                switch result {
+                case .success(let snapshot):
+                    self.quotaAccount = snapshot.account
+                    self.quotaResult(serial,.success(snapshot.value))
+                case .failure(let error): self.quotaResult(serial,.failure(error))
+                }
             }
+            query.start { [connection = self.connection] method,params,reply in connection.call(method,params,completion:reply) }
         }
     }
     func quotaResult(_ serial: Int, _ result: Result<[String:Any],Error>) {
         guard serial == quotaSerial && pet.quotaActive && !closing else{return}
+        quotaRequestInFlight = false
         switch result {
         case .failure(let error):
             pet.quotaActive = false
@@ -347,7 +361,7 @@ final class ChatController {
             pet.placeBubble()
         case .success(let value):
             let overview = QuotaPresentation.overview(value,account:quotaAccount)
-            pet.say("Codex 额度",body:" ",kind:"quota")
+            if pet.bubble.kind != "quota" {pet.say("Codex 额度",body:" ",kind:"quota")}
             pet.bubble.quotaRows(overview,scale:Double(pet.bubblePercent)/100); pet.placeBubble()
         }
     }

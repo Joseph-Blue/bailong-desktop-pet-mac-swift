@@ -31,6 +31,7 @@ private final class ReadDatabase {
 struct PublicSnapshot {
     var logical: String, actual: String, turn: String, title: String, cwd: String, historyMode: String
     var status: String, started: Double, messages: String, final: String, alert: String, step: String, error: String
+    var completed: Double?
     var key: String { actual+":"+turn }
     var fingerprint: String { [status,messages,final,alert,step,error].joined(separator:"\u{001f}") }
 }
@@ -74,9 +75,9 @@ final class DesktopSync {
             let match = pattern.matches(in:path,range:NSRange(path.startIndex...,in:path)).last
             let actual = match.flatMap{Range($0.range,in:path)}.map{String(path[$0])} ?? logical
             if excluded.contains(logical) || excluded.contains(actual) {continue}
-            var turns = try history.rows("SELECT turn_id,status,error_json,started_at FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 3",[actual])
+            var turns = try history.rows("SELECT turn_id,status,error_json,started_at,completed_at FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 3",[actual])
             for old in watched where old.actual == actual && !turns.contains(where:{$0["turn_id"] == old.turn}) {
-                turns += try history.rows("SELECT turn_id,status,error_json,started_at FROM thread_turns WHERE thread_id=? AND turn_id=?",[actual,old.turn])
+                turns += try history.rows("SELECT turn_id,status,error_json,started_at,completed_at FROM thread_turns WHERE thread_id=? AND turn_id=?",[actual,old.turn])
             }
             for turn in turns {
                 // 工具中间失败由原 Codex 对话处理；这里只观察公开消息、进展和待处理状态。
@@ -103,7 +104,7 @@ final class DesktopSync {
                     }
                 }
                 if ["completed","failed","interrupted"].contains(turn["status"] ?? "") {alert = ""; step = ""}
-                result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? ""))
+                result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? "")))
             }
         }
         return result.sorted{$0.started < $1.started}
@@ -139,7 +140,7 @@ final class DesktopSync {
                     let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.messages.components(separatedBy:"\n\n").last!
                     let signature = text
                     if !text.isEmpty && (turn.notices[signature] == nil || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say("主人，我还在留意进展…",body:text,kind:"task",thread:conversation.key,followsText:false,purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress,animateHeading:true)
+                        chat.pet.say("主人，我还在留意进展…",body:text,kind:"task",thread:conversation.key,followsText:false,purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress,animateHeading:true,taskStartedAt:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,taskKey:key)
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
                     }
                 }
@@ -147,7 +148,7 @@ final class DesktopSync {
                 running.remove(key)
                 if !turn.finished {
                     turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)
-                    chat.pet.say(value.status == "completed" ? "主人，完成啦！" : "主人，任务还没有完成。",body:!value.error.isEmpty ? value.error : !value.final.isEmpty ? value.final : value.title,kind:"task",thread:conversation.key,followsText:false,resetText:true,purpose:value.status == "completed" ? .result : .attention)
+                    chat.pet.say(TaskOutcome.title(value.status),body:TaskOutcome.body(status:value.status,error:value.error,final:value.final),kind:"task",thread:conversation.key,followsText:false,resetText:true,purpose:value.status == "completed" ? .result : .attention,taskStartedAt:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,taskKey:key,taskFinishedAt:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),taskStatus:value.status)
                 }
             }
         }

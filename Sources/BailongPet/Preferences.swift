@@ -1,17 +1,18 @@
 import AppKit
 
 enum SettingsSection: Int, CaseIterable {
-    case general, identity, activity, messages, appearance, advanced, developer
-    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","性能"][rawValue] }
-    var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer"][rawValue] }
+    case general, identity, activity, messages, appearance, advanced, developer, updates
+    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","性能","更新"][rawValue] }
+    var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer","arrow.triangle.2.circlepath"][rawValue] }
     var keys: [String] {
         switch self {
         case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","addressMode","customAddress","petName","greetingTemplate","customLines"]
         case .activity: return ["singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
         case .messages: return ["sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
-        case .appearance: return ["petPercent","bubblePercent","messageFontSize","appearanceMode","accentStyle","accentRGB"]
+        case .appearance: return ["petPercent","bubblePercent","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
         case .advanced: return []
+        case .updates: return ["automaticallyCheckUpdates"]
         case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit"]
         }
     }
@@ -43,6 +44,8 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
+        "automaticallyCheckUpdates":true,
+        "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"512","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","addressMode":"master","customAddress":"","petName":"白龙娘",
@@ -54,17 +57,22 @@ final class PetPreferences {
         "interactionSeconds":5.0,"progressSeconds":10.0,"resultSeconds":20.0,"quotaSeconds":20.0,
         "autoReadTime":true,"pauseOnHover":true,"countAfterReveal":true,"typingEffect":true,"soundEnabled":true,
         "quietCompanion":false,"quietSchedule":false,"quietStart":22*60,"quietEnd":8*60,
-        "petPercent":100,"bubblePercent":100,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"purple","accentRGB":[0.60,0.40,0.74]
+        "petPercent":100,"bubblePercent":100,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
     ]
     static let ranges: [String:ClosedRange<Double>] = [
-        "animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,
+        "glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"messageFontSize":11...20
     ]
-    static let choices = ["animationQuality":["512","384","256"],"animationFPSLimit":["full","30","24","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"addressMode":["master","name","custom"],"movementRange":["still","nearby","screen"],
+    static var glassAvailable: Bool {if #available(macOS 26.0, *) {return true}; return false}
+    var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
+    static let choices = ["bubbleMaterial":["glass","plain"],"animationQuality":["512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"addressMode":["master","name","custom"],"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
     let defaults: UserDefaults
-    init(defaults: UserDefaults = .standard) {self.defaults = defaults}
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
+    }
     static func displayID(_ screen: NSScreen) -> String {(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? ""}
     func value(_ key: String) -> Any {defaults.object(forKey:key) ?? Self.defaults[key]!}
     func bool(_ key: String) -> Bool {value(key) as? Bool ?? false}
@@ -72,7 +80,7 @@ final class PetPreferences {
     func string(_ key: String) -> String {value(key) as? String ?? ""}
     var animationBufferFrames: Int { Int(number("animationBufferFrames")) }
     var animationResolution: Int { Int(string("animationQuality"))! }
-    var animationFPS: Double { string("animationFPSLimit") == "full" ? 30 : Double(string("animationFPSLimit"))! }
+    func animationFPS(native: Double) -> Double { string("animationFPSLimit") == "full" ? native : min(native,Double(string("animationFPSLimit"))!) }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
     func set(_ value: Any, for key: String) {defaults.set(value,forKey:key); notify([key])}
     private func notify(_ keys: [String]) {
@@ -159,9 +167,10 @@ final class PetPreferences {
     }
     func importData(_ data: Data, clipIDs: Set<String>) throws {
         guard let document = try JSONSerialization.jsonObject(with:data) as? [String:Any],
-              document["schemaVersion"] as? Int == 1, let values = document["settings"] as? [String:Any] else {
+              document["schemaVersion"] as? Int == 1, var values = document["settings"] as? [String:Any] else {
             throw PetFailure(message:"请选择本应用导出的设置文件。")
         }
+        if let old = values["animationFPSLimit"] as? String, ["24","30"].contains(old) {values["animationFPSLimit"] = "full"}
         for (key,value) in values {
             // dev.7 / dev.8 导出包含旧开关；统一流式后只校验类型，不恢复旧播放策略。
             if key == "lowResourceMode", let n = value as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() { continue }

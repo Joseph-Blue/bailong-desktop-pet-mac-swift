@@ -124,7 +124,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     private let contentStack = NSStackView()
     private let viewport = NSScrollView()
     private let footerHeight = 46.0
-    private let pinSwitch = NSSwitch()
+    private let pinSwitch = AccentSwitch()
     private var fittingWindow = false
     private var closing = false
     private let identity = NSTextField(wrappingLabelWithString: DeviceIdentity.text)
@@ -312,7 +312,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let count = pet.animation?.frameCount ?? 0
         let index = pet.animation?.stream?.current?.index ?? pet.frameIndex
         let resolution = pet.currentFrame?.image.width ?? pet.preferences.animationResolution
-        let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧" : pet.preferences.string("animationFPSLimit") + " FPS"
+        let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧 (≥ 24 FPS)" : pet.preferences.string("animationFPSLimit") + " FPS"
         let state = pet.hidden ? "隐藏" : pet.loading ? "解码中" : pet.press != nil && !pet.dragged ? "暂停" : "播放"
         let preloadEnabled = pet.preferences.bool("preloadWholeAnimation")
         playback.stringValue = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 绘制 \(number(draws))/s"

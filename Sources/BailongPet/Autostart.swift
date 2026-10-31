@@ -43,7 +43,7 @@ final class FollowLauncher {
         alert.addButton(withTitle: "取消")
         alert.addButton(withTitle: exists ? "修复／更新" : "启用")
         if exists { alert.addButton(withTitle: "停用") }
-        alert.applyAccent(primary: 1)
+        alert.applyAccent(primary:1,keyboardDefault:1)
         let response = alert.runModal()
         guard response != .alertFirstButtonReturn else { return }
         do {

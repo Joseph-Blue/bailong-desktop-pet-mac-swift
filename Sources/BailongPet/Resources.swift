@@ -71,7 +71,8 @@ struct Frame {
 final class Animation: NSObject, @unchecked Sendable {
     let frames: [Frame]
     let stream: StreamingAnimation?
-    init(_ frames: [Frame], stream: StreamingAnimation? = nil) { self.frames = frames; self.stream = stream }
+    let fps: Double
+    init(_ frames: [Frame], stream: StreamingAnimation? = nil, fps: Double = 24) { self.frames = frames; self.stream = stream; self.fps = fps }
     var frameCount: Int { stream?.frameCount ?? frames.count }
     var residentCount: Int { stream.map { $0.statistics(retaining: frames.first).frames } ?? frames.count }
     var cost: Int { stream?.statistics(retaining: frames.first).bytes ?? frames.reduce(0) { $0 + $1.cost } }
@@ -138,6 +139,7 @@ final class Decoder: @unchecked Sendable {
                 }
                 guard current(token) else { return }
                 let rate = try await track.load(.nominalFrameRate)
+                guard rate.isFinite && rate > 0 else {throw PetFailure(message:"「\(clip.title)」缺少有效的素材帧率。")}
                 let range = try await track.load(.timeRange)
                 guard current(token) else { return }
                 let streaming = StreamingAnimation(asset: asset, track: track, context: context, capacity: capacity, resolution: side,
@@ -152,7 +154,7 @@ final class Decoder: @unchecked Sendable {
                         self.lock.withLock { if self.generation == token { self.preloadProgress = (clip.id, count, streaming.frameCount) } }
                     }), current(token) else { return }
                     guard let firstFrame = frames.first else { throw PetFailure(message: "「\(clip.title)」没有可播放的帧。") }
-                    let animation = Animation(frames)
+                    let animation = Animation(frames,fps:Double(rate))
                     lock.withLock { if generation == token { resident[clip.id] = WeakAnimation(animation) } }
                     DispatchQueue.main.async {
                         if self.current(token) { first(firstFrame); completion(.success(animation)) }
@@ -160,7 +162,7 @@ final class Decoder: @unchecked Sendable {
                     return
                 }
                 let firstFrame = try streaming.prime()
-                let animation = Animation([firstFrame], stream: streaming)
+                let animation = Animation([firstFrame], stream: streaming,fps:Double(rate))
                 let accepted = lock.withLock { () -> Bool in
                     guard generation == token else { return false }
                     stream = streaming; resident[clip.id] = WeakAnimation(animation); return true

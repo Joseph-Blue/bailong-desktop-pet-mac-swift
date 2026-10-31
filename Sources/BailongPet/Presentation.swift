@@ -33,7 +33,7 @@ struct AppFailure {
         text.isHorizontallyResizable = false; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         scroll.documentView = text; scroll.hasVerticalScroller = true; alert.accessoryView = scroll
         alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"复制详情")
-        alert.applyAccent()
+        alert.applyAccent(primary:1,keyboardDefault:1)
         if alert.runModal() == .alertSecondButtonReturn {NSPasteboard.general.clearContents(); NSPasteboard.general.setString(detail,forType:.string)}
     }
 }
@@ -115,6 +115,8 @@ enum QuotaPresentation {
             else if string(bucket["rateLimitReachedType"]) != nil {result.notice = "服务报告当前已达到使用限制。"}
         }
         if result.rows.isEmpty {result.rows = [QuotaRow(title:"使用额度",value:"暂未提供",detail:emptyMessage(account),remaining:nil)]}
+        let cards = QuotaResetCards(value)
+        result.rows.append(QuotaRow(title:"额度重置卡",value:cards.amount,detail:cards.detail,remaining:nil))
         if value["ordinaryUsageAllowed"] as? Bool == false {result.notice = "服务当前未允许使用包含额度。"}
         return result
     }
