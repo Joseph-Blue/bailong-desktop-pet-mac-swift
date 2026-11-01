@@ -4,6 +4,7 @@ struct PublicAgentMessage:Equatable {
     let id:String
     let text:String
     let isFinal:Bool
+    var isImage = false
 }
 
 struct PublicSnapshot {
@@ -15,6 +16,7 @@ struct PublicSnapshot {
     var hasSensitiveQuestion = false
     var agentMessages = [PublicAgentMessage]()
     var isLatest = true
+    var resultText:String {GeneratedImageLink.appending(agentMessages.filter(\.isImage).map(\.text),to:final)}
     var key: String { actual+":"+turn }
     var fingerprint: [String] { agentMessages.flatMap {[$0.id,$0.text]} + [status,messages,final,alert,step,error,attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
 }
@@ -110,7 +112,16 @@ final class DesktopSync {
             guard value.started > clearedBefore else {continue}
             if excluded.contains(value.logical) || excluded.contains(value.actual) {continue}
             let key = value.key, active = value.isLatest && activeStatuses.contains(value.status)
-            if tracked[key] == nil && !active && (initial || value.started < born) {continue}
+            if tracked[key] == nil && !active && (initial || value.started < born) {
+                // 补齐扫描范围内已有历史的图片入口，不把旧任务重新弹出或新增为历史。
+                if chat.store.recordsAutomatically,!chat.store.isReadOnly,
+                   let conversation = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical}),
+                   let turn = conversation.turns.first(where:{$0.id == value.turn}) {
+                    let enriched = GeneratedImageLink.appending(value.agentMessages.filter(\.isImage).map(\.text),to:turn.messages)
+                    if enriched != turn.messages {turn.messages = enriched; changed = true}
+                }
+                continue
+            }
             if tracked[key] == nil && active && value.started < born-86400 {continue}
             var c = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical})
             if c == nil {c = chat.store.create(cwd:value.cwd,external:true); c!.title = value.title; c!.threadID = value.logical}
@@ -168,7 +179,7 @@ final class DesktopSync {
                 running.remove(key)
                 if !turn.finished {
                     turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.final), kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result")
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result")
                 }
             }
         }

@@ -1,6 +1,6 @@
 # 白龙桌宠Swift
 
-- 本地 main 版本为 0.5.0-dev.19，新增历史管理与 720 画质；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 本地 main 版本为 0.5.0-dev.20，新增历史管理与 720 画质；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
@@ -107,3 +107,7 @@
 - 问卷提交状态属于原 QuestionForm；切到额度等临时内容不遗留全局提交锁，回执按原任务及表单身份处理，不能清除后来出现的新问题或误改当前气泡按钮。
 
 - 内置会话在同一 CodexConnection 中 start／resume 成功后复用加载身份，后续直接 turn/start；thread/closed 与连接关闭清理身份，不反复 resume、不抢占其他 writer、不自动新建或重发。每轮仍发送用户选择的 model／effort。气泡未浏览旧卡时跟随同级任务进展及结果；用户明确提交内置新任务可选中新卡，问卷与待处理请求不被打断。
+
+- imageGeneration 完成项从公开 savedPath 生成本机图片链接，内置事件与外部只读同步共用；按 item ID 保留独立卡片，最终结果汇集图片入口，历史保留链接，点击在访达定位。不读取或存储图片 base64、生成提示词，不推测文件路径。
+
+- 个性页你的名字、桌宠名字与全部台词留空时显示可编辑默认正文，不使用默认台词占位；点击清空立即恢复并选中默认内容，手动删空在结束编辑后恢复，中文组字期间不干预。特定称呼例外：空值保留“留空沿用你的名字”占位提示，不填入默认正文，继续跟随用户名；仅打开页面不写入配置。

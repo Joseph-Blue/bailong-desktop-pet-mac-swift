@@ -372,7 +372,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             cell?.backgroundStyle = row.interiorBackgroundStyle
         }
     }
-    private func entry(_ title: String, value: String, placeholder: String = "", limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, changed: @escaping (String)->Void) -> NSView {
+    private func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, changed: @escaping (String)->Void) -> NSView {
+        let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
         let field: NSTextField = selected == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
         let templateField = field as? SettingsTemplateField
         templateField?.allowsTokens = allowsTokens
@@ -405,14 +406,27 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             }
             updateCount(bounded); changed(bounded)
         }
+        if let emptyFallback {
+            textEndActions[ObjectIdentifier(field)] = { [weak self,weak field] text in
+                guard text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,let self,let field else {return}
+                field.stringValue = emptyFallback
+                self.textActions[ObjectIdentifier(field)]?(emptyFallback)
+                (field as? SettingsTemplateField)?.refreshHighlight()
+                self.identityPreview?.stringValue = self.preferences.statusLine("greetingTemplate")
+            }
+        }
         attach(clear) { [weak self,weak field] _ in
             guard let self,let field else {return}
             self.window.makeFirstResponder(field)
+            let replacement = emptyFallback ?? ""
             if let editor = field.currentEditor() as? NSTextView {
                 let all = NSRange(location:0,length:(editor.string as NSString).length)
-                if editor.shouldChangeText(in:all,replacementString:"") {editor.replaceCharacters(in:all,with:""); editor.didChangeText()}
+                if editor.shouldChangeText(in:all,replacementString:replacement) {
+                    editor.replaceCharacters(in:all,with:replacement); editor.didChangeText()
+                    editor.setSelectedRange(NSRange(location:0,length:(replacement as NSString).length))
+                }
             } else {
-                field.stringValue = ""; self.textActions[ObjectIdentifier(field)]?(""); (field as? SettingsTemplateField)?.refreshHighlight()
+                field.stringValue = replacement; self.textActions[ObjectIdentifier(field)]?(replacement); (field as? SettingsTemplateField)?.refreshHighlight()
             }
         }
         let controls = NSStackView(views:[field,clear,count]); controls.orientation = .horizontal; controls.spacing = 6; controls.alignment = .centerY; controls.distribution = .fill
@@ -458,7 +472,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         default: icon = nil
         }
         let token = ["ownerName":"{用户名}","petName":"{桌宠名}","customAddress":"{特定称呼}"][key]
-        return entry(title,value:preferences.string(key),placeholder:placeholder,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token) { [weak self] value in self?.preferences.set(value,for:key) }
+        let fallback = ["ownerName":"主人","petName":"白龙娘"][key]
+            ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
+        return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token) { [weak self] value in self?.preferences.set(value,for:key) }
     }
     private func slider(_ title: String, _ key: String, range: ClosedRange<Double>, step: Double = 1, suffix: String, detail: String? = nil) -> NSView {
         let slider = NSSlider(value:preferences.number(key),minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
@@ -596,7 +612,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             }
             restore.controlSize = .small; restore.font = .systemFont(ofSize:11)
             restore.setAccessibilityLabel("恢复全部互动台词为默认值")
-            group("互动台词",lines.map {clip in entry(clip.title,value:(preferences.value("customLines") as? [String:String])?[clip.id] ?? "",placeholder:preferences.templateSource(clip.line ?? ""),limit:120) { [weak self] in self?.preferences.setLine($0,for:clip.id) }},action:restore)
+            group("互动台词",lines.map {clip in entry(clip.title,value:(preferences.value("customLines") as? [String:String])?[clip.id] ?? "",emptyFallback:preferences.templateSource(clip.line ?? ""),limit:120) { [weak self] in self?.preferences.setLine($0,for:clip.id) }},action:restore)
         }
     }
     private func activity() {

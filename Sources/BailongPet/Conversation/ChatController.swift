@@ -14,6 +14,7 @@ final class ChatController {
     var messages = [String:String](), messageOrder = [String](), summaries = [String:String](), steps = [String:String]()
     private var previewedMessages = [String:String]()
     private var finalMessageID:String?
+    private var imageMessageIDs = Set<String>()
     var lastPreview = "", lastKind = "output"
     var saveError: String?
     var updateTimer: Timer?
@@ -350,7 +351,7 @@ final class ChatController {
         let c = selected, turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
-        running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
+        running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; imageMessageIDs.removeAll(); messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
         pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
@@ -410,6 +411,13 @@ final class ChatController {
         case "agentMessage":
             if messages[id] == nil {messageOrder.append(id)}; messages[id] = item["text"] as? String ?? ""; lastKind = "output"
             if item["phase"] as? String == "final_answer" {finalMessageID = id; running?.1.final = item["text"] as? String ?? ""}
+        case "imageGeneration":
+            if let link = GeneratedImageLink.markdown(status:item["status"] as? String,savedPath:item["savedPath"] as? String) {
+                if messages[id] == nil {messageOrder.append(id)}
+                messages[id] = link; imageMessageIDs.insert(id); steps.removeValue(forKey:id); lastKind = "output"
+            } else if ["inProgress","running"].contains(item["status"] as? String ?? "") {
+                steps[id] = "正在生成图片"; lastKind = "progress"
+            } else {steps.removeValue(forKey:id)}
         case "reasoning":
             // 只读取协议公开 summary，不读取 content 或加密推理字段。
             for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {summaries["\(id):\(index)"] = part as? String ?? (part as? [String:Any])?["text"] as? String ?? ""}; lastKind = "summary"
@@ -453,7 +461,7 @@ final class ChatController {
     func finish(_ status: String, error: String = "") {
         guard let (c,t) = running else{return}
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
-        if t.final.isEmpty {finalMessageID = messageOrder.last; t.final = finalMessageID.flatMap{messages[$0]} ?? ""}
+        if t.final.isEmpty {finalMessageID = messageOrder.last(where:{!imageMessageIDs.contains($0)}); t.final = finalMessageID.flatMap{messages[$0]} ?? ""}
         presentAgentMessages(conversation:c,turn:t)
         running = nil; requestCoordinator.dismiss(); pet.bubble.resolveQuestions(taskKey:"own"); pet.taskEnded("own",status:status); persist()
         let title = pet.preferences.taskResultLine(status)
@@ -467,7 +475,7 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:t.final, kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:finalMessageID ?? "result")}
+        } else {pet.say(title, body:GeneratedImageLink.appending(messageOrder.filter {imageMessageIDs.contains($0)}.compactMap {messages[$0]},to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:finalMessageID ?? "result")}
         if closing {finishShutdown()}
     }
     func stop() {

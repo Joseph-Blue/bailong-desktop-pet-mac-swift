@@ -97,13 +97,14 @@ enum DesktopHistoryReader {
             let answeredIDs = Set(answeredRows.compactMap {$0["question_id"]})
             for turn in turns {
                 // 工具中间失败由原 Codex 对话处理；这里只观察公开消息、进展和待处理状态。
-                // 不读取 reasoning、工具参数、退出码或工具输出，也不据此生成失败提醒。
+                // 不读取 reasoning、工具参数、退出码或工具输出；图片仅取公开的保存路径。
                 let items = try history.rows("""
                 SELECT item_type,json_extract(item_json,'$.id') item_id,json_extract(item_json,'$.phase') phase,
                 CASE WHEN NOT EXISTS (SELECT 1 FROM json_each(item_json,'$.questions') q WHERE json_extract(q.value,'$.isSecret')=1)
                     THEN json_extract(item_json,'$.text') END text,
                 json_extract(item_json,'$.status') status,json_extract(item_json,'$.questions') questions,
-                json_extract(item_json,'$.reason') reason
+                json_extract(item_json,'$.reason') reason,
+                CASE WHEN item_type='imageGeneration' THEN json_extract(item_json,'$.savedPath') END saved_path
                 FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type IN
                 ('agentMessage','userMessage','commandExecution','fileChange','mcpToolCall','webSearch','imageGeneration','imageView')
                 ORDER BY rollout_ordinal DESC LIMIT 200
@@ -133,6 +134,10 @@ enum DesktopHistoryReader {
                             if ["final_answer","final"].contains(item["phase"] ?? "") {final = text; step = ""}
                             else if item["phase"] == nil || item["phase"] == "commentary" {messages.append(text)}
                         }
+                    } else if item["item_type"] == "imageGeneration",
+                              let link = GeneratedImageLink.markdown(status:item["status"],savedPath:item["saved_path"]) {
+                        messages.append(link)
+                        if let id = item["item_id"] {agentMessages.append(.init(id:id,text:link,isFinal:false,isImage:true))}
                     } else if ["waitingForApproval","requiresApproval"].contains(item["status"] ?? "") {
                         approval = .approval(fileChange:item["item_type"] == "fileChange",reason:item["reason"])
                     } else if item["status"] == "waitingForInput", questions.isEmpty {
