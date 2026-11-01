@@ -10,24 +10,14 @@
 
 ## 0.5.0 特色功能
 
-<table>
-  <tr>
-    <th width="50%">液态玻璃任务气泡</th>
-    <th width="50%">执行中与近期任务概览</th>
-  </tr>
-  <tr>
-    <td valign="top"><a href=".github/images/task-progress.png"><img src=".github/images/task-progress.png" alt="桌宠液态玻璃气泡展示 Codex 任务进展、计时、消息翻页与快捷回复" width="400"></a></td>
-    <td valign="top"><a href=".github/images/task-overview.png"><img src=".github/images/task-overview.png" alt="桌宠任务概览展示正在执行和近期完成的任务、状态与用时" width="400"></a></td>
-  </tr>
-  <tr>
-    <th>Codex 额度查询</th>
-    <th>桌宠临时对话</th>
-  </tr>
-  <tr>
-    <td valign="top"><a href=".github/images/codex-quota.png"><img src=".github/images/codex-quota.png" alt="额度气泡展示套餐、剩余额度、重置时间、可用点数和重置卡" width="400"></a></td>
-    <td valign="top"><a href=".github/images/quick-chat.png"><img src=".github/images/quick-chat.png" alt="临时对话输入窗提供模型与推理强度选择、文件夹、历史和新对话入口" width="400"></a></td>
-  </tr>
-</table>
+<p>
+  <a href=".github/images/task-progress.png"><img src=".github/images/task-progress.png" alt="任务进展" width="240"></a>
+  <a href=".github/images/task-overview.png"><img src=".github/images/task-overview.png" alt="任务概览" width="240"></a>
+</p>
+<p>
+  <a href=".github/images/codex-quota.png"><img src=".github/images/codex-quota.png" alt="额度查询" width="240"></a>
+  <a href=".github/images/quick-chat.png"><img src=".github/images/quick-chat.png" alt="临时对话" width="240"></a>
+</p>
 
 ### 更轻的动画播放，更快进入画面
 
