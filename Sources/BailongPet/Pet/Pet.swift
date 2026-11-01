@@ -191,7 +191,6 @@ final class PetController: NSObject, NSMenuDelegate {
         if self.motion != nil { movementReady = now + 10 }; motion = nil
         loading = true
         // 气泡生命周期由自身计时和明确关闭控制，不随动作切换清空。
-        if mode == "interaction" {say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:true)}
         if preferences.bool("preloadWholeAnimation"), current.id == clip.id,
            let animation, animation.stream == nil, animation.frames.count > 1 {
             decoder.cancel(); loading = false; self.mode = mode
@@ -406,16 +405,19 @@ final class PetController: NSObject, NSMenuDelegate {
         play(catalog.idle,"idle"); return true
     }
     func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
-    func preview(_ clip: Clip) {
+    func preview(_ clip: Clip, taskOverview:Bool = false) {
         interaction(); soundOnce(); manualHidden = false; applyVisibility()
+        say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:taskOverview && preferences.bool("showTaskOverview"))
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
     func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
+        let transientInteraction = purpose == .interaction && !taskOverview && thread == nil && timing == nil && question == nil && !attentionAction
+        if transientInteraction && !bubble.acceptsTransientInteraction {return}
         if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
-        if kind.hasPrefix("quota") {
+        if kind.hasPrefix("quota") || transientInteraction {
             bubble.onQuestionSubmit = nil; bubble.onQuestionsSkipped = nil
             bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),animateHeading:animateHeading || kind == "quotaLoading")
             bubble.purpose = purpose
@@ -425,7 +427,7 @@ final class PetController: NSObject, NSMenuDelegate {
             let reply:(() -> Void)? = thread.flatMap {key in attentionAction ? nil : { [weak self] in self?.onReply(key) }}
             bubble.onCardLayout = { [weak self] in self?.placeBubble() }
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
-                scale:Double(bubblePercent)/100,seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
+                seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 followsText:followsText,resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
                 details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,showsTaskOverview:taskOverview))
         }
@@ -444,13 +446,12 @@ final class PetController: NSObject, NSMenuDelegate {
         bubble.place(near:visiblePetFrame,screen:screen,dock:dock)
     }
     func resize(_ p: Int, _ b: Int) {
-        let old = window.frame, bubbleChanged = bubblePercent != b
+        let old = window.frame
         petPercent = p; bubblePercent = b; interaction()
         let side = 256 * Double(p)/100
         window.setFrame(NSRect(x:old.midX-side/2,y:old.minY,width:side,height:side),display:true)
         keepOnScreen()
         activityOrigin = position; savePosition()
-        if bubbleChanged || bubble.kind == "preview" {showSizePreview()}
     }
     func showSizePreview(purpose: MessagePurpose = .preview) {
         guard !hidden else{return}
@@ -508,12 +509,15 @@ final class PetController: NSObject, NSMenuDelegate {
         say(preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"greeting",purpose:.interaction,personalizeTitle:false)
     }
     func reveal() { manualHidden = false; keepOnScreen(); applyVisibility() }
+    private func randomAnimation(taskOverview:Bool = false) {
+        if let clip = preferences.choose(catalog.variants+catalog.work,previous:current.id) {preview(clip,taskOverview:taskOverview)}
+    }
     func performGesture(_ action: String) {
         switch action {
         case "chat": soundOnce(); onComposer()
         case "quota": soundOnce(); onQuota()
         case "history": soundOnce(); onHistory(nil)
-        case "random": if let clip = preferences.choose(catalog.variants+catalog.work,previous:current.id) {preview(clip)}
+        case "random": randomAnimation(taskOverview:true)
         default: break
         }
     }
@@ -571,7 +575,7 @@ final class PetController: NSObject, NSMenuDelegate {
         codex.image?.size = NSSize(width:16,height:16)
         menu.addItem(codex)
         menu.addItem(.separator())
-        menu.addItem(MenuAction("随机动画",symbol:"shuffle") { [weak self] in self?.performGesture("random") })
+        menu.addItem(MenuAction("随机动画",symbol:"shuffle") { [weak self] in self?.randomAnimation() })
         let animations = submenu("播放动作",symbol:"play.rectangle")
         for (name,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations)] {
             let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
@@ -643,7 +647,8 @@ final class PetController: NSObject, NSMenuDelegate {
             configureAnimationTimer()
         }
         if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize"]) {
-            resize(Int(preferences.number("petPercent")),Int(preferences.number("bubblePercent"))); if settingsOpen {showSizePreview()}
+            resize(Int(preferences.number("petPercent")),Int(preferences.number("bubblePercent")))
+            if !bubble.refreshAppearance(),settingsOpen {showSizePreview()}
         }
         if keys.contains("preferredDisplay") {applyPreferredDisplay()}
         if keys.contains("rememberPosition") {savePosition()}

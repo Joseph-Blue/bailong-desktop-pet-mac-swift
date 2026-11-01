@@ -20,7 +20,7 @@ struct BubbleCard {
     enum Priority:Int {case companion, message, request}
     var id:String
     var title:String, body:String, kind:String
-    var scale:Double, seconds:Double
+    var seconds:Double
     var thread:String?
     var purpose:MessagePurpose
     var followsText:Bool, resetText:Bool, animateHeading:Bool, attentionAction:Bool

@@ -19,6 +19,7 @@ final class Bubble {
     private let cardCount = NSTextField(labelWithString:"")
     private var cards = [BubbleCard]()
     private var cardIndex:Int?
+    private var refreshStandalone:(() -> Void)?
     private var isBrowsingCards = false
     private var submittingQuestion = false
     var onCardLayout:() -> Void = {}
@@ -59,6 +60,10 @@ final class Bubble {
     var onCodex: () -> Void = {CodexConnection.openDesktop()}
     var kind = ""
     var visible: Bool { motion.presented }
+    var acceptsTransientInteraction:Bool {
+        !visible || (!pendingAttention && questionForm == nil && !submittingQuestion &&
+            (cardIndex.map {cards[$0].priority == .companion} ?? (purpose == .interaction || purpose == .preview)))
+    }
     func resolveQuestions(taskKey:String? = nil) {
         let affected = cards.filter {card in card.attentionAction && (taskKey == nil || card.timing?.key == taskKey)}.map(\.id)
         let currentID = cardIndex.map {cards[$0].id}
@@ -89,7 +94,8 @@ final class Bubble {
             if message.question?.submit != nil {
                 updated.form = cards[index].form; updated.questionSize = cards[index].questionSize
             }
-            cards[index] = updated
+            if message.showsTaskOverview {cards.remove(at:index); cards.append(updated)}
+            else {cards[index] = updated}
         } else {cards.append(message)}
         // 只保留本次运行的近期卡片；等待回答的卡片和正在阅读的卡片不被裁掉。
         while cards.count > Int(preferences.number("bubbleCardLimit")),let old = cards.firstIndex(where:{$0.id != currentID && $0.id != message.id && !$0.attentionAction}) {cards.remove(at:old)}
@@ -100,7 +106,9 @@ final class Bubble {
         let replacesCurrent = current.map {
             message.priority.rawValue > $0.priority.rawValue || (message.priority == .companion && $0.priority == .companion)
         } ?? false
-        if !wasVisible || cardIndex == nil || (!protectsCurrent && replacesCurrent) {
+        // 概览仅由用户按键明确召回：移动到末尾并显示，但不打断待处理请求或问卷。
+        let requestedOverview = message.showsTaskOverview && !pendingAttention && questionForm == nil && !submittingQuestion
+        if !wasVisible || cardIndex == nil || requestedOverview || (!protectsCurrent && replacesCurrent) {
             if currentID != message.id {isBrowsingCards = false}
             cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()
         }
@@ -110,10 +118,26 @@ final class Bubble {
     func refreshCardPreferences() {
         saveCardForm()
         let currentID = cardIndex.map {cards[$0].id}
+        if !preferences.bool("showTaskOverview") {cards.removeAll {$0.showsTaskOverview}}
         while cards.count > Int(preferences.number("bubbleCardLimit")),
               let old = cards.firstIndex(where:{$0.id != currentID && !$0.attentionAction}) {cards.remove(at:old)}
         cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
-        if visible && cardIndex != nil {renderCard()}
+        if visible {
+            if cardIndex != nil {renderCard()}
+            else if currentID != nil {hide()}
+        }
+    }
+    @discardableResult func refreshAppearance() -> Bool {
+        saveCardForm()
+        for index in cards.indices {cards[index].questionSize = nil}
+        questionSize = nil
+        guard visible else {return false}
+        let origin = scroll.contentView.bounds.origin
+        if cardIndex != nil {renderCard(refreshingAppearance:true)}
+        else if let refreshStandalone {refreshStandalone()}
+        else {return false}
+        scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
+        onCardLayout(); return true
     }
     private func navigateCard(_ delta:Int) {
         guard !submittingQuestion,let index = cardIndex,cards.indices.contains(index+delta) else {return}
@@ -129,20 +153,20 @@ final class Bubble {
         replyButton.isHidden = cardIndex.flatMap {cards[$0].reply} == nil
         replyButton.isEnabled = !submittingQuestion
     }
-    private func renderCard() {
+    private func renderCard(refreshingAppearance:Bool = false) {
         guard let index = cardIndex,cards.indices.contains(index) else {return}
         let card = cards[index]
         questionForm = card.form; questionModels = card.form?.questions ?? card.question?.questions ?? []; questionTaskKey = card.timing?.key; questionSize = card.questionSize
         onQuestionSubmit = card.question?.submit; onQuestionsSkipped = card.question?.skip
         onDetails = card.details; onCodex = card.codex
         updateCardNavigation()
-        show(title:card.title,body:card.body,kind:card.kind,scale:card.scale,seconds:preferences.duration(card.purpose,text:card.body),
-             details:card.thread != nil,followsText:card.followsText,resetText:card.resetText,animateHeading:card.animateHeading,
-             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true)
+        show(title:card.title,body:card.body,kind:card.kind,scale:preferences.number("bubblePercent")/100,seconds:preferences.duration(card.purpose,text:card.body),
+             details:card.thread != nil,followsText:card.followsText,resetText:refreshingAppearance ? false : card.resetText,animateHeading:card.animateHeading,
+             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance)
         relatedConversation = card.thread; purpose = card.purpose
         cards[index].form = questionForm
         if card.showsTaskOverview && preferences.bool("showTaskOverview") {
-            let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:scroll.frame.width),scale:scale,provider:taskProvider)
+            let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:scroll.frame.width),scale:scale*preferences.number("messageFontSize")/13,provider:taskProvider)
             taskList = list; scroll.documentView = list
             list.onResize = { [weak self] height in guard let self else {return}; self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout() }
             layout(bodyHeight:min(320*scale,list.frame.height)); list.start()
@@ -220,9 +244,30 @@ final class Bubble {
         elapsedIcon.isHidden = true; elapsedLabel.isHidden = true
         for v in [title,scroll,closeButton,details,codexButton,retryButton,elapsedIcon,elapsedLabel,previousQuestion!,skipQuestion!,previousCard!,nextCard!,replyButton!,cardCount] as [NSView] { content.body.addSubview(v) }
     }
+    private var actionButtons:[ActionButton] {[details,codexButton,replyButton,retryButton,previousCard,nextCard,previousQuestion,skipQuestion]}
+    private func configureButtons() {
+        let fontSize = preferences.number("messageFontSize")*scale
+        for button in actionButtons {button.configureFlexible(font:.systemFont(ofSize:fontSize))}
+        cardCount.font = .monospacedDigitSystemFont(ofSize:max(11*scale,fontSize-2*scale),weight:.regular)
+    }
+    private var buttonHeight:CGFloat {max(28*scale,actionButtons.map {$0.intrinsicContentSize.height}.max() ?? 0)}
+    private var minimumLayoutWidth:CGFloat {
+        let gap = 8*scale
+        var column = [details!,codexButton!,replyButton!,retryButton!,previousQuestion!,skipQuestion!]
+            .filter {!$0.isHidden}.map {$0.intrinsicContentSize.width}.max() ?? 0
+        if !previousCard.isHidden {
+            let count = max(cards.count,Int(preferences.number("bubbleCardLimit")))
+            let countWidth = ("\(count) / \(count)" as NSString).size(withAttributes:[.font:cardCount.font!]).width.rounded(.up)
+            column = max(column,2*(buttonHeight+gap)+countWidth)
+        }
+        return max(320*scale,32*scale+gap+2*column)
+    }
+    private var layoutWidth:CGFloat {min(max(questionSize?.width ?? 0,minimumLayoutWidth),placementArea?.width ?? .greatestFiniteMagnitude)}
     private func layout(bodyHeight: Double) {
         layoutBodyHeight = bodyHeight
-        let w = min(questionSize?.width ?? 320*scale,placementArea?.width ?? .greatestFiniteMagnitude), margin = 16*scale
+        configureButtons()
+        let w = layoutWidth, margin = 16*scale
+        if !questionModels.isEmpty {window.minSize = NSSize(width:min(minimumLayoutWidth,placementArea?.width ?? minimumLayoutWidth),height:220*scale)}
         let hasElapsed = taskStartedAt != nil
         let elapsedWidth = hasElapsed ? elapsedGroupWidth : 0
         elapsedLayoutWidth = elapsedWidth
@@ -230,9 +275,9 @@ final class Bubble {
         let font = title.font!
         let firstLineHeight = (font.ascender-font.descender+font.leading).rounded(.up)+4
         let headingHeight = max(firstLineHeight,title.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
-        let buttonHeight = 28*scale, gap = 8*scale
+        let buttonHeight = self.buttonHeight, gap = 8*scale
         let columnWidth = (w-2*margin-gap)/2
-        let actionsHeight = details.isHidden && codexButton.isHidden && retryButton.isHidden ? 0 : 40*scale+(previousQuestion.isHidden ? 0 : buttonHeight+gap)
+        let actionsHeight = details.isHidden && codexButton.isHidden && retryButton.isHidden ? 0 : buttonHeight+gap+(previousQuestion.isHidden ? 0 : buttonHeight+gap)
         let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+gap
         let footer = actionsHeight+navigationHeight
         // 关闭、标题首行与计时同一行；标题按剩余宽度换行，不缩字或截断。
@@ -252,40 +297,43 @@ final class Bubble {
             self.text.frame.size.width = self.scroll.contentView.bounds.width
             self.text.textContainer?.containerSize = NSSize(width:self.scroll.contentView.bounds.width,height:CGFloat.greatestFiniteMagnitude)
             // 两列共享边界与控件高度；翻页留在左下，正文高度不影响导航位置。
-            let navigationY = 12*scale, actionY = navigationY+navigationHeight
-            self.previousQuestion.frame = NSRect(x:margin,y:actionY+buttonHeight+gap,width:76*scale,height:buttonHeight)
-            self.skipQuestion.frame = NSRect(x:w-margin-64*scale,y:actionY+buttonHeight+gap,width:64*scale,height:buttonHeight)
+            let navigationY = margin, actionY = navigationY+navigationHeight
+            self.previousQuestion.frame = NSRect(x:margin,y:actionY+buttonHeight+gap,width:columnWidth,height:buttonHeight)
+            self.skipQuestion.frame = NSRect(x:margin+columnWidth+gap,y:actionY+buttonHeight+gap,width:columnWidth,height:buttonHeight)
             self.previousCard.frame = NSRect(x:margin,y:navigationY,width:buttonHeight,height:buttonHeight)
             let countHeight = self.cardCount.intrinsicContentSize.height
             self.cardCount.frame = NSRect(x:margin+buttonHeight+gap,y:navigationY+(buttonHeight-countHeight)/2,width:columnWidth-2*(buttonHeight+gap),height:countHeight)
             self.nextCard.frame = NSRect(x:margin+columnWidth-buttonHeight,y:navigationY,width:buttonHeight,height:buttonHeight)
             self.replyButton.frame = NSRect(x:margin+columnWidth+gap,y:navigationY,width:columnWidth,height:buttonHeight)
-            self.retryButton.frame = NSRect(x:w-margin-82*scale,y:actionY,width:82*scale,height:buttonHeight)
+            self.retryButton.frame = NSRect(x:margin+columnWidth+gap,y:actionY,width:columnWidth,height:buttonHeight)
             if !self.codexButton.isHidden && self.details.isHidden {
                 self.codexButton.frame = NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight)
             } else if !self.codexButton.isHidden {
                 self.codexButton.frame = NSRect(x:margin,y:actionY,width:columnWidth,height:buttonHeight)
                 self.details.frame = NSRect(x:margin+columnWidth+gap,y:actionY,width:columnWidth,height:buttonHeight)
             } else {
-                self.details.frame = self.retryButton.isHidden ? NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight) : NSRect(x:margin,y:actionY,width:w-2*margin-90*scale,height:buttonHeight)
+                self.details.frame = self.retryButton.isHidden ? NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight) : NSRect(x:margin,y:actionY,width:columnWidth,height:buttonHeight)
             }
         }
         motion.resize(to:NSSize(width:w,height:h))
     }
     private func layoutQuestions() {
-        let width = GutterScrollView.documentWidth(for:min(questionSize?.width ?? 320*scale,placementArea?.width ?? .greatestFiniteMagnitude)-32*scale)
+        let width = GutterScrollView.documentWidth(for:layoutWidth-32*scale)
         let document:NSView
-        if let questionForm {questionForm.reflow(width:width); document = questionForm}
+        if let questionForm {
+            questionForm.updateAppearance(scale:scale,fontSize:preferences.number("messageFontSize")*scale)
+            questionForm.reflow(width:width); document = questionForm
+        }
         else {document = TaskQuestionLayout.document(questionModels,width:width,scale:scale,fontSize:preferences.number("messageFontSize")*scale)}
         scroll.documentView = document
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, followsText: Bool = true, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false) {
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, followsText: Bool = true, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false) {
         taskList?.stop(); taskList = nil
         if !fromCard {saveCardForm(); cardIndex = nil; isBrowsingCards = false; updateCardNavigation()}
         let taskKey = timing?.key
-        timer?.invalidate()
+        if !preserveCountdown {timer?.invalidate()}
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
         let same = self.kind == kind && scroll.documentView === text && text.automaticallyFollowsEnd == followsText
         text.automaticallyFollowsEnd = followsText
@@ -313,13 +361,7 @@ final class Bubble {
         text.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale)
         details.title = "查看记录详情"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
         codexButton.isHidden = !enabled; codexButton.emphasize(attentionAction)
-        for button in [details!,codexButton!,replyButton!,retryButton!,previousCard!,nextCard!,previousQuestion!,skipQuestion!] {
-            button.font = .systemFont(ofSize:13*scale)
-        }
-        cardCount.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.regular)
-        for button in [previousCard!,nextCard!] {
-            button.symbolConfiguration = .init(pointSize:13*scale,weight:.regular)
-        }
+        configureButtons()
         if attentionAction && !questions.isEmpty {
             text.finishReveal()
             if onQuestionSubmit != nil && questions.allSatisfy({!$0.id.isEmpty}) {
@@ -343,19 +385,25 @@ final class Bubble {
                 previousQuestion.isHidden = false; skipQuestion.isHidden = false
                 previousQuestion.isEnabled = questionForm?.canGoBack == true; skipQuestion.isEnabled = questionForm?.canSkip == true
                 questionForm?.onSubmit = { [weak self] in self?.details.performClick(nil) }
-                details.title = questionForm?.actionTitle ?? "提交回答"; details.emphasize(); details.isHidden = false; details.isEnabled = questionForm?.canAdvance == true
+                details.title = submittingQuestion ? "正在提交…" : questionForm?.actionTitle ?? "提交回答"; details.emphasize(); details.isHidden = false; details.isEnabled = !submittingQuestion && questionForm?.canAdvance == true
                 codexButton.emphasize(false)
             }
             layoutQuestions()
             scroll.contentView.scroll(to:.zero); scroll.reflectScrolledClipView(scroll.contentView)
         } else {
             let rendered = kind == "task" ? MarkdownText.render(body,font:text.font!,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:text.font!,.foregroundColor:NSColor.labelColor])
-            let height = body.isEmpty ? 0 : min(180*scale,max(24*scale,rendered.boundingRect(with:NSSize(width:GutterScrollView.documentWidth(for:288*scale)-12,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading]).height+12))
+            let height = body.isEmpty ? 0 : min(180*scale,max(24*scale,rendered.boundingRect(with:NSSize(width:GutterScrollView.documentWidth(for:layoutWidth-32*scale)-12,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading]).height+12))
             layout(bodyHeight:height)
             text.setContent(rendered,animated:preferences.bool("typingEffect") && kind == "task" && followsText,reset:!same || resetText)
         }
         motion.show()
-        startCountdown(attentionAction ? 0 : seconds)
+        if !preserveCountdown {startCountdown(attentionAction ? 0 : seconds)}
+        refreshStandalone = fromCard ? nil : { [weak self] in
+            guard let self else {return}
+            self.show(title:heading,body:body,kind:kind,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,
+                details:enabled,followsText:followsText,resetText:false,animateHeading:animateHeading,attentionAction:attentionAction,
+                questions:questions,timing:timing,preserveCountdown:true)
+        }
     }
     private func setHeading(_ heading: String, animated: Bool) {
         if plainHeading != heading || headingTimer == nil {headingStarted = ProcessInfo.processInfo.systemUptime}
@@ -469,6 +517,10 @@ final class Bubble {
         if let retry {retryButton.title = "重试"; retryButton.isHidden = false; retryButton.callback = retry}
         else if failure.openDesktop {retryButton.title = "打开 Codex"; retryButton.isHidden = false; retryButton.callback = {CodexConnection.openDesktop()}}
         layout(bodyHeight:scroll.frame.height)
+        refreshStandalone = { [weak self] in
+            guard let self else {return}
+            self.showFailure(failure,scale:self.preferences.number("bubblePercent")/100,retry:retry,taskStartedAt:taskStartedAt,taskFinishedAt:taskFinishedAt,taskStatus:taskStatus)
+        }
     }
     func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, retry: (() -> Void)? = nil) {
         let fontScale = scale*preferences.number("messageFontSize")/13
@@ -478,7 +530,8 @@ final class Bubble {
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
             if let retry {retryButton.title = "重试"; retryButton.callback = retry; retryButton.isHidden = false}
         }
-        let width = GutterScrollView.documentWidth(for:scroll.frame.width)
+        configureButtons()
+        let width = GutterScrollView.documentWidth(for:layoutWidth-32*self.scale)
         let content = TopDownView(frame:NSRect(x:0,y:0,width:width,height:1))
         var y = 0.0
         @discardableResult func addText(_ value: String, font: NSFont, color: NSColor = .labelColor) -> CGFloat {
@@ -522,6 +575,13 @@ final class Bubble {
         content.frame.size.height = y
         layout(bodyHeight:min(320*scale,y))
         scroll.documentView = content; scroll.contentView.scroll(to:.zero)
+        let heading = plainHeading
+        refreshStandalone = { [weak self] in
+            guard let self else {return}
+            let scale = self.preferences.number("bubblePercent")/100
+            self.show(title:heading,body:" ",kind:"quota",scale:scale,seconds:0,preserveCountdown:true)
+            self.quotaRows(overview,scale:scale,failure:failure,retry:retry)
+        }
     }
     func place(near rect: CGRect, screen: NSScreen, dock: String?) {
         let area = screen.visibleFrame.insetBy(dx:8,dy:8)

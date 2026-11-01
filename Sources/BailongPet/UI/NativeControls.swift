@@ -18,6 +18,7 @@ func materialView() -> NSVisualEffectView {
 final class ActionButton: NSButton {
     var callback: () -> Void
     private var prominent = false
+    private var flexibleLayout = false
     var keepsAccentWhenInactive = false {didSet {updateAccent()}}
     init(_ title: String, _ callback: @escaping () -> Void) {
         self.callback = callback; super.init(frame: .zero)
@@ -25,20 +26,37 @@ final class ActionButton: NSButton {
         NotificationCenter.default.addObserver(self,selector:#selector(updateAccent),name:AppAccent.didChange,object:nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+    func configureFlexible(font:NSFont) {
+        flexibleLayout = true; bezelStyle = .flexiblePush; self.font = font
+        symbolConfiguration = .init(pointSize:font.pointSize,weight:.regular)
+        if let image,image.size != NSSize(width:iconSide,height:iconSide),let copy = image.copy() as? NSImage {
+            copy.size = NSSize(width:iconSide,height:iconSide); self.image = copy
+        }
+        invalidateIntrinsicContentSize()
+    }
+    private var iconSide:CGFloat {image == nil ? 0 : (font?.pointSize ?? 13)+3}
+    override var intrinsicContentSize:NSSize {
+        guard flexibleLayout || (prominent && keepsAccentWhenInactive) else {return super.intrinsicContentSize}
+        let font = font ?? .systemFont(ofSize:13), ratio = font.pointSize/13
+        let text = imagePosition == .imageOnly ? NSSize.zero : (title as NSString).size(withAttributes:[.font:font])
+        let gap:CGFloat = image != nil && text.width > 0 ? 6*ratio : 0
+        return NSSize(width:ceil(text.width+iconSide+gap+24*ratio),height:ceil(max(28*ratio,max(text.height,iconSide)+10*ratio)))
+    }
     func emphasize(_ enabled: Bool = true) {prominent = enabled; updateAccent()}
     @objc private func updateAccent() {
         bezelColor = prominent ? AppAccent.color : nil
-        isBordered = !(prominent && keepsAccentWhenInactive); needsDisplay = true
+        isBordered = !(prominent && keepsAccentWhenInactive); invalidateIntrinsicContentSize(); needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {
         guard prominent && keepsAccentWhenInactive else {super.draw(dirtyRect); return}
         let color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : AppAccent.color
         color.withAlphaComponent(isEnabled ? 1 : 0.45).setFill()
-        NSBezierPath(roundedRect:bounds.insetBy(dx:0,dy:1),xRadius:7,yRadius:7).fill()
+        let ratio = (font?.pointSize ?? 13)/13
+        NSBezierPath(roundedRect:bounds.insetBy(dx:0,dy:1),xRadius:7*ratio,yRadius:7*ratio).fill()
         let attributes: [NSAttributedString.Key:Any] = [.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.white]
         let size = (title as NSString).size(withAttributes:attributes)
-        let iconSize:CGFloat = image == nil ? 0 : min(18,max(12,(font?.pointSize ?? 13)+3))
-        let iconSpace = iconSize > 0 ? iconSize+6 : 0
+        let iconSize = iconSide
+        let iconSpace = iconSize > 0 ? iconSize+6*ratio : 0
         let start = (bounds.width-size.width-iconSpace)/2
         if let image {
             let rect = NSRect(x:start,y:(bounds.height-iconSize)/2,width:iconSize,height:iconSize)

@@ -58,6 +58,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onSelect: (String) -> Void = { _ in }, onSubmit: (String,Bool) -> Void = { _,_ in }
     var onStop: () -> Void = {}, onNew: () -> Void = {}, onFolder: () -> Void = {}, onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
     private let recovery = NSStackView()
+    private var composerFooterButtons = [ActionButton]()
+    private var composerButtonHeight:NSLayoutConstraint?
     private let composerClose = BubbleCloseButton()
     private var localDismissMonitor: Any?, globalDismissMonitor: Any?
     var presentingFolderPicker = false
@@ -109,7 +111,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerFolder = ActionButton("文件夹…") { [weak self] in self?.onFolder() }
         let historyLink = ActionButton("历史") { [weak self] in self?.openHistory() }
         composerNew = ActionButton("开启新对话") { [weak self] in self?.onNew() }
-        let footer = NSStackView(views:[composerFolder,historyLink,composerNew,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8
+        composerFooterButtons = [composerFolder,historyLink,composerNew,composerButton]
+        for button in composerFooterButtons {
+            button.configureFlexible(font:.systemFont(ofSize:13))
+            if button !== composerButton {button.heightAnchor.constraint(equalTo:composerButton.heightAnchor).isActive = true}
+        }
+        composerButtonHeight = composerButton.heightAnchor.constraint(equalToConstant:28); composerButtonHeight?.isActive = true
+        let footer = NSStackView(views:[composerFolder,historyLink,composerNew,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
         composerModel = ModelSelector(models)
         let modelRow = NSStackView(views:[modelHint(),composerModel,NSView()]); modelRow.spacing = 8; modelRow.alignment = .centerY
         composerModelRow = modelRow
@@ -302,7 +310,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerButton.isEnabled = enabled && !historyReadOnly; historyButton.isEnabled = enabled && !historyReadOnly
         let selectorWidth = max(280,composerModel.intrinsicContentSize.width.rounded(.up))
         let hintWidth = ("选择模型与推理强度：" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)+6
-        let composerWidth = max(500,selectorWidth+hintWidth+40)
+        let footerWidth = composerFooterButtons.filter {!$0.isHidden}.reduce(CGFloat(32+4*8)) {$0+$1.intrinsicContentSize.width}
+        let composerWidth = max(500,selectorWidth+hintWidth+40,footerWidth)
         composer.contentMinSize = NSSize(width:composerWidth,height:350)
         if let content = composer.contentView, content.bounds.width < composerWidth {composerMotion.resize(to:NSSize(width:composerWidth,height:content.bounds.height))}
         let detailWidth = max(520,historyModel.intrinsicContentSize.width.rounded(.up)+historyButton.intrinsicContentSize.width+64)
@@ -417,10 +426,17 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let title = label(failure.title,bold:true), message = label(failure.message)
         let restoreButton = ActionButton("返回输入") { [weak self] in self?.clearFailure(); restore() }; restoreButton.emphasize()
         let details = ActionButton("技术详情…") {failure.showDetails()}
-        let actions = NSStackView(views:[details,NSView(),restoreButton]); actions.spacing = 8
+        let recoveryFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
+        for button in [details,restoreButton] {
+            button.configureFlexible(font:recoveryFont)
+            button.heightAnchor.constraint(equalToConstant:button.intrinsicContentSize.height).isActive = true
+        }
+        let actions = NSStackView(views:[details,restoreButton]); actions.spacing = 8; actions.distribution = .fillEqually
         for v in [title,message,actions] {recovery.addArrangedSubview(v); v.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true}
         if failure.openDesktop {
-            let open = ActionButton("打开 Codex") {CodexConnection.openDesktop()}; open.emphasize(); recovery.insertArrangedSubview(open,at:2)
+            let open = ActionButton("打开 Codex") {CodexConnection.openDesktop()}; open.emphasize()
+            open.configureFlexible(font:recoveryFont); open.heightAnchor.constraint(equalToConstant:open.intrinsicContentSize.height).isActive = true
+            open.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true; recovery.insertArrangedSubview(open,at:2)
         }
         composerInput.isHidden = true; recovery.isHidden = false; composerButton.isHidden = !busy
     }
@@ -469,6 +485,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         updateShortcuts()
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
         composerEditor.font = messageFont; historyEditor.font = messageFont; status.font = messageFont
+        for button in composerFooterButtons {button.configureFlexible(font:messageFont)}
+        composerButtonHeight?.constant = composerFooterButtons.map {$0.intrinsicContentSize.height}.max() ?? 28
         composerButton.isHidden = !recovery.isHidden && !busy
         composerButton.emphasize(!busy); historyButton.emphasize(!busy)
         modelStateChanged()

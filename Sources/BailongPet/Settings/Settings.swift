@@ -643,7 +643,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func messages() {
         group("历史记录",[toggle("记录历史","recordHistory"),note("关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
         group("气泡卡片与任务概览",[
-            slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，仅保留在本次运行的内存中。同一任务更新原卡片，正在阅读和待处理卡片保留；不删除历史对话。"),
+            slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，可设为 5～100 条，仅保留在本次运行的运行内存 (RAM) 中。普通对白不计入，任务概览只占一条；正在阅读和待处理卡片保留，不删除历史对话。"),
             toggle("互动气泡显示任务概览","showTaskOverview",detail:"在随机动画台词下显示当前任务与近期结束的任务，点击任务行跳转 Codex。"),
             slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"默认 5 条，每个会话显示最新轮次。任务概览关闭时保留此设置。")])
         group("输入快捷键",[

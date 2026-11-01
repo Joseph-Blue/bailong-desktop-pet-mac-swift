@@ -8,7 +8,7 @@ private final class QuestionOptionLabel:NSTextField {
 // 草稿及跳过状态仅保存在当前请求内存中，不写入历史。
 final class QuestionForm: NSView {
     let questions:[TaskQuestion]
-    private let scale:CGFloat, fontSize:CGFloat
+    private var scale:CGFloat, fontSize:CGFloat
     private var selected = [String:String](), skipped = Set<String>()
     private var radios = [NSButton](), inputs = [MessageEditor](), editors = [MessageInputBox]()
     private var generated = [NSView]()
@@ -80,6 +80,10 @@ final class QuestionForm: NSView {
         }
         if previous.questions.indices.contains(previous.currentIndex),
            let index = questions.firstIndex(where:{$0.id == previous.questions[previous.currentIndex].id}) {currentIndex = index}
+    }
+    func updateAppearance(scale:CGFloat,fontSize:CGFloat) {
+        self.scale = scale; self.fontSize = fontSize
+        for input in inputs {input.font = .systemFont(ofSize:fontSize)}
     }
     func reflow(width:CGFloat) {
         for view in generated {view.removeFromSuperview()}; generated.removeAll()

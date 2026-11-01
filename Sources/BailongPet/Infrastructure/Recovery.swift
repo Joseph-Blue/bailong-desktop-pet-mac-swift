@@ -63,8 +63,10 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         windows[id] = controller
         controller.heading.stringValue = report.title; controller.explanation.stringValue = report.message
         controller.report.string = report.text; controller.retry.title = actionTitle
-        controller.retry.callback = action; controller.retry.isEnabled = true
-        controller.copy.title = "拷贝错误报告"
+        controller.recoveryAction = action; controller.retry.isEnabled = true
+        controller.activity.stringValue = controller.retrying ? "重试未完成 · "+report.date.formatted(date:.omitted,time:.standard) : ""
+        controller.retrying = false
+        controller.copy.title = "拷贝报告"
         if !existed {controller.present(takeFocus:false)}
     }
     static func resolve(_ id:String) {
@@ -78,50 +80,87 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
     }
     static var hasIssues: Bool {!windows.isEmpty}
 
-    private let window = RecoveryPanel(contentRect:NSRect(x:0,y:0,width:680,height:440),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+    private let window = RecoveryPanel(contentRect:NSRect(x:0,y:0,width:680,height:480),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
     private let heading = label("",bold:true), explanation = label("")
     private let report = AppTextView()
     private var retry: ActionButton!, copy: ActionButton!
+    private let activity = NSTextField(labelWithString:"")
+    private var recoveryAction:() -> Void = {}
+    private var retrying = false
     override private init() {
         super.init()
         window.title = "错误与恢复"; window.isReleasedWhenClosed = false; window.delegate = self
-        window.minSize = NSSize(width:560,height:400); window.collectionBehavior = [.fullScreenNone]
+        window.contentMinSize = NSSize(width:580,height:420); window.collectionBehavior = [.fullScreenNone]
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         let root = NSView(); window.contentView = root
         let icon = NSImageView(image:NSImage(systemSymbolName:"exclamationmark.triangle",accessibilityDescription:"运行错误")!)
         icon.contentTintColor = .systemRed; icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.widthAnchor.constraint(equalToConstant:32).isActive = true; icon.heightAnchor.constraint(equalToConstant:32).isActive = true
-        heading.font = .systemFont(ofSize:20,weight:.semibold)
+        icon.widthAnchor.constraint(equalToConstant:28).isActive = true; icon.heightAnchor.constraint(equalToConstant:28).isActive = true
+        heading.font = .systemFont(ofSize:19,weight:.semibold)
         explanation.font = .systemFont(ofSize:13); explanation.textColor = .secondaryLabelColor
-        let description = NSStackView(views:[heading,explanation]); description.orientation = .vertical; description.alignment = .leading; description.spacing = 6
+        let description = NSStackView(views:[heading,explanation]); description.orientation = .vertical; description.alignment = .leading; description.spacing = 8
         let header = NSStackView(views:[icon,description]); header.alignment = .top; header.spacing = 12
+        description.widthAnchor.constraint(equalTo:header.widthAnchor,constant:-40).isActive = true
+        for field in [heading,explanation] {
+            field.widthAnchor.constraint(equalTo:description.widthAnchor).isActive = true
+            field.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        }
         let caption = label("错误报告",bold:true)
+        activity.font = .systemFont(ofSize:11); activity.textColor = .secondaryLabelColor
+        let reportHeader = NSStackView(views:[caption,NSView(),activity]); reportHeader.alignment = .firstBaseline; reportHeader.spacing = 12
         report.isEditable = false; report.isSelectable = true; report.drawsBackground = true
         report.backgroundColor = .textBackgroundColor; report.textColor = .labelColor
         report.font = .monospacedSystemFont(ofSize:12,weight:.regular); report.textContainerInset = NSSize(width:12,height:12)
         report.isVerticallyResizable = true; report.isHorizontallyResizable = false; report.autoresizingMask = [.width]
         report.textContainer?.widthTracksTextView = true
-        let scroll = NSScrollView(); scroll.documentView = report; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
-        scroll.borderType = .bezelBorder
-        copy = ActionButton("拷贝错误报告") { [weak self] in
+        report.minSize = .zero; report.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
+        report.setAccessibilityLabel("可拷贝的错误报告")
+        let scroll = GutterScrollView(); scroll.documentView = report; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        scroll.drawsBackground = true; scroll.backgroundColor = .textBackgroundColor; scroll.borderType = .noBorder
+        copy = ActionButton("拷贝报告") { [weak self] in
             guard let self else {return}
             NSPasteboard.general.clearContents()
             if NSPasteboard.general.setString(self.report.string,forType:.string) {self.copy.title = "已拷贝"}
         }
         copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil); copy.imagePosition = .imageLeading
-        retry = ActionButton("") { }; retry.keepsAccentWhenInactive = true; retry.emphasize()
+        let issue = ActionButton("反馈 Issue…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
+        issue.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil); issue.imagePosition = .imageLeading
+        issue.hoverHelp = "打开项目仓库的新建 Issue 页面"
+        retry = ActionButton("") { [weak self] in self?.retryRecovery() }; retry.keepsAccentWhenInactive = true; retry.emphasize()
         let quit = SettingsFooterButton(title:"退出程序",target:self,action:#selector(exitApplication))
-        quit.hasDestructiveAction = true; quit.isBordered = false; quit.keyEquivalent = ""
-        quit.widthAnchor.constraint(equalToConstant:92).isActive = true; quit.heightAnchor.constraint(equalToConstant:30).isActive = true
-        let footer = NSStackView(views:[copy,NSView(),retry,quit]); footer.spacing = 10
-        let stack = NSStackView(views:[header,caption,scroll,footer]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 14
-        stack.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(stack)
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:root.topAnchor,constant:24),stack.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-24)])
-        for view in [header,scroll,footer] {view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
-        description.setContentHuggingPriority(.defaultLow,for:.horizontal)
-        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:180).isActive = true
-        scroll.setContentHuggingPriority(.defaultLow,for:.vertical)
+        quit.hasDestructiveAction = true; quit.isBordered = false
+        for button in [copy!,issue,retry!] {
+            button.configureFlexible(font:.systemFont(ofSize:13))
+            button.heightAnchor.constraint(equalToConstant:32).isActive = true
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant:108).isActive = true
+        }
+        quit.font = .systemFont(ofSize:13)
+        quit.widthAnchor.constraint(equalTo:retry.widthAnchor).isActive = true
+        quit.heightAnchor.constraint(equalTo:retry.heightAnchor).isActive = true
+        for button in [copy!,issue,retry!,quit] as [NSButton] {button.keyEquivalent = ""}
+        window.defaultButtonCell = nil
+        let footer = NSStackView(views:[copy!,issue,NSView(),quit,retry!]); footer.spacing = 8; footer.alignment = .centerY; footer.distribution = .fill
+        for view in [header,reportHeader,scroll,footer] {
+            view.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(view)
+            view.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24).isActive = true
+            view.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24).isActive = true
+        }
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo:root.topAnchor,constant:24),
+            reportHeader.topAnchor.constraint(equalTo:header.bottomAnchor,constant:20),
+            scroll.topAnchor.constraint(equalTo:reportHeader.bottomAnchor,constant:8),
+            scroll.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-20),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:100),
+            footer.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-20),footer.heightAnchor.constraint(equalToConstant:32)
+        ])
         window.center()
+    }
+    private func retryRecovery() {
+        guard !retrying else {return}
+        retrying = true; retry.isEnabled = false; activity.stringValue = "正在处理…"
+        window.contentView?.layoutSubtreeIfNeeded(); window.displayIfNeeded()
+        // 成功由 resolve 收起窗口，失败由 show 更新报告及重新启用按钮；不伪造恢复成功。
+        DispatchQueue.main.async { [weak self] in self?.recoveryAction() }
     }
     private func present(takeFocus:Bool) {
         NSApp.setActivationPolicy(.regular)

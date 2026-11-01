@@ -143,7 +143,8 @@ final class AccentSwatch: NSButton {
         } else {
             AppAccent.color(for:key).setFill(); path.fill()
             if key == "custom" {
-                let image = NSImage(systemSymbolName:"paintpalette",accessibilityDescription:nil)
+                let image = NSImage(systemSymbolName:"paintpalette",accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[.white]))
+                image?.isTemplate = false
                 image?.draw(in:circle.insetBy(dx:5,dy:5))
             }
         }
