@@ -370,7 +370,7 @@ final class Bubble {
         currentBody = body; relatedConversation = nil
         if scroll.documentView !== text {scroll.documentView = text}
         title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
-        setHeading(heading, animated: animateHeading)
+        setHeading(heading, animated: animateHeading && timing?.finished == nil)
         text.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale)
         details.title = "查看记录详情"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
         codexButton.isHidden = !enabled; codexButton.emphasize(attentionAction)
@@ -424,6 +424,10 @@ final class Bubble {
         if !animated {
             headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0
             title.stringValue = heading; return
+        }
+        if !preferences.bool("bubbleMotion") || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0
+            renderAnimatedHeading(); return
         }
         renderAnimatedHeading()
         guard headingTimer == nil else { return }
@@ -500,9 +504,11 @@ final class Bubble {
     func finishTask(_ key: String, status: String) {
         for index in cards.indices where cards[index].timing?.key == key && cards[index].timing?.finished == nil {
             cards[index].timing?.finished = Date(); cards[index].timing?.status = status
+            cards[index].animateHeading = false
         }
         guard timedTaskKey == key else {return}
         taskFinishedAt = Date(); setElapsedColor(status)
+        setHeading(plainHeading,animated:false)
         refreshElapsed(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil
     }
     private func startCountdown(_ seconds: Double) {
