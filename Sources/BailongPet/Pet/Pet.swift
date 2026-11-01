@@ -420,7 +420,8 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),animateHeading:animateHeading || kind == "quotaLoading")
             bubble.purpose = purpose
         } else {
-            let identity = timing?.key.map {key in (thread ?? "")+":"+key+":"+String(timing?.start?.timeIntervalSince1970 ?? 0)+":"+(messageID ?? "status")} ?? UUID().uuidString
+            // 只有明确标记的实时任务概览复用卡片，不能按 interaction 类型合并普通消息。
+            let identity = taskOverview ? "task-overview" : (timing?.key.map {key in (thread ?? "")+":"+key+":"+String(timing?.start?.timeIntervalSince1970 ?? 0)+":"+(messageID ?? "status")} ?? UUID().uuidString)
             let reply:(() -> Void)? = thread.flatMap {key in attentionAction ? nil : { [weak self] in self?.onReply(key) }}
             bubble.onCardLayout = { [weak self] in self?.placeBubble() }
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,

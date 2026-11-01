@@ -132,7 +132,7 @@ final class Bubble {
              attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true)
         relatedConversation = card.thread; purpose = card.purpose
         cards[index].form = questionForm
-        if card.showsTaskOverview && cards.last(where:{$0.showsTaskOverview})?.id == card.id && preferences.bool("showTaskOverview") {
+        if card.showsTaskOverview && preferences.bool("showTaskOverview") {
             let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:scroll.frame.width),scale:scale,provider:taskProvider)
             taskList = list; scroll.documentView = list
             list.onResize = { [weak self] height in guard let self else {return}; self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout() }
