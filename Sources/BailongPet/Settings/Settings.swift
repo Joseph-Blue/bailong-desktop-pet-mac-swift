@@ -772,8 +772,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let dataButton = SettingsFooterButton(title:"清空数据…",target:self,action:#selector(clearLocalData))
         let cacheButton = SettingsFooterButton(title:"清空缓存…",target:self,action:#selector(clearLocalCache))
         for button in [dataButton,cacheButton] {button.bezelStyle = .rounded; button.hasDestructiveAction = true}
-        group("本机存储",[total,
-            row("本机数据",detail:"聊天记录、同步副本和应用设置",control:data),
+        group("本应用所占本机存储",[total,
+            row("本应用所占本机数据",detail:"聊天记录、同步副本和应用设置",control:data),
             row("默认任务文件夹",detail:"任务创建的文件，清空数据时保留。",control:work),
             row("磁盘缓存",detail:"不含动画帧缓冲的运行内存 (RAM)。",control:cache),
             row("清空本机数据",control:dataButton),row("清空磁盘缓存",control:cacheButton),
