@@ -8,6 +8,22 @@
 
 **正式版：[0.6.0](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙桌宠Swiftv0.6.0)。**
 
+## 下载与使用
+
+需要 **Apple Silicon Mac、macOS 14 或更新版本**。Codex 功能需要在本机安装并登录 Codex。
+
+1. 下载 [Apple Silicon ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
+2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，从访达打开。
+3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。
+
+App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一次，再到“系统设置 → 隐私与安全性 → 仍要打开”。[Apple 操作说明](https://support.apple.com/zh-cn/102445)
+
+### 从旧版升级
+
+退出旧桌宠，再打开新版。新版保留设置与历史，升级历史格式前会备份原文件。已经启用的启动项会在新版首次运行时更新；App 移动到新目录后，手动打开一次即可更新路径。
+
+历史和任务文件位于 `~/Library/Application Support/BailongPetAppKit`。历史备份为 `conversations-before-schema2-<时间戳>.json`；若切回 0.2.1，使用升级前的备份。
+
 ## 特色功能
 
 这里介绍截至 **0.6.0** 已有的功能，各版本的更新见 [变更记录](CHANGELOG.md)。截图可点击查看原图；消息气泡图保留自 0.5.0，其余为 0.6.0。
@@ -93,22 +109,6 @@ Codex 工作时，桌宠会显示回复和需要你处理的提醒。单击桌�
 - **按需查看性能**：独立窗口显示 FPS、CPU、GPU、运行内存 (RAM) 和动画缓冲，关闭后停止统计。
 - **按需启动和检查更新**：可设为登录启动或随 Codex 启动；更新页可以检查正式版本并打开下载页，启动自动检查默认关闭。
 - **集中管理本机数据和权限**：设置中提供访达授权、文件权限、登录项入口，以及本应用的数据和缓存清理。历史格式升级前会备份原文件。
-
-## 下载与使用
-
-需要 **Apple Silicon Mac、macOS 14 或更新版本**。Codex 功能需要在本机安装并登录 Codex。
-
-1. 下载 [Apple Silicon ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
-2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，从访达打开。
-3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。
-
-App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一次，再到“系统设置 → 隐私与安全性 → 仍要打开”。[Apple 操作说明](https://support.apple.com/zh-cn/102445)
-
-### 从旧版升级
-
-退出旧桌宠，再打开新版。新版保留设置与历史，升级历史格式前会备份原文件。已经启用的启动项会在新版首次运行时更新；App 移动到新目录后，手动打开一次即可更新路径。
-
-历史和任务文件位于 `~/Library/Application Support/BailongPetAppKit`。历史备份为 `conversations-before-schema2-<时间戳>.json`；若切回 0.2.1，使用升级前的备份。
 
 ## 常用操作
 
