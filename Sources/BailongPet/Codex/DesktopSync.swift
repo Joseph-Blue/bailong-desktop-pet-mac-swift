@@ -109,19 +109,19 @@ final class DesktopSync {
                         }
                     }
                     let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint}
-                    self.accept(values)
+                    let recordsChanged = self.accept(values)
                     if let approvalError {
                         self.diagnostics += " · 审批同步失败："+approvalError
                         self.status += "\n\n实时审批状态未同步："+approvalError
                     }
-                    if displayChanged || changed {self.chat.refresh()}
-                    if changed {self.chat.persist()}
+                    if recordsChanged || changed {self.chat.persist()}
+                    else if displayChanged {self.chat.refresh()}
                 }
             }
             catch {DispatchQueue.main.async {self.reading = false; self.chat.desktopTasks = []; self.chat.desktopTaskReadStatus = "Codex 当前任务状态读取失败"; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
         }
     }
-    private func accept(_ values: [PublicSnapshot]) {
+    private func accept(_ values: [PublicSnapshot]) -> Bool {
         var changed = false
         let now = Date().timeIntervalSince1970
         let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID}).union(chat.store.deletedThreads)
@@ -221,7 +221,7 @@ final class DesktopSync {
         let present = Set(values.map{$0.key}), missing = running.subtracting(present)
         diagnostics = "\(values.count) 条 · 活跃 \(running.count) · 待更新 \(missing.count) · " + Date().formatted(.dateTime.hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))
         status = Self.describeStatus(values,missing:missing.count)
-        if changed {chat.persist()}
+        return changed
     }
     private func submitAnswers(_ snapshot:PublicSnapshot,answers:[String:String],completion:@escaping (Error?) -> Void) {
         let questions = snapshot.attention?.questions ?? []

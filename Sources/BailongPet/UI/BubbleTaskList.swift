@@ -69,7 +69,7 @@ final class BubbleTaskList: NSView {
                 addSubview(row); rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height+2*scale
             }
         }
-        frame.size.height = y; onResize?(y)
+        if frame.height != y {frame.size.height = y; onResize?(y)}
     }
     deinit {stop()}
 }

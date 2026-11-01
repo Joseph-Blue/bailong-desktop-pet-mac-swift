@@ -12,6 +12,9 @@ final class QuestionForm: NSView {
     private var selected = [String:String](), skipped = Set<String>()
     private var radios = [NSButton](), inputs = [MessageEditor](), editors = [MessageInputBox]()
     private var generated = [NSView]()
+    private var layoutPage = -1, layoutSkipped = false
+    private var layoutShortcut = ""
+    private var needsReflow = true
     private weak var pageLabel:NSTextField?
     private var enabled = true
     var isSubmitting = false {didSet {setEnabled(!isSubmitting)}}
@@ -83,10 +86,15 @@ final class QuestionForm: NSView {
            let index = questions.firstIndex(where:{$0.id == previous.questions[previous.currentIndex].id}) {currentIndex = index}
     }
     func updateAppearance(scale:CGFloat,fontSize:CGFloat) {
-        self.scale = scale; self.fontSize = fontSize
+        guard self.scale != scale || self.fontSize != fontSize else {return}
+        self.scale = scale; self.fontSize = fontSize; needsReflow = true
         for input in inputs {input.font = .systemFont(ofSize:fontSize)}
     }
     func reflow(width:CGFloat) {
+        let skippedPage = questions.indices.contains(currentIndex) && skipped.contains(questions[currentIndex].id)
+        let shortcutKey = PetPreferences.shared.sendShortcut.sendLabel + PetPreferences.shared.sendShortcut.newlineLabel
+        guard needsReflow || frame.width != width || layoutPage != currentIndex || layoutSkipped != skippedPage || layoutShortcut != shortcutKey else {return}
+        needsReflow = false; layoutPage = currentIndex; layoutSkipped = skippedPage; layoutShortcut = shortcutKey
         for view in generated {view.removeFromSuperview()}; generated.removeAll()
         for button in radios {button.isHidden = true}
         for (i,editor) in editors.enumerated() {editor.isHidden = i != currentIndex}

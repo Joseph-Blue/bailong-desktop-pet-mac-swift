@@ -5,12 +5,12 @@ class GutterScrollView:NSScrollView {
     static var gutter:CGFloat {NSScroller.scrollerWidth(for:.regular,scrollerStyle:.legacy)+4}
     static func documentWidth(for width:CGFloat) -> CGFloat {max(0,width-gutter)}
     override func tile() {
+        // 使用原生留白，避免每次 tile 先撑宽正文、再缩窄，反复触发文本换行。
+        let right:CGFloat = hasVerticalScroller ? (scrollerStyle == .overlay ? Self.gutter : 4) : 0
+        if contentInsets.right != right {
+            var insets = contentInsets; insets.right = right; contentInsets = insets
+        }
         super.tile()
-        guard hasVerticalScroller else {return}
-        var frame = contentView.frame
-        let reserved = bounds.maxX-frame.maxX
-        frame.size.width = max(0,frame.width-max(0,Self.gutter-reserved))
-        if contentView.frame != frame {contentView.frame = frame}
     }
 }
 

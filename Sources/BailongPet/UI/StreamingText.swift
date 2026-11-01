@@ -6,10 +6,14 @@ final class StreamingTextView: AppTextView {
     private var revealTimer: Timer?
     private var followsEnd = true
     private var codeToolbars = [Int:CodeBlockToolbar]()
+    private var codeLayoutDirty = true
+    private var codeLayoutWidth:CGFloat = -1
+    private func invalidateCodeLayout() {codeLayoutDirty = true; needsLayout = true}
     override func layout() {
         super.layout()
+        guard codeLayoutDirty || codeLayoutWidth != bounds.width else {return}
         guard let storage = textStorage,let manager = layoutManager,let container = textContainer else {return}
-        manager.ensureLayout(for:container)
+        codeLayoutDirty = false; codeLayoutWidth = bounds.width
         var seen = Set<Int>()
         storage.enumerateAttribute(.codeBlockHeader,in:NSRange(location:0,length:storage.length)) {value,range,_ in
             guard let content = value as? CodeBlockContent else {return}
@@ -17,6 +21,7 @@ final class StreamingTextView: AppTextView {
             let toolbar = codeToolbars[range.location] ?? CodeBlockToolbar(content)
             toolbar.content = content
             if toolbar.superview == nil {addSubview(toolbar); codeToolbars[range.location] = toolbar}
+            manager.ensureLayout(forCharacterRange:range)
             let glyphs = manager.glyphRange(forCharacterRange:range,actualCharacterRange:nil)
             let rect = manager.boundingRect(forGlyphRange:glyphs,in:container)
             toolbar.frame = NSRect(x:max(textContainerOrigin.x,bounds.width-textContainerInset.width-46),y:rect.minY+textContainerOrigin.y,width:30,height:26)
@@ -38,24 +43,23 @@ final class StreamingTextView: AppTextView {
         super.clicked(onLink:link,at:charIndex)
     }
     func setContent(_ value: NSAttributedString, animated: Bool, reset: Bool = false) {
-        defer {needsLayout = true}
-        if !reset && targetText.isEqual(to:value) {if !animated {finishReveal()}; return}
+        if !reset && targetText.isEqual(to:value) {if !animated && isRevealing {finishReveal()}; return}
+        defer {invalidateCodeLayout()}
         let follows = automaticallyFollowsEnd && (reset || isAtEnd)
         let origin = enclosingScrollView?.contentView.bounds.origin
         targetText = value
         guard animated && !reset else {
             if startsSnapshotsAtTop && reset {setSelectedRange(NSRange(location:0,length:0))}
-            stopReveal(); textStorage?.setAttributedString(value)
-            // 先完成代码框等富文本排版与文档高度更新，再恢复阅读位置。
-            if startsSnapshotsAtTop {
-                if let manager = layoutManager,let container = textContainer {manager.ensureLayout(for:container)}
-                if isVerticallyResizable {sizeToFit()}
-            }
+            stopReveal()
+            if reset {textStorage?.setAttributedString(value)}
+            else {replaceChangedSuffix(with:value)}
             if startsSnapshotsAtTop && reset {scrollToBeginningOfDocument(nil)}
             else if !startsSnapshotsAtTop && follows {scrollToEndOfDocument(nil)}
             else if reset {scrollToBeginningOfDocument(nil)}
             else if startsSnapshotsAtTop,let scroll = enclosingScrollView,let origin {
-                scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
+                if scroll.contentView.bounds.origin != origin {
+                    scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
+                }
             }
             return
         }
@@ -87,12 +91,31 @@ final class StreamingTextView: AppTextView {
             revealTimer = timer; RunLoop.main.add(timer,forMode:.common)
         }
     }
+    // 保留完全相同的富文本前缀，只让 TextKit 重排发生变化的尾部。
+    private func replaceChangedSuffix(with value:NSAttributedString) {
+        guard let storage = textStorage else {return}
+        let prefix = (storage.string as NSString).commonPrefix(with:value.string,options:.literal)
+        var length = (prefix as NSString).length
+        if length > 0 {
+            let range = (storage.string as NSString).rangeOfComposedCharacterSequence(at:length-1)
+            if NSMaxRange(range) > length {length = range.location}
+        }
+        var offset = 0
+        while offset < length {
+            var oldRange = NSRange(), newRange = NSRange()
+            let old = storage.attributes(at:offset,effectiveRange:&oldRange)
+            let new = value.attributes(at:offset,effectiveRange:&newRange)
+            guard NSDictionary(dictionary:old).isEqual(to:new) else {length = offset; break}
+            offset = min(length,NSMaxRange(oldRange),NSMaxRange(newRange))
+        }
+        storage.replaceCharacters(in:NSRange(location:length,length:storage.length-length),
+                                  with:value.attributedSubstring(from:NSRange(location:length,length:value.length-length)))
+    }
     private var isAtEnd: Bool {
         guard let clip = enclosingScrollView?.contentView else {return true}
         return clip.bounds.maxY >= bounds.maxY-10
     }
     private func revealNext() {
-        defer {needsLayout = true}
         guard let storage = textStorage else {stopReveal(); return}
         let remaining = targetText.length-storage.length
         guard remaining > 0 else {stopReveal(); return}
@@ -101,14 +124,14 @@ final class StreamingTextView: AppTextView {
         let count = min(remaining,max(2,Int(ceil(Double(remaining)/5))))
         let text = targetText.string as NSString
         let range = text.rangeOfComposedCharacterSequences(for:NSRange(location:storage.length,length:count))
-        storage.append(targetText.attributedSubstring(from:range))
+        storage.append(targetText.attributedSubstring(from:range)); invalidateCodeLayout()
         if followsEnd {scrollToEndOfDocument(nil)}
         if storage.length == targetText.length {stopReveal()}
     }
     func finishReveal() {
-        defer {needsLayout = true}
         let follows = automaticallyFollowsEnd && isAtEnd; stopReveal()
-        if !attributedString().isEqual(to:targetText) {textStorage?.setAttributedString(targetText)}
+        guard !attributedString().isEqual(to:targetText) else {return}
+        replaceChangedSuffix(with:targetText); invalidateCodeLayout()
         if follows {scrollToEndOfDocument(nil)}
     }
     private func stopReveal() {revealTimer?.invalidate(); revealTimer = nil}

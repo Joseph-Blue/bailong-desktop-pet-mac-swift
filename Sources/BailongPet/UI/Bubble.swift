@@ -219,6 +219,8 @@ final class Bubble {
             taskList = list; scroll.documentView = list
             list.onResize = { [weak self] height in guard let self else {return}; self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout() }
             layout(bodyHeight:min(320*scale,list.frame.height)); list.start()
+            scroll.contentView.scroll(to:changedCard && !refreshingAppearance ? .zero : origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
         }
         onCardLayout()
     }
@@ -296,7 +298,7 @@ final class Bubble {
         replyButton.keepsAccentWhenInactive = true; replyButton.emphasize()
         for (button,symbol,name) in [(previousCard!,"chevron.left","上一条消息"),(nextCard!,"chevron.right","下一条消息")] {
             button.image = NSImage(systemSymbolName:symbol,accessibilityDescription:name)
-            button.imagePosition = .imageOnly; button.hoverHelp = name; button.setAccessibilityLabel(name)
+            button.imagePosition = .imageOnly; button.setAccessibilityLabel(name)
         }
         cardCount.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); cardCount.textColor = .secondaryLabelColor; cardCount.alignment = .center
         [previousCard!,nextCard!,replyButton!,cardCount].forEach {$0.isHidden = true}
@@ -378,12 +380,15 @@ final class Bubble {
             self.closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
             let textHeight = max(0,height-chromeHeight)
             let readingOrigin = self.scroll.contentView.bounds.origin
-            self.scroll.frame = NSRect(x:margin,y:margin+footer,width:w-2*margin,height:textHeight)
+            let viewport = NSRect(x:margin,y:margin+footer,width:w-2*margin,height:textHeight)
+            if self.scroll.frame != viewport {self.scroll.frame = viewport}
             self.scroll.isHidden = bodyHeight <= 0
-            self.text.frame.size.width = self.scroll.contentView.bounds.width
-            self.text.textContainer?.containerSize = NSSize(width:self.scroll.contentView.bounds.width,height:CGFloat.greatestFiniteMagnitude)
+            let textWidth = self.scroll.contentView.bounds.width
+            if self.text.frame.width != textWidth {self.text.frame.size.width = textWidth}
+            let containerSize = NSSize(width:textWidth,height:CGFloat.greatestFiniteMagnitude)
+            if self.text.textContainer?.containerSize != containerSize {self.text.textContainer?.containerSize = containerSize}
             // 高度过渡及屏幕避让每帧都会调整视口；静态正文仍保持顶部或用户阅读位置。
-            if !self.text.automaticallyFollowsEnd {
+            if !self.text.automaticallyFollowsEnd && self.scroll.contentView.bounds.origin != readingOrigin {
                 self.scroll.contentView.scroll(to:readingOrigin)
                 self.scroll.reflectScrolledClipView(self.scroll.contentView)
             }
@@ -427,7 +432,7 @@ final class Bubble {
             questionForm.reflow(width:width); document = questionForm
         }
         else {document = TaskQuestionLayout.document(questionModels,width:width,scale:scale,fontSize:preferences.number("messageFontSize")*scale)}
-        scroll.documentView = document
+        if scroll.documentView !== document {scroll.documentView = document}
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
@@ -465,13 +470,13 @@ final class Bubble {
         text.isSelectable = kind == "task"
         if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
         currentBody = body; relatedConversation = nil
-        if scroll.documentView !== text {scroll.documentView = text}
+        if !(attentionAction && !questions.isEmpty),scroll.documentView !== text {scroll.documentView = text}
         title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
         title.maximumNumberOfLines = kind == "progressToast" ? 1 : 0
         title.lineBreakMode = kind == "progressToast" ? .byTruncatingTail : .byWordWrapping
         title.hoverHelp = kind == "progressToast" ? heading : nil
         setHeading(heading, animated: animateHeading && timing?.finished == nil)
-        text.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale)
+        let bodyFont = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
         details.title = "查看记录详情"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
         codexButton.isHidden = !enabled; codexButton.emphasize(attentionAction && approval == nil)
         configureButtons()
@@ -502,9 +507,11 @@ final class Bubble {
                 codexButton.emphasize(false)
             }
             layoutQuestions()
-            scroll.contentView.scroll(to:.zero); scroll.reflectScrolledClipView(scroll.contentView)
+            if resetText || !sameQuestions {
+                scroll.contentView.scroll(to:.zero); scroll.reflectScrolledClipView(scroll.contentView)
+            }
         } else {
-            let rendered = approval.map {ApprovalText.render($0,font:text.font!)} ?? (kind == "task" ? MarkdownText.render(body,font:text.font!,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:text.font!,.foregroundColor:NSColor.labelColor]))
+            let rendered = approval.map {ApprovalText.render($0,font:bodyFont)} ?? (kind == "task" ? MarkdownText.render(body,font:bodyFont,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:bodyFont,.foregroundColor:NSColor.labelColor]))
             let height = body.isEmpty ? 0 : min(kind == "progressToast" ? .greatestFiniteMagnitude : (approval == nil ? 180 : 320)*scale,max(24*scale,rendered.boundingRect(with:NSSize(width:GutterScrollView.documentWidth(for:layoutWidth-32*scale)-12,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading]).height+12))
             layout(bodyHeight:height)
             text.setContent(rendered,animated:animatesText,reset:!same || resetText)
@@ -665,6 +672,7 @@ final class Bubble {
         }
     }
     func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, retry: (() -> Void)? = nil) {
+        let origin = scroll.documentView is TopDownView ? scroll.contentView.bounds.origin : .zero
         let fontScale = scale*preferences.number("messageFontSize")/13
         if let failure {
             purpose = .attention; timer?.invalidate(); timer = nil
@@ -719,7 +727,8 @@ final class Bubble {
         content.addSubview(management); y += management.frame.height+4*scale
         content.frame.size.height = y
         layout(bodyHeight:min(320*scale,y))
-        scroll.documentView = content; scroll.contentView.scroll(to:.zero)
+        scroll.documentView = content; scroll.contentView.scroll(to:origin)
+        scroll.reflectScrolledClipView(scroll.contentView)
         let heading = plainHeading
         refreshStandalone = { [weak self] in
             guard let self else {return}

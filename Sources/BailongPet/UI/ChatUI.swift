@@ -77,6 +77,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let inheritedSettings = label("沿用 Codex 原会话的模型与权限")
     private var historyPlaceholder: String {PetPreferences.shared.fixedText("主人，我们接着聊吧…")}
     private var composerFolder: ActionButton!, composerNew: ActionButton!
+    private var renderedTranscriptSignature = [String]()
     private var renderedConversation: String?
     private var transcriptCache = [String:([String],NSAttributedString)]()
     var busy = false
@@ -343,7 +344,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func updateSearchHighlights(reveal:Bool) {
         guard let layout = transcript.layoutManager else {return}
         let text = transcript.string, whole = NSRange(location:0,length:(text as NSString).length)
-        layout.removeTemporaryAttribute(.backgroundColor,forCharacterRange:whole)
+        if !findMatches.isEmpty {layout.removeTemporaryAttribute(.backgroundColor,forCharacterRange:whole)}
         findMatches = searching ? HistorySearch.ranges(in:text,query:searchField.stringValue) : []
         matchIndex = findMatches.isEmpty ? 0 : min(matchIndex,findMatches.count-1)
         for (index,range) in findMatches.enumerated() {
@@ -507,15 +508,28 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let selectionChanged = renderedConversation != selected.key
         transcript.startsSnapshotsAtTop = selected.external
         transcript.automaticallyFollowsEnd = !searching && !selected.external
-        transcript.setContent(transcriptContent(selected),animated:!searching && !selected.external && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
+        let signature = transcriptStyle(selected) + [String(PetPreferences.shared.bool("typingEffect"))] + selected.turns.flatMap {[ $0.key ] + transcriptTurnSignature($0)}
+        let contentChanged = selectionChanged || signature != renderedTranscriptSignature
+        if contentChanged {
+            transcript.setContent(transcriptContent(selected),animated:!searching && !selected.external && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
+            renderedTranscriptSignature = signature
+        } else if searching && transcript.isRevealing {transcript.finishReveal()}
         if selectionChanged {matchIndex = 0}
         renderedConversation = selected.key
-        updateSearchHighlights(reveal:searching && selectionChanged)
+        if contentChanged || searching || !findMatches.isEmpty {updateSearchHighlights(reveal:searching && selectionChanged)}
     }
     @objc private func accentChanged() {
         transcriptCache.removeAll()
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedConversation = nil
         refreshVisibleHistory()
+    }
+    private func transcriptStyle(_ conversation:Conversation) -> [String] {
+        let preferences = PetPreferences.shared
+        return [preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
+    }
+    private func transcriptTurnSignature(_ turn:Turn) -> [String] {
+        [turn.input,turn.status,turn.messages,turn.summary,turn.steps,turn.final,turn.error,
+         turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)]
     }
     private func transcriptContent(_ conversation: Conversation) -> NSAttributedString {
         var result = NSMutableAttributedString()
@@ -534,13 +548,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             append("在下方输入想做的事。",color:.secondaryLabelColor)
             return result
         }
-        let preferences = PetPreferences.shared
-        let style = [preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
+        let style = transcriptStyle(conversation)
         let keys = Set(conversation.turns.map(\.key))
         transcriptCache = transcriptCache.filter {keys.contains($0.key)}
         for turn in conversation.turns {
-            let signature = style + [turn.input,turn.status,turn.messages,turn.summary,turn.steps,turn.final,turn.error,
-                turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)]
+            let signature = style + transcriptTurnSignature(turn)
             if let cached = transcriptCache[turn.key],cached.0 == signature {result.append(cached.1); continue}
             let accumulated = result
             result = NSMutableAttributedString()
