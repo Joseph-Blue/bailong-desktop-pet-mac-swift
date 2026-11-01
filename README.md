@@ -4,7 +4,7 @@
 
 参考 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet) 的功能与交互，沿用原作动画素材，独立维护。不代表原作者或 OpenAI。
 
-本项目为[公开 GitHub 仓库](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift)。当前本地版本 **0.4.0**，已合并至本地 `main`，尚未推送或发布。
+本项目为[公开 GitHub 仓库](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift)。当前本地开发版本 **0.4.1-dev.1**，位于 `main`，在 0.4.0 基础上完成修复与整理，尚未推送或发布。
 
 ## 下载与首次打开
 
@@ -12,7 +12,7 @@
 
 **[前往 GitHub Releases 下载](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases)**
 
-发布页提供已发布版本；本文介绍的 **0.4.0 尚未发布到 GitHub**。下载后解压，将 App 移入“应用程序”再打开。更新时先退出桌宠，用新版替换旧 App，设置与聊天记录保留。
+发布页提供已发布版本；本文所述本地版本尚未发布到 GitHub。下载后解压，将 App 移入“应用程序”再打开。更新时先退出桌宠，用新版替换旧 App，设置与聊天记录保留。
 
 ### 遇到 macOS 安全拦截
 
@@ -80,7 +80,7 @@
 
 需要 Apple Command Line Tools，运行和素材工具均使用 Apple 原生框架。旧 FFmpeg 运行及离线转码方案已移除。
 
-当前本地产物位于 `dist/native-hevc/0.4.0/arm64/白龙娘桌宠MacOS-Swift版.app`。应用包包含运行用透明 HEVC 动画、音效、图标和同架构跟随启动 helper，不携带 Python 或第三方视频解码器。
+构建产物位于 `dist/native-hevc/<VERSION>/arm64/白龙娘桌宠MacOS-Swift版.app`。应用包包含运行用透明 HEVC 动画、音效、图标和同架构跟随启动 helper，不携带 Python 或第三方视频解码器。
 
 仓库不含素材、图标或构建产物。构建使用已准备好的原生素材目录；可从本机已有原生版 App 的 `Contents/Resources/outputs/白龙桌宠素材` 复制清单和透明 HEVC 子目录。原作的 WebM 发布包不能直接用作本版运行资源。
 
@@ -92,6 +92,7 @@ local-assets/
   glass-symbols/                      # 玻璃滑块的两个 PDF 符号
   sounds/来源.txt
   BailongPet.icns
+  openai-logo.png                     # 跳转按钮的 OpenAI 模板标志
   openai-logo.png                     # OpenAI 官方模板标志
 ```
 

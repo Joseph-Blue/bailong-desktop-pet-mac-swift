@@ -15,23 +15,23 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 ## 代码入口
 
-以下 Swift 文件除注明外位于 Sources/BailongPet；精确参数、来源及现行架构见 docs/来源与架构.md。
+先按项目 AGENTS.md 核对当前约束；精确参数、来源与现行设计见 docs/来源与架构.md。以下相对 Sources/BailongPet，仍是单 Swift target：
 
-| 内容 | 文件 |
+| 内容 | 文件或目录 |
 | --- | --- |
-| 桌宠交互、素材与位置调度 | Pet.swift、Resources.swift、StreamingAnimation.swift |
-| 气泡、材质、动态效果 | NativeUI.swift、BubbleMotion.swift、BubblePlacement.swift、WindowFade.swift |
-| 偏好、设置、强调色 | Preferences.swift、Settings.swift、Appearance.swift |
-| 性能采样及窗口 | Diagnostics.swift、GPUStatistics.swift |
-| 内置任务、外部观察、终态文案 | ChatController.swift、Codex.swift、DesktopSync.swift、TaskOutcome.swift |
-| 额度请求、重置卡 | QuotaQuery.swift、QuotaResetCards.swift |
-| 历史、搜索与输入 | History.swift、HistorySearch.swift、HistoryViews.swift、ChatUI.swift、StreamingText.swift、TextInteraction.swift |
-| Markdown 与本机文件 | MarkdownText.swift、MessageFileLink.swift |
-| 问卷与桌面端回答 | QuestionForm.swift、DesktopQuestionReply.swift、Presentation.swift |
-| 变量迁移、本机清理、错误恢复 | TemplateSyntax.swift、LocalStorage.swift、Recovery.swift、RunLifecycle.swift |
-| 更新检查与版本比较 | Updates.swift、SemanticVersion.swift |
-| 跟随启动 | Autostart.swift、FollowMonitor.swift、Tools/FollowHelper/main.swift |
-| PNG 接入、构建 | Tools/NativeHEVC/ApplyPNGRepairs.swift、scripts/apply-native-png-repairs.sh、scripts/build.sh |
+| 启动与退出 | App/main.swift、App/RunLifecycle.swift |
+| 动画、素材与位置 | Pet/Pet.swift、Pet/Resources.swift、Pet/StreamingAnimation.swift |
+| 气泡、材质与输入 | UI/Bubble.swift、UI/NativeControls.swift、UI/MessageEditor.swift、UI/TextInteraction.swift |
+| 计时与问卷展示数据 | UI/BubblePresentation.swift、UI/QuestionForm.swift |
+| 偏好与设置 | Settings/Preferences.swift、Settings/Settings.swift、Settings/SettingsControls.swift |
+| 内置任务与请求 | Conversation/ChatController.swift、Codex/RequestCoordinator.swift、Codex/CodexProtocol.swift |
+| 外部观察与明确回答 | Codex/DesktopHistoryReader.swift、Codex/DesktopSync.swift、Codex/DesktopQuestionReply.swift |
+| 历史、搜索与显示 | Conversation/History.swift、Conversation/HistorySearch.swift、UI/ChatUI.swift |
+| 额度 | Codex/QuotaQuery.swift、Codex/QuotaResetCards.swift |
+| 更新与跟随启动 | Infrastructure/Updates.swift、Infrastructure/Autostart.swift、Infrastructure/FollowMonitor.swift |
+| 构建与 PNG 接入 | scripts/swift-sources.sh、scripts/build.sh、Tools/NativeHEVC/ApplyPNGRepairs.swift |
+
+移动文件必须同步递归源码清单入口和 helper 的单独路径；Tests 继续只保留本地。修改历史策略时定向核对跨重启冻结，修改请求时核对原轮次／窗口身份，不能只测正常路径。
 
 ## 原生界面与外观
 

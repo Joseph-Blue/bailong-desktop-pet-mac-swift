@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func startApplication() {
         do {
+            _ = try Paths.readVersion()
+            try PetPreferences.shared.validatePlayback()
             if !ownsInstance {
                 try FileManager.default.createDirectory(at:Paths.data,withIntermediateDirectories:true)
                 instanceFD = open(Paths.data.appendingPathComponent("instance.lock").path,O_CREAT | O_RDWR,0o600)

@@ -16,8 +16,7 @@ final class ChatController {
     var saveError: String?
     var updateTimer: Timer?
     var saveTimer: Timer?
-    var alert: NSAlert?
-    var requests = [(Any,String,[String:Any])]()
+    lazy var requestCoordinator = RequestCoordinator(chat:self)
     var quotaSerial = 0
     var quotaRequestInFlight = false
     var quotaAccount: [String:Any]?
@@ -67,7 +66,7 @@ final class ChatController {
             return URL(fileURLWithPath:conversation.cwd,isDirectory:true)
         }
         connection.event = { [weak self] method,p in self?.receive(method,p) }
-        connection.request = { [weak self] id,method,p in self?.requests.append((id,method,p)); self?.nextRequest() }
+        connection.request = { [weak self] id,method,p in self?.requestCoordinator.enqueue(id,method,p) }
         connection.disconnected = { [weak self] error in if self?.running != nil {self?.finish("interrupted",error:error.localizedDescription)} }
         pet.cliDiagnostics = { [weak self] in
             guard let self else { return "连接已关闭" }
@@ -76,7 +75,7 @@ final class ChatController {
         pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
         pet.onCodex = { [weak self] key in
             if let self, let (conversation,turn) = self.running, conversation.key == key,
-               ["waitingForInput","waitingForApproval"].contains(turn.status), let request = self.alert {
+               ["waitingForInput","waitingForApproval"].contains(turn.status), let request = self.requestCoordinator.alert {
                 let parent = request.window.sheetParent ?? self.approvalParent()
                 if parent.isMiniaturized {parent.deminiaturize(nil)}
                 parent.makeKeyAndOrderFront(nil); request.window.makeKeyAndOrderFront(nil)
@@ -197,7 +196,7 @@ final class ChatController {
         running = (c,turn); cancelled = false; messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
         ui.composerEditor.string = ""; ui.historyEditor.string = ""
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:text,kind:"task",thread:c.key,personalizeTitle:false,taskStartedAt:turn.date,taskKey:"own"); persist()
+        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, timing:.init(start:turn.date,key:"own")); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}
@@ -222,7 +221,7 @@ final class ChatController {
                         switch result {
                         case .success(let value): turn.id = (value["turn"] as? [String:Any])?["id"] as? String; turn.status = "running"; if self.cancelled {self.interrupt()}; self.persist()
                         case .failure(let error):
-                            if turn.id != nil || error.localizedDescription.contains("超时") { turn.status = "unknown"; turn.error = error.localizedDescription; self.persist() }
+                            if turn.id != nil || (error as? CodexProtocol.Failure)?.isTimeout == true { turn.status = "unknown"; turn.error = error.localizedDescription; self.persist() }
                             else {self.finish("failed",error:error.localizedDescription)}
                         }
                     }
@@ -236,7 +235,7 @@ final class ChatController {
         switch method {
         case "turn/started": t.id = (p["turn"] as? [String:Any])?["id"] as? String; t.status = "running"; if cancelled {interrupt()}
         case "item/agentMessage/delta":
-            let id = p["itemId"] as! String; if messages[id] == nil {messageOrder.append(id)}
+            guard let id = p["itemId"] as? String else {return}; if messages[id] == nil {messageOrder.append(id)}
             messages[id,default:""] += p["delta"] as? String ?? ""; lastKind = "output"
         case "item/reasoning/summaryTextDelta":
             let key = "\(p["itemId"] ?? ""):\(p["summaryIndex"] ?? 0)"; summaries[key,default:""] += p["delta"] as? String ?? ""; lastKind = "summary"
@@ -277,7 +276,7 @@ final class ChatController {
             let text = self.lastKind == "summary" ? t.summary : self.lastKind == "progress" ? t.steps : t.messages
             if !text.isEmpty && text != self.lastPreview {
                 self.lastPreview = text
-                self.pet.say(self.pet.preferences.statusLine("taskProgressTemplate"),body:text,kind:"task",thread:c.key,personalizeTitle:false,taskStartedAt:t.date,taskKey:"own")
+                self.pet.say(self.pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, timing:.init(start:t.date,key:"own"))
             }
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)
@@ -291,7 +290,7 @@ final class ChatController {
         guard let (c,t) = running else{return}
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error
         if t.final.isEmpty {t.final = messageOrder.last.flatMap{messages[$0]} ?? ""}
-        running = nil; dismissRequests(); pet.taskEnded("own",status:status); persist()
+        running = nil; requestCoordinator.dismiss(); pet.taskEnded("own",status:status); persist()
         let title = pet.preferences.taskResultLine(status)
         if !error.isEmpty && status != "completed" && !closing {
             let failure = AppFailure.codex(error)
@@ -303,79 +302,17 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title,body:t.final,kind:"task",thread:c.key,purpose:status == "completed" ? .result : .attention,personalizeTitle:false,taskStartedAt:t.date,taskKey:"own",taskFinishedAt:Date(),taskStatus:status)}
+        } else {pet.say(title, body:t.final, kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status))}
         if closing {finishShutdown()}
     }
-    func stop() { guard running != nil else{return}; cancelled = true; dismissRequests(); ui.status.stringValue = "正在停止任务…"; interrupt() }
+    func stop() {
+        guard let (_,turn) = running else {return}
+        cancelled = true; requestCoordinator.dismiss(); ui.status.stringValue = "正在停止任务…"
+        if turn.id == nil {connection.abortUnconfirmedTask()} else {interrupt()}
+    }
     func interrupt() {
         guard let (c,t) = running, let thread = c.threadID, let turn = t.id else{return}
         connection.call("turn/interrupt",["threadId":thread,"turnId":turn]) { [weak self] result in if case .failure(let error) = result {self?.running?.1.error = error.localizedDescription; self?.persist()} }
-    }
-    private func showAttention(_ attention:TaskAttention, submit: (([String:String], @escaping (Error?) -> Void) -> Void)? = nil) {
-        guard let (conversation,turn) = running else {return}
-        pet.say(pet.preferences.statusLine(attention.kind.templateKey),body:attention.body,kind:"task",thread:conversation.key,
-                followsText:false,resetText:true,purpose:.attention,personalizeTitle:false,animateHeading:false,
-                taskStartedAt:turn.date,taskKey:"own",attentionAction:true,questions:attention.questions,questionSubmit:submit)
-    }
-    private func clearAttention() {
-        if let (conversation,_) = running, pet.bubble.relatedConversation == conversation.key, pet.bubble.purpose == .attention {pet.bubble.hide()}
-    }
-    func nextRequest() {
-        guard alert == nil && !requests.isEmpty else{return}
-        let (id,method,p) = requests.removeFirst()
-        guard running != nil && !cancelled else {connection.unsupported(id,method); nextRequest();return}
-        if method == "item/permissions/requestApproval" {connection.reply(id,["permissions":[:],"scope":"turn"]); nextRequest();return}
-        if method == "item/tool/requestUserInput" { questions(id,p["questions"] as? [[String:Any]] ?? [],answers:[:]); return }
-        guard method == "item/commandExecution/requestApproval" || method == "item/fileChange/requestApproval" else {connection.unsupported(id,method); nextRequest();return}
-        running?.1.status = "waitingForApproval"; persist()
-        let a = NSAlert(); alert = a; a.messageText = pet.preferences.statusLine("taskApprovalTemplate")
-        a.informativeText = p["reason"] as? String ?? "请查看具体操作后决定。"
-        let details = AppTextView(frame:NSRect(x:0,y:0,width:520,height:180)); details.isEditable = false; details.isSelectable = true
-        details.string = String(data:(try? JSONSerialization.data(withJSONObject:p,options:.prettyPrinted)) ?? Data(),encoding:.utf8) ?? ""
-        let scroll = NSScrollView(frame:details.frame); scroll.documentView = details; scroll.hasVerticalScroller = true; a.accessoryView = scroll
-        a.addButton(withTitle:"拒绝"); a.addButton(withTitle:"允许这一次"); a.buttons[0].keyEquivalent = "\r"; a.buttons[1].keyEquivalent = ""
-        NSApp.activate(ignoringOtherApps:true)
-        a.applyAccent()
-        showAttention(.approval(fileChange:method == "item/fileChange/requestApproval",reason:p["reason"] as? String))
-        a.beginSheetModal(for:approvalParent()) { [weak self] response in
-            guard let self else{return}; self.alert = nil; self.clearAttention()
-            self.connection.reply(id,["decision":response == .alertSecondButtonReturn && !self.cancelled && self.running != nil ? "accept" : "decline"])
-            self.running?.1.status = "running"; self.persist(); self.nextRequest()
-        }
-    }
-    func questions(_ id: Any, _ questions: [[String:Any]], answers: [String:Any]) {
-        guard running != nil && !cancelled else {connection.reply(id,["answers":answers]); return}
-        guard let q = questions.first else {connection.reply(id,["answers":answers]); running?.1.status = "running"; persist(); nextRequest();return}
-        let a = NSAlert(); alert = a; a.messageText = q["header"] as? String ?? "请补充信息"; a.informativeText = q["question"] as? String ?? ""
-        let input: NSView
-        if q["isSecret"] as? Bool == true {input = NSSecureTextField(frame:NSRect(x:0,y:0,width:420,height:28))}
-        else if let options = q["options"] as? [[String:Any]], !options.isEmpty {
-            let combo = NSComboBox(frame:NSRect(x:0,y:0,width:420,height:28)); combo.addItems(withObjectValues:options.compactMap{$0["label"] as? String}); combo.isEditable = true; input = combo
-        } else {input = NSTextField(frame:NSRect(x:0,y:0,width:420,height:28))}
-        a.accessoryView = input; a.addButton(withTitle:"提交"); a.addButton(withTitle:"取消并停止")
-        running?.1.status = "waitingForInput"
-        if q["isSecret"] as? Bool == true {running?.1.sensitiveQuestionNotice = pet.preferences.sensitiveQuestionNotice}
-        persist()
-        let submit: (([String:String], @escaping (Error?) -> Void) -> Void)? = q["isSecret"] as? Bool == true ? nil : { [weak self,weak a] values,completion in
-            guard let self,let a,self.alert === a,let parent = a.window.sheetParent,let key = q["id"] as? String else {completion(PetFailure(message:"这道问题已结束。")); return}
-            (input as! NSTextField).stringValue = values[key] ?? ""
-            parent.endSheet(a.window,returnCode:.alertFirstButtonReturn); completion(nil)
-        }
-        showAttention(.question(q),submit:submit); NSApp.activate(ignoringOtherApps:true)
-        a.applyAccent()
-        a.beginSheetModal(for:approvalParent()) { [weak self] response in
-            guard let self else{return}; self.alert = nil
-            self.clearAttention()
-            guard response == .alertFirstButtonReturn && !self.cancelled else {self.connection.reply(id,["answers":answers]); self.stop();return}
-            if q["isSecret"] as? Bool == true {self.running?.1.sensitiveInputNotice = self.pet.preferences.sensitiveInputNotice}
-            var next = answers; next[q["id"] as! String] = ["answers":[(input as! NSTextField).stringValue]]
-            self.questions(id,Array(questions.dropFirst()),answers:next)
-        }
-    }
-    func dismissRequests() {
-        requests.removeAll()
-        if let alert, let parent = alert.window.sheetParent {parent.endSheet(alert.window,returnCode:.cancel)}
-        alert = nil
     }
     func quota() {
         guard !(quotaRequestInFlight && pet.quotaActive) else {return}

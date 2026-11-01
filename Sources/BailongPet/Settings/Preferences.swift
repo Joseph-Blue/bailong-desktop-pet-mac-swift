@@ -1,5 +1,10 @@
 import AppKit
 
+struct PlaybackSettingsError: LocalizedError {
+    let key:String
+    var errorDescription:String? {"播放设置「"+key+"」无效。"}
+}
+
 enum SettingsSection: Int, CaseIterable {
     case general, identity, activity, messages, appearance, advanced, developer, updates
     var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","性能","更新"][rawValue] }
@@ -79,6 +84,17 @@ final class PetPreferences {
         TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
         if defaults.string(forKey:"addressMode") == "master" {defaults.set("name",forKey:"addressMode")}
         if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
+    }
+    func validatePlayback() throws {
+        for key in ["animationQuality","animationFPSLimit"] {
+            guard Self.choices[key]!.contains(string(key)) else {throw PlaybackSettingsError(key:key)}
+        }
+        for key in ["animationBufferFrames","playbackSpeed","petPercent","bubblePercent"] {
+            let number = number(key)
+            guard number.isFinite,Self.ranges[key]!.contains(number),key == "playbackSpeed" || number.rounded() == number else {
+                throw PlaybackSettingsError(key:key)
+            }
+        }
     }
     static func displayID(_ screen: NSScreen) -> String {(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? ""}
     func value(_ key: String) -> Any {defaults.object(forKey:key) ?? Self.defaults[key]!}

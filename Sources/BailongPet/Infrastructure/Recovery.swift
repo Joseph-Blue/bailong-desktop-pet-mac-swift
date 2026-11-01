@@ -19,6 +19,7 @@ struct RecoveryReport {
             let allowed = [NSCocoaErrorDomain,NSPOSIXErrorDomain,NSURLErrorDomain,"AVFoundationErrorDomain","NSOSStatusErrorDomain"]
             lines += ["错误类型："+String(reflecting:type(of:error)),
                       "错误域："+(allowed.contains(value.domain) ? value.domain : "应用错误"),"错误码：\(value.code)"]
+            if let settings = error as? PlaybackSettingsError {lines.append("无效播放设置："+settings.key)}
             if let decoding = error as? DecodingError {
                 switch decoding {
                 case .dataCorrupted: lines.append("数据状态：内容损坏或格式错误")

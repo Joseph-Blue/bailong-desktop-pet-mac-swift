@@ -7,11 +7,14 @@ if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != "--build-only" ]]; }; then
     exit 2
 fi
 
+source scripts/swift-sources.sh
 binary=".build/dev/BailongPetDev"
 mkdir -p .build/dev .build/module-cache
 rebuild=0
 [[ -x "$binary" ]] || rebuild=1
-for source in Sources/BailongPet/*.swift VERSION "${0:A}"; do
+source_manifest="${(F)swift_sources}"
+[[ -f .build/dev/sources.txt && "$(<.build/dev/sources.txt)" == "$source_manifest" ]] || rebuild=1
+for source in $swift_sources VERSION scripts/swift-sources.sh "${0:A}"; do
     if [[ "$source" -nt "$binary" ]]; then rebuild=1; break; fi
 done
 
@@ -34,10 +37,11 @@ if (( rebuild )); then
 PLIST
     xcrun swiftc -O -whole-module-optimization -swift-version 5 \
         -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache \
-        Sources/BailongPet/*.swift -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 \
+        $swift_sources -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 \
         -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker .build/dev/Info.plist \
         -o "$binary.next"
     mv "$binary.next" "$binary"
+    print -r -- "$source_manifest" > .build/dev/sources.txt
 else
     print "源码未变化，复用上次编译结果。"
 fi

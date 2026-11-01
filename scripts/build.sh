@@ -4,6 +4,7 @@ cd "${0:A:h:h}"
 if (( $# > 1 )); then
     print -u2 "用法：$0 [arm64|x86_64]"; exit 2
 fi
+source scripts/swift-sources.sh
 target_arch="${1:-arm64}"
 case "$target_arch" in
     arm64|x86_64) ;;
@@ -15,10 +16,10 @@ version="$(<VERSION)"
 output="dist/native-hevc/$version/$target_arch"
 mkdir -p ".build/$target_arch" .build/module-cache "$output"
 xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
-    -module-cache-path .build/module-cache Sources/BailongPet/*.swift \
+    -module-cache-path .build/module-cache $swift_sources \
     -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3
 xcrun swiftc -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
-    -module-cache-path .build/module-cache Sources/BailongPet/FollowMonitor.swift Tools/FollowHelper/main.swift \
+    -module-cache-path .build/module-cache Sources/BailongPet/Infrastructure/FollowMonitor.swift Tools/FollowHelper/main.swift \
     -framework AppKit -o ".build/$target_arch/BailongFollow"
 
 app="$output/白龙娘桌宠MacOS-Swift版.app"

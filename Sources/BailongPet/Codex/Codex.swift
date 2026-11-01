@@ -17,6 +17,7 @@ final class CodexConnection {
     private let reader = DispatchQueue(label:"白龙娘 Codex 协议")
     private var connectionError: String?
     private(set) var executableURL: URL?
+    var isConnected:Bool {ready}
     var diagnostics: String {
         let state = ready ? "协议已连接" : process?.isRunning == true ? "正在初始化" : (connectionError.map { "连接失败：" + $0 } ?? "未连接")
         let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"
@@ -56,7 +57,7 @@ final class CodexConnection {
     static func openConversation(_ id:String?) {
         guard let id,let url = threadURL(id) else {openDesktop(); return}
         navigationQueue.async {
-            let lookup = Result {try DesktopSync.readTitles([id])}
+            let lookup = Result {try DesktopHistoryReader.readTitles([id])}
             DispatchQueue.main.async {
                 switch lookup {
                 case .success(let titles) where titles[id] != nil:
@@ -95,7 +96,7 @@ final class CodexConnection {
                     while let end = buffer.firstIndex(of:10) {
                         let line = Data(buffer[..<end]); buffer.removeSubrange(...end)
                         do {
-                            let message = try JSONSerialization.jsonObject(with:line) as! [String:Any]
+                            let message = try CodexProtocol.object(line)
                             DispatchQueue.main.async { if self?.generation == token { self?.receive(message) } }
                         } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error) } }; return }
                     }
@@ -110,13 +111,13 @@ final class CodexConnection {
             expiration = Timer.scheduledTimer(withTimeInterval:1,repeats:true) { [weak self] _ in
                 guard let self else{return}
                 let expired = self.pending.filter { $0.value.1 < Date() }
-                for (id,entry) in expired { self.pending.removeValue(forKey:id); entry.0(.failure(PetFailure(message:"Codex 请求超时，任务状态尚未确认。"))) }
+                for (id,entry) in expired { self.pending.removeValue(forKey:id); entry.0(.failure(CodexProtocol.Failure.timeout)) }
             }
             call("initialize",["clientInfo":["name":"bailong_appkit","title":PetPreferences.shared.appName,"version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
                 guard let self else{return}
                 switch result {
                 case .success:
-                    self.send(["method":"initialized"]); self.ready = true
+                    guard self.send(["method":"initialized"]) else {return}; self.ready = true
                     let callbacks = self.waiting; self.waiting.removeAll(); callbacks.forEach{$0(nil)}
                 case .failure(let error): self.fail(error)
                 }
@@ -124,22 +125,39 @@ final class CodexConnection {
         } catch { fail(error) }
     }
     func call(_ method: String, _ params: [String:Any], completion: @escaping Reply) {
+        guard input != nil else {completion(.failure(CodexProtocol.Failure.disconnected)); return}
         serial += 1; pending[serial] = (completion,Date().addingTimeInterval(30))
         send(["id":serial,"method":method,"params":params])
     }
     func reply(_ id: Any, _ result: [String:Any]) { send(["id":id,"result":result]) }
     func unsupported(_ id: Any, _ method: String) { send(["id":id,"error":["code":-32601,"message":"此客户端未支持 \(method)"]]) }
-    private func send(_ value: [String:Any]) {
-        do { var bytes = try JSONSerialization.data(withJSONObject:value); bytes.append(10); try input?.write(contentsOf:bytes) }
-        catch { fail(error) }
+    @discardableResult private func send(_ value:[String:Any]) -> Bool {
+        do {
+            guard let input else {throw CodexProtocol.Failure.disconnected}
+            var bytes = try JSONSerialization.data(withJSONObject:value); bytes.append(10)
+            try input.write(contentsOf:bytes); return true
+        } catch {fail(error); return false}
     }
+    func abortUnconfirmedTask() {
+        fail(PetFailure(message:"已关闭桌宠任务连接并回收服务进程；任务最终结果未确认，请在 Codex 核对。"))
+    }
+    func reject(_ id:Any,_ message:String) {send(["id":id,"error":["code":-32602,"message":message]])}
     private func receive(_ value: [String:Any]) {
         if let method = value["method"] as? String {
-            let params = value["params"] as? [String:Any] ?? [:]
+            guard let params = (value["params"] ?? [:]) as? [String:Any] else {
+                if let id = value["id"] {reject(id,"请求缺少参数对象。")} else {fail(CodexProtocol.Failure.malformed("事件缺少参数对象"))}
+                return
+            }
+            do {try CodexProtocol.validate(method,params)}
+            catch {
+                if let id = value["id"] {reject(id,error.localizedDescription)} else {fail(error)}
+                return
+            }
             if let id = value["id"] { request(id,method,params) } else { event(method,params) }
         } else if let id = value["id"] as? Int, let (callback,_) = pending.removeValue(forKey:id) {
             if let error = value["error"] as? [String:Any] { callback(.failure(PetFailure(message:error["message"] as? String ?? "Codex 请求失败"))) }
-            else { callback(.success(value["result"] as? [String:Any] ?? [:])) }
+            else if let result = value["result"] as? [String:Any] {callback(.success(result))}
+            else {callback(.failure(CodexProtocol.Failure.malformed("回复缺少结果对象")))}
         }
     }
     private func fail(_ error: Error) {

@@ -1,35 +1,5 @@
 import AppKit
 
-final class MessageEditor: AppTextView {
-    var onFocusChange: () -> Void = {}
-    override func becomeFirstResponder() -> Bool {let result = super.becomeFirstResponder(); onFocusChange(); return result}
-    override func resignFirstResponder() -> Bool {let result = super.resignFirstResponder(); onFocusChange(); return result}
-    var send: () -> Void = {}
-    var onTextChange: () -> Void = {}
-    var placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…") {didSet {needsDisplay = true}}
-    override func didChangeText() {super.didChangeText(); needsDisplay = true; onTextChange()}
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        if string.isEmpty {
-            (placeholder as NSString).draw(in:NSRect(x:textContainerOrigin.x+5,y:textContainerOrigin.y,width:max(0,bounds.width-textContainerOrigin.x-14),height:bounds.height-textContainerOrigin.y),withAttributes:[.font:font ?? NSFont.systemFont(ofSize:14),.foregroundColor:NSColor.placeholderTextColor])
-        }
-    }
-    private func handleReturn(_ event: NSEvent) -> Bool {
-        guard (event.keyCode == 36 || event.keyCode == 76), !hasMarkedText(),
-              let sendNow = PetPreferences.shared.sendShortcut.action(modifiers:event.modifierFlags) else {return false}
-        if sendNow {if !event.isARepeat {send()}} else if isEditable {insertNewline(nil)}
-        return true
-    }
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // 不给窗口默认按钮抢走输入法的确认键；只有本输入框聚焦时消费快捷键。
-        guard window?.firstResponder === self else {return super.performKeyEquivalent(with:event)}
-        return handleReturn(event) || super.performKeyEquivalent(with:event)
-    }
-    override func keyDown(with event: NSEvent) {
-        if !handleReturn(event) {super.keyDown(with:event)}
-    }
-
-}
 final class HistoryWindow: NSWindow {
     var focusSearch: () -> Void = {}
     var nextMatch: (Bool) -> Void = {_ in}
@@ -89,6 +59,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var historyPlaceholder: String {PetPreferences.shared.fixedText("主人，我们接着聊吧…")}
     private var composerFolder: ActionButton!, composerNew: ActionButton!
     private var renderedConversation: String?
+    private var transcriptCache = [String:([String],NSAttributedString)]()
     var busy = false
     private var updatingList = false
     private var listSnapshot = [String]()
@@ -415,6 +386,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyEditor.isEditable = !selected.external && !busy; composerEditor.isEditable = !busy
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}
+        guard history.isVisible && !history.isMiniaturized else {return}
         let selectionChanged = renderedConversation != selected.key
         transcript.automaticallyFollowsEnd = !searching
         transcript.setContent(transcriptContent(selected),animated:!searching && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
@@ -423,11 +395,12 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         updateSearchHighlights(reveal:searching && selectionChanged)
     }
     @objc private func accentChanged() {
+        transcriptCache.removeAll()
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedConversation = nil
         if let c = conversations.first(where:{$0.key == selected}) {refresh(Array(conversations.reversed()),selected:c,busy:busy)}
     }
     private func transcriptContent(_ conversation: Conversation) -> NSAttributedString {
-        let result = NSMutableAttributedString()
+        var result = NSMutableAttributedString()
         func append(_ text: String, font: NSFont = .systemFont(ofSize:PetPreferences.shared.number("messageFontSize")), color: NSColor = .labelColor, after: CGFloat = 12) {
             guard !text.isEmpty else {return}
             let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 4; paragraph.paragraphSpacing = after
@@ -443,7 +416,16 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             append("在下方输入想做的事。",color:.secondaryLabelColor)
             return result
         }
+        let preferences = PetPreferences.shared
+        let style = [preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
+        let keys = Set(conversation.turns.map(\.key))
+        transcriptCache = transcriptCache.filter {keys.contains($0.key)}
         for turn in conversation.turns {
+            let signature = style + [turn.input,turn.status,turn.messages,turn.summary,turn.steps,turn.final,turn.error,
+                turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)]
+            if let cached = transcriptCache[turn.key],cached.0 == signature {result.append(cached.1); continue}
+            let accumulated = result
+            result = NSMutableAttributedString()
             if !turn.input.isEmpty {
                 append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
                 append(turn.input)
@@ -462,6 +444,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             if !turn.final.isEmpty && !turn.messages.contains(turn.final) {appendMarkdown(turn.final)}
             if !turn.error.isEmpty {let failure = AppFailure.codex(turn.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
             append(" ",font:.systemFont(ofSize:4),after:12)
+            transcriptCache[turn.key] = (signature,result)
+            accumulated.append(result); result = accumulated
         }
         return result
     }
@@ -493,8 +477,15 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         history.miniwindowImage = NSApp.applicationIconImage
         if history.isMiniaturized {history.deminiaturize(nil)}
         NSApp.unhide(nil); history.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
+        refreshVisibleHistory()
         history.contentView?.layoutSubtreeIfNeeded()
         if searching {updateSearchHighlights(reveal:true)} else {transcript.scrollToEndOfDocument(nil)}
+    }
+    private func refreshVisibleHistory() {
+        if let current = conversations.first(where:{$0.key == selected}) {refresh(Array(conversations.reversed()),selected:current,busy:busy)}
+    }
+    func windowDidDeminiaturize(_ notification:Notification) {
+        if notification.object as? NSWindow === history {refreshVisibleHistory()}
     }
     func windowWillMiniaturize(_ notification: Notification) {
         if notification.object as? NSWindow === history {history.miniwindowImage = NSApp.applicationIconImage}

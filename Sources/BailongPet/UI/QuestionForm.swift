@@ -66,6 +66,21 @@ final class QuestionForm: NSView {
         reflow(width:width)
     }
     required init?(coder:NSCoder) {fatalError()}
+    func restoreDrafts(from previous:QuestionForm) {
+        for (index,q) in questions.enumerated() {
+            guard let oldIndex = previous.questions.firstIndex(where:{$0.id == q.id && $0.prompt == q.prompt}) else {continue}
+            inputs[index].string = previous.inputs[oldIndex].string
+            if let value = previous.selected[q.id],q.options.contains(where:{$0.title == value}) {selected[q.id] = value}
+            if previous.skipped.contains(q.id) {skipped.insert(q.id)}
+            for button in radios where button.identifier?.rawValue == q.id {
+                let option = button.tag % 1000
+                button.state = option < q.options.count ? (selected[q.id] == q.options[option].title ? .on : .off) :
+                    (selected[q.id] == nil && !inputs[index].string.isEmpty ? .on : .off)
+            }
+        }
+        if previous.questions.indices.contains(previous.currentIndex),
+           let index = questions.firstIndex(where:{$0.id == previous.questions[previous.currentIndex].id}) {currentIndex = index}
+    }
     func reflow(width:CGFloat) {
         for view in generated {view.removeFromSuperview()}; generated.removeAll()
         for button in radios {button.isHidden = true}

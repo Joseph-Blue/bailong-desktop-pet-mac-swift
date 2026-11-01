@@ -5,12 +5,12 @@ enum TaskAttentionKind: String {
     var templateKey: String {self == .answer ? "taskAnswerTemplate" : "taskApprovalTemplate"}
     var status: String {self == .answer ? "waitingForInput" : "waitingForApproval"}
 }
-struct TaskQuestionOption {
+struct TaskQuestionOption: Equatable {
     let title: String
     let detail: String?
     let recommended: Bool
 }
-struct TaskQuestion {
+struct TaskQuestion: Equatable {
     let prompt: String
     let options: [TaskQuestionOption]
     var id: String = ""
@@ -52,24 +52,9 @@ struct AppFailure {
         AppFailure(title:"这个动作暂时无法播放",message:"桌宠会保留当前画面。可以重试，或从菜单选择其他动作。",detail:error.localizedDescription)
     }
     static func codex(_ raw: String) -> AppFailure {
-        let lower = raw.lowercased()
-        if lower.contains("newer version") || lower.contains("upgrade") {
-            return AppFailure(title:"Codex 需要更新",message:"当前 Codex 版本无法使用这个模型。请更新桌面应用，再回来重试。",detail:raw,openDesktop:true)
-        }
-        if lower.contains("没有找到") || lower.contains("不可执行") {
-            return AppFailure(title:"暂时无法连接 Codex",message:"请安装或打开 Codex 桌面应用并完成登录，然后重试。",detail:raw,openDesktop:true)
-        }
-        if lower.contains("unauthorized") || lower.contains("401") || lower.contains("sign in") || lower.contains("not logged") {
-            return AppFailure(title:"需要重新登录",message:"请在 Codex 桌面应用中确认登录状态，再回来继续。",detail:raw,openDesktop:true)
-        }
-        if lower.contains("429") || lower.contains("usage limit") {
-            return AppFailure(title:"当前额度暂不可用",message:"请查看剩余额度和重置时间，稍后再试。",detail:raw)
-        }
-        if lower.contains("network") || lower.contains("connect") || lower.contains("timed out") || lower.contains("超时") {
-            return AppFailure(title:"连接暂时中断",message:"请检查网络和 Codex 状态。任务尚未确认完成，原始记录已保留。",detail:raw)
-        }
-        return AppFailure(title:"这次任务未能完成",message:"原始记录已保留。可以查看原因，并把内容放回输入框后重新发送。",detail:raw)
+        AppFailure(title:"Codex 任务未能完成",message:"请查看技术详情；可返回输入框修改后重新发送。",detail:raw)
     }
+
     func showDetails() {
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
         let scroll = NSScrollView(frame:NSRect(x:0,y:0,width:480,height:180))

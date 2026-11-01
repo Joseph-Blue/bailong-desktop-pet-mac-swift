@@ -411,14 +411,14 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, taskStartedAt: Date? = nil, taskKey: String? = nil, taskFinishedAt: Date? = nil, taskStatus: String? = nil, attentionAction: Bool = false, questions: [TaskQuestion] = [], questionSubmit: (([String:String], @escaping (Error?) -> Void) -> Void)? = nil, questionSkip: ((Set<String>) -> Void)? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
-        bubble.onQuestionSubmit = questionSubmit; bubble.onQuestionsSkipped = questionSkip
+        bubble.onQuestionSubmit = question?.submit; bubble.onQuestionsSkipped = question?.skip
         bubble.onDetails = { [weak self] in self?.onHistory(thread) }
         bubble.onCodex = { [weak self] in self?.onCodex(thread) }
-        bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),details:thread != nil,followsText:followsText,resetText:resetText,animateHeading:animateHeading || kind == "quotaLoading",taskStartedAt:taskStartedAt,taskKey:taskKey,taskFinishedAt:taskFinishedAt,taskStatus:taskStatus,attentionAction:attentionAction,questions:questions)
+        bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title, body:body, kind:kind, scale:Double(bubblePercent)/100, seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body), details:thread != nil, followsText:followsText, resetText:resetText, animateHeading:animateHeading || kind == "quotaLoading", attentionAction:attentionAction, questions:question?.questions ?? [], timing:timing)
         bubble.purpose = purpose; bubble.relatedConversation = thread
         placeBubble()
     }

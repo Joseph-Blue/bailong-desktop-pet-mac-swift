@@ -1,6 +1,6 @@
 # 白龙娘桌宠MacOS-Swift版
 
-- 本地 main 为 0.4.0，已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 本地 main 为 0.4.1-dev.1，在 0.4.0 基础上完成边界修复与结构整理；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
@@ -65,3 +65,5 @@
 
 - 历史搜索显示命中正文摘要，选中后定位并高亮；⌘F 聚焦顶部搜索，⌘G／⇧⌘G 遍历当前正文匹配。筛选不得清空草稿或自动切换会话，搜索高亮只作用于显示层。
 - 临时聊天、历史回复、问卷共用 MessageInputBox：NSBox 与原生 focus-ring 层同级、四边约束，禁止把焦点层追加到 NSBox 内容区或用零尺寸 autoresizing 推导边界。单击互动及临时聊天优先在桌宠上方，新消息重置选边；边缘继续避让。
+
+- 源码保持单 target，按 App／Pet／Conversation／Codex／UI／Settings／Infrastructure 分组；构建共用 scripts/swift-sources.sh。历史开关策略与冻结快照原子保存，重复历史身份在读取时拒绝；请求回调须核对原轮次与窗口身份。

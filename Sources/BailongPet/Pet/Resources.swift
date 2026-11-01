@@ -13,9 +13,17 @@ enum Paths {
     static let assets = resources.appendingPathComponent(Bundle.main.bundleURL.pathExtension == "app" ? "outputs/白龙桌宠素材" : "native-hevc/catalog")
     static let data = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BAILONG_DATA_DIR"] ??
         NSHomeDirectory() + "/Library/Application Support/BailongPetAppKit")
-    static var version: String {
+    static func readVersion() throws -> String {
         let url = Bundle.main.bundleURL.pathExtension == "app" ? resources.appendingPathComponent("VERSION") : project.appendingPathComponent("VERSION")
-        return (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.3.0"
+        let version = try String(contentsOf:url,encoding:.utf8).trimmingCharacters(in:.whitespacesAndNewlines)
+        guard SemanticVersion(version) != nil else {throw PetFailure(message:"VERSION 中的版本号无法识别。")}
+        return version
+    }
+    static var version:String {
+        switch Result(catching:readVersion) {
+        case .success(let value): return value
+        case .failure: return "版本不可读"
+        }
     }
 }
 
