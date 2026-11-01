@@ -53,9 +53,10 @@ final class BubbleTaskList: NSView {
             let heading = label(section.0,bold:true); heading.font = .systemFont(ofSize:12*scale,weight:.medium)
             heading.frame = NSRect(x:0,y:y,width:bounds.width,height:22*scale); addSubview(heading); y += 26*scale
             if section.1.isEmpty {
-                let empty = label(index == 0 ? incoming.status ?? "暂无正在执行的任务" : "暂无近期结束的任务")
+                let empty = label(incoming.status ?? (index == 0 ? "暂无正在执行的任务" : "暂无近期结束的任务"))
                 empty.font = .systemFont(ofSize:11*scale); empty.textColor = .secondaryLabelColor
-                empty.frame = NSRect(x:0,y:y,width:bounds.width,height:22*scale); addSubview(empty); y += 22*scale
+                let height = max(22*scale,empty.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:bounds.width,height:.greatestFiniteMagnitude)).height.rounded(.up))
+                empty.frame = NSRect(x:0,y:y,width:bounds.width,height:height); addSubview(empty); y += height
             }
             for task in section.1 {
                 let row = BubbleTaskRow(task:task,scale:scale)

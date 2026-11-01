@@ -135,11 +135,11 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
             button.widthAnchor.constraint(greaterThanOrEqualToConstant:108).isActive = true
         }
         quit.font = .systemFont(ofSize:13)
-        quit.widthAnchor.constraint(equalTo:retry.widthAnchor).isActive = true
-        quit.heightAnchor.constraint(equalTo:retry.heightAnchor).isActive = true
         for button in [copy!,issue,retry!,quit] as [NSButton] {button.keyEquivalent = ""}
         window.defaultButtonCell = nil
         let footer = NSStackView(views:[copy!,issue,NSView(),quit,retry!]); footer.spacing = 8; footer.alignment = .centerY; footer.distribution = .fill
+        quit.widthAnchor.constraint(equalTo:retry.widthAnchor).isActive = true
+        quit.heightAnchor.constraint(equalTo:retry.heightAnchor).isActive = true
         for view in [header,reportHeader,scroll,footer] {
             view.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(view)
             view.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24).isActive = true

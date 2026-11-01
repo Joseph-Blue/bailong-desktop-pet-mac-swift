@@ -114,10 +114,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerFooterButtons = [composerFolder,historyLink,composerNew,composerButton]
         for button in composerFooterButtons {
             button.configureFlexible(font:.systemFont(ofSize:13))
-            if button !== composerButton {button.heightAnchor.constraint(equalTo:composerButton.heightAnchor).isActive = true}
         }
         composerButtonHeight = composerButton.heightAnchor.constraint(equalToConstant:28); composerButtonHeight?.isActive = true
         let footer = NSStackView(views:[composerFolder,historyLink,composerNew,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
+        // 跨控件约束必须在共同父视图建立后启用，否则 AppKit 会中断整个会话初始化。
+        for button in composerFooterButtons where button !== composerButton {
+            button.heightAnchor.constraint(equalTo:composerButton.heightAnchor).isActive = true
+        }
         composerModel = ModelSelector(models)
         let modelRow = NSStackView(views:[modelHint(),composerModel,NSView()]); modelRow.spacing = 8; modelRow.alignment = .centerY
         composerModelRow = modelRow
@@ -328,9 +331,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     @objc private func searchHistory() {
         matchIndex = 0; refreshList()
-        if let current = conversations.first(where:{$0.key == selected}) {
-            refresh(Array(conversations.reversed()),selected:current,busy:busy)
-        }
+        refreshVisibleHistory()
         updateSearchHighlights(reveal:true)
     }
     @objc private func revealSearchResult() {if searching {matchIndex = 0; updateSearchHighlights(reveal:true)}}
@@ -436,7 +437,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if failure.openDesktop {
             let open = ActionButton("打开 Codex") {CodexConnection.openDesktop()}; open.emphasize()
             open.configureFlexible(font:recoveryFont); open.heightAnchor.constraint(equalToConstant:open.intrinsicContentSize.height).isActive = true
-            open.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true; recovery.insertArrangedSubview(open,at:2)
+            recovery.insertArrangedSubview(open,at:2)
+            open.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true
         }
         composerInput.isHidden = true; recovery.isHidden = false; composerButton.isHidden = !busy
     }
@@ -512,7 +514,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func accentChanged() {
         transcriptCache.removeAll()
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedConversation = nil
-        if let c = conversations.first(where:{$0.key == selected}) {refresh(Array(conversations.reversed()),selected:c,busy:busy,sending:externalSending,unconfirmed:externalUnconfirmed,replyNote:replyNote,replyMode:externalMode,modelNote:externalModelNote,readOnly:historyReadOnly)}
+        refreshVisibleHistory()
     }
     private func transcriptContent(_ conversation: Conversation) -> NSAttributedString {
         var result = NSMutableAttributedString()
@@ -597,7 +599,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if searching {updateSearchHighlights(reveal:true)} else {transcript.scrollToEndOfDocument(nil)}
     }
     private func refreshVisibleHistory() {
-        if let current = conversations.first(where:{$0.key == selected}) {refresh(Array(conversations.reversed()),selected:current,busy:busy)}
+        guard let current = conversations.first(where:{$0.key == selected}) else {return}
+        // 搜索、重新打开和取消最小化只刷新显示，不重置发送状态、只读保护和原会话设置。
+        refresh(Array(conversations.reversed()),selected:current,busy:busy,sending:externalSending,
+                unconfirmed:externalUnconfirmed,replyNote:replyNote,replyMode:externalMode,
+                modelNote:externalModelNote,readOnly:historyReadOnly)
     }
     func windowDidDeminiaturize(_ notification:Notification) {
         if notification.object as? NSWindow === history {refreshVisibleHistory()}

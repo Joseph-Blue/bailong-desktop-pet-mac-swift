@@ -78,6 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pet.syncStatus = { [weak sync] in sync?.status ?? "任务同步已停止，当前不会读取新的任务状态。" }
             RecoveryWindow.resolve("history-load")
         } catch {
+            pet.syncDiagnostics = { "会话初始化未完成" }
+            pet.syncStatus = { "会话初始化未完成，任务同步尚未启动。请打开历史会话重新读取。\n\n"+error.localizedDescription }
+            pet.bubble.taskProvider = {BubbleTaskOverview(status:"任务同步未启动，请打开历史会话重试")}
             pet.onHistory = { [weak self] _ in self?.loadChat(); RecoveryWindow.revealAll() }
             pet.onComposer = { [weak self] in self?.loadChat(); RecoveryWindow.revealAll() }
             RecoveryWindow.show(id:"history-load",report:RecoveryReport(title:"对话数据未能加载",message:"历史原文件保留，对话和任务同步尚未启动。修复文件格式或读取权限后，可重新读取。",module:"会话数据",operation:"读取历史与初始化任务目录",error:error),actionTitle:"重新读取") { [weak self] in self?.loadChat() }

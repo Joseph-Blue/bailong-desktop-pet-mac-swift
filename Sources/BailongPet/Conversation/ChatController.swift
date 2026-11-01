@@ -117,7 +117,7 @@ final class ChatController {
         }
         pet.onQuota = { [weak self] in self?.quota() }
         pet.bubble.taskProvider = { [weak self] in
-            guard let self else {return BubbleTaskOverview()}
+            guard let self else {return BubbleTaskOverview(status:"任务同步已停止")}
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
             var tasks = self.desktopTasks.filter {!self.store.deletedThreads.contains($0.threadID ?? "")}.map {task in
                 let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title

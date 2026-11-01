@@ -23,7 +23,7 @@ final class Bubble {
     private var isBrowsingCards = false
     private var submittingQuestion = false
     var onCardLayout:() -> Void = {}
-    var taskProvider:() -> BubbleTaskOverview = {BubbleTaskOverview()}
+    var taskProvider:() -> BubbleTaskOverview = {BubbleTaskOverview(status:"任务同步尚未初始化")}
     private var taskList:BubbleTaskList?
     private var timer: Timer?
     private var headingTimer: Timer?
@@ -166,7 +166,9 @@ final class Bubble {
         relatedConversation = card.thread; purpose = card.purpose
         cards[index].form = questionForm
         if card.showsTaskOverview && preferences.bool("showTaskOverview") {
-            let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:scroll.frame.width),scale:scale*preferences.number("messageFontSize")/13,provider:taskProvider)
+            let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:scroll.frame.width),scale:scale*preferences.number("messageFontSize")/13,provider:{ [weak self] in
+                self?.taskProvider() ?? BubbleTaskOverview(status:"任务同步已停止")
+            })
             taskList = list; scroll.documentView = list
             list.onResize = { [weak self] height in guard let self else {return}; self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout() }
             layout(bodyHeight:min(320*scale,list.frame.height)); list.start()
