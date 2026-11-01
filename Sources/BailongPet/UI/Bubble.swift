@@ -94,7 +94,16 @@ final class Bubble {
         // 只保留本次运行的近期卡片；等待回答的卡片和正在阅读的卡片不被裁掉。
         while cards.count > Int(preferences.number("bubbleCardLimit")),let old = cards.firstIndex(where:{$0.id != currentID && $0.id != message.id && !$0.attentionAction}) {cards.remove(at:old)}
         cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
-        if !wasVisible || cardIndex == nil || (message.kind == "interaction" || message.attentionAction) && !submittingQuestion {cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()}
+        let current = cardIndex.map {cards[$0]}
+        // 概览与随机台词让位于任务消息；阅读对话、填写及提交问卷时不自动切卡。
+        let protectsCurrent = submittingQuestion || questionForm != nil || (isBrowsingCards && current?.priority != .companion)
+        let replacesCurrent = current.map {
+            message.priority.rawValue > $0.priority.rawValue || (message.priority == .companion && $0.priority == .companion)
+        } ?? false
+        if !wasVisible || cardIndex == nil || (!protectsCurrent && replacesCurrent) {
+            if currentID != message.id {isBrowsingCards = false}
+            cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()
+        }
         else if currentID == message.id {renderCard()}
         else {updateCardNavigation(); layout(bodyHeight:layoutBodyHeight); onCardLayout()}
     }

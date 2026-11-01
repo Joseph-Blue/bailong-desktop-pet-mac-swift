@@ -17,6 +17,7 @@ struct QuestionPresentation {
 }
 
 struct BubbleCard {
+    enum Priority:Int {case companion, message, request}
     var id:String
     var title:String, body:String, kind:String
     var scale:Double, seconds:Double
@@ -31,4 +32,9 @@ struct BubbleCard {
     var showsTaskOverview = false
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
+    var priority:Priority {
+        if attentionAction {return .request}
+        if showsTaskOverview || (thread == nil && purpose == .interaction) {return .companion}
+        return .message
+    }
 }
