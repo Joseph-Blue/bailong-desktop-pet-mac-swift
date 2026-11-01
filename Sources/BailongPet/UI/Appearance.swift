@@ -15,10 +15,17 @@ enum AppAppearance {
         case "dark": NSApp.appearance = NSAppearance(named:.darkAqua)
         default: NSApp.appearance = nil
         }
+        NotificationCenter.default.post(name:AppAccent.didChange,object:nil)
     }
     static func select(_ value: String) {
         SettingsStorage.defaults.set(value,forKey:"appearanceMode")
         apply()
+    }
+    // 计时器与 Core Animation 不在 AppKit 的绘制上下文中，显式按所属视图解析动态色。
+    static func resolvedColor(_ color:NSColor,for appearance:NSAppearance) -> CGColor {
+        var result = NSColor.clear.cgColor
+        appearance.performAsCurrentDrawingAppearance {result = color.cgColor}
+        return result
     }
 }
 

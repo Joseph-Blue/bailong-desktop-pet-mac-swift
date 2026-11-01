@@ -6,6 +6,7 @@ final class AboutPageController: NSViewController {
     private var textViews = [NSTextView]()
     private let titleLabel = NSTextField(wrappingLabelWithString:"")
     private let appIcon = NSImageView()
+    private let tabs = NSTabView()
     private static var architecture: String {
         #if arch(arm64)
         return "Apple Silicon（arm64）"
@@ -41,10 +42,9 @@ final class AboutPageController: NSViewController {
         version.textColor = .secondaryLabelColor
         version.alignment = .center
 
-        let tabs = NSTabView()
         tabs.tabViewType = .topTabsBezelBorder
         tabs.font = .systemFont(ofSize:13)
-        for (identifier,label,text) in [("about","关于",aboutText()),("credits","开源致谢",creditsText())] {
+        for (identifier,label,text) in [("about","关于",aboutText()),("credits","开源项目、技术栈与致谢",creditsText())] {
             let item = NSTabViewItem(identifier:identifier)
             item.label = label
             item.view = readingView(text)
@@ -70,6 +70,8 @@ final class AboutPageController: NSViewController {
             tabs.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-24)
         ])
     }
+
+    func selectTab(_ identifier:String) {loadViewIfNeeded(); tabs.selectTabViewItem(withIdentifier:identifier)}
 
     private func readingView(_ content: NSAttributedString) -> NSScrollView {
         let scroll = NSScrollView()

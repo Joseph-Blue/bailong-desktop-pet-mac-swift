@@ -28,6 +28,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var searchHighlight:SettingsSearchHighlight?
     private var selected: SettingsSection = .general
     private var hasShown = false
+    private var hasSavedFrame = false
     private var materialPreview: Bubble?
     private var previewDismissal: DispatchWorkItem?
     private weak var glassSlider: GlassOpacitySlider?
@@ -54,7 +55,6 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         window.collectionBehavior.insert(.fullScreenNone)
         window.minSize = NSSize(width:800,height:540)
         if let screen = NSScreen.main {window.setContentSize(NSSize(width:min(1040,screen.visibleFrame.width-80),height:min(900,screen.visibleFrame.height-80)))}
-        window.setFrameAutosaveName("BailongSettingsWindow")
         window.focusSearch = { [weak self] in
             guard let self else {return}
             self.searchItem?.beginSearchInteraction(); self.window.makeFirstResponder(self.searchField)
@@ -138,6 +138,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         NotificationCenter.default.addObserver(self,selector:#selector(refreshUpdateStatus),name:UpdateChecker.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshDiagnosticsSwitch),name:PetPreferences.didChange,object:preferences)
         render()
+        window.center()
+        hasSavedFrame = window.restoreSavedFrame(named:"BailongSettingsWindow")
     }
     @objc private func refreshDiagnosticsSwitch() {
         diagnosticsSwitch?.state = preferences.bool("showDiagnostics") ? .on : .off
@@ -154,7 +156,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     func show(section: SettingsSection? = nil) {
         if let section {select(section)} else {render()}
-        if !hasShown {window.center(); hasShown = true}
+        if !hasShown {
+            if !hasSavedFrame {window.zoom(nil)}
+            hasShown = true
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.addWindowsItem(window,title:window.title,filename:false)
         if window.isMiniaturized {window.deminiaturize(nil)}
@@ -212,6 +217,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)])
         for (index,row) in rows.enumerated() {
+            if index > 0 && row.identifier?.rawValue == "settings-explanation" {items.setCustomSpacing(4,after:rows[index-1])}
             if index > 0 && row.identifier?.rawValue != "settings-explanation" {let line = NSBox(); line.boxType = .separator; fill(line,in:items)}
             fill(row,in:items)
         }
@@ -272,6 +278,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func revealSetting(_ entry:SettingsSearchEntry) {
         window.makeFirstResponder(nil); select(entry.section)
+        if entry.section == .about {
+            aboutPage.selectTab(entry.title == "关于" ? "about" : "credits")
+            return
+        }
         window.contentView?.layoutSubtreeIfNeeded()
         guard let target = searchAnchors[entry.anchor] ?? searchAnchors[entry.group],let document = scroll.documentView else {return}
         let rect = target.convert(target.bounds,to:document)
@@ -335,7 +345,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         attach(control) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:key) }
         return row(title,detail:detail,control:control)
     }
-    private func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, changed: @escaping (String)->Void) -> NSView {
+    private func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
         if identifier == "animationQuality" {
@@ -348,15 +358,15 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
         menu.widthAnchor.constraint(equalToConstant:width).isActive = true; menu.setAccessibilityLabel(title)
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
-        return row(title,control:menu)
+        return row(title,detail:detail,control:menu)
     }
-    private func choice(_ title: String, _ key: String, _ options: [(String,String)]) -> NSView {
+    private func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil) -> NSView {
         let width:CGFloat
         if key == "sendShortcut" {
             let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
             width = max(260,(options.map {($0.1 as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)+40)
         } else {width = ["singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190}
-        return popup(title,options:options,value:preferences.string(key),width:width,identifier:key) { [weak self] value in
+        return popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail) { [weak self] value in
             self?.preferences.set(value,for:key)
             self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
@@ -587,6 +597,11 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             row("登录时启动",detail:loginText,control:ActionButton(login == .enabled ? "停用…" : login == .requiresApproval ? "打开登录项…" : "启用…") { [weak self] in self?.configureLogin() }),
             row("随 Codex 启动",detail:FollowLauncher.statusText,control:ActionButton("配置…") { [weak self] in FollowLauncher.configure(); self?.render() }),
             toggle("启动后显示桌宠","showOnLaunch"),toggle("记住上次位置","rememberPosition")])
+        group("权限与系统设置",[
+            row("访达自动化",detail:"恢复目标文件所在的最小化访达窗口，并选中文件。",control:FinderPermissionControl(frame:.zero)),
+            row("文件与文件夹",detail:"访问文稿、桌面、下载等受保护目录时，由系统按需请求。按目录管理，无统一授权状态。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
+            row("登录项与后台运行",detail:"管理登录启动及随 Codex 启动；启用状态见上方“启动”。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()}),
+            note("本应用不要求辅助功能、输入监控、屏幕录制、摄像头、麦克风或完全磁盘访问权限。")])
         var displays = [("","跟随当前屏幕")] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
         let saved = preferences.string("preferredDisplay")
         if !displays.contains(where:{$0.0 == saved}) {displays.append((saved,"已断开的显示器（暂用当前屏幕）"))}
@@ -665,18 +680,20 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return searchable(stack,title:clip.title)
     }
     private func messages() {
-        group("历史记录",[toggle("记录历史","recordHistory"),note("关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
-        group("气泡窗审批",[choice("气泡窗审批按钮顺序","approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")]),note("仅改变桌宠气泡窗中的审批按钮位置，不改变原生审批对话框或 Codex 界面。红叉表示拒绝，绿对钩表示允许；键盘按键不触发审批。")])
+        group("历史记录",[toggle("记录历史","recordHistory",detail:"关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
+        group("气泡窗审批",[choice("气泡窗审批按钮顺序","approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")],detail:"仅改变桌宠气泡窗中的审批按钮位置，不改变原生审批对话框或 Codex 界面。红叉表示拒绝，绿对钩表示允许；键盘按键不触发审批。")])
         group("输入快捷键",[
             choice("发送与换行","sendShortcut",SendShortcut.options),
             note(SendShortcut.settingsExplanation)])
-        group("显示哪些消息",[toggle("任务气泡提醒","taskBubbles"),toggle("任务进展","progressBubbles"),toggle("最终回复","resultBubbles"),toggle("互动台词","interactionBubbles"),note("需要处理的审批、补充输入与任务失败仍保留通知入口。关闭气泡不会停止任务或删除历史。")])
+        group("显示哪些消息",[
+            toggle("任务气泡提醒","taskBubbles"),toggle("任务进展","progressBubbles"),toggle("最终回复","resultBubbles"),toggle("互动台词","interactionBubbles"),
+            toggle("显示思考过程","showThinkingProgress",detail:"在任务概览和进展小气泡中显示公开思考摘要，不计入气泡记录。"),
+            toggle("显示工具调用","showToolProgress",detail:"在任务概览和进展小气泡中显示工具名称、操作和执行状态，不计入气泡记录。"),
+            toggle("自动显示进展小气泡","progressToastEnabled",detail:"默认关闭。开启后，思考摘要或工具状态变化时自动弹出，优先放在桌宠上方；不打断审批、问卷和输入。"),
+            note("需要处理的审批、补充输入与任务失败仍保留通知入口。关闭气泡不会停止任务或删除历史。")])
         group("气泡卡片与任务概览",[
             slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，可设为 5～100 条，仅保留在本次运行的运行内存 (RAM) 中。普通对白不计入，任务概览只占一条；正在阅读和待处理卡片保留，不删除历史对话。"),
             toggle("互动气泡显示任务概览","showTaskOverview",detail:"通过按键执行“显示任务进度、播放随机动画”时，在台词下显示当前与近期结束任务；点击任务行跳转 Codex。"),
-            toggle("显示思考过程","showThinkingProgress",detail:"在任务概览和进展小气泡中显示公开思考摘要，不计入气泡记录。"),
-            toggle("显示工具调用","showToolProgress",detail:"在任务概览和进展小气泡中显示工具名称、操作和执行状态，不计入气泡记录。"),
-            toggle("自动显示进展小气泡","progressToastEnabled",detail:"思考摘要或工具状态变化时自动弹出，优先放在桌宠上方；不打断审批、问卷和输入。"),
             slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"默认 5 条，每个会话显示最新轮次。任务概览关闭时保留此设置。")])
         group("停留时间",[
             slider("互动台词","interactionSeconds",range:0...60,suffix:"秒"),slider("任务进展","progressSeconds",range:0...60,suffix:"秒"),slider("最终回复","resultSeconds",range:0...120,suffix:"秒"),slider("额度信息","quotaSeconds",range:0...120,suffix:"秒"),note("设为 0 秒表示手动关闭。审批、补充输入和失败提示保留到处理或手动关闭。"),
@@ -687,7 +704,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func appearance() {
         group("大小",[slider("桌宠大小","petPercent",range:50...200,suffix:"%"),slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt")])
-        group("气泡形状",[toggle("自定义宽高比","bubbleAspectEnabled"),slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1"),note("关闭时按内容自动排版。开启后应用于消息与进展气泡，正文超出时滚动；屏幕边界和操作按钮保留所需空间。问卷手动拉伸优先，额度按内容排版。")])
+        group("气泡形状",[toggle("自定义宽高比","bubbleAspectEnabled",detail:"关闭时按内容自动排版。开启后应用于消息与进展气泡，正文超出时滚动；屏幕边界和操作按钮保留所需空间。问卷手动拉伸优先，额度按内容排版。"),slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1")])
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
             let dot = AccentSwatch(key:key,name:name)
@@ -720,10 +737,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             attach(button) { [weak self] _ in self?.preferences.set(key,for:"bubbleMaterial"); self?.render(); self?.showMaterialPreview() }
             radios.addArrangedSubview(button)
         }
-        let materialNote = note("液态玻璃材质仅在 macOS 26、27 系统中可用")
-        var materialRows = [row("消息窗口材质",control:radios),materialNote]
+        var materialRows = [row("消息窗口材质",detail:"macOS 26 起支持液态玻璃材质。",control:radios)]
         if preferences.usesGlass {
             let follow = AccentSwitch(); follow.state = preferences.bool("glassFollowsSystem") ? .on : .off; glassFollowSwitch = follow
+            follow.setAccessibilityLabel("液态玻璃跟随系统设定")
             attach(follow) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:"glassFollowsSystem"); self?.showMaterialPreview() }
             materialRows.append(row("液态玻璃跟随系统设定",control:follow))
             let slider = GlassOpacitySlider(); slider.minValue = 0; slider.maxValue = 1; slider.doubleValue = preferences.number("glassOpacity")
@@ -799,14 +816,14 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let total = label("正在统计本应用磁盘存储…")
         total.font = .systemFont(ofSize:11); total.textColor = .secondaryLabelColor
         total.identifier = .init("settings-explanation")
-        let dataButton = SettingsFooterButton(title:"清空数据…",target:self,action:#selector(clearLocalData))
+        let dataButton = SettingsFooterButton(title:"清空本应用的本机数据…",target:self,action:#selector(clearLocalData))
         let cacheButton = SettingsFooterButton(title:"清空缓存…",target:self,action:#selector(clearLocalCache))
         for button in [dataButton,cacheButton] {button.bezelStyle = .rounded; button.hasDestructiveAction = true}
         group("本应用所占本机存储",[total,
             row("本应用所占本机数据",detail:"聊天记录、同步副本和应用设置",control:data),
             row("默认任务文件夹",detail:"任务创建的文件，清空数据时保留。",control:work),
             row("磁盘缓存",detail:"不含动画帧缓冲的运行内存 (RAM)。",control:cache),
-            row("清空本机数据",control:dataButton),row("清空磁盘缓存",control:cacheButton),
+            row("清空本应用的本机数据",control:dataButton),row("清空磁盘缓存",control:cacheButton),
             row("数据目录",detail:Paths.data.path,control:ActionButton("在访达中显示") {if !NSWorkspace.shared.open(Paths.data) {showError("无法打开数据目录",PetFailure(message:Paths.data.path))}})],
             action:ActionButton("刷新") { [weak self] in self?.render() })
         storageGeneration += 1; let generation = storageGeneration
@@ -826,7 +843,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     @objc private func clearLocalData() {
-        confirmStorage(title:"清空本机数据？",body:"删除桌宠的聊天记录和 Codex 同步副本，并恢复应用设置。默认任务文件夹、其他工作目录、Codex 原始记录和登录信息保留。",button:"清空数据") { [weak self] in
+        confirmStorage(title:"清空本应用的本机数据？",body:"删除本应用的聊天记录和 Codex 同步副本，并恢复本应用设置。默认任务文件夹、其他工作目录、Codex 原始记录和登录信息保留。",button:"清空本应用的本机数据") { [weak self] in
             guard let action = self?.onClearLocalData else {throw PetFailure(message:"数据管理尚未就绪。")}
             try action()
         }

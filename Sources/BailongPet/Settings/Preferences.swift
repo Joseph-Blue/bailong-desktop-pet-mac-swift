@@ -64,7 +64,7 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
-        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,
+        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":false,"progressToastSeconds":2.0,
         "automaticallyCheckUpdates":false,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",

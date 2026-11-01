@@ -1,5 +1,14 @@
 import AppKit
 
+extension NSMenu {
+    func showProvidedImages() {
+        for item in items {
+            if #available(macOS 27.0, *), item.image != nil {item.preferredImageVisibility = .visible}
+            item.submenu?.showProvidedImages()
+        }
+    }
+}
+
 func showError(_ title: String, _ error: Error) {
     let alert = NSAlert(); alert.messageText = title; alert.informativeText = error.localizedDescription
     alert.alertStyle = .warning; alert.addButton(withTitle: "好")

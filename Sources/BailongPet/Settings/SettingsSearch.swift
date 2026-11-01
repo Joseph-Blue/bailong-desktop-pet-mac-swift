@@ -2,6 +2,13 @@ import AppKit
 
 final class SettingsWindow: NSWindow {
     private var restoredFrame:NSRect?
+    func restoreSavedFrame(named name:String) -> Bool {
+        // 保存标准尺寸作为绿灯恢复目标，再读取用户保存的窗口位置与尺寸。
+        restoredFrame = frame
+        let restored = setFrameUsingName(name)
+        setFrameAutosaveName(name)
+        return restored
+    }
     override func zoom(_ sender:Any?) {
         guard let area = screen?.visibleFrame else {return}
         if frame.equalTo(area),let restoredFrame {setFrame(restoredFrame,display:true,animate:!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion); self.restoredFrame = nil}
@@ -31,6 +38,9 @@ struct SettingsSearchEntry {
             entries += titles.map {Self(section:section,group:group,title:$0,keywords:keywords)}
         }
         add(.general,"启动",["登录时启动","随 Codex 启动","启动后显示桌宠","记住上次位置"],"开机 自启动 跟随 召回")
+        add(.general,"权限与系统设置",["访达自动化"],"权限 授权 Finder 文件链接 最小化 恢复 自动化 系统设置")
+        add(.general,"权限与系统设置",["文件与文件夹"],"权限 授权 文稿 桌面 下载 隐私 文件访问 系统设置")
+        add(.general,"权限与系统设置",["登录项与后台运行"],"权限 批准 开机 自启动 跟随 后台 系统设置")
         add(.general,"桌面",["全屏时自动隐藏","所在显示器"],"屏幕 多屏")
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 预览")
@@ -43,7 +53,8 @@ struct SettingsSearchEntry {
         add(.messages,"历史记录",["记录历史"],"聊天 保存 同步")
         add(.messages,"气泡窗审批",["气泡窗审批按钮顺序"],"批准 允许这一次 允许本轮 拒绝 左拒绝 右允许 左允许 右拒绝 左右 位置 红叉 绿对钩")
         add(.messages,"气泡卡片与任务概览",["气泡卡片保留数量","互动气泡显示任务概览","近期结束任务数量"],"消息 历史 上一条 下一条 正在执行 最近 完成")
-        add(.messages,"气泡卡片与任务概览",["显示思考过程","显示工具调用","自动显示进展小气泡"],"思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关")
+        add(.messages,"显示哪些消息",["显示思考过程","显示工具调用"],"思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关")
+        add(.messages,"显示哪些消息",["自动显示进展小气泡"],"默认关闭 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关")
         add(.messages,"输入快捷键",["发送与换行"],"回车 Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 备选1 备选2 默认 发送 换行 快捷回复 插话 问卷")
         add(.messages,"显示哪些消息",["任务气泡提醒","任务进展","最终回复","互动台词"],"通知 显示 开关")
         add(.messages,"停留时间",["互动台词","任务进展","最终回复","额度信息","长回复自动延长阅读时间","鼠标移入时暂停倒计时","文字显示完毕后开始计时"],"气泡 自动关闭 秒 时长 悬停")
@@ -55,12 +66,13 @@ struct SettingsSearchEntry {
         add(.appearance,"主题",["外观模式","强调色","自定义"],"主题 颜色 浅色 深色 跟随系统")
         add(.appearance,"消息窗口",["消息窗口材质","液态玻璃跟随系统设定","玻璃不透明度","动态效果","气泡效果"],"玻璃 透明 磨砂 背景 动画 预览")
         add(.advanced,"设置文件",["导出设置","导入设置"],"备份 恢复")
-        add(.advanced,"本应用所占本机存储",["本应用所占本机数据","默认任务文件夹","磁盘缓存","清空本机数据","清空磁盘缓存","数据目录"],"存储 磁盘 空间 清理 删除 访达 Finder")
+        add(.advanced,"本应用所占本机存储",["本应用所占本机数据","默认任务文件夹","磁盘缓存","清空本应用的本机数据","清空磁盘缓存","数据目录"],"存储 磁盘 空间 清理 删除 访达 Finder 清空本机数据 清空数据")
         add(.developer,"动画",["画质","素材帧率上限","动画缓冲帧数","整段动画预加载"],"性能 内存 RAM 720 512 384 256 FPS 分辨率 缓冲")
         add(.developer,"应用统计",["开启应用性能信息统计浮窗"],"CPU GPU 内存 RAM Swap 性能监视器")
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
+        add(.about,"关于",["关于","开源项目、技术栈与致谢"],"开源致谢 来源 作者 许可证 技术栈 AppKit macOS UI skill")
         for index in entries.indices {
             if ["液态玻璃跟随系统设定","玻璃不透明度"].contains(entries[index].title) {
                 entries[index].condition = "选择液态玻璃材质后显示"

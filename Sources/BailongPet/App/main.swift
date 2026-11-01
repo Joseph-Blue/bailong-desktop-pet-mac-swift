@@ -127,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.addItem(MenuAction("错误与恢复",symbol:"exclamationmark.triangle") {RecoveryWindow.revealAll()})
         windows.addItem(NSMenuItem(title:"最小化",action:#selector(NSWindow.performMiniaturize(_:)),keyEquivalent:"m"))
         windows.addItem(.separator()); NSApp.windowsMenu = windows
-        NSApp.mainMenu = bar
+        bar.showProvidedImages(); NSApp.mainMenu = bar
     }
     @objc func updateNames() {
         let name = PetPreferences.shared.appName

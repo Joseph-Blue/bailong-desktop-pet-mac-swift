@@ -1,5 +1,16 @@
 import AppKit
 
+private final class BubbleHeadingField:NSTextField {
+    var colorsChanged:(() -> Void)?
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        NotificationCenter.default.addObserver(self,selector:#selector(refreshColors),name:AppAccent.didChange,object:nil)
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshColors()}
+    @objc private func refreshColors() {colorsChanged?()}
+}
+
 final class Bubble {
     let window: PetWindow
     private lazy var motion = BubbleMotion(window:window,preferences:preferences)
@@ -8,9 +19,9 @@ final class Bubble {
     private var placementArea:CGRect?
     var targetFrame: NSRect {motion.frame}
     func move(to origin: NSPoint) {motion.move(to:origin)}
-    private let title = label("", bold:true)
+    private let title = BubbleHeadingField(wrappingLabelWithString:"")
     private let text = StreamingTextView()
-    private let scroll = GutterScrollView()
+    private let scroll = InitialReadingScrollView()
     private let closeButton = BubbleCloseButton()
     private var details: ActionButton!
     private var codexButton: ActionButton!
@@ -33,6 +44,7 @@ final class Bubble {
     private var plainHeading = ""
     private var headingPhase = 0
     private var headingStarted = 0.0
+    private var headingAnimated = false
     private let elapsedIcon = NSImageView()
     private let elapsedLabel = NSTextField(labelWithString:"00:00")
     private var elapsedTimer: Timer?
@@ -168,8 +180,8 @@ final class Bubble {
         saveCardForm(); cardIndex = index+delta; renderCard()
     }
     private func updateCardNavigation() {
-        let multiple = cardIndex != nil && cards.count > 1
-        previousCard.isHidden = !multiple; nextCard.isHidden = !multiple; cardCount.isHidden = !multiple
+        let hasCard = cardIndex != nil
+        previousCard.isHidden = !hasCard; nextCard.isHidden = !hasCard; cardCount.isHidden = !hasCard
         previousCard.isEnabled = !submittingQuestion && (cardIndex ?? 0) > 0
         nextCard.isEnabled = !submittingQuestion && (cardIndex ?? cards.count) < cards.count-1
         cardCount.stringValue = "\((cardIndex ?? 0)+1) / \(cards.count)"
@@ -179,9 +191,12 @@ final class Bubble {
     private func renderCard(refreshingAppearance:Bool = false) {
         guard let index = cardIndex,cards.indices.contains(index) else {return}
         let card = cards[index]
-        let changedCard = renderedCardID != card.id || !visible
+        let changedApproval = approval?.request.identity != card.approval?.request.identity || approval?.request.details != card.approval?.request.details
+        let changedCard = renderedCardID != card.id || changedApproval || !visible
         let origin = scroll.contentView.bounds.origin
-        let animatesText = preferences.bool("typingEffect") && card.kind == "task" && card.followsText
+        let animatesText = preferences.bool("typingEffect") && card.kind == "task" && card.followsText && !card.attentionAction && card.approval == nil
+        if card.approval == nil {scroll.releaseInitialTop()}
+        else if changedCard && !refreshingAppearance {scroll.holdInitialTop()}
         questionForm = card.form; questionModels = card.form?.questions ?? card.question?.questions ?? []; questionTaskKey = card.timing?.key; questionSize = card.questionSize
         onQuestionSubmit = card.question?.submit; onQuestionsSkipped = card.question?.skip
         onDetails = card.details; onCodex = card.codex; approval = card.approval
@@ -221,8 +236,14 @@ final class Bubble {
         }
         let content = BubbleBackgroundView()
         window.contentView = content
+        title.isSelectable = false; title.font = .boldSystemFont(ofSize:13)
+        title.colorsChanged = { [weak self] in
+            guard let self,self.headingAnimated else {return}
+            self.renderAnimatedHeading()
+        }
         text.isEditable = false; text.isSelectable = false; text.drawsBackground = false
         text.startsSnapshotsAtTop = true
+        text.onUserNavigation = { [weak self] in self?.scroll.releaseInitialTop() }
         text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = [.width]
         text.textContainer?.widthTracksTextView = true; text.textContainerInset = NSSize(width:0,height:2)
         text.textColor = .labelColor
@@ -321,7 +342,8 @@ final class Bubble {
             let countWidth = ("\(count) / \(count)" as NSString).size(withAttributes:[.font:cardCount.font!]).width.rounded(.up)
             column = max(column,2*(buttonHeight+gap)+countWidth)
         }
-        return max(usesCustomAspect ? aspectWidth : 320*scale,320*scale,32*scale+gap+2*column)
+        let questionWidth = previousQuestion.isHidden ? 0 : 32*scale+2*gap+3*([previousQuestion!,skipQuestion!,details!].map {$0.intrinsicContentSize.width}.max() ?? 0)
+        return max(usesCustomAspect ? aspectWidth : 320*scale,320*scale,32*scale+gap+2*column,questionWidth)
     }
     private var layoutWidth:CGFloat {min(max(questionSize?.width ?? 0,minimumLayoutWidth),kind == "progressToast" ? 360*scale : .greatestFiniteMagnitude,placementArea?.width ?? .greatestFiniteMagnitude)}
     private func layout(bodyHeight: Double) {
@@ -355,10 +377,16 @@ final class Bubble {
             self.closeButton.frame = NSRect(x:margin-2*scale,y:height-margin-firstLineHeight/2-closeSide/2,width:closeSide,height:closeSide)
             self.closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
             let textHeight = max(0,height-chromeHeight)
+            let readingOrigin = self.scroll.contentView.bounds.origin
             self.scroll.frame = NSRect(x:margin,y:margin+footer,width:w-2*margin,height:textHeight)
             self.scroll.isHidden = bodyHeight <= 0
             self.text.frame.size.width = self.scroll.contentView.bounds.width
             self.text.textContainer?.containerSize = NSSize(width:self.scroll.contentView.bounds.width,height:CGFloat.greatestFiniteMagnitude)
+            // 高度过渡及屏幕避让每帧都会调整视口；静态正文仍保持顶部或用户阅读位置。
+            if !self.text.automaticallyFollowsEnd {
+                self.scroll.contentView.scroll(to:readingOrigin)
+                self.scroll.reflectScrolledClipView(self.scroll.contentView)
+            }
             // 两列共享边界与控件高度；翻页留在左下，正文高度不影响导航位置。
             let navigationY = margin, actionY = navigationY+navigationHeight
             let allowOnLeft = self.preferences.string("approvalButtonOrder") == "allowLeft"
@@ -372,7 +400,15 @@ final class Bubble {
             self.nextCard.frame = NSRect(x:margin+columnWidth-buttonHeight,y:navigationY,width:buttonHeight,height:buttonHeight)
             self.replyButton.frame = NSRect(x:margin+columnWidth+gap,y:navigationY,width:columnWidth,height:buttonHeight)
             self.retryButton.frame = NSRect(x:margin+columnWidth+gap,y:actionY,width:columnWidth,height:buttonHeight)
-            if !self.codexButton.isHidden && self.details.isHidden {
+            if !self.previousQuestion.isHidden {
+                // 题目导航固定一行：上一题、跳过、下一题／提交；Codex 跳转独立一行。
+                let questionColumn = (w-2*margin-2*gap)/3
+                let questionY = actionY+buttonHeight+gap
+                self.previousQuestion.frame = NSRect(x:margin,y:questionY,width:questionColumn,height:buttonHeight)
+                self.skipQuestion.frame = NSRect(x:margin+questionColumn+gap,y:questionY,width:questionColumn,height:buttonHeight)
+                self.details.frame = NSRect(x:margin+2*(questionColumn+gap),y:questionY,width:questionColumn,height:buttonHeight)
+                self.codexButton.frame = NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight)
+            } else if !self.codexButton.isHidden && self.details.isHidden {
                 self.codexButton.frame = NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight)
             } else if !self.codexButton.isHidden {
                 self.codexButton.frame = NSRect(x:margin,y:actionY,width:columnWidth,height:buttonHeight)
@@ -397,11 +433,11 @@ final class Bubble {
 
     func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, followsText: Bool = true, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false) {
         taskList?.stop(); taskList = nil
-        if !fromCard {saveCardForm(); approval = nil; cardIndex = nil; renderedCardID = nil; isBrowsingCards = false; updateCardNavigation()}
+        if !fromCard {saveCardForm(); approval = nil; scroll.releaseInitialTop(); cardIndex = nil; renderedCardID = nil; isBrowsingCards = false; updateCardNavigation()}
         let taskKey = timing?.key
         if !preserveCountdown {timer?.invalidate()}
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
-        let animatesText = preferences.bool("typingEffect") && kind == "task" && followsText
+        let animatesText = preferences.bool("typingEffect") && kind == "task" && followsText && !attentionAction && approval == nil
         let same = self.kind == kind && scroll.documentView === text && text.automaticallyFollowsEnd == animatesText
         text.automaticallyFollowsEnd = animatesText
         self.kind = kind; self.scale = scale
@@ -505,9 +541,10 @@ final class Bubble {
     private func setHeading(_ heading: String, animated: Bool) {
         if plainHeading != heading || headingTimer == nil {headingStarted = ProcessInfo.processInfo.systemUptime}
         plainHeading = heading
+        headingAnimated = animated
         if !animated {
             headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0
-            title.stringValue = heading; return
+            title.stringValue = heading; title.textColor = .labelColor; return
         }
         if !preferences.bool("bubbleMotion") || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0
@@ -523,9 +560,11 @@ final class Bubble {
         headingTimer = timer; RunLoop.main.add(timer, forMode: .common)
     }
     private func renderAnimatedHeading() {
+        let foreground = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:title.effectiveAppearance))!
+        let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:title.effectiveAppearance))!
         let value = NSMutableAttributedString(string:headingFrames[headingPhase] + " " + plainHeading,
-            attributes:[.font:title.font ?? NSFont.systemFont(ofSize:13,weight:.semibold),.foregroundColor:NSColor.labelColor])
-        value.addAttribute(.foregroundColor,value:AppAccent.color,range:NSRange(location:0,length:1))
+            attributes:[.font:title.font ?? NSFont.systemFont(ofSize:13,weight:.semibold),.foregroundColor:foreground])
+        value.addAttribute(.foregroundColor,value:accent,range:NSRange(location:0,length:1))
         if preferences.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             // 1.2 秒扫过，2.8 秒停顿；前两字符是盲文和空格，不参与流水。
             let phase = (ProcessInfo.processInfo.systemUptime-headingStarted).truncatingRemainder(dividingBy:4)
@@ -539,7 +578,7 @@ final class Bubble {
                 let strength = phase < 1.2 ? exp(-distance*distance) : 0
                 // 浅色界面用深字浅扫；深色界面用灰字亮扫，亮带方向一致。
                 let opacity = dark ? 0.58+0.42*strength : 1-0.55*strength
-                value.addAttribute(.foregroundColor,value:NSColor.labelColor.withAlphaComponent(opacity),range:NSRange(location:offset,length:length))
+                value.addAttribute(.foregroundColor,value:foreground.withAlphaComponent(opacity),range:NSRange(location:offset,length:length))
                 offset += length
             }
         }

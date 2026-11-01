@@ -155,7 +155,9 @@ final class PetController: NSObject, NSMenuDelegate {
         let target = NSScreen.screens.first {PetPreferences.displayID($0) == preferences.string("preferredDisplay")} ?? screen
         let a = target.visibleFrame
         let remember = preferences.bool("rememberPosition")
-        window.setFrameOrigin(CGPoint(x: remember ? defaults.object(forKey:"x") as? Double ?? a.maxX-size-24 : a.maxX-size-24, y: remember ? defaults.object(forKey:"y") as? Double ?? a.minY+24 : a.minY+24))
+        let initial = CGPoint(x:a.minX+a.width*0.85-size/2,y:a.minY+a.height*0.23-size/2)
+        window.setFrameOrigin(CGPoint(x:remember ? defaults.object(forKey:"x") as? Double ?? initial.x : initial.x,
+                                      y:remember ? defaults.object(forKey:"y") as? Double ?? initial.y : initial.y))
         move(constrained(position, screen: target)); activityOrigin = position
         manualHidden = !preferences.bool("showOnLaunch"); playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
         bubble.preferences = preferences
@@ -625,6 +627,7 @@ final class PetController: NSObject, NSMenuDelegate {
         tools.addItem(MenuAction("关于"+preferences.appName+"…",symbol:"info.circle") { [weak self] in self?.showSettings(section:.about) })
         menu.addItem(.separator())
         menu.addItem(MenuAction("退出"+preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak self] in self?.onQuit() })
+        menu.showProvidedImages()
         return menu
     }
     func savePosition() {
@@ -653,6 +656,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
+        if keys.contains("appearanceMode") {AppAppearance.apply()}
         // 连续拖动材质滑块只刷新气泡背景，不触发任务同步与桌宠调度。
         if !keys.isEmpty && Set(keys).isSubset(of:["bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]) {return}
         if keys.contains("approvalButtonOrder") {_ = bubble.refreshAppearance(); placeBubble()}
@@ -683,7 +687,6 @@ final class PetController: NSObject, NSMenuDelegate {
         if !Set(keys).isDisjoint(with:["autoMove","movementRange","quietCompanion","quietSchedule","quietStart","quietEnd"]) {
             if motion != nil {idle()}; activityOrigin = position
         }
-        if keys.contains("appearanceMode") {AppAppearance.apply()}
         if keys.contains("accentStyle") || keys.contains("accentRGB") {NotificationCenter.default.post(name:AppAccent.didChange,object:nil)}
         if !preferences.allows(bubble.purpose) {bubble.hide()}; if !preferences.allows(.progress) {progressBubble.hide()}
         if !Set(keys).isDisjoint(with:["bubbleCardLimit","recentTaskCount","showTaskOverview"]) {bubble.refreshCardPreferences()}

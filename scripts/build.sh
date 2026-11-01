@@ -49,6 +49,7 @@ cat > "$staging/Contents/Info.plist" <<PLIST
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>CFBundleAllowMixedLocalizations</key><true/>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSAppleEventsUsageDescription</key><string>点击本机文件链接时，恢复对应的访达窗口并选中文件。</string>
 <key>CFBundleIconFile</key><string>BailongPet</string>
 </dict></plist>
 PLIST

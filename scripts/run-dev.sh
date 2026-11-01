@@ -33,6 +33,7 @@ if (( rebuild )); then
 <key>CFBundleAllowMixedLocalizations</key><true/>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSAppleEventsUsageDescription</key><string>点击本机文件链接时，恢复对应的访达窗口并选中文件。</string>
 </dict></plist>
 PLIST
     xcrun swiftc -O -whole-module-optimization -swift-version 5 \

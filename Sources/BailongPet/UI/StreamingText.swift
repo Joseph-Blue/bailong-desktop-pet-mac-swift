@@ -25,6 +25,12 @@ final class StreamingTextView: AppTextView {
     }
     var automaticallyFollowsEnd = true
     var startsSnapshotsAtTop = false
+    var onUserNavigation:() -> Void = {}
+    override func keyDown(with event:NSEvent) {
+        if [49,115,116,119,121,123,124,125,126].contains(event.keyCode) {onUserNavigation()}
+        super.keyDown(with:event)
+    }
+    override func mouseDown(with event:NSEvent) {onUserNavigation(); super.mouseDown(with:event)}
     var linkBaseDirectory: (() -> URL?)?
     var isRevealing: Bool {revealTimer != nil}
     override func clicked(onLink link: Any, at charIndex: Int) {
@@ -38,7 +44,13 @@ final class StreamingTextView: AppTextView {
         let origin = enclosingScrollView?.contentView.bounds.origin
         targetText = value
         guard animated && !reset else {
+            if startsSnapshotsAtTop && reset {setSelectedRange(NSRange(location:0,length:0))}
             stopReveal(); textStorage?.setAttributedString(value)
+            // 先完成代码框等富文本排版与文档高度更新，再恢复阅读位置。
+            if startsSnapshotsAtTop {
+                if let manager = layoutManager,let container = textContainer {manager.ensureLayout(for:container)}
+                if isVerticallyResizable {sizeToFit()}
+            }
             if startsSnapshotsAtTop && reset {scrollToBeginningOfDocument(nil)}
             else if !startsSnapshotsAtTop && follows {scrollToEndOfDocument(nil)}
             else if reset {scrollToBeginningOfDocument(nil)}
