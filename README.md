@@ -93,7 +93,7 @@ Codex 工作时，桌宠会显示回复和需要你处理的提醒。单击桌�
 
 双击桌宠查询 Codex 额度，按账号返回的信息显示套餐、剩余额度、下次重置时间、点数和重置卡。**每次都重新查询，不使用上次结果。**
 
-底部提供 ChatGPT 网页、Google Play 和 Apple 的订阅管理入口，免费用户也能看到。点击后打开对应平台；桌宠不显示订阅续费日期。
+底部提供 ChatGPT 网页、Google Play 和 Apple 的订阅管理入口，免费用户也能看到。点击后打开对应平台。
 
 <p align="center">
   <a href=".github/images/codex-quota.png"><img src=".github/images/codex-quota.png" alt="额度查询：套餐、剩余额度、重置时间、点数、重置卡和订阅管理入口" width="320"></a>
