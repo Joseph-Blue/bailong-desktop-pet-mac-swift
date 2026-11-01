@@ -259,7 +259,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         play(preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"idle")
     }
-    func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !quotaActive && press == nil && !menuOpen && !settingsOpen && now >= max(nextLeisure,lastInteraction+preferences.activityInterval) }
+    func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !quotaActive && press == nil && !menuOpen && now >= max(nextLeisure,lastInteraction+preferences.activityInterval) }
     func route(_ clip: Clip) -> CGPoint? {
         guard preferences.string("movementRange") != "still" else {return nil}
         let a = area(screen)

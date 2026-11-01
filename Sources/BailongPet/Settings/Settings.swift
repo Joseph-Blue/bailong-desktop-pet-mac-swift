@@ -95,10 +95,13 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let resetAll = SettingsFooterButton(title:"恢复全部设置为默认值",target:self,action:#selector(restoreAll))
         resetAll.bezelStyle = .rounded; resetAll.hasDestructiveAction = true
         resetAll.focusRingType = .exterior
+        let closeButton = SettingsFooterButton(title:"关闭",target:window,action:#selector(NSWindow.performClose(_:)))
+        closeButton.focusRingType = .exterior
+        closeButton.setAccessibilityLabel("关闭设置窗口")
         let footerLine = NSBox(); footerLine.boxType = .separator
-        let sidebarFooter = NSStackView(views:[footerLine,resetButton,resetAll])
+        let sidebarFooter = NSStackView(views:[footerLine,resetButton,resetAll,closeButton])
         sidebarFooter.orientation = .vertical; sidebarFooter.spacing = 8; sidebarFooter.alignment = .leading
-        for button in [resetButton as NSButton,resetAll] {
+        for button in [resetButton as NSButton,resetAll,closeButton] {
             button.font = .systemFont(ofSize:11); button.controlSize = .small
             button.heightAnchor.constraint(equalToConstant:28).isActive = true
             button.widthAnchor.constraint(equalTo:sidebarFooter.widthAnchor).isActive = true
