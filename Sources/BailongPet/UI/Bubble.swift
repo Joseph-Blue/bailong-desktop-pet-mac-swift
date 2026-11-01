@@ -88,7 +88,7 @@ final class Bubble {
         guard let index = cardIndex,cards.indices.contains(index) else {return}
         cards[index].form = questionForm; cards[index].questionSize = questionSize
     }
-    func present(_ message:BubbleCard) {
+    func present(_ message:BubbleCard,select:Bool = false) {
         saveCardForm()
         let currentID = cardIndex.map {cards[$0].id}, wasVisible = visible
         if let index = cards.firstIndex(where:{$0.id == message.id}) {
@@ -106,11 +106,12 @@ final class Bubble {
         // 概览与随机台词让位于任务消息；阅读对话、填写及提交问卷时不自动切卡。
         let protectsCurrent = submittingQuestion || questionForm != nil || (isBrowsingCards && current?.priority != .companion)
         let replacesCurrent = current.map {
-            message.priority.rawValue > $0.priority.rawValue || (message.priority == .companion && $0.priority == .companion)
+            message.priority.rawValue > $0.priority.rawValue ||
+            (message.priority == $0.priority && message.priority != .request)
         } ?? false
-        // 概览仅由用户按键明确召回：移动到末尾并显示，但不打断待处理请求或问卷。
-        let requestedOverview = message.showsTaskOverview && !pendingAttention && questionForm == nil && !submittingQuestion
-        if !wasVisible || cardIndex == nil || requestedOverview || (!protectsCurrent && replacesCurrent) {
+        // 主动发送或按键召回概览可选中新卡，但不打断待处理请求或问卷。
+        let requestedCard = (select || message.showsTaskOverview) && !pendingAttention && questionForm == nil && !submittingQuestion
+        if !wasVisible || cardIndex == nil || requestedCard || (!protectsCurrent && replacesCurrent) {
             if currentID != message.id {isBrowsingCards = false}
             cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()
         }

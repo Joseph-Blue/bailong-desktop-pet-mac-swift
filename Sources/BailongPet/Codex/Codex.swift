@@ -11,6 +11,7 @@ final class CodexConnection {
     private var pending = [Int:(Reply,Date)]()
     private var waiting = [(Error?) -> Void]()
     private var ready = false
+    private var loadedThreads = Set<String>()
     private var closing = false
     private var generation = 0
     private var expiration: Timer?
@@ -124,6 +125,23 @@ final class CodexConnection {
             }
         } catch { fail(error) }
     }
+    // 同一服务进程内复用已加载的会话；恢复只用于本次连接尚未加载的历史会话。
+    func prepareThread(_ id:String?,params:[String:Any],completion:@escaping (Result<String,Error>) -> Void) {
+        if let id,loadedThreads.contains(id) {completion(.success(id)); return}
+        var params = params
+        if let id {params["threadId"] = id}
+        call(id == nil ? "thread/start" : "thread/resume",params) { [weak self] result in
+            switch result {
+            case .failure(let error): completion(.failure(error))
+            case .success(let value):
+                guard let thread = (value["thread"] as? [String:Any])?["id"] as? String,!thread.isEmpty else {
+                    completion(.failure(CodexProtocol.Failure.malformed("缺少会话 ID"))); return
+                }
+                self?.loadedThreads.insert(thread)
+                completion(.success(thread))
+            }
+        }
+    }
     func call(_ method: String, _ params: [String:Any], completion: @escaping Reply) {
         guard input != nil else {completion(.failure(CodexProtocol.Failure.disconnected)); return}
         serial += 1; pending[serial] = (completion,Date().addingTimeInterval(30))
@@ -153,6 +171,7 @@ final class CodexConnection {
                 if let id = value["id"] {reject(id,error.localizedDescription)} else {fail(error)}
                 return
             }
+            if method == "thread/closed",let thread = params["threadId"] as? String {loadedThreads.remove(thread)}
             if let id = value["id"] { request(id,method,params) } else { event(method,params) }
         } else if let id = value["id"] as? Int, let (callback,_) = pending.removeValue(forKey:id) {
             if let error = value["error"] as? [String:Any] { callback(.failure(PetFailure(message:error["message"] as? String ?? "Codex 请求失败"))) }
@@ -166,7 +185,7 @@ final class CodexConnection {
         callbacks.forEach{$0(error)}; calls.forEach{$0(.failure(error))}; disconnected(error)
     }
     func close() {
-        closing = true; ready = false; generation += 1; expiration?.invalidate()
+        closing = true; ready = false; loadedThreads.removeAll(); generation += 1; expiration?.invalidate()
         try? input?.close(); input = nil
         if let process, process.isRunning {
             process.terminate()

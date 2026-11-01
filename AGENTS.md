@@ -1,6 +1,6 @@
 # 白龙桌宠Swift
 
-- 本地 main 版本为 0.5.0-dev.18，新增历史管理与 720 画质；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 本地 main 版本为 0.5.0-dev.19，新增历史管理与 720 画质；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
@@ -105,3 +105,5 @@
 - 跨控件 Auto Layout 约束须在共同父视图建立后激活，覆盖临时回复窗、恢复页和错误操作。任务同步未初始化／失败须显示实际状态，不能冒充空列表；历史搜索、召回及取消最小化只刷新显示，保留发送、待确认、只读和原会话模型状态。未经用户批准不回滚提交。
 
 - 问卷提交状态属于原 QuestionForm；切到额度等临时内容不遗留全局提交锁，回执按原任务及表单身份处理，不能清除后来出现的新问题或误改当前气泡按钮。
+
+- 内置会话在同一 CodexConnection 中 start／resume 成功后复用加载身份，后续直接 turn/start；thread/closed 与连接关闭清理身份，不反复 resume、不抢占其他 writer、不自动新建或重发。每轮仍发送用户选择的 model／effort。气泡未浏览旧卡时跟随同级任务进展及结果；用户明确提交内置新任务可选中新卡，问卷与待处理请求不被打断。

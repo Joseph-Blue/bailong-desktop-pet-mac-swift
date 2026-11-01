@@ -52,7 +52,10 @@ struct AppFailure {
         AppFailure(title:"这个动作暂时无法播放",message:"桌宠会保留当前画面。可以重试，或从菜单选择其他动作。",detail:error.localizedDescription)
     }
     static func codex(_ raw: String) -> AppFailure {
-        AppFailure(title:"Codex 任务未能完成",message:"请查看技术详情；可返回输入框修改后重新发送。",detail:raw)
+        if raw.contains("already has an active writer") {
+            return AppFailure(title:"这条会话已有写入连接",message:"请在 Codex 原会话继续，或在桌宠中开启新对话。",detail:raw,openDesktop:true)
+        }
+        return AppFailure(title:"Codex 任务未能完成",message:"请查看技术详情；可返回输入框修改后重新发送。",detail:raw)
     }
 
     func showDetails() {

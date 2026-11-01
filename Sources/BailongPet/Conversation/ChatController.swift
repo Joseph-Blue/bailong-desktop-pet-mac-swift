@@ -353,23 +353,20 @@ final class ChatController {
         running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, timing:.init(start:turn.date,key:"own")); persist()
+        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}
             if self.cancelled {self.finish("interrupted"); return}
             var params: [String:Any] = ["cwd":c.cwd,"sandbox":"workspace-write","approvalPolicy":"on-request","approvalsReviewer":"user","developerInstructions":self.personalizedPersona]
             if let model = modelParams["model"] {params["model"] = model}
-            let method: String
-            if let thread = c.threadID { params["threadId"] = thread; method = "thread/resume" }
-            else { params["historyMode"] = "legacy"; method = "thread/start" }
-            self.connection.call(method,params) { [weak self, weak turn] result in
+            if c.threadID == nil {params["historyMode"] = "legacy"}
+            self.connection.prepareThread(c.threadID,params:params) { [weak self, weak turn] result in
                 guard let self, let turn, self.running?.1 === turn else{return}
                 switch result {
                 case .failure(let error): self.finish("failed",error:error.localizedDescription)
-                case .success(let value):
-                    c.threadID = (value["thread"] as? [String:Any])?["id"] as? String
-                    guard let thread = c.threadID else {self.finish("failed",error:"Codex 没有返回线程 ID。");return}
+                case .success(let thread):
+                    c.threadID = thread
                     if self.cancelled { self.finish("interrupted"); return }
                     var turnParams: [String:Any] = ["threadId":thread,"cwd":c.cwd,"input":[["type":"text","text":text]],"approvalPolicy":"on-request","approvalsReviewer":"user","summary":"concise","sandboxPolicy":["type":"workspaceWrite","writableRoots":[c.cwd],"networkAccess":false]]
                     turnParams.merge(modelParams) {_,selected in selected}
