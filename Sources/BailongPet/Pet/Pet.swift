@@ -503,10 +503,12 @@ final class PetController: NSObject, NSMenuDelegate {
         updateMotionDisplayLink(); refreshMenu(); greetOnFirstAppearance()
     }
     private func greetOnFirstAppearance() {
-        guard greetingPending,!hidden,animation != nil else {return}
+        // 等首段素材完成初始化再切换问候动作，不能从首帧回调取消仍在加载的待机素材。
+        guard greetingPending,!hidden,!loading,animation != nil else {return}
         greetingPending = false
         guard preferences.allows(.interaction),activeTasks.isEmpty,!bubble.visible,!composerVisible else {return}
         say(preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"greeting",purpose:.interaction,personalizeTitle:false)
+        if let greeting = catalog.variants.first(where:{$0.id == "01"}) {play(greeting,"interaction")}
     }
     func reveal() { manualHidden = false; keepOnScreen(); applyVisibility() }
     private func randomAnimation(taskOverview:Bool = false) {

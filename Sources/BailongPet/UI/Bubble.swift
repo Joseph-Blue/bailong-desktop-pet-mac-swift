@@ -21,7 +21,7 @@ final class Bubble {
     private var cardIndex:Int?
     private var refreshStandalone:(() -> Void)?
     private var isBrowsingCards = false
-    private var submittingQuestion = false
+    private var submittingQuestion:Bool {questionForm?.isSubmitting == true}
     var onCardLayout:() -> Void = {}
     var taskProvider:() -> BubbleTaskOverview = {BubbleTaskOverview(status:"任务同步尚未初始化")}
     private var taskList:BubbleTaskList?
@@ -64,14 +64,16 @@ final class Bubble {
         !visible || (!pendingAttention && questionForm == nil && !submittingQuestion &&
             (cardIndex.map {cards[$0].priority == .companion} ?? (purpose == .interaction || purpose == .preview)))
     }
-    func resolveQuestions(taskKey:String? = nil) {
-        let affected = cards.filter {card in card.attentionAction && (taskKey == nil || card.timing?.key == taskKey)}.map(\.id)
+    func resolveQuestions(taskKey:String? = nil,form:QuestionForm? = nil) {
+        let affected = cards.filter {card in
+            card.attentionAction && (taskKey == nil || card.timing?.key == taskKey) && (form == nil || card.form === form)
+        }.map(\.id)
         let currentID = cardIndex.map {cards[$0].id}
         cards.removeAll {affected.contains($0.id)}
         cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
-        if taskKey == nil || currentID.map({affected.contains($0)}) == true {
+        if (taskKey == nil && form == nil) || currentID.map({affected.contains($0)}) == true {
             questionForm = nil; questionModels = []; questionSize = nil; onQuestionSubmit = nil
-            pendingAttention = false; questionTaskKey = nil; submittingQuestion = false
+            pendingAttention = false; questionTaskKey = nil
             hide()
         } else {updateCardNavigation(); layout(bodyHeight:layoutBodyHeight)}
     }
@@ -202,13 +204,21 @@ final class Bubble {
                 self.window.makeFirstResponder(nil)
                 guard form.complete else {return}
                 if form.answers.isEmpty {self.onQuestionsSkipped?(form.skippedIDs); self.resolveQuestions(taskKey:self.questionTaskKey); return}
-                self.submittingQuestion = true; self.updateCardNavigation()
-                form.setEnabled(false); self.previousQuestion.isEnabled = false; self.skipQuestion.isEnabled = false; self.details.isEnabled = false; self.details.title = "正在提交…"
+                let taskKey = self.questionTaskKey, skipped = self.onQuestionsSkipped
+                form.isSubmitting = true; self.updateCardNavigation()
+                self.previousQuestion.isEnabled = false; self.skipQuestion.isEnabled = false; self.details.isEnabled = false; self.details.title = "正在提交…"
                 submit(form.answers) { [weak self,weak form] error in
-                    guard let self,let form,self.questionForm === form else {return}
-                    self.submittingQuestion = false; self.updateCardNavigation()
-                    if let error {form.setEnabled(true); self.previousQuestion.isEnabled = form.canGoBack; self.skipQuestion.isEnabled = true; self.details.isEnabled = true; self.details.title = "提交回答"; showError("回答未提交",error)}
-                    else {self.onQuestionsSkipped?(form.skippedIDs); self.resolveQuestions(taskKey:self.questionTaskKey)}
+                    guard let self,let form else {return}
+                    form.isSubmitting = false; self.updateCardNavigation()
+                    if let error {
+                        if self.questionForm === form {
+                            self.previousQuestion.isEnabled = form.canGoBack; self.skipQuestion.isEnabled = form.canSkip
+                            self.details.isEnabled = form.canAdvance; self.details.title = form.actionTitle
+                        }
+                        showError("回答未提交",error)
+                    } else {
+                        skipped?(form.skippedIDs); self.resolveQuestions(taskKey:taskKey,form:form)
+                    }
                 }
                 return
             }

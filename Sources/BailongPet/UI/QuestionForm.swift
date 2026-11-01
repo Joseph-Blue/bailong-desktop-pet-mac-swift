@@ -14,6 +14,7 @@ final class QuestionForm: NSView {
     private var generated = [NSView]()
     private weak var pageLabel:NSTextField?
     private var enabled = true
+    var isSubmitting = false {didSet {setEnabled(!isSubmitting)}}
     private(set) var currentIndex = 0
     var onChange: () -> Void = {}, onNavigate: () -> Void = {}, onSubmit: () -> Void = {}, onSkipAll: () -> Void = {}
     var skippedIDs:Set<String> {skipped}
@@ -167,7 +168,7 @@ final class QuestionForm: NSView {
     private func refreshPageLabel() {
         pageLabel?.stringValue = "第 \(currentIndex+1) / \(questions.count) 题"+(skipped.contains(questions[currentIndex].id) ? " · 已跳过" : "")
     }
-    func setEnabled(_ value:Bool) {
+    private func setEnabled(_ value:Bool) {
         enabled = value
         for radio in radios {radio.isEnabled = value}
         for input in inputs {input.isEditable = value}
