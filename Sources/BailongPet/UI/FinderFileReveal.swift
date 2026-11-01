@@ -3,6 +3,7 @@ import AppKit
 // 只由用户点击文件链接触发。使用 Finder 自身字典，不控制 System Events 或请求辅助功能。
 enum FinderFileReveal {
     private static let queue = DispatchQueue(label:"白龙桌宠 访达定位",qos:.userInitiated)
+    // 先取得窗口 ID 列表；直接 repeat ... in Finder windows 会把 item 引用交给 Finder，读到窗口内文件。
     static let script = """
     on run arguments
         set filePath to item 1 of arguments
@@ -11,18 +12,21 @@ enum FinderFileReveal {
         set targetFolder to POSIX file folderPath as alias
         tell application id "com.apple.finder"
             with timeout of 15 seconds
-                set chosenWindow to missing value
-                repeat with candidate in Finder windows
-                    if (target of candidate) is folder targetFolder then
-                        set chosenWindow to candidate
+                set chosenWindowID to missing value
+                set windowIDs to get id of every Finder window
+                repeat with windowID in windowIDs
+                    set candidateID to contents of windowID
+                    if (target of Finder window id candidateID) is folder targetFolder then
+                        set chosenWindowID to candidateID
                         exit repeat
                     end if
                 end repeat
-                if chosenWindow is missing value then
-                    set chosenWindow to make new Finder window to targetFolder
+                if chosenWindowID is missing value then
+                    set createdWindow to make new Finder window to targetFolder
+                    set chosenWindowID to id of createdWindow
                 end if
-                set collapsed of chosenWindow to false
-                set index of chosenWindow to 1
+                set collapsed of Finder window id chosenWindowID to false
+                set index of Finder window id chosenWindowID to 1
                 set selection to {targetItem}
                 set frontmost to true
             end timeout
