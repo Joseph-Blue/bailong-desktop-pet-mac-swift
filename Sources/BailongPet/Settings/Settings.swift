@@ -2,7 +2,7 @@ import AppKit
 import ServiceManagement
 
 final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate, NSToolbarDelegate {
-    let window = SettingsWindow(contentRect:NSRect(x:0,y:0,width:900,height:900),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+    let window = SettingsWindow(contentRect:NSRect(x:0,y:0,width:1040,height:900),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
     let preferences: PetPreferences
     let catalog: Catalog?
     private let aboutPage = AboutPageController()
@@ -53,7 +53,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         window.styleMask.insert(.fullSizeContentView)
         window.collectionBehavior.insert(.fullScreenNone)
         window.minSize = NSSize(width:800,height:540)
-        if let screen = NSScreen.main {window.setContentSize(NSSize(width:900,height:min(900,screen.visibleFrame.height-80)))}
+        if let screen = NSScreen.main {window.setContentSize(NSSize(width:min(1040,screen.visibleFrame.width-80),height:min(900,screen.visibleFrame.height-80)))}
         window.setFrameAutosaveName("BailongSettingsWindow")
         window.focusSearch = { [weak self] in
             guard let self else {return}
@@ -125,7 +125,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             scroll.leadingAnchor.constraint(equalTo:detail.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:detail.trailingAnchor),
             scroll.topAnchor.constraint(equalTo:detail.safeAreaLayoutGuide.topAnchor),scroll.bottomAnchor.constraint(equalTo:detail.bottomAnchor),
             document.leadingAnchor.constraint(equalTo:scroll.contentView.leadingAnchor),document.topAnchor.constraint(equalTo:scroll.contentView.topAnchor),document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),
-            content.centerXAnchor.constraint(equalTo:document.centerXAnchor),content.widthAnchor.constraint(lessThanOrEqualToConstant:660),preferredWidth,
+            content.centerXAnchor.constraint(equalTo:document.centerXAnchor),content.widthAnchor.constraint(lessThanOrEqualToConstant:780),preferredWidth,
             content.leadingAnchor.constraint(greaterThanOrEqualTo:document.leadingAnchor,constant:24),content.trailingAnchor.constraint(lessThanOrEqualTo:document.trailingAnchor,constant:-24),
             content.topAnchor.constraint(equalTo:document.topAnchor,constant:24),content.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-24)
         ])

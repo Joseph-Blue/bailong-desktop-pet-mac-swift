@@ -39,7 +39,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 编辑界面时读取已安装的 [macos-golden-gate-design](https://github.com/gambadio/macos-golden-gate-design) 技能，继续使用 AppKit；不顺带修改第三方技能。
 
 - 设置和历史采用 NSSplitViewController、贯穿侧栏及统一 NSToolbar；内容区不套装饰性圆角外框。设置限制阅读宽度，关联选项使用区外标题、浅底分组和组内分隔线。历史输入区仅属于右侧会话，保留草稿、只读状态、真实停止及输入法组字保护。
-- 设置实际操作控件靠右，组合控件用 fill 与内容宽度收紧，不只对齐空容器。同类滑块轨道统一 180pt 并放在行右端，数值／单位在左；色点名称居中，单选组内部起点一致。注释使用 11pt secondaryLabelColor，不在独立注释前加分隔线。
+- 设置默认内容尺寸 1040×900pt、正文最大 780pt，受屏幕可用区域限制并保留已保存窗口尺寸。设置实际操作控件靠右，组合控件用 fill 与内容宽度收紧，不只对齐空容器。同类滑块轨道统一 180pt 并放在行右端，数值／单位在左；色点名称居中，单选组内部起点一致。注释使用 11pt secondaryLabelColor，不在独立注释前加分隔线。
 
 - 两个恢复按钮固定在侧栏底部，共用 SettingsFooterButton 的轮廓、28pt 高度及焦点范围。危险按钮淡红底、动态红字，禁止纯红底黑字；恢复全部二次确认。
 - 设置与历史保留原生 NSTableView，plain 样式、selectionHighlightStyle=none。AccentHistoryRow 按滚动视口绘制左右各收进 10pt、圆角 7pt 的完整选中背景；活动时用应用色，失焦用系统灰，选中图标／文字同步变白。
