@@ -12,7 +12,7 @@
 
 需要 **Apple Silicon Mac、macOS 14 或更新版本**。Codex 功能需要在本机安装并登录 Codex。
 
-1. 下载 [Apple Silicon ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
+1. [下载 Apple Silicon 版（ZIP）](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
 2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，从访达打开。
 3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。
 
