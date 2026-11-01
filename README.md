@@ -6,7 +6,7 @@
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
-**本页介绍 0.5.0，本地正式构建已准备；GitHub 当前公开下载为 0.2.1。**
+**正式版：[0.5.0](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/v0.5.0)。**
 
 ## 0.5.0 特色功能
 
