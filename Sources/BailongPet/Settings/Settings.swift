@@ -597,7 +597,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func identity() {
         fill(note("{用户名} 是你的名字，{桌宠名} 是桌宠的名字；{特定称呼} 使用下面填写的内容，留空沿用你的名字。右键点击台词或特定称呼输入框，可插入这些变量。"),in:content)
-        let names = [text("你的名字","ownerName",placeholder:"默认为“主人”"),text("桌宠的名字","petName",placeholder:"白龙娘"),text("特定称呼","customAddress",placeholder:"留空沿用你的名字")]
+        let names = [text("你的名字","ownerName",placeholder:"默认为“主人”"),text("桌宠的名字","petName",placeholder:"白龙娘"),text("特定称呼","customAddress",placeholder:"留空沿用你的名字，可以插入变量")]
         group("我们怎么称呼彼此",names)
         let preview = label(preferences.statusLine("greetingTemplate")); preview.font = .systemFont(ofSize:15,weight:.medium); identityPreview = preview
         group("见面时说",[text("问候语","greetingTemplate",limit:120),alignedRow(leading:preview,control:ActionButton("预览消息") { [weak self] in self?.onMessagePreview(.preview) })])
