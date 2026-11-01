@@ -51,6 +51,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
         window.title = "设置"; window.isReleasedWhenClosed = false; window.delegate = self
         window.styleMask.insert(.fullSizeContentView)
+        window.collectionBehavior.insert(.fullScreenNone)
         window.minSize = NSSize(width:800,height:540)
         if let screen = NSScreen.main {window.setContentSize(NSSize(width:900,height:min(900,screen.visibleFrame.height-80)))}
         window.setFrameAutosaveName("BailongSettingsWindow")

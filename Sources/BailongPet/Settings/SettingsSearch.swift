@@ -1,6 +1,12 @@
 import AppKit
 
 final class SettingsWindow: NSWindow {
+    private var restoredFrame:NSRect?
+    override func zoom(_ sender:Any?) {
+        guard let area = screen?.visibleFrame else {return}
+        if frame.equalTo(area),let restoredFrame {setFrame(restoredFrame,display:true,animate:!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion); self.restoredFrame = nil}
+        else {restoredFrame = frame; setFrame(area,display:true,animate:!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)}
+    }
     var focusSearch: () -> Void = {}
     override func performKeyEquivalent(with event:NSEvent) -> Bool {
         if event.modifierFlags.intersection([.command,.shift,.option,.control]) == .command,
