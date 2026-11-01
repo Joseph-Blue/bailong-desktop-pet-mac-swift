@@ -1,6 +1,6 @@
 # 白龙桌宠Swift
 
-- 当前正式版本为 0.6.0，新增气泡内审批、实时进展、代码块、权限入口及访达窗口恢复；保留历史管理与 720 画质，发布标签为 白龙桌宠Swiftv0.6.0。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 当前正式版本为 0.6.1，修复访达窗口引用错误；沿用 0.6.0 新增的气泡内审批、实时进展、代码块、权限入口及访达窗口恢复；保留历史管理与 720 画质，发布标签为 白龙桌宠Swiftv0.6.1。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
