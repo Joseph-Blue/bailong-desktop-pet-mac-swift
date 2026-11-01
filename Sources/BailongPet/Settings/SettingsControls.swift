@@ -67,6 +67,17 @@ final class SettingsTemplateField: NSTextField {
 }
 final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
     var allowsTokens = true
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted {
+            // 点击聚焦尚未修改文字；等 AppKit 完成 field editor 的内容装载再高亮。
+            DispatchQueue.main.async { [weak self] in
+                guard let self,self.window?.firstResponder === self else {return}
+                self.refreshHighlight()
+            }
+        }
+        return accepted
+    }
     override func menu(for event:NSEvent) -> NSMenu? {
         let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
         for (title,action) in [("剪切",#selector(NSText.cut(_:))),("拷贝",#selector(NSText.copy(_:))),("粘贴",#selector(NSText.paste(_:))),("全选",#selector(NSResponder.selectAll(_:)))] {
