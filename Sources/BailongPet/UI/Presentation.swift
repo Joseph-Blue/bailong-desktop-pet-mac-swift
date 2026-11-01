@@ -60,7 +60,7 @@ struct AppFailure {
 
     func showDetails() {
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
-        let scroll = NSScrollView(frame:NSRect(x:0,y:0,width:480,height:180))
+        let scroll = GutterScrollView(frame:NSRect(x:0,y:0,width:480,height:180))
         let text = AppTextView(frame:scroll.bounds); text.isEditable = false; text.isSelectable = true
         text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = detail
         text.isHorizontallyResizable = false; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true

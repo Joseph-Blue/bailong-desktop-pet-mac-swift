@@ -47,7 +47,11 @@ final class MessageInputBox: NSView {
     private let surface = NSBox()
     let scroll: NSScrollView
     var fillColor:NSColor {get {surface.fillColor} set {surface.fillColor = newValue}}
-    var contentSize:NSSize {scroll.contentSize}
+    var contentSize:NSSize {
+        var size = scroll.contentSize
+        if let scroll = scroll as? GutterScrollView {size.width = scroll.documentLayoutWidth}
+        return size
+    }
     init(scroll:NSScrollView,editor:MessageEditor) {
         self.scroll = scroll; super.init(frame:.zero)
         surface.boxType = .custom; surface.borderColor = .separatorColor; surface.fillColor = .textBackgroundColor

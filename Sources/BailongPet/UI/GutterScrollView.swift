@@ -16,6 +16,20 @@ private class VerticalReadingClipView:NSClipView {
 class GutterScrollView:NSScrollView {
     static var gutter:CGFloat {NSScroller.scrollerWidth(for:.regular,scrollerStyle:.legacy)+4}
     static func documentWidth(for width:CGFloat) -> CGFloat {max(0,width-gutter)}
+    var documentLayoutWidth:CGFloat {hasVerticalScroller ? Self.documentWidth(for:bounds.width) : bounds.width}
+    override var documentView:NSView? {
+        didSet {
+            // 文本换行按容器宽度计算，滚动条显隐只改变视口，不拉伸正文。
+            if let text = documentView as? NSTextView {
+                text.autoresizingMask.remove(.width)
+                layoutTextWidth(text)
+            }
+        }
+    }
+    private func layoutTextWidth(_ text:NSTextView) {
+        let width = documentLayoutWidth
+        if text.frame.width != width {text.frame.size.width = width}
+    }
     override init(frame:NSRect) {
         super.init(frame:frame)
         let clip = VerticalReadingClipView()
@@ -24,6 +38,7 @@ class GutterScrollView:NSScrollView {
     }
     required init?(coder:NSCoder) {fatalError()}
     override func tile() {
+        if let text = documentView as? NSTextView {layoutTextWidth(text)}
         // 使用原生留白，避免每次 tile 先撑宽正文、再缩窄，反复触发文本换行。
         let right:CGFloat = hasVerticalScroller ? (scrollerStyle == .overlay ? Self.gutter : 4) : 0
         if contentInsets.right != right {

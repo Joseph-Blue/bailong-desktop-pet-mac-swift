@@ -214,10 +214,10 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
     private let versions = NSTextField(labelWithString:"")
     private let timestamp = NSTextField(labelWithString:"")
     private let notes = AppTextView(frame:NSRect(x:0,y:0,width:540,height:220))
-    private let notesScroll = NSScrollView()
+    private let notesScroll = GutterScrollView()
     private var notesHeight: NSLayoutConstraint!
     private let details = AppTextView(frame:NSRect(x:0,y:0,width:540,height:110))
-    private let detailsScroll = NSScrollView()
+    private let detailsScroll = GutterScrollView()
     private var detailsHeight: NSLayoutConstraint!
     private let detailsRow = NSStackView()
     private let disclosure = ActionButton("▸ 技术详情") {}

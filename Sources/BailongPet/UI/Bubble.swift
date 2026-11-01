@@ -246,7 +246,8 @@ final class Bubble {
         text.isEditable = false; text.isSelectable = false; text.drawsBackground = false
         text.startsSnapshotsAtTop = true
         text.onUserNavigation = { [weak self] in self?.scroll.releaseInitialTop() }
-        text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = [.width]
+        // 正文宽度由气泡布局统一提供，不随滚动条显隐自动拉伸。
+        text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = []
         text.textContainer?.widthTracksTextView = true; text.textContainerInset = NSSize(width:0,height:2)
         text.textColor = .labelColor
         scroll.documentView = text; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
@@ -383,7 +384,7 @@ final class Bubble {
             let viewport = NSRect(x:margin,y:margin+footer,width:w-2*margin,height:textHeight)
             if self.scroll.frame != viewport {self.scroll.frame = viewport}
             self.scroll.isHidden = bodyHeight <= 0
-            let textWidth = self.scroll.contentView.bounds.width
+            let textWidth = GutterScrollView.documentWidth(for:viewport.width)
             if self.text.frame.width != textWidth {self.text.frame.size.width = textWidth}
             let containerSize = NSSize(width:textWidth,height:CGFloat.greatestFiniteMagnitude)
             if self.text.textContainer?.containerSize != containerSize {self.text.textContainer?.containerSize = containerSize}

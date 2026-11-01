@@ -38,7 +38,9 @@ final class RequestCoordinator {
         a.informativeText = p["reason"] as? String ?? "请查看具体操作后决定。"
         let details = AppTextView(frame:NSRect(x:0,y:0,width:520,height:180)); details.isEditable = false; details.isSelectable = true
         details.string = String(data:(try? JSONSerialization.data(withJSONObject:p,options:.prettyPrinted)) ?? Data(),encoding:.utf8) ?? ""
-        let scroll = NSScrollView(frame:details.frame); scroll.documentView = details; scroll.hasVerticalScroller = true; a.accessoryView = scroll
+        details.isVerticallyResizable = true; details.isHorizontallyResizable = false
+        details.textContainer?.widthTracksTextView = true
+        let scroll = GutterScrollView(frame:details.frame); scroll.documentView = details; scroll.hasVerticalScroller = true; a.accessoryView = scroll
         a.addButton(withTitle:"拒绝"); a.addButton(withTitle:"允许这一次"); a.buttons[0].keyEquivalent = "\r"; a.buttons[1].keyEquivalent = ""
         NSApp.activate(ignoringOtherApps:true)
         a.applyAccent()

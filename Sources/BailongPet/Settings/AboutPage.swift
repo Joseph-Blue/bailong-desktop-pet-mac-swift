@@ -74,7 +74,7 @@ final class AboutPageController: NSViewController {
     func selectTab(_ identifier:String) {loadViewIfNeeded(); tabs.selectTabViewItem(withIdentifier:identifier)}
 
     private func readingView(_ content: NSAttributedString) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = GutterScrollView()
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
