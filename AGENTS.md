@@ -1,6 +1,6 @@
 # 白龙桌宠Swift
 
-- 本地 main 版本为 0.5.0-dev.12，新增历史管理与 720 画质；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 本地 main 版本为 0.5.0-dev.13，新增历史管理与 720 画质；已整合 codex/check-updates 的更新检查、原生界面、问卷和历史功能；尚未推送或创建 Release。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
@@ -94,3 +94,5 @@
 - 设置使用 com.bailongpet.appkit.settings.v2 配置域，首次只迁移已知设置、桌宠位置与内置模型选择，保留旧域。历史 schema 1 先备份后原子升级 schema 2；不支持或读取／迁移失败进入只读，不阻止桌宠与设置启动，不覆盖原历史，提供导出和重读。
 - 登录启动／跟随启动只自动维护既有用户启用项，新版本首次运行更新路径与版本；不要求 /Applications，不接受 AppTranslocation；尊重系统撤销许可，不自动降级绑定较新注册。
 - 设置与历史窗口绿色按钮填满当前屏幕可用区域，再次恢复原尺寸；用户明确要求，不使用 macOS 独立全屏空间。
+
+- 右键与托盘菜单共用主菜单：查询额度后为带 OpenAI 模板图标的跳转到 Codex，随机动画在播放动作前；不提供手动隐藏桌宠入口。历史会话用书本图标，设置和退出保留图标；大小与称呼台词两个入口直接打开外观／称呼与个性页。

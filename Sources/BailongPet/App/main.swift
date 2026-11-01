@@ -103,7 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let about = NSMenuItem(title:"关于"+PetPreferences.shared.appName,action:#selector(showAbout),keyEquivalent:""); about.target = self; about.tag = 101; appMenu.addItem(about)
         appMenu.addItem(.separator())
         appMenu.addItem(MenuAction("检查更新…",symbol:"arrow.triangle.2.circlepath") {UpdateWindow.show()})
-        let settings = NSMenuItem(title:"设置…",action:#selector(showSettings),keyEquivalent:","); settings.target = self; appMenu.addItem(settings)
+        let settings = NSMenuItem(title:"设置…",action:#selector(showSettings),keyEquivalent:","); settings.target = self
+        settings.image = NSImage(systemSymbolName:"gearshape",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
+        appMenu.addItem(settings)
         appMenu.addItem(.separator())
         let close = NSMenuItem(title:"关闭当前窗口",action:#selector(closeInterface),keyEquivalent:"q"); close.target = self; appMenu.addItem(close)
         let quit = NSMenuItem(title:"退出"+PetPreferences.shared.appName,action:#selector(quitFromMenu),keyEquivalent:""); quit.target = self; quit.tag = 102; quit.image = NSImage(systemSymbolName:"rectangle.portrait.and.arrow.right",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular)); appMenu.addItem(quit)

@@ -564,9 +564,14 @@ final class PetController: NSObject, NSMenuDelegate {
             let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.onComposer() })
-        menu.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.onHistory(nil) })
+        menu.addItem(MenuAction("历史会话",symbol:"book.closed") { [weak self] in self?.onHistory(nil) })
         menu.addItem(MenuAction("查询额度",symbol:"gauge.with.dots.needle.50percent") { [weak self] in self?.soundOnce(); self?.onQuota() })
+        let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
+        codex.image = AppIcons.openAI?.copy() as? NSImage
+        codex.image?.size = NSSize(width:16,height:16)
+        menu.addItem(codex)
         menu.addItem(.separator())
+        menu.addItem(MenuAction("随机动画",symbol:"shuffle") { [weak self] in self?.performGesture("random") })
         let animations = submenu("播放动作",symbol:"play.rectangle")
         for (name,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations)] {
             let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
@@ -580,8 +585,9 @@ final class PetController: NSObject, NSMenuDelegate {
         switches.addItem(MenuAction("全屏时自动隐藏",checked:autoFullscreen) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoFullscreen,for:"autoFullscreen") })
         switches.addItem(.separator())
         switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak self] in self?.showSettings(section:.general) })
-        menu.addItem(MenuAction(manualHidden ? "显示桌宠" : "隐藏桌宠",symbol:manualHidden ? "eye" : "eye.slash") { [weak self] in guard let self else{return}; self.manualHidden.toggle(); self.applyVisibility() })
         menu.addItem(.separator())
+        menu.addItem(MenuAction("更改桌宠、气泡与文字大小…",symbol:"textformat.size") { [weak self] in self?.showSettings(section:.appearance) })
+        menu.addItem(MenuAction("更改桌宠称呼和台词…",symbol:"person.text.rectangle") { [weak self] in self?.showSettings(section:.identity) })
         menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.showSettings() })
         let tools = submenu("工具与帮助",symbol:"questionmark.circle")
         tools.addItem(MenuAction("任务同步状态…",symbol:"arrow.triangle.2.circlepath") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "Codex 任务同步状态"; a.informativeText = self.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:"任务同步"); a.addButton(withTitle:"知道了"); a.applyAccent(); a.runModal() })
