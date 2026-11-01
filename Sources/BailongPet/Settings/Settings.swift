@@ -351,7 +351,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return row(title,control:menu)
     }
     private func choice(_ title: String, _ key: String, _ options: [(String,String)]) -> NSView {
-        popup(title,options:options,value:preferences.string(key),width:["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190,identifier:key) { [weak self] value in
+        let width:CGFloat
+        if key == "sendShortcut" {
+            let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
+            width = max(260,(options.map {($0.1 as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)+40)
+        } else {width = ["singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190}
+        return popup(title,options:options,value:preferences.string(key),width:width,identifier:key) { [weak self] value in
             self?.preferences.set(value,for:key)
             self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
@@ -604,7 +609,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         group("我们怎么称呼彼此",names)
         let preview = label(preferences.statusLine("greetingTemplate")); preview.font = .systemFont(ofSize:15,weight:.medium); identityPreview = preview
         group("见面时说",[text("问候语","greetingTemplate",limit:120),alignedRow(leading:preview,control:ActionButton("预览消息") { [weak self] in self?.onMessagePreview(.preview) })])
-        group("任务状态台词",[text("执行任务中","taskProgressTemplate",limit:120),text("等待回答","taskAnswerTemplate",limit:120),text("等待批准","taskApprovalTemplate",limit:120),text("任务成功","taskSuccessTemplate",limit:120),text("任务失败","taskFailureTemplate",limit:120),text("任务中断或取消","taskInterruptedTemplate",limit:120)])
+        group("任务状态台词",[text("执行任务中","taskProgressTemplate",limit:120),text("正在思考","taskThinkingTemplate",limit:120),text("正在调用工具","taskToolTemplate",limit:120),text("正在运行命令","taskCommandTemplate",limit:120),text("已运行命令","taskCommandCompletedTemplate",limit:120),text("等待回答","taskAnswerTemplate",limit:120),text("等待批准","taskApprovalTemplate",limit:120),text("任务成功","taskSuccessTemplate",limit:120),text("任务失败","taskFailureTemplate",limit:120),text("任务中断或取消","taskInterruptedTemplate",limit:120)])
         group("额度查询台词",[text("正在查询","quotaLoadingTemplate",limit:120)])
         if let catalog {
             let lines = (catalog.variants+catalog.work).filter {$0.line != nil}
@@ -661,22 +666,28 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func messages() {
         group("历史记录",[toggle("记录历史","recordHistory"),note("关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
+        group("气泡窗审批",[choice("气泡窗审批按钮顺序","approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")]),note("仅改变桌宠气泡窗中的审批按钮位置，不改变原生审批对话框或 Codex 界面。红叉表示拒绝，绿对钩表示允许；键盘按键不触发审批。")])
+        group("输入快捷键",[
+            choice("发送与换行","sendShortcut",SendShortcut.options),
+            note(SendShortcut.settingsExplanation)])
+        group("显示哪些消息",[toggle("任务气泡提醒","taskBubbles"),toggle("任务进展","progressBubbles"),toggle("最终回复","resultBubbles"),toggle("互动台词","interactionBubbles"),note("需要处理的审批、补充输入与任务失败仍保留通知入口。关闭气泡不会停止任务或删除历史。")])
         group("气泡卡片与任务概览",[
             slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，可设为 5～100 条，仅保留在本次运行的运行内存 (RAM) 中。普通对白不计入，任务概览只占一条；正在阅读和待处理卡片保留，不删除历史对话。"),
             toggle("互动气泡显示任务概览","showTaskOverview",detail:"通过按键执行“显示任务进度、播放随机动画”时，在台词下显示当前与近期结束任务；点击任务行跳转 Codex。"),
+            toggle("显示思考过程","showThinkingProgress",detail:"在任务概览和进展小气泡中显示公开思考摘要，不计入气泡记录。"),
+            toggle("显示工具调用","showToolProgress",detail:"在任务概览和进展小气泡中显示工具名称、操作和执行状态，不计入气泡记录。"),
+            toggle("自动显示进展小气泡","progressToastEnabled",detail:"思考摘要或工具状态变化时自动弹出，优先放在桌宠上方；不打断审批、问卷和输入。"),
             slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"默认 5 条，每个会话显示最新轮次。任务概览关闭时保留此设置。")])
-        group("输入快捷键",[
-            choice("发送与换行","sendShortcut",[("commandReturn","⌘ Command + ↩ Enter 发送"),("returnToSend","↩ Enter 发送")]),
-            note("默认：⌘ Command + ↩ Enter 发送，↩ Enter 换行。\n备选：↩ Enter 发送；⇧ Shift + ↩ Enter 或 ⌥ Option + ↩ Enter 换行。\n临时对话和历史对话同步生效，中文输入法选词时不会发送。")])
-        group("显示哪些消息",[toggle("任务气泡提醒","taskBubbles"),toggle("任务进展","progressBubbles"),toggle("最终回复","resultBubbles"),toggle("互动台词","interactionBubbles"),note("需要处理的审批、补充输入与任务失败仍保留通知入口。关闭气泡不会停止任务或删除历史。")])
         group("停留时间",[
             slider("互动台词","interactionSeconds",range:0...60,suffix:"秒"),slider("任务进展","progressSeconds",range:0...60,suffix:"秒"),slider("最终回复","resultSeconds",range:0...120,suffix:"秒"),slider("额度信息","quotaSeconds",range:0...120,suffix:"秒"),note("设为 0 秒表示手动关闭。审批、补充输入和失败提示保留到处理或手动关闭。"),
-            toggle("长回复自动延长阅读时间","autoReadTime",detail:"最多延长到 120 秒；手动关闭模式不受影响。"),toggle("鼠标移入时暂停倒计时","pauseOnHover"),toggle("文字显示完毕后开始计时","countAfterReveal")])
+            toggle("长回复自动延长阅读时间","autoReadTime",detail:"最多延长到 120 秒；手动关闭模式不受影响。"),toggle("鼠标移入时暂停倒计时","pauseOnHover"),toggle("文字显示完毕后开始计时","countAfterReveal"),
+            slider("进展小气泡停留时间","progressToastSeconds",range:1...10,suffix:"秒",detail:"默认 2 秒，思考与工具调用共用；内容更新后重新计时，不占气泡记录。")])
         group("显示与声音",[toggle("逐步显示文字","typingEffect"),toggle("播放音效","soundEnabled"),row("最终回复时长",control:ActionButton("预览…") { [weak self] in self?.onMessagePreview(.result) })])
         group("安静陪伴",[toggle("安静陪伴模式","quietCompanion",detail:"减少自主活动、停止自动移动，关闭互动台词、进展气泡和音效。最终回复与待处理通知保留。"),toggle("启用专注时段","quietSchedule"),time("开始时间","quietStart"),time("结束时间","quietEnd"),note("按本机时间生效，支持跨午夜；起止相同表示全天。")])
     }
     private func appearance() {
         group("大小",[slider("桌宠大小","petPercent",range:50...200,suffix:"%"),slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt")])
+        group("气泡形状",[toggle("自定义宽高比","bubbleAspectEnabled"),slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1"),note("关闭时按内容自动排版。开启后应用于消息与进展气泡，正文超出时滚动；屏幕边界和操作按钮保留所需空间。问卷手动拉伸优先，额度按内容排版。")])
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
             let dot = AccentSwatch(key:key,name:name)

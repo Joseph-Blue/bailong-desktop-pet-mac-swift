@@ -97,23 +97,39 @@ enum DesktopHistoryReader {
             let answeredIDs = Set(answeredRows.compactMap {$0["question_id"]})
             for turn in turns {
                 // 工具中间失败由原 Codex 对话处理；这里只观察公开消息、进展和待处理状态。
-                // 不读取 reasoning、工具参数、退出码或工具输出；图片仅取公开的保存路径。
+                // 只取公开摘要与操作元数据，不读取 reasoning.content、工具 arguments 或输出。
                 let items = try history.rows("""
                 SELECT item_type,json_extract(item_json,'$.id') item_id,json_extract(item_json,'$.phase') phase,
                 CASE WHEN NOT EXISTS (SELECT 1 FROM json_each(item_json,'$.questions') q WHERE json_extract(q.value,'$.isSecret')=1)
                     THEN json_extract(item_json,'$.text') END text,
                 json_extract(item_json,'$.status') status,json_extract(item_json,'$.questions') questions,
                 json_extract(item_json,'$.reason') reason,
+                CASE WHEN item_type='commandExecution' THEN json_extract(item_json,'$.command') END command,
+                CASE WHEN item_type='commandExecution' THEN json_extract(item_json,'$.commandActions') END command_actions,
+                CASE WHEN item_type='fileChange' THEN json_extract(item_json,'$.changes') END changes,
+                CASE WHEN item_type='webSearch' THEN json_extract(item_json,'$.query') END query,
+                CASE WHEN item_type='reasoning' THEN json_extract(item_json,'$.summary') END summary,
+                CASE WHEN item_type IN ('mcpToolCall','dynamicToolCall') THEN json_extract(item_json,'$.tool') END tool,
+                CASE WHEN item_type='mcpToolCall' THEN json_extract(item_json,'$.server') END server,
+                CASE WHEN item_type='dynamicToolCall' THEN json_extract(item_json,'$.namespace') END namespace,
                 CASE WHEN item_type='imageGeneration' THEN json_extract(item_json,'$.savedPath') END saved_path
                 FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type IN
-                ('agentMessage','userMessage','commandExecution','fileChange','mcpToolCall','webSearch','imageGeneration','imageView')
+                ('agentMessage','userMessage','reasoning','commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageGeneration','imageView','contextCompaction')
                 ORDER BY rollout_ordinal DESC LIMIT 200
                 """,[actual,turn["turn_id"]!]).reversed()
-                var messages = [String](), final = "", alert = "", step = ""
+                var messages = [String](), final = "", alert = ""
                 var agentMessages = [PublicAgentMessage]()
+                var activity:TaskActivity?
+                var activityItems = [[String:Any]]()
                 var questions = [[String:Any]](), approval:TaskAttention?, hasSensitiveInput = false, hasSensitiveQuestion = false
                 for item in items {
                     if item["item_type"] == "userMessage" {continue}
+                    var progress:[String:Any] = ["type":item["item_type"] ?? ""]
+                    for key in ["status","tool","server","namespace","command","query"] {if let value = item[key],value != "null" {progress[key] = value}}
+                    for (column,field) in [("summary","summary"),("command_actions","commandActions"),("changes","changes")] {
+                        if let raw = item[column],raw != "null" {progress[field] = try JSONSerialization.jsonObject(with:Data(raw.utf8))}
+                    }
+                    activityItems.append(progress)
                     if let raw = item["questions"], raw != "null", let incoming = try JSONSerialization.jsonObject(with:Data(raw.utf8)) as? [[String:Any]] {
                         for (index,var question) in incoming.enumerated() {
                             if let itemID = item["item_id"] {
@@ -131,7 +147,7 @@ enum DesktopHistoryReader {
                             if let id = item["item_id"],item["phase"] == nil || ["commentary","final_answer","final"].contains(item["phase"]!) {
                                 agentMessages.append(.init(id:id,text:text,isFinal:["final_answer","final"].contains(item["phase"] ?? "")))
                             }
-                            if ["final_answer","final"].contains(item["phase"] ?? "") {final = text; step = ""}
+                            if ["final_answer","final"].contains(item["phase"] ?? "") {final = text}
                             else if item["phase"] == nil || item["phase"] == "commentary" {messages.append(text)}
                         }
                     } else if item["item_type"] == "imageGeneration",
@@ -142,8 +158,6 @@ enum DesktopHistoryReader {
                         approval = .approval(fileChange:item["item_type"] == "fileChange",reason:item["reason"])
                     } else if item["status"] == "waitingForInput", questions.isEmpty {
                         questions.append(["title":"需要补充信息，请回到 Codex 处理。"])
-                    } else if ["inProgress","running"].contains(item["status"] ?? "") {
-                        step = ["commandExecution":"正在执行操作","fileChange":"正在修改文件","mcpToolCall":"正在调用工具","webSearch":"正在查阅资料","imageGeneration":"正在生成图片","imageView":"正在查看图片"][item["item_type"] ?? ""] ?? "正在处理"
                     }
                 }
                 var attention:TaskAttention?
@@ -152,10 +166,13 @@ enum DesktopHistoryReader {
                 else if !questions.isEmpty {attention = TaskAttention(kind:.answer,body:questions.map {TaskAttention.question($0).body}.joined(separator:"\n\n"),questions:questions.flatMap {TaskAttention.question($0).questions})}
                 else if turn["status"] == "waitingForApproval" {attention = .approval(fileChange:false,reason:nil)}
                 else if turn["status"] == "waitingForInput" {attention = TaskAttention(kind:.answer,body:"需要补充信息，请回到 Codex 处理。")}
-                if ["completed","failed","interrupted"].contains(turn["status"] ?? "") {attention = nil; step = ""}
+                activity = TaskActivity.current(items:activityItems)
+                if !activeStatuses.contains(turn["status"] ?? "") {attention = nil; activity = nil}
+                let step = activity?.text ?? ""
                 alert = attention?.body ?? ""
                 result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion))
                 result[result.count-1].agentMessages = agentMessages
+                result[result.count-1].activity = activity
                 result[result.count-1].isLatest = turn["turn_id"] == latestTurn
             }
         }

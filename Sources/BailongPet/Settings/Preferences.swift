@@ -12,10 +12,10 @@ enum SettingsSection: Int, CaseIterable {
     var keys: [String] {
         switch self {
         case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
-        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"]
+        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"]
         case .activity: return ["singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
-        case .messages: return ["bubbleCardLimit","recentTaskCount","showTaskOverview","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
-        case .appearance: return ["petPercent","bubblePercent","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
+        case .messages: return ["approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
         case .advanced, .about: return []
         case .updates: return ["automaticallyCheckUpdates"]
         case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit"]
@@ -25,11 +25,23 @@ enum SettingsSection: Int, CaseIterable {
 
 enum MessagePurpose { case interaction, progress, result, attention, quota, preview }
 
-enum SendShortcut: String {
-    case commandReturn, returnToSend
-    var sendLabel: String {self == .commandReturn ? "⌘ Command + ↩ Enter" : "↩ Enter"}
-    var newlineLabel: String {self == .commandReturn ? "↩ Enter" : "⇧ Shift + ↩ Enter，或 ⌥ Option + ↩ Enter"}
+enum SendShortcut: String, CaseIterable {
+    case commandReturn, returnToSend, controlOrCommandReturn
+    var sendLabel: String {
+        switch self {
+        case .commandReturn:return "⌘ Command + ↩ Enter"
+        case .returnToSend:return "↩ Enter"
+        case .controlOrCommandReturn:return "⌃ Control + ↩ Enter 或 ⌘ Command + ↩ Enter"
+        }
+    }
+    var newlineLabel: String {self == .returnToSend ? "⇧ Shift + ↩ Enter，或 ⌥ Option + ↩ Enter" : "↩ Enter"}
     var hint: String {"发送：\(sendLabel)\n换行：\(newlineLabel)"}
+    static var options:[(String,String)] {allCases.map {($0.rawValue,$0.sendLabel+" 发送")}}
+    static var settingsExplanation:String {
+        allCases.enumerated().map {index,value in
+            "\(index == 0 ? "默认" : "备选 \(index)")：\(value.sendLabel) 发送；\(value.newlineLabel) 换行。"
+        }.joined(separator:"\n")+"\n临时对话、历史对话和问卷输入同步生效，中文输入法选词时不会发送。"
+    }
     func action(modifiers: NSEvent.ModifierFlags) -> Bool? {
         let flags = modifiers.intersection([.command,.shift,.option,.control])
         switch self {
@@ -39,6 +51,9 @@ enum SendShortcut: String {
         case .returnToSend:
             if flags.isEmpty {return true}
             if flags == .shift || flags == .option {return false}
+        case .controlOrCommandReturn:
+            if flags == .control || flags == .command {return true}
+            if flags.isEmpty || flags == .shift || flags == .option {return false}
         }
         return nil
     }
@@ -49,14 +64,14 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
-        "recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,
+        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,
         "automaticallyCheckUpdates":false,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),
-        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskSuccessTemplate":"{用户名}，完成啦！",
+        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskThinkingTemplate":"{桌宠名}正在思考","taskToolTemplate":"{桌宠名}正在调用工具","taskCommandTemplate":"{桌宠名}正在运行命令","taskCommandCompletedTemplate":"{桌宠名}已运行命令","taskSuccessTemplate":"{用户名}，完成啦！",
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
@@ -67,17 +82,17 @@ final class PetPreferences {
         "interactionSeconds":5.0,"progressSeconds":10.0,"resultSeconds":20.0,"quotaSeconds":5.0,
         "autoReadTime":true,"pauseOnHover":true,"countAfterReveal":true,"typingEffect":true,"soundEnabled":true,
         "quietCompanion":false,"quietSchedule":false,"quietStart":22*60,"quietEnd":8*60,
-        "petPercent":100,"bubblePercent":100,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
+        "petPercent":100,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
     ]
     static let ranges: [String:ClosedRange<Double>] = [
         "bubbleCardLimit":5...100,"recentTaskCount":1...20,
-        "glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,
+        "glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
-        "petPercent":50...200,"bubblePercent":50...150,"messageFontSize":11...20
+        "petPercent":50...200,"bubblePercent":50...150,"bubbleAspectRatio":0.6...3,"messageFontSize":11...20
     ]
     static var glassAvailable: Bool {if #available(macOS 26.0, *) {return true}; return false}
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
-    static let choices = ["bubbleMaterial":["glass","plain"],"animationQuality":["720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"movementRange":["still","nearby","screen"],
+    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults

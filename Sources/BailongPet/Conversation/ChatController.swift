@@ -16,6 +16,15 @@ final class ChatController {
     private var finalMessageID:String?
     private var imageMessageIDs = Set<String>()
     var lastPreview = "", lastKind = "output"
+    var currentActivity:TaskActivity?
+    private var activityItems = [[String:Any]]()
+    private func updateActivity(_ item:[String:Any]) {
+        guard let id = item["id"] as? String else {return}
+        let projected = DesktopRuntimeProjection.item(item)
+        if let index = activityItems.firstIndex(where:{$0["id"] as? String == id}) {activityItems[index] = projected}
+        else {activityItems.append(projected)}
+        currentActivity = TaskActivity.current(items:activityItems)
+    }
     var saveError: String?
     var updateTimer: Timer?
     var saveTimer: Timer?
@@ -122,7 +131,7 @@ final class ChatController {
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
             var tasks = self.desktopTasks.filter {!self.store.deletedThreads.contains($0.threadID ?? "")}.map {task in
                 let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title
-                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID)
+                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity)
             }
             let observed = Set(tasks.compactMap(\.threadID))
             for conversation in self.store.conversations {
@@ -130,7 +139,7 @@ final class ChatController {
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
-                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt))
+                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.currentActivity) : nil))
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
@@ -351,7 +360,7 @@ final class ChatController {
         let c = selected, turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
-        running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; imageMessageIDs.removeAll(); messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
+        running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; imageMessageIDs.removeAll(); messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""; currentActivity = nil; activityItems.removeAll()
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
         pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
@@ -392,10 +401,26 @@ final class ChatController {
         case "item/agentMessage/delta":
             guard let id = p["itemId"] as? String else {return}; if messages[id] == nil {messageOrder.append(id)}
             messages[id,default:""] += p["delta"] as? String ?? ""; lastKind = "output"
+            updateActivity(["id":id,"type":"agentMessage"]); lastPreview = ""
         case "item/reasoning/summaryTextDelta":
             let key = "\(p["itemId"] ?? ""):\(p["summaryIndex"] ?? 0)"; summaries[key,default:""] += p["delta"] as? String ?? ""; lastKind = "summary"
-        case "item/started", "item/completed": if let item = p["item"] as? [String:Any] { record(item) }
-        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); lastKind = "progress"
+            updateActivity(["id":p["itemId"] as? String ?? "","type":"reasoning","summary":summaries.filter {$0.key.hasPrefix("\(p["itemId"] ?? ""):")}.sorted {$0.key < $1.key}.map(\.value)])
+        case "item/started", "item/completed": if let item = p["item"] as? [String:Any] {
+            record(item)
+            let type = item["type"] as? String ?? ""
+            if type != "agentMessage" && !(type == "imageGeneration" && imageMessageIDs.contains(item["id"] as? String ?? "")) {
+                var progress = item
+                progress["status"] = item["status"] as? String ?? (method == "item/started" ? "inProgress" : "completed")
+                if type == "reasoning",TaskActivity.summary(item["summary"] as? [Any] ?? []).isEmpty,let id = item["id"] as? String {
+                    progress["summary"] = summaries.filter {$0.key.hasPrefix(id+":")}.sorted {$0.key < $1.key}.map(\.value)
+                }
+                updateActivity(progress)
+                lastKind = type == "reasoning" ? "summary" : "progress"
+            } else if type == "agentMessage" {
+                updateActivity(item)
+            }
+        }
+        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); lastKind = "progress"; currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "")
         case "turn/completed":
             guard let turn = p["turn"] as? [String:Any], t.id == nil || t.id == turn["id"] as? String else{return}
             for item in turn["items"] as? [[String:Any]] ?? [] {record(item)}
@@ -409,12 +434,14 @@ final class ChatController {
         let id = item["id"] as? String ?? UUID().uuidString
         switch item["type"] as? String {
         case "agentMessage":
+            currentActivity = nil; lastPreview = ""
             if messages[id] == nil {messageOrder.append(id)}; messages[id] = item["text"] as? String ?? ""; lastKind = "output"
             if item["phase"] as? String == "final_answer" {finalMessageID = id; running?.1.final = item["text"] as? String ?? ""}
         case "imageGeneration":
             if let link = GeneratedImageLink.markdown(status:item["status"] as? String,savedPath:item["savedPath"] as? String) {
                 if messages[id] == nil {messageOrder.append(id)}
                 messages[id] = link; imageMessageIDs.insert(id); steps.removeValue(forKey:id); lastKind = "output"
+                currentActivity = nil; lastPreview = ""
             } else if ["inProgress","running"].contains(item["status"] as? String ?? "") {
                 steps[id] = "正在生成图片"; lastKind = "progress"
             } else {steps.removeValue(forKey:id)}
@@ -435,13 +462,10 @@ final class ChatController {
             guard let self else{return}; self.updateTimer = nil; self.updateText(); self.refresh(); self.scheduleSave()
             guard let (c,t) = self.running else{return}
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
+            if self.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
             self.presentAgentMessages(conversation:c,turn:t)
-            guard self.lastKind != "output" else {return}
-            let text = self.lastKind == "summary" ? t.summary : self.lastKind == "progress" ? t.steps : t.messages
-            if !text.isEmpty && text != self.lastPreview {
-                self.lastPreview = text
-                self.pet.say(self.pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:t.date,key:"own"))
-            }
+            self.pet.showProgressToast(self.currentActivity,key:"own",timing:.init(start:t.date,key:"own"))
+
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)
     }
@@ -460,6 +484,7 @@ final class ChatController {
     }
     func finish(_ status: String, error: String = "") {
         guard let (c,t) = running else{return}
+        pet.bubble.removeActivity(taskKey:"own"); currentActivity = nil; activityItems.removeAll()
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
         if t.final.isEmpty {finalMessageID = messageOrder.last(where:{!imageMessageIDs.contains($0)}); t.final = finalMessageID.flatMap{messages[$0]} ?? ""}
         presentAgentMessages(conversation:c,turn:t)

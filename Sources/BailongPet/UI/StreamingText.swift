@@ -5,7 +5,26 @@ final class StreamingTextView: AppTextView {
     private var targetText = NSAttributedString(string:"")
     private var revealTimer: Timer?
     private var followsEnd = true
+    private var codeToolbars = [Int:CodeBlockToolbar]()
+    override func layout() {
+        super.layout()
+        guard let storage = textStorage,let manager = layoutManager,let container = textContainer else {return}
+        manager.ensureLayout(for:container)
+        var seen = Set<Int>()
+        storage.enumerateAttribute(.codeBlockHeader,in:NSRange(location:0,length:storage.length)) {value,range,_ in
+            guard let content = value as? CodeBlockContent else {return}
+            seen.insert(range.location)
+            let toolbar = codeToolbars[range.location] ?? CodeBlockToolbar(content)
+            toolbar.content = content
+            if toolbar.superview == nil {addSubview(toolbar); codeToolbars[range.location] = toolbar}
+            let glyphs = manager.glyphRange(forCharacterRange:range,actualCharacterRange:nil)
+            let rect = manager.boundingRect(forGlyphRange:glyphs,in:container)
+            toolbar.frame = NSRect(x:max(textContainerOrigin.x,bounds.width-textContainerInset.width-46),y:rect.minY+textContainerOrigin.y,width:30,height:26)
+        }
+        for key in Array(codeToolbars.keys) where !seen.contains(key) {codeToolbars.removeValue(forKey:key)?.removeFromSuperview()}
+    }
     var automaticallyFollowsEnd = true
+    var startsSnapshotsAtTop = false
     var linkBaseDirectory: (() -> URL?)?
     var isRevealing: Bool {revealTimer != nil}
     override func clicked(onLink link: Any, at charIndex: Int) {
@@ -13,13 +32,19 @@ final class StreamingTextView: AppTextView {
         super.clicked(onLink:link,at:charIndex)
     }
     func setContent(_ value: NSAttributedString, animated: Bool, reset: Bool = false) {
+        defer {needsLayout = true}
         if !reset && targetText.isEqual(to:value) {if !animated {finishReveal()}; return}
         let follows = automaticallyFollowsEnd && (reset || isAtEnd)
+        let origin = enclosingScrollView?.contentView.bounds.origin
         targetText = value
         guard animated && !reset else {
             stopReveal(); textStorage?.setAttributedString(value)
-            if follows {scrollToEndOfDocument(nil)}
+            if startsSnapshotsAtTop && reset {scrollToBeginningOfDocument(nil)}
+            else if !startsSnapshotsAtTop && follows {scrollToEndOfDocument(nil)}
             else if reset {scrollToBeginningOfDocument(nil)}
+            else if startsSnapshotsAtTop,let scroll = enclosingScrollView,let origin {
+                scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
+            }
             return
         }
         guard let storage = textStorage else {return}
@@ -55,6 +80,7 @@ final class StreamingTextView: AppTextView {
         return clip.bounds.maxY >= bounds.maxY-10
     }
     private func revealNext() {
+        defer {needsLayout = true}
         guard let storage = textStorage else {stopReveal(); return}
         let remaining = targetText.length-storage.length
         guard remaining > 0 else {stopReveal(); return}
@@ -68,6 +94,7 @@ final class StreamingTextView: AppTextView {
         if storage.length == targetText.length {stopReveal()}
     }
     func finishReveal() {
+        defer {needsLayout = true}
         let follows = automaticallyFollowsEnd && isAtEnd; stopReveal()
         if !attributedString().isEqual(to:targetText) {textStorage?.setAttributedString(targetText)}
         if follows {scrollToEndOfDocument(nil)}

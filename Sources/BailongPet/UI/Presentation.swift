@@ -80,6 +80,7 @@ struct QuotaOverview {
     let plan: String
     var rows: [QuotaRow]
     var notice: String?
+    var management:SubscriptionManagement = .personal
 }
 enum QuotaPresentation {
     static let plans = ["free":"Free", "go":"Go", "plus":"Plus", "prolite":"Pro 100", "pro":"Pro 200", "promax":"Pro 500",
@@ -116,6 +117,7 @@ enum QuotaPresentation {
         if buckets.isEmpty, let legacy = value["rateLimits"] as? [String:Any] {buckets = [legacy]}
         let bucketPlan = buckets.compactMap {string($0["planType"])}.first(where:{$0 != "unknown"})
         var result = QuotaOverview(plan:plan(bucketPlan,account:account),rows:[])
+        result.management = .forAccount(account,plan:result.plan)
         for (index,bucket) in buckets.enumerated() {
             let name = string(bucket["limitName"]) ?? string(bucket["limitId"]) ?? "额度组 \(index+1)"
             let prefix = buckets.count > 1 ? name+" · " : ""
@@ -161,7 +163,7 @@ enum QuotaPresentation {
         }
     }
     static func unavailable(account: [String:Any]?) -> QuotaOverview {
-        QuotaOverview(plan:plan(nil,account:account),rows:[QuotaRow(title:"使用额度",value:"暂时无法获取",detail:emptyMessage(account),remaining:nil)],notice:nil)
+        QuotaOverview(plan:plan(nil,account:account),rows:[QuotaRow(title:"使用额度",value:"暂时无法获取",detail:emptyMessage(account),remaining:nil)],notice:nil,management:.forAccount(account,plan:plan(nil,account:account)))
     }
 }
 

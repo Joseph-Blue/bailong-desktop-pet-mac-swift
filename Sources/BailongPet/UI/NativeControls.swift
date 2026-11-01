@@ -17,8 +17,17 @@ func materialView() -> NSVisualEffectView {
 }
 final class ActionButton: NSButton {
     var callback: () -> Void
+    var acceptsKeyboardActivation = true
+    override var acceptsFirstResponder: Bool {acceptsKeyboardActivation && super.acceptsFirstResponder}
+    override func performKeyEquivalent(with event:NSEvent) -> Bool {
+        acceptsKeyboardActivation && super.performKeyEquivalent(with:event)
+    }
+    override func keyDown(with event:NSEvent) {
+        if acceptsKeyboardActivation {super.keyDown(with:event)}
+    }
     private var prominent = false
     private var flexibleLayout = false
+    var semanticColor:NSColor? {didSet {updateAccent()}}
     var keepsAccentWhenInactive = false {didSet {updateAccent()}}
     init(_ title: String, _ callback: @escaping () -> Void) {
         self.callback = callback; super.init(frame: .zero)
@@ -45,15 +54,24 @@ final class ActionButton: NSButton {
     func emphasize(_ enabled: Bool = true) {prominent = enabled; updateAccent()}
     @objc private func updateAccent() {
         bezelColor = prominent ? AppAccent.color : nil
-        isBordered = !(prominent && keepsAccentWhenInactive); invalidateIntrinsicContentSize(); needsDisplay = true
+        isBordered = semanticColor == nil && !(prominent && keepsAccentWhenInactive); invalidateIntrinsicContentSize(); needsDisplay = true
     }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
     override func draw(_ dirtyRect: NSRect) {
-        guard prominent && keepsAccentWhenInactive else {super.draw(dirtyRect); return}
-        let color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : AppAccent.color
+        guard semanticColor != nil || prominent && keepsAccentWhenInactive else {super.draw(dirtyRect); return}
+        let color:NSColor, foreground:NSColor
+        if let semanticColor {
+            // 实色浅底，文字随系统外观提高对比；不依赖背景玻璃或仅靠颜色区分。
+            color = NSColor.controlBackgroundColor.blended(withFraction:isHighlighted ? 0.26 : 0.13,of:semanticColor) ?? .controlBackgroundColor
+            foreground = isEnabled ? semanticColor.blended(withFraction:0.35,of:.labelColor) ?? .labelColor : .disabledControlTextColor
+        } else {
+            color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : AppAccent.color
+            foreground = .white
+        }
         color.withAlphaComponent(isEnabled ? 1 : 0.45).setFill()
         let ratio = (font?.pointSize ?? 13)/13
         NSBezierPath(roundedRect:bounds.insetBy(dx:0,dy:1),xRadius:7*ratio,yRadius:7*ratio).fill()
-        let attributes: [NSAttributedString.Key:Any] = [.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.white]
+        let attributes: [NSAttributedString.Key:Any] = [.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:foreground]
         let size = (title as NSString).size(withAttributes:attributes)
         let iconSize = iconSide
         let iconSpace = iconSize > 0 ? iconSize+6*ratio : 0
@@ -62,7 +80,7 @@ final class ActionButton: NSButton {
             let rect = NSRect(x:start,y:(bounds.height-iconSize)/2,width:iconSize,height:iconSize)
             let tinted = NSImage(size:rect.size,flipped:false) { bounds in
                 image.draw(in:bounds)
-                NSColor.white.setFill(); bounds.fill(using:.sourceIn); return true
+                foreground.setFill(); bounds.fill(using:.sourceIn); return true
             }
             tinted.draw(in:rect)
         }

@@ -449,7 +449,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         } else if busy { onStop(); return }
         let text = editor.string.trimmingCharacters(in:.whitespacesAndNewlines)
         if !text.isEmpty {
-            if editor === historyEditor {transcript.scrollToEndOfDocument(nil)}
+            if editor === historyEditor && !external {transcript.scrollToEndOfDocument(nil)}
             onSubmit(text,editor === composerEditor)
         }
     }
@@ -505,8 +505,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.linkBaseDirectory = {messageDirectory}
         guard history.isVisible && !history.isMiniaturized else {return}
         let selectionChanged = renderedConversation != selected.key
-        transcript.automaticallyFollowsEnd = !searching
-        transcript.setContent(transcriptContent(selected),animated:!searching && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
+        transcript.startsSnapshotsAtTop = selected.external
+        transcript.automaticallyFollowsEnd = !searching && !selected.external
+        transcript.setContent(transcriptContent(selected),animated:!searching && !selected.external && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
         if selectionChanged {matchIndex = 0}
         renderedConversation = selected.key
         updateSearchHighlights(reveal:searching && selectionChanged)
@@ -596,7 +597,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; history.makeKeyAndOrderFront(nil)
         refreshVisibleHistory()
         history.contentView?.layoutSubtreeIfNeeded()
-        if searching {updateSearchHighlights(reveal:true)} else {transcript.scrollToEndOfDocument(nil)}
+        if searching {updateSearchHighlights(reveal:true)}
+        else if external {transcript.scrollToBeginningOfDocument(nil)}
+        else {transcript.scrollToEndOfDocument(nil)}
     }
     private func refreshVisibleHistory() {
         guard let current = conversations.first(where:{$0.key == selected}) else {return}

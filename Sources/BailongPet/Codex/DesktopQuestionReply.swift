@@ -55,7 +55,27 @@ final class DesktopSocket {
         let id = UUID().uuidString
         var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":(timeoutSeconds-1)*1000]
         if let target {request["targetClientId"] = target}
-        let json = try JSONSerialization.data(withJSONObject:request)
+        try send(request)
+        let deadline = Date().addingTimeInterval(Double(timeoutSeconds))
+        while Date() < deadline {
+            let value = try receive()
+            guard value["requestId"] as? String == id else {continue}
+            guard value["resultType"] as? String == "success" else {throw PetFailure(message:"Codex 未接受回答："+(value["error"] as? String ?? "请求失败"))}
+            return value
+        }
+        throw PetFailure(message:"Codex 未在规定时间内确认回答。请转到 Codex 检查提交结果。")
+    }
+    func broadcast(_ method:String,params:[String:Any],version:Int) throws {
+        try send(["type":"broadcast","method":method,"sourceClientId":clientID,"params":params,"version":version])
+    }
+    func receiveIfAvailable(milliseconds:Int32) throws -> [String:Any]? {
+        var descriptor = pollfd(fd:fd,events:Int16(POLLIN),revents:0)
+        let result = Darwin.poll(&descriptor,1,milliseconds)
+        guard result >= 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}
+        return result == 0 ? nil : try receive()
+    }
+    private func send(_ value:[String:Any]) throws {
+        let json = try JSONSerialization.data(withJSONObject:value)
         var length = UInt32(json.count).littleEndian
         var frame = withUnsafeBytes(of:&length) {Data($0)}; frame.append(json)
         try frame.withUnsafeBytes {bytes in
@@ -65,16 +85,12 @@ final class DesktopSocket {
                 guard sent > 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}; offset += sent
             }
         }
-        let deadline = Date().addingTimeInterval(Double(timeoutSeconds))
-        while Date() < deadline {
-            let header = try read(4), size = header.enumerated().reduce(UInt32(0)) {$0 | UInt32($1.element) << (8*$1.offset)}
-            guard size > 0 && size <= 16*1024*1024 else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
-            guard let value = try JSONSerialization.jsonObject(with:read(Int(size))) as? [String:Any] else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
-            guard value["requestId"] as? String == id else {continue}
-            guard value["resultType"] as? String == "success" else {throw PetFailure(message:"Codex 未接受回答："+(value["error"] as? String ?? "请求失败"))}
-            return value
-        }
-        throw PetFailure(message:"Codex 未在规定时间内确认回答。请转到 Codex 检查提交结果。")
+    }
+    private func receive() throws -> [String:Any] {
+        let header = try read(4), size = header.enumerated().reduce(UInt32(0)) {$0 | UInt32($1.element) << (8*$1.offset)}
+        guard size > 0 && size <= 16*1024*1024 else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
+        guard let value = try JSONSerialization.jsonObject(with:read(Int(size))) as? [String:Any] else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
+        return value
     }
     private func read(_ count:Int) throws -> Data {
         var result = Data(count:count)

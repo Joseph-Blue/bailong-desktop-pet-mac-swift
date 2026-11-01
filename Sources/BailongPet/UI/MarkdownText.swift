@@ -11,18 +11,20 @@ enum MarkdownText {
     private struct Fragment {
         let block: Int?
         let table: Int?
+        var code: Int? = nil
         let text: NSAttributedString
     }
     static func render(_ source: String, font: NSFont = .systemFont(ofSize:14), color: NSColor = .labelColor,
                        lineSpacing: CGFloat = 4, paragraphSpacing: CGFloat = 12) -> NSAttributedString {
         // 生成中的 Markdown 可能尚未闭合，此时保留可解析内容或原文。
         let parsed = (try? AttributedString(markdown:source,options:.init(interpretedSyntax:.full,failurePolicy:.returnPartiallyParsedIfPossible))) ?? AttributedString(source)
-        var fragments = [Fragment](), tables = [Int:TableContent]()
+        var fragments = [Fragment](), tables = [Int:TableContent](), codeBlocks = [Int:(language:String,text:String)]()
         var previousItem: Int?
         for run in parsed.runs {
             let components = run.presentationIntent?.components ?? []
             let block = components.first?.identity
-            var level: Int?, ordinal: Int?, itemID: Int?, tableRow: Int?, tableID: Int?, column: Int?
+            var level: Int?, ordinal: Int?, itemID: Int?, tableRow: Int?, tableID: Int?, column: Int?, codeID:Int?
+            var codeLanguage = ""
             var listDepth = 0, ordered = false, codeBlock = false, quote = false, header = false
             for component in components {
                 switch component.kind {
@@ -30,7 +32,7 @@ enum MarkdownText {
                 case .listItem(let value): if itemID == nil {ordinal = value; itemID = component.identity}
                 case .orderedList: if listDepth == 0 {ordered = true}; listDepth += 1
                 case .unorderedList: listDepth += 1
-                case .codeBlock: codeBlock = true
+                case .codeBlock(let language): codeBlock = true; codeID = component.identity; codeLanguage = language ?? ""
                 case .blockQuote: quote = true
                 case .table(let columns):
                     tableID = component.identity
@@ -68,7 +70,11 @@ enum MarkdownText {
                 value = "图片：" + (description.isEmpty ? name : description)
             }
             let text = NSAttributedString(string:prefix+value,attributes:attributes)
-            fragments.append(Fragment(block:block,table:tableID,text:text))
+            fragments.append(Fragment(block:block,table:tableID,code:codeID,text:text))
+            if let id = codeID {
+                let previous = codeBlocks[id]?.text ?? ""
+                codeBlocks[id] = (codeLanguage,previous+value)
+            }
             if let id = tableID, let row = tableRow, let column, var table = tables[id] {
                 if table.cells[row] == nil {table.rows.append(row); table.cells[row] = [:]}
                 if header {table.headers.insert(row)}
@@ -80,9 +86,14 @@ enum MarkdownText {
         let result = NSMutableAttributedString()
         let plain = NSMutableParagraphStyle(); plain.lineSpacing = lineSpacing; plain.paragraphSpacing = paragraphSpacing
         let base: [NSAttributedString.Key:Any] = [.font:font,.foregroundColor:color,.paragraphStyle:plain]
-        var previousBlock: Int?, emittedTables = Set<Int>()
+        var previousBlock: Int?, emittedTables = Set<Int>(), emittedCode = Set<Int>()
         for fragment in fragments {
-            if let id = fragment.table, let table = tables[id] {
+            if let id = fragment.code,let code = codeBlocks[id] {
+                guard emittedCode.insert(id).inserted else {continue}
+                if result.length > 0 && !result.string.hasSuffix("\n") {result.append(NSAttributedString(string:"\n",attributes:base))}
+                result.append(CodeBlockRendering.render(code.text,language:code.language,font:font))
+                result.append(NSAttributedString(string:"\n",attributes:base)); previousBlock = nil
+            } else if let id = fragment.table, let table = tables[id] {
                 guard emittedTables.insert(id).inserted else {continue}
                 if result.length > 0 && !result.string.hasSuffix("\n") {result.append(NSAttributedString(string:"\n",attributes:base))}
                 result.append(renderTable(table,font:font,color:color,lineSpacing:lineSpacing))

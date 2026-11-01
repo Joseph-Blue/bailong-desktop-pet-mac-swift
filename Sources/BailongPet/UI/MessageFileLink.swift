@@ -28,7 +28,12 @@ enum MessageFileLink {
         guard let target else {
             showError("文件不存在",PetFailure(message:file.path)); return true
         }
+        // 只发送目标定位请求；打开 Finder.app 会触发 reopen，额外显示默认目录。
         NSWorkspace.shared.activateFileViewerSelecting([target])
+        // 激活已有进程，不发送 reopen，也不使用 activateAllWindows。
+        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier:"com.apple.finder").first {
+            finder.activate(options:[])
+        }
         return true
     }
 

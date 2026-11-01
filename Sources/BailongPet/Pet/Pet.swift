@@ -47,6 +47,9 @@ final class PetController: NSObject, NSMenuDelegate {
     let view = SpriteView()
     let decoder = Decoder()
     let bubble = Bubble()
+    private let progressBubble = Bubble()
+    private var toastActivities = [String:TaskActivity]()
+    private var progressToastKey:String?
     var diagnostics: DiagnosticsPanel?
     var syncDiagnostics: () -> String = { "等待初始化" }
     var cliDiagnostics: () -> String = { "尚未初始化" }
@@ -86,7 +89,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var quotaActive = false
     var manualHidden = false, fullscreenHidden = false, sleeping = false
     var menuOpen = false, settingsOpen = false
-    var composerVisible = false
+    var composerVisible = false {didSet {if composerVisible {progressBubble.hide()}}}
     private var greetingPending = true
     var pauseTime: Double?
     var press: CGPoint?, pressOrigin = CGPoint.zero
@@ -411,9 +414,10 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
+        if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
         let transientInteraction = purpose == .interaction && !taskOverview && thread == nil && timing == nil && question == nil && !attentionAction
         if transientInteraction && !bubble.acceptsTransientInteraction {return}
         if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
@@ -429,7 +433,7 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 followsText:followsText,resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,showsTaskOverview:taskOverview),select:selectCard)
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,showsTaskOverview:taskOverview),select:selectCard)
         }
         placeBubble()
     }
@@ -441,9 +445,23 @@ final class PetController: NSObject, NSMenuDelegate {
         let local = stableLocalBounds.applying(transform).intersection(view.bounds)
         return local.isNull ? window.frame : window.convertToScreen(view.convert(local,to:nil))
     }
+    func showProgressToast(_ activity:TaskActivity?,key:String,timing:TaskTiming) {
+        guard toastActivities[key] != activity else {return}
+        toastActivities[key] = activity
+        guard let activity,activity.kind != .reply else {
+            if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}; return
+        }
+        guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),
+              preferences.bool("progressToastEnabled"),activity.visible,preferences.allows(.progress) else {return}
+        progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing); placeBubble()
+    }
     func placeBubble() {
-        guard bubble.visible else{return}
-        bubble.place(near:visiblePetFrame,screen:screen,dock:dock)
+        if bubble.visible {bubble.place(near:visiblePetFrame,screen:screen,dock:dock)}
+        if progressBubble.visible {
+            if bubble.blocksProgressToast || composerVisible {progressBubble.hide(); return}
+            progressBubble.place(near:visiblePetFrame,screen:screen,dock:dock)
+            if bubble.visible && progressBubble.targetFrame.intersects(bubble.targetFrame) {progressBubble.hide()}
+        }
     }
     func resize(_ p: Int, _ b: Int) {
         let old = window.frame
@@ -468,10 +486,14 @@ final class PetController: NSObject, NSMenuDelegate {
         if preferences.bool("taskOpening") && first && !hidden && dock == nil && press == nil, let clip = catalog.work.first(where:{$0.id == "work01"}) { play(clip,"opening") }
     }
     func stopObservingTask(_ key:String) {
+        toastActivities.removeValue(forKey:key)
+        if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
         activeTasks.remove(key)
         if activeTasks.isEmpty && !hidden && dock == nil && press == nil {idle()}
     }
     func taskEnded(_ key: String, status: String) {
+        toastActivities.removeValue(forKey:key)
+        if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
         bubble.finishTask(key,status:status); activeTasks.remove(key); interaction()
         if status == "completed" { soundOnce() }
         guard !hidden && dock == nil && press == nil else { return }
@@ -481,7 +503,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var fullCandidate = false, fullCandidateSince = 0.0
     func checkDesktop() {
         let quiet = preferences.isQuiet()
-        if quiet != wasQuiet {wasQuiet = quiet; interaction(); if quiet && motion != nil {idle()}; if !preferences.allows(bubble.purpose) {bubble.hide()}}
+        if quiet != wasQuiet {wasQuiet = quiet; interaction(); if quiet && motion != nil {idle()}; if !preferences.allows(bubble.purpose) {bubble.hide()}; if !preferences.allows(.progress) {progressBubble.hide()}}
         var full = false
         if autoFullscreen, let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ProcessInfo.processInfo.processIdentifier,
            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]] {
@@ -498,7 +520,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if fullscreenHidden != full && now-fullCandidateSince >= (full ? 0.25 : 0.75) { fullscreenHidden = full; applyVisibility() }
     }
     func applyVisibility() {
-        if hidden { dockRecallAt = nil; dockDoubleClick = false; leftDoubleClick = false; press = nil; dragged = false; if pauseTime == nil { pauseTime = now }; window.ignoresMouseEvents = true; visibilityFade.setVisible(false); bubble.hide(); quotaActive = false; onVisibility(false) }
+        if hidden { dockRecallAt = nil; dockDoubleClick = false; leftDoubleClick = false; press = nil; dragged = false; if pauseTime == nil { pauseTime = now }; window.ignoresMouseEvents = true; visibilityFade.setVisible(false); bubble.hide(); progressBubble.hide(); quotaActive = false; onVisibility(false) }
         else { if let pauseTime { began += now-pauseTime }; pauseTime = nil; if animation != nil {visibilityFade.setVisible(true)}; interaction() }
         updateMotionDisplayLink(); refreshMenu(); greetOnFirstAppearance()
     }
@@ -633,6 +655,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func settingsChanged(_ keys: [String]) {
         // 连续拖动材质滑块只刷新气泡背景，不触发任务同步与桌宠调度。
         if !keys.isEmpty && Set(keys).isSubset(of:["bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]) {return}
+        if keys.contains("approvalButtonOrder") {_ = bubble.refreshAppearance(); placeBubble()}
         if keys.contains("showDiagnostics") { updateDiagnostics() }
         if keys.contains("diagnosticsPinned") { diagnostics?.updatePin() }
         if !Set(keys).isDisjoint(with: ["animationBufferFrames", "animationQuality", "preloadWholeAnimation"]) {
@@ -648,10 +671,13 @@ final class PetController: NSObject, NSMenuDelegate {
             playbackRate = preferences.speed(current.id); began = reference-elapsed/playbackRate
             configureAnimationTimer()
         }
-        if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize"]) {
+        if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize","bubbleAspectEnabled","bubbleAspectRatio"]) {
             resize(Int(preferences.number("petPercent")),Int(preferences.number("bubblePercent")))
             if !bubble.refreshAppearance(),settingsOpen {showSizePreview()}
         }
+        if !Set(keys).isDisjoint(with:["progressToastEnabled","showThinkingProgress","showToolProgress","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate"]) {progressBubble.hide()}
+        if keys.contains("progressToastSeconds") {progressBubble.refreshDuration()}
+        if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize","bubbleAspectEnabled","bubbleAspectRatio","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion","appearanceMode"]) {_ = progressBubble.refreshAppearance(); placeBubble()}
         if keys.contains("preferredDisplay") {applyPreferredDisplay()}
         if keys.contains("rememberPosition") {savePosition()}
         if !Set(keys).isDisjoint(with:["autoMove","movementRange","quietCompanion","quietSchedule","quietStart","quietEnd"]) {
@@ -659,7 +685,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         if keys.contains("appearanceMode") {AppAppearance.apply()}
         if keys.contains("accentStyle") || keys.contains("accentRGB") {NotificationCenter.default.post(name:AppAccent.didChange,object:nil)}
-        if !preferences.allows(bubble.purpose) {bubble.hide()}
+        if !preferences.allows(bubble.purpose) {bubble.hide()}; if !preferences.allows(.progress) {progressBubble.hide()}
         if !Set(keys).isDisjoint(with:["bubbleCardLimit","recentTaskCount","showTaskOverview"]) {bubble.refreshCardPreferences()}
         if keys.contains("typingEffect") && !preferences.bool("typingEffect") {bubble.finishTyping()}
         if !Set(keys).isDisjoint(with:["interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime"]) {bubble.refreshDuration()}
@@ -672,7 +698,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func close() {
         diagnostics?.stop(); visibilityFade.stop()
         motionDisplayLink?.invalidate(); motionDisplayLink = nil
-        startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); dockRecallAt = nil; decoder.close(); bubble.hide(); settings.window.orderOut(nil)
+        startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); dockRecallAt = nil; decoder.close(); bubble.hide(); progressBubble.hide(); settings.window.orderOut(nil)
         for token in observationTokens { NSWorkspace.shared.notificationCenter.removeObserver(token); NotificationCenter.default.removeObserver(token) }
         NSStatusBar.system.removeStatusItem(status); window.orderOut(nil)
     }
