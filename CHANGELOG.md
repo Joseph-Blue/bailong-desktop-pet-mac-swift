@@ -4,7 +4,7 @@
 
 ## [0.5.0] — 2026-11-01
 
-[发布页](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/v0.5.0)。以下为相较 [0.2.1](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙娘桌宠v0.2.1) 的累计更新。
+[发布页](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙桌宠Swiftv0.5.0)。以下为相较 [0.2.1](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙娘桌宠v0.2.1) 的累计更新。
 
 ### 性能与技术栈
 
