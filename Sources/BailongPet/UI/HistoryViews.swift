@@ -1,5 +1,37 @@
 import AppKit
 
+final class HistoryTableView: NSTableView {
+    var contextMenu: (Int) -> NSMenu? = {_ in nil}
+    override func menu(for event:NSEvent) -> NSMenu? {
+        let index = row(at:convert(event.locationInWindow,from:nil))
+        return index >= 0 ? contextMenu(index) : nil
+    }
+}
+
+// 保留完整标题供辅助功能和悬停读取；只在显示层合并空白并对超宽末尾淡化。
+final class FadingTitleField: NSTextField {
+    private let fade = CAGradientLayer()
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        isEditable = false; isSelectable = false; isBordered = false; drawsBackground = false
+        maximumNumberOfLines = 1; usesSingleLineMode = true; lineBreakMode = .byClipping
+        setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        wantsLayer = true
+        fade.startPoint = CGPoint(x:0,y:0.5); fade.endPoint = CGPoint(x:1,y:0.5)
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let overflow = attributedStringValue.size().width > max(0,bounds.width-4)
+        fade.frame = bounds
+        fade.colors = [NSColor.black.cgColor,NSColor.black.cgColor,NSColor.clear.cgColor]
+        fade.locations = [0,NSNumber(value:Double(max(0,1-24/max(1,bounds.width)))),1]
+        layer?.mask = overflow ? fade : nil
+        CATransaction.commit()
+    }
+}
+
 final class AccentHistoryRow: NSTableRowView {
     override var interiorBackgroundStyle: NSView.BackgroundStyle {isSelected && isEmphasized ? .emphasized : .normal}
     override var isSelected: Bool {didSet {refreshSelection()}}
@@ -22,18 +54,17 @@ final class AccentHistoryRow: NSTableRowView {
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }
 final class HistoryConversationCell: NSTableCellView {
-    private let titleLabel = NSTextField(labelWithString:"")
+    private let titleLabel = FadingTitleField(frame:.zero)
     private let snippetLabel = NSTextField(wrappingLabelWithString:"")
     private let sourceIcon = NSImageView()
     private let titleText:String, snippetText:String?, query:String
     init(title: String, external: Bool = false, symbol:String? = nil, snippet:String? = nil, query:String = "") {
-        titleText = title; snippetText = snippet; self.query = query
+        titleText = title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); snippetText = snippet; self.query = query
         super.init(frame:.zero)
-        titleLabel.maximumNumberOfLines = 1; titleLabel.usesSingleLineMode = true; titleLabel.lineBreakMode = .byTruncatingTail
         snippetLabel.maximumNumberOfLines = 2; snippetLabel.lineBreakMode = .byTruncatingTail
         sourceIcon.image = NSImage(systemSymbolName:symbol ?? (external ? "arrow.down.doc" : "bubble.left"),accessibilityDescription:symbol == nil ? (external ? "Codex 同步记录" : "桌宠对话") : title)
         addSubview(sourceIcon); addSubview(titleLabel); textField = titleLabel; imageView = sourceIcon
-        toolTip = [title,snippet].compactMap {$0}.joined(separator:"\n")
+        hoverHelp = [title,snippet].compactMap {$0}.joined(separator:"\n")
         setAccessibilityLabel((symbol == nil ? (external ? "Codex 同步记录，" : "桌宠对话，") : "")+title+(snippet.map {"，"+$0} ?? ""))
         sourceIcon.translatesAutoresizingMaskIntoConstraints = false; titleLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -60,6 +91,7 @@ final class HistoryConversationCell: NSTableCellView {
             return value
         }
         titleLabel.attributedStringValue = styled(titleText,size:13,color:foreground)
+        titleLabel.needsLayout = true
         snippetLabel.attributedStringValue = styled(snippetText ?? "",size:11,color:secondary)
         sourceIcon.contentTintColor = selected ? .alternateSelectedControlTextColor : AppAccent.color
     }

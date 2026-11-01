@@ -23,7 +23,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 | 动画、素材与位置 | Pet/Pet.swift、Pet/Resources.swift、Pet/StreamingAnimation.swift |
 | 气泡、材质与输入 | UI/Bubble.swift、UI/NativeControls.swift、UI/MessageEditor.swift、UI/TextInteraction.swift |
 | 计时与问卷展示数据 | UI/BubblePresentation.swift、UI/QuestionForm.swift |
-| 偏好与设置 | Settings/Preferences.swift、Settings/Settings.swift、Settings/SettingsControls.swift |
+| 偏好与设置 | Settings/Preferences.swift、Settings/Settings.swift、Settings/SettingsControls.swift、Settings/AboutPage.swift |
 | 内置任务与请求 | Conversation/ChatController.swift、Codex/RequestCoordinator.swift、Codex/CodexProtocol.swift |
 | 外部观察与明确回答 | Codex/DesktopHistoryReader.swift、Codex/DesktopSync.swift、Codex/DesktopQuestionReply.swift |
 | 历史、搜索与显示 | Conversation/History.swift、Conversation/HistorySearch.swift、UI/ChatUI.swift |
@@ -45,7 +45,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 强调色默认“跟随系统”且位于首位，手动色保留。八个预设使用架构文档中用户截图取样的 sRGB，不用 systemPink 等同名语义色替代。“自定义”色点使用 paintpalette 图标并打开原生颜色面板。
 - 开关、单选和复选保持 NSSwitch／NSButton 原生形状及交互。NativeAccentTint 使用公开 contentFilters 映射应用色，关闭状态也保持挂载以覆盖切换动画；仅跟随系统时移除。不访问私有控件，不把颜色滤镜称为原生 tint API。危险及警告保留语义色。
 - 普通 NSAlert 分离视觉主操作与键盘默认操作，审批仍默认拒绝。危险确认经 beginDangerousSheet 清除默认按钮并拦截 Return／小键盘 Enter，两键不执行任何操作，Esc 取消。NSAlert 保留系统 destructive 外观，不覆写 bezelColor；系统文件选择框保持原生行为。
-- 创建 NSApplication 前，仅在本应用偏好域设置 NSInitialToolTipDelay=200 毫秒，不修改全局域。设置侧栏分类无 tooltip，仅保留收起／展开按钮；气泡关闭按钮无 tooltip，保留辅助功能名，性能窗口不新增悬停说明。
+- 应用自有悬停使用 HoverHelp，200ms 延迟与 80ms 淡出；系统控件仍由系统管理。设置侧栏分类无提示，仅保留收起／展开按钮；气泡关闭按钮无提示，保留辅助功能名，性能窗口不新增悬停说明。
 - 设置、历史和性能窗口可经 Dock／菜单召回。⌘Q 与 Dock“退出”关闭界面／取消对话框，不退出桌宠；明确的完整退出菜单和系统关机、SIGTERM/SIGINT 仍清理任务进程。关闭一个窗口不移除其他窗口的 Dock 入口。
 
 - 可选中文本右键仅剪切／拷贝／粘贴／全选，个性页模板编辑器保留变量插入；保留系统安全文本编辑器。消息与历史输入框显示原生焦点环，应用色仅映射独立焦点层。
@@ -53,9 +53,9 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 ## 称呼与台词
 
-- “称呼与个性”输入菜单提供剪切／拷贝／粘贴／全选；两个名字字段无分隔线与变量插入，保持纯文本。台词和特定称呼提供 Tab 对齐变量插入，{用户名}／{桌宠名}／{特定称呼} 动态色及淡底；组字期间不截断。名字与称呼 20 字、台词 120 字，变量整体算 1 字；清空按钮和计数在输入框右侧同排，达到上限红色。长台词标签在上、输入区展开换行。姓名标签显示图标及对应变量，桌宠名复用托盘图标；你的名字在前、桌宠名紧随。特定称呼只在选中 custom 时显示，隐藏不清值。任务及额度台词空值回默认，互动组恢复只清该组。
+- “称呼与个性”输入菜单提供剪切／拷贝／粘贴／全选；两个名字字段无分隔线与变量插入，保持纯文本。台词和特定称呼提供 Tab 对齐变量插入，{用户名}／{桌宠名}／{特定称呼} 动态色及淡底；组字期间不截断。名字与称呼 20 字、台词 120 字，变量整体算 1 字；清空按钮和计数在输入框右侧同排，达到上限红色。长台词标签在上、输入区展开换行。姓名标签显示图标及对应变量，桌宠名复用托盘图标；你的名字在前、桌宠名紧随。特定称呼始终显示，由台词中的变量决定是否使用。任务及额度台词空值回默认，互动组恢复只清该组。
 - TemplateSyntax 仅对特定称呼、各 Template 字段及 customLines 转换旧变量；首次启动一次迁移，旧文件导入独立转换，保留旧别名解析，不改用户名／桌宠名字面值、会话正文和历史。变量作为完整单位计数与截断，不能截掉半个变量；替换值不递归解析。
-- 称呼来源仅 name／custom，默认 name，旧 master 启动／导入归并 name。名字为空有效值为主人；特定称呼为空沿用有效名字。名字原文不自动填值，输入提示“默认为‘主人’”；用户名变量及内置人格共用有效名。“怎么称呼你”后附 {特定称呼} 色标，两种来源原生单选同排右对齐。
+- 不保留称呼来源单选；特定称呼留空沿用有效用户名，名字留空为主人。默认台词与内置人格使用 {用户名}，已有自定义台词保留。旧 addressMode 启动移除、导入忽略。
 - 问候语在每次启动后首次有画面且显示时触发一次，普通气泡、无 Codex／详情按钮、不写历史；遵守互动气泡及安静模式，已有任务、气泡、输入窗则跳过，不延迟补发。隐藏后召回不重复，空模板回默认。
 
 ## 气泡材质与动态效果
@@ -72,7 +72,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 ## 动画与性能
 
-- 默认 512×512、流式读取、24 帧后续缓冲、满帧，首帧就绪即播；画质另选 384／256。缓冲整数 6～240，非法值结束编辑恢复 24，滑块松开才提交，不预分配容量、不跨动作预读。
+- 默认原画 720×720、流式读取、24 帧后续缓冲、满帧，首帧就绪即播；画质按原画 720／较高 512／中 384／低 256 排列，名称与分辨率用真实 Tab 和 NSTextTab 对齐；默认原画 720，保留已有手动选择。缓冲整数 6～240，非法值结束编辑恢复 24，滑块松开才提交，不预分配容量、不跨动作预读。
 - 性能页依次为画质、素材帧率上限、缓冲、整段预加载。预加载默认关，启用后缓冲置灰且保留值；完整读取当前动作后播放，同动作循环复用，不预热整个素材库。提示“不推荐，会显著增加运行内存 (RAM) 占用。”
 - 素材选项“满帧 (≥ 24 FPS)”／20／15；满帧按源帧率乘播放速度，限帧不改时长、不插帧，旧 24／30 偏好及导入值迁移 full。当前素材 33 段 24fps，move03left／move03right 为 30fps，修改素材后重新读取元数据。
 - 素材选帧定时器与几何动画分开。macOS 14+ NSView.displayLink 随视图屏幕刷新位移／旋转，弱 target 避免循环引用，只在活动期间启用，隐藏／结束暂停，关闭释放。复用当前图像，不随屏幕刷新增加解码请求；统计 FPS 计不同图像，draws 可重复。
@@ -132,3 +132,12 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 临时聊天使用 nonactivatingPanel 获取键盘焦点，不激活应用或恢复隐藏／最小化的其他窗口。“转到 Codex”及历史跳转按钮前放官方 OpenAI 模板标志，标志资源本地保留并打包，不追踪二进制。
 
 - 历史搜索显示命中正文摘要，选中后定位并高亮；⌘F 聚焦顶部搜索，⌘G／⇧⌘G 遍历当前正文匹配。筛选不得清空草稿或自动切换会话，搜索高亮只作用于显示层。
+
+- 历史管理使用侧栏原生右键菜单：重命名、同步 Codex 标题、分隔线、删除。localTitle 标记手动命名，明确同步清除标记；Codex 标题读取 threads.name（未生成时暂沿用 title），5 秒补查已存会话，避免错用首条输入。单行显示层合并空白并在末尾 24pt 渐隐，完整标题仍供悬停和辅助功能读取。访达入口使用 AppIcons.finder 单色图标。
+- 明确管理操作在自动记录关闭时仍原子写入冻结副本。删除实际移除 conversations.json 对应正文，并在同文件保存 deletedThreads 身份防回填；先落盘后更新 UI。正在执行的内置该会话须先停止，外部删除只停止本地观察。危险确认复用 beginDangerousSheet，两个 Enter 均不生效。
+- 应用自有悬停统一使用 HoverHelp：公开 AppKit tracking／panel API、200ms 显示延迟、80ms 淡出；减少动态效果时直接收起。点击、滚动、窗口关闭／最小化／失焦取消，快速重入按 generation 丢弃旧收起回调。工具栏使用原生 NSButton 承载提示；系统控件仍由系统管理。
+
+- 关于页集成在设置侧栏，AboutPageController 保留图标、版本／编译架构、关于／开源致谢 NSTabView、原有富文本和链接。内容区不增加外层卡片，原生分页容器承担真实内容切换。两个关于菜单入口都打开该设置页；致谢记录 macos-golden-gate-design 的 GitHub 来源与其 MIT 声明。
+- HoverHelp 展示完整原文，无固定行数／160pt 限高／省略尾部；使用 NSTextFieldCell 实际测量高度，长文本换行，接近屏幕高度时增宽。
+- 独立窗口后台刷新与关闭回调不主动激活其他窗口；性能开关联动仅首次非激活显示，不再恢复设置焦点、不反复置前；后台恢复报告非激活显示。明确菜单／Dock 召回聚焦指定窗口，应用已活动时不重复激活；Dock 优先当前窗口，历史打开不调用全应用 unhide。
+- 图标由 Tools/GenerateAppIcon/main.swift 从已修复 idle PNG 母版通过 Core Graphics 生成透明多尺寸 iconset，再用 iconutil 打包；源图及旧图标备份只保留 local-assets。透明像素经预乘 Alpha 重采样，不重绘角色。

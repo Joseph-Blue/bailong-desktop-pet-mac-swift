@@ -126,7 +126,7 @@ final class ModelSelector: NSButton {
         updateTitle()
     }
     required init?(coder:NSCoder) {fatalError()}
-    @objc private func updateTitle() {title = settings.title; toolTip = settings.currentModel?.displayName ?? "默认跟随 Codex 设置"}
+    @objc private func updateTitle() {title = settings.title; hoverHelp = settings.currentModel?.displayName ?? "默认跟随 Codex 设置"}
     func closeChoices() {popover.performClose(nil)}
     func containsInteraction(at point: NSPoint, window: NSWindow?) -> Bool {
         guard popover.isShown else{return false}
@@ -201,10 +201,10 @@ final class ModelSelectorContent: NSViewController {
         caution.stringValue = settings.caution ?? ""
         caution.isHidden = settings.loading || settings.error != nil || settings.caution == nil
         caution.textColor = settings.showsAstraRedWarning ? .systemRed : .systemOrange
-        explanation.toolTip = settings.error
+        explanation.hoverHelp = settings.error
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading
         luna.isEnabled = !settings.loading && settings.lunaMinimum != nil
-        luna.toolTip = settings.lunaMinimum == nil ? "当前模型列表未提供 GPT-5.6 Luna。" : "切换到 GPT-5.6 Luna 支持的最低推理强度，并记住选择。"
+        luna.hoverHelp = settings.lunaMinimum == nil ? "当前模型列表未提供 GPT-5.6 Luna。" : "切换到 GPT-5.6 Luna 支持的最低推理强度，并记住选择。"
         layoutControls()
     }
     private func layoutControls() {

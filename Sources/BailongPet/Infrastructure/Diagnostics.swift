@@ -232,10 +232,10 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.sample() }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
-        if window.isMiniaturized { window.deminiaturize(nil) }
+        if takeFocus && window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.addWindowsItem(window, title: window.title, filename: false)
-        if takeFocus { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-        else { window.orderFront(nil) }
+        if takeFocus { if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil) }
+        else if !window.isVisible && !window.isMiniaturized { window.orderFront(nil) }
     }
     func stop() {
         timer?.invalidate(); timer = nil; previousGPU = nil

@@ -22,7 +22,7 @@ final class RequestCoordinator {
         self.chat.pet.say(self.chat.pet.preferences.statusLine(attention.kind.templateKey), body:attention.body, kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:.attention, personalizeTitle:false, animateHeading:false, attentionAction:true, timing:.init(start:turn.date,key:"own"), question:.init(questions:attention.questions,submit:submit))
     }
     private func clearAttention() {
-        if let (conversation,_) = self.chat.running, self.chat.pet.bubble.relatedConversation == conversation.key, self.chat.pet.bubble.purpose == .attention {self.chat.pet.bubble.hide()}
+        self.chat.pet.bubble.resolveQuestions(taskKey:"own")
     }
     func nextRequest() {
         guard alert == nil && !requests.isEmpty else{return}

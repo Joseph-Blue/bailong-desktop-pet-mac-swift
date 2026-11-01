@@ -1,6 +1,6 @@
 import Foundation
 
-// 台词变量与称呼来源的旧设置迁移；用户名、桌宠名和历史正文保持字面值。
+// 台词变量的旧设置迁移；用户名、桌宠名和历史正文保持字面值。
 enum TemplateSyntax {
     static let aliases = [("{称呼}","{特定称呼}"),("{名字}","{用户名}"),("{桌宠}","{桌宠名}")]
     static let tokens = ["{用户名}","{桌宠名}","{特定称呼}"]
@@ -25,7 +25,6 @@ enum TemplateSyntax {
     static func isTemplateKey(_ key:String) -> Bool {key == "customAddress" || key.hasSuffix("Template")}
     static func migrate(_ values:[String:Any]) -> [String:Any] {
         var result = values
-        if values["addressMode"] as? String == "master" {result["addressMode"] = "name"}
         for (key,value) in values {
             if isTemplateKey(key),let text = value as? String {result[key] = normalized(text)}
             else if key == "customLines",let lines = value as? [String:String] {result[key] = lines.mapValues(normalized)}

@@ -9,6 +9,7 @@ final class Turn: Codable {
     var sensitiveQuestionNotice: String? = nil
     var model: String? = nil, effort: String? = nil
     var date = Date()
+    var completedAt:Date? = nil
     var owned = true
     var finished = false
     var notices = [String:Double]()
@@ -17,7 +18,7 @@ final class Turn: Codable {
         t.id = id; t.key = key; t.input = input; t.status = status
         t.messages = messages; t.summary = summary; t.steps = steps; t.final = final; t.error = error
         t.sensitiveInputNotice = sensitiveInputNotice; t.sensitiveQuestionNotice = sensitiveQuestionNotice
-        t.model = model; t.effort = effort; t.date = date; t.owned = owned
+        t.model = model; t.effort = effort; t.date = date; t.completedAt = completedAt; t.owned = owned
         t.finished = finished; t.notices = notices
         return t
     }
@@ -26,16 +27,25 @@ final class Conversation: Codable {
     var key = UUID().uuidString
     var threadID: String? = nil
     var title = "新对话"
+    var localTitle: String? = nil
     var cwd = ""
     var external = false
     var historyMode = "legacy"
     var turns = [Turn]()
+    func snapshot() -> Conversation {
+        let copy = Conversation()
+        copy.key = key; copy.threadID = threadID; copy.title = title; copy.localTitle = localTitle
+        copy.cwd = cwd; copy.external = external; copy.historyMode = historyMode
+        copy.turns = turns.map {$0.snapshot()}
+        return copy
+    }
 }
 // 可选策略字段兼容已有 schema 1 文件。关闭期间只记录排除身份与时间，不保存正文。
 struct HistoryRecordingPolicy: Codable {
     var excludedTurns = Set<String>()
     var externalBefore: Double = 0
     var disabled = false
+    var deletedThreads: Set<String>? = nil
 }
 struct HistoryDocument: Codable {
     var schemaVersion = 1
@@ -65,6 +75,8 @@ final class HistoryStore {
     private var suspended = false, draining = false
     private var pending: HistoryDocument?
     private var writeEpoch = 0
+    var deletedThreads: Set<String> {policy.deletedThreads ?? []}
+    var recordsAutomatically: Bool {recording}
     init(recording:Bool = true, directory:URL = Paths.data) throws {
         url = directory.appendingPathComponent("conversations.json")
         self.recording = recording
@@ -109,7 +121,7 @@ final class HistoryStore {
             let old = saved[c.key]
             let oldTurns = Dictionary(uniqueKeysWithValues:(old?.turns ?? []).map {($0.key,$0)})
             let copy = Conversation()
-            copy.key = c.key; copy.threadID = c.threadID; copy.title = c.title
+            copy.key = c.key; copy.threadID = c.threadID; copy.title = c.title; copy.localTitle = c.localTitle
             copy.cwd = c.cwd; copy.external = c.external; copy.historyMode = c.historyMode
             var frozen = false
             for t in c.turns {
@@ -118,7 +130,7 @@ final class HistoryStore {
                 if excluded {frozen = true; if let previous = oldTurns[t.key] {copy.turns.append(previous)}}
                 else {copy.turns.append(t.snapshot())}
             }
-            if frozen {copy.title = old?.title ?? "对话记录"}
+            if frozen {copy.title = old?.title ?? "对话记录"; copy.localTitle = old?.localTitle}
             if !preservingExcluded || !copy.turns.isEmpty || old != nil {records.append(copy)}
         }
         return HistoryDocument(conversations:records,recordingPolicy:policy)
@@ -159,6 +171,45 @@ final class HistoryStore {
         }
     }
     func finish() {save(); queue.sync {}}
+    // 明确的管理操作也适用于关闭自动记录时的冻结副本；落盘成功后才改变界面。
+    func setTitle(_ title:String, for conversation:Conversation, manual:Bool) throws {
+        queue.sync {}
+        var document = recording ? makeSnapshot() : archive
+        document.conversations = document.conversations.map {$0.snapshot()}
+        if let copy = document.conversations.first(where:{$0.key == conversation.key}) {
+            copy.title = title; copy.localTitle = manual ? title : nil
+        } else {
+            let copy = Conversation(); copy.key = conversation.key; copy.threadID = conversation.threadID
+            copy.cwd = conversation.cwd; copy.external = conversation.external; copy.historyMode = conversation.historyMode
+            copy.title = title; copy.localTitle = manual ? title : nil
+            document.conversations.append(copy)
+        }
+        document.recordingPolicy = policy
+        try commitManagement(document)
+        conversation.title = title; conversation.localTitle = manual ? title : nil
+    }
+    func delete(_ conversation:Conversation) throws {
+        queue.sync {}
+        var document = recording ? makeSnapshot() : archive
+        document.conversations.removeAll {$0.key == conversation.key}
+        var nextPolicy = policy
+        if let id = conversation.threadID {
+            var deleted = nextPolicy.deletedThreads ?? []; deleted.insert(id); nextPolicy.deletedThreads = deleted
+        }
+        nextPolicy.excludedTurns.subtract(conversation.turns.map(\.key))
+        document.recordingPolicy = nextPolicy
+        try commitManagement(document)
+        policy = nextPolicy; conversations.removeAll {$0.key == conversation.key}
+    }
+    private func commitManagement(_ document:HistoryDocument) throws {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
+        let data = try encoder.encode(document)
+        try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try data.write(to:url,options:.atomic)
+        archive = document
+        lock.withLock {suspended = false; pending = nil; writeEpoch += 1}
+        onSaved()
+    }
     func clear() throws {
         queue.sync {}
         let fresh = HistoryRecordingPolicy(externalBefore:Date().timeIntervalSince1970,disabled:!recording)

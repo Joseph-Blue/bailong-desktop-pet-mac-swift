@@ -99,7 +99,7 @@ final class Decoder: @unchecked Sendable {
     private var stream: StreamingAnimation?
     private var generation = 0
     private var bufferCapacity = 24
-    private var resolution = 512
+    private var resolution = 720
     private var preloadWhole = false
     private var preloadProgress: (id: String, frames: Int, total: Int)?
     func preloadingStatistics() -> (id: String, frames: Int, total: Int)? { lock.withLock { preloadProgress } }

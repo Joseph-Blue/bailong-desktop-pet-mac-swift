@@ -123,7 +123,7 @@ final class AccentSwatch: NSButton {
     init(key:String,name:String) {
         self.key = key; super.init(frame:.zero)
         title = ""; isBordered = false; setButtonType(.toggle); focusRingType = .exterior
-        toolTip = name; setAccessibilityLabel(name)
+        hoverHelp = name; setAccessibilityLabel(name)
         widthAnchor.constraint(equalToConstant:38).isActive = true
         heightAnchor.constraint(equalToConstant:34).isActive = true
     }

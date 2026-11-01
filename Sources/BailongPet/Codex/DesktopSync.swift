@@ -7,6 +7,7 @@ struct PublicSnapshot {
     var attention: TaskAttention?
     var hasSensitiveInput = false
     var hasSensitiveQuestion = false
+    var isLatest = true
     var key: String { actual+":"+turn }
     var fingerprint: [String] { [status,messages,final,alert,step,error,attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
 }
@@ -29,43 +30,65 @@ final class DesktopSync {
         UserDefaults.standard.set(clearedBefore,forKey:"desktopHistoryClearedBefore")
         for key in running {chat.pet.taskEnded(key,status:"interrupted")}
         running.removeAll(); tracked.removeAll(); fingerprints.removeAll(); noticedAt.removeAll(); changedAt.removeAll()
+        chat.desktopTasks = []; chat.desktopTaskReadStatus = "正在同步 Codex 任务状态…"
     }
     private(set) var diagnostics = "等待同步"
     var status = "正在准备读取本机 Codex 的任务记录。\n读取成功后，这里会显示任务数量、当前状态和最近刷新时间。"
     init(chat: ChatController) {
         self.chat = chat
+        chat.onHistoryDeleted = { [weak self] conversation in self?.forget(conversation) }
         timer = Timer.scheduledTimer(withTimeInterval:1,repeats:true) { [weak self] _ in self?.poll() }
     }
+    private func forget(_ conversation:Conversation) {
+        chat.desktopTasks.removeAll {$0.threadID == conversation.threadID}
+        let keys = tracked.filter {$0.value.logical == conversation.threadID || $0.value.actual == conversation.threadID}.map(\.key)
+        for key in keys {
+            tracked.removeValue(forKey:key); fingerprints.removeValue(forKey:key)
+            noticedAt.removeValue(forKey:key); changedAt.removeValue(forKey:key)
+            if running.remove(key) != nil {chat.pet.stopObservingTask(key)}
+        }
+    }
     private func poll() {
+        chat.refreshDesktopSettingsIfNeeded()
         guard !reading && !stopped else{return}; reading = true
-        let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID})
+        let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID}).union(chat.store.deletedThreads)
         let watched = tracked.values.filter{running.contains($0.key)}
-        let titleIDs = Date().timeIntervalSince(lastTitleSync) >= 15 ? chat.store.conversations.filter(\.external).compactMap(\.threadID) : []
+        let unresolvedThreads = Set(chat.store.conversations.filter {$0.external && $0.turns.contains(where:{activeStatuses.contains($0.status)})}.compactMap(\.threadID))
+        let titleIDs = chat.store.recordsAutomatically && Date().timeIntervalSince(lastTitleSync) >= 5 ? chat.store.conversations.filter {$0.external && $0.localTitle == nil}.compactMap(\.threadID) : []
         queue.async { [weak self] in
             guard let self else{return}
             do {
-                let values = try DesktopHistoryReader.read(excluded:excluded,watched:Array(watched))
+                let values = try DesktopHistoryReader.read(excluded:excluded,watched:Array(watched),additionalThreads:unresolvedThreads)
                 let titles = try DesktopHistoryReader.readTitles(titleIDs)
                 DispatchQueue.main.async {
                     self.reading = false; guard !self.stopped else {return}
+                    self.chat.desktopTaskReadStatus = nil
+                    self.chat.desktopTasks = values.filter {$0.isLatest && $0.started > self.clearedBefore && !self.chat.store.deletedThreads.contains($0.logical)}.map {
+                        BubbleTaskSummary(key:$0.key,title:$0.title,threadID:$0.logical,status:$0.status,start:Date(timeIntervalSince1970:$0.started),end:$0.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},turnID:$0.turn)
+                    }
                     if !titleIDs.isEmpty {self.lastTitleSync = Date()}
                     var changed = false
-                    for conversation in self.chat.store.conversations where conversation.external {
+                    for conversation in self.chat.store.conversations where conversation.external && conversation.localTitle == nil && self.chat.store.recordsAutomatically {
                         if let id = conversation.threadID, let title = titles[id], !title.isEmpty, title != conversation.title {
                             conversation.title = title; changed = true
                         }
                     }
                     self.accept(values)
+                    self.chat.refresh()
                     if changed {self.chat.persist()}
                 }
             }
-            catch {DispatchQueue.main.async {self.reading = false; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
+            catch {DispatchQueue.main.async {self.reading = false; self.chat.desktopTasks = []; self.chat.desktopTaskReadStatus = "Codex 当前任务状态读取失败"; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
         }
     }
     private func accept(_ values: [PublicSnapshot]) {
         var changed = false
         let now = Date().timeIntervalSince1970
-        let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID})
+        let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID}).union(chat.store.deletedThreads)
+        let currentActive = Set(values.filter {$0.isLatest && activeStatuses.contains($0.status)}.map(\.key))
+        for key in running.subtracting(currentActive) {
+            chat.pet.stopObservingTask(key); running.remove(key)
+        }
         for var value in values {
             var skippedAll = false
             if let attention = value.attention,attention.kind == .answer,!attention.isSensitive,!attention.questions.isEmpty {
@@ -79,19 +102,26 @@ final class DesktopSync {
             }
             guard value.started > clearedBefore else {continue}
             if excluded.contains(value.logical) || excluded.contains(value.actual) {continue}
-            let key = value.key, active = activeStatuses.contains(value.status)
+            let key = value.key, active = value.isLatest && activeStatuses.contains(value.status)
             if tracked[key] == nil && !active && (initial || value.started < born) {continue}
             if tracked[key] == nil && active && value.started < born-86400 {continue}
             var c = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical})
             if c == nil {c = chat.store.create(cwd:value.cwd,external:true); c!.title = value.title; c!.threadID = value.logical}
             let conversation = c!; conversation.historyMode = value.historyMode
-            if !value.title.isEmpty && conversation.title != value.title {conversation.title = value.title; changed = true}
+            if chat.store.recordsAutomatically && conversation.localTitle == nil && !value.title.isEmpty && conversation.title != value.title {conversation.title = value.title; changed = true}
             var t = conversation.turns.first(where:{$0.id == value.turn})
             if t == nil {t = Turn(); t!.id = value.turn; t!.owned = false; t!.date = Date(timeIntervalSince1970:value.started); conversation.turns.append(t!); changed = true}
             let turn = t!, previousAttention = tracked[key]?.attention?.kind, different = fingerprints[key] != value.fingerprint
+            if value.started > 0,turn.date != Date(timeIntervalSince1970:value.started) {
+                turn.date = Date(timeIntervalSince1970:value.started); changed = true
+            }
+            if ["completed","failed","interrupted"].contains(value.status) {
+                let end = value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? turn.completedAt ?? Date()
+                if turn.completedAt != end {turn.completedAt = end; changed = true}
+            }
             tracked[key] = value
             if different {
-                if previousAttention == .answer && value.attention == nil {chat.pet.bubble.resolveQuestions(taskKey:key)}
+                if previousAttention != nil && value.attention == nil {chat.pet.bubble.resolveQuestions(taskKey:key)}
                 if value.alert.isEmpty && !value.status.hasPrefix("waiting") && chat.pet.bubble.purpose == .attention && chat.pet.bubble.relatedConversation == conversation.key {
                     chat.pet.bubble.hide()
                 }

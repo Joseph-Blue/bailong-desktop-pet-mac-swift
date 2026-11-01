@@ -130,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu?.item(withTag:102)?.title = "退出"+name
     }
     @objc func showSettings() {pet?.showSettings()}
-    @objc func showAbout() {AppIcons.showAbout()}
+    @objc func showAbout() {pet?.showSettings(section:.about)}
     @objc func systemWillTerminate() {explicitQuit = true}
     @objc func quitFromMenu() {explicitQuit = true; FollowSessions.markManualExit(); NSApp.terminate(nil)}
     @objc func closeInterface() {
@@ -154,10 +154,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func reveal() {pet?.reveal()}
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if let minimized = NSApp.windows.first(where: {$0.isMiniaturized && $0.canBecomeKey}) {
+        // Dock 召回先沿用当前窗口，不因设置窗口存在就切走历史／更新／统计。
+        if let current = NSApp.keyWindow,current.isVisible {return false}
+        if let visible = NSApp.orderedWindows.first(where:{$0.isVisible && !$0.isMiniaturized && $0.canBecomeKey}) {
+            visible.makeKeyAndOrderFront(nil)
+        }
+        else if let minimized = NSApp.windows.first(where: {$0.isMiniaturized && $0.canBecomeKey}) {
             minimized.deminiaturize(nil); minimized.makeKeyAndOrderFront(nil)
         }
-        else if pet?.settings.window.isVisible == true {pet?.showSettings()}
         else if pet?.preferences.bool("showDiagnostics") == true { pet?.showDiagnostics() }
         else if RecoveryWindow.hasIssues {RecoveryWindow.revealAll()}
         else { chat?.showHistory(nil) }

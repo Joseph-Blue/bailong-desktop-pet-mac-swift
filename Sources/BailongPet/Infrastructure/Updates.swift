@@ -239,7 +239,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         current.automaticPresentation = automaticallyPresented
         if check {UpdateChecker.shared.check()}
         current.refresh()
-        if activate {NSApp.activate(ignoringOtherApps:true); current.window.makeKeyAndOrderFront(nil)}
+        if activate {if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; current.window.makeKeyAndOrderFront(nil)}
         else {current.window.orderFront(nil)}
     }
     override private init() {

@@ -29,6 +29,29 @@ final class ReadDatabase {
     }
 }
 enum DesktopHistoryReader {
+    static func recordedReasoningEffort(thread:String,model:String) throws -> String? {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
+        let state = try ReadDatabase(root+"/state_5.sqlite")
+        // 只用原会话、相同模型的记录补充缺失值，不借用全局默认值或其他会话。
+        return try state.rows("SELECT reasoning_effort FROM threads WHERE id=? AND model=?",[thread,model]).first?["reasoning_effort"]
+    }
+    static func requireReplyConversation(_ thread:String,previousTurn:String,steering:Bool) throws {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
+        let state = try ReadDatabase(root+"/state_5.sqlite")
+        guard let row = try state.rows("SELECT id,rollout_path FROM threads WHERE id=? AND archived=0",[thread]).first else {
+            throw PetFailure(message:"原会话已归档或不存在，请在 Codex 中处理。")
+        }
+        let path = row["rollout_path"] ?? ""
+        let pattern = try NSRegularExpression(pattern:"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+        let actual = pattern.matches(in:path,range:NSRange(path.startIndex...,in:path)).last
+            .flatMap {Range($0.range,in:path)}.map {String(path[$0])} ?? thread
+        let history = try ReadDatabase(root+"/thread_history_1.sqlite")
+        let turns = try history.rows("SELECT turn_id,status FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 1",[actual])
+        guard let latest = turns.first,latest["turn_id"] == previousTurn,
+              (steering ? ["inProgress","running"] : ["completed","failed","interrupted","cancelled","canceled"]).contains(latest["status"] ?? "") else {
+            throw PetFailure(message:"原会话状态已变化。请查看 Codex 当前对话后再发送。")
+        }
+    }
     static func readTitles(_ ids:[String]) throws -> [String:String] {
         guard !ids.isEmpty else {return [:]}
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
@@ -37,18 +60,18 @@ enum DesktopHistoryReader {
         for start in stride(from:0,to:ids.count,by:400) {
             let batch = Array(ids[start..<min(ids.count,start+400)])
             let placeholders = Array(repeating:"?",count:batch.count).joined(separator:",")
-            for row in try state.rows("SELECT id,title FROM threads WHERE id IN ("+placeholders+")",batch) {
+            for row in try state.rows("SELECT id,name AS title FROM threads WHERE id IN ("+placeholders+")",batch) {
                 if let id = row["id"],let title = row["title"] {titles[id] = title}
             }
         }
         return titles
     }
-    static func read(excluded: Set<String>, watched: [PublicSnapshot]) throws -> [PublicSnapshot] {
+    static func read(excluded: Set<String>, watched: [PublicSnapshot], additionalThreads:Set<String> = []) throws -> [PublicSnapshot] {
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
         let state = try ReadDatabase(root+"/state_5.sqlite"), history = try ReadDatabase(root+"/thread_history_1.sqlite")
-        var threads = try state.rows("SELECT id,rollout_path,title,cwd,history_mode FROM threads WHERE archived=0 AND updated_at>=? AND (thread_source='user' OR thread_source IS NULL) AND (source IS NULL OR source NOT LIKE '%subagent%') ORDER BY updated_at DESC LIMIT 40",[String(Int(Date().timeIntervalSince1970)-86400)])
-        for logical in Set(watched.map{$0.logical}) where !threads.contains(where:{$0["id"] == logical}) {
-            threads += try state.rows("SELECT id,rollout_path,title,cwd,history_mode FROM threads WHERE id=?",[logical])
+        var threads = try state.rows("SELECT id,rollout_path,COALESCE(NULLIF(TRIM(name),''),title) AS title,cwd,history_mode FROM threads WHERE archived=0 AND updated_at>=? AND (thread_source='user' OR thread_source IS NULL) AND (source IS NULL OR source NOT LIKE '%subagent%') ORDER BY updated_at DESC LIMIT 40",[String(Int(Date().timeIntervalSince1970)-86400)])
+        for logical in Set(watched.map{$0.logical}).union(additionalThreads) where !threads.contains(where:{$0["id"] == logical}) {
+            threads += try state.rows("SELECT id,rollout_path,COALESCE(NULLIF(TRIM(name),''),title) AS title,cwd,history_mode FROM threads WHERE id=?",[logical])
         }
         let pattern = try NSRegularExpression(pattern:"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
         var result = [PublicSnapshot]()
@@ -58,6 +81,7 @@ enum DesktopHistoryReader {
             let actual = match.flatMap{Range($0.range,in:path)}.map{String(path[$0])} ?? logical
             if excluded.contains(logical) || excluded.contains(actual) {continue}
             var turns = try history.rows("SELECT turn_id,status,error_json,started_at,completed_at FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 3",[actual])
+            let latestTurn = turns.first?["turn_id"]
             for old in watched where old.actual == actual && !turns.contains(where:{$0["turn_id"] == old.turn}) {
                 turns += try history.rows("SELECT turn_id,status,error_json,started_at,completed_at FROM thread_turns WHERE thread_id=? AND turn_id=?",[actual,old.turn])
             }
@@ -122,6 +146,7 @@ enum DesktopHistoryReader {
                 if ["completed","failed","interrupted"].contains(turn["status"] ?? "") {attention = nil; step = ""}
                 alert = attention?.body ?? ""
                 result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion))
+                result[result.count-1].isLatest = turn["turn_id"] == latestTurn
             }
         }
         return result.sorted{$0.started < $1.started}

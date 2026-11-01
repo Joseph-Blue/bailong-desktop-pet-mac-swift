@@ -65,13 +65,17 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         controller.report.string = report.text; controller.retry.title = actionTitle
         controller.retry.callback = action; controller.retry.isEnabled = true
         controller.copy.title = "拷贝错误报告"
-        if !existed {controller.present()}
+        if !existed {controller.present(takeFocus:false)}
     }
     static func resolve(_ id:String) {
         guard let controller = windows.removeValue(forKey:id) else {return}
         controller.window.close()
     }
-    static func revealAll() {for controller in windows.values {controller.present()}}
+    static func revealAll() {
+        let controllers = Array(windows.values)
+        for controller in controllers {controller.present(takeFocus:false)}
+        controllers.first?.present(takeFocus:true)
+    }
     static var hasIssues: Bool {!windows.isEmpty}
 
     private let window = RecoveryPanel(contentRect:NSRect(x:0,y:0,width:680,height:440),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
@@ -119,11 +123,13 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         scroll.setContentHuggingPriority(.defaultLow,for:.vertical)
         window.center()
     }
-    private func present() {
+    private func present(takeFocus:Bool) {
         NSApp.setActivationPolicy(.regular)
         NSApp.addWindowsItem(window,title:window.title,filename:false)
-        if window.isMiniaturized {window.deminiaturize(nil)}
-        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
+        if takeFocus {
+            if window.isMiniaturized {window.deminiaturize(nil)}
+            if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil)
+        } else if !window.isVisible && !window.isMiniaturized {window.orderFront(nil)}
     }
     @objc private func exitApplication() {Self.quit()}
     func windowWillClose(_ notification:Notification) {NSApp.removeWindowsItem(window)}

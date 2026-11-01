@@ -1,10 +1,11 @@
 import AppKit
 import ServiceManagement
 
-final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSToolbarDelegate {
-    let window = NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:820),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate, NSToolbarDelegate {
+    let window = SettingsWindow(contentRect:NSRect(x:0,y:0,width:900,height:900),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
     let preferences: PetPreferences
     let catalog: Catalog?
+    private let aboutPage = AboutPageController()
     private let splitController = NSSplitViewController()
     private let sidebar = NSTableView(), scroll = NSScrollView(), content = NSStackView()
     private let resetButton = SettingsFooterButton(title:"恢复本页设置为默认值",target:nil,action:nil)
@@ -19,6 +20,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private weak var diagnosticsSwitch: NSSwitch?
     private var bufferControls = [NSControl]()
     private weak var bufferRow: NSView?
+    private let searchField = NSSearchField()
+    private var searchItem:NSSearchToolbarItem?
+    private let searchResults = SettingsSearchResults()
+    private lazy var searchIndex = SettingsSearchEntry.all(catalog:catalog)
+    private var searchAnchors = [String:NSView]()
+    private var searchHighlight:SettingsSearchHighlight?
     private var selected: SettingsSection = .general
     private var hasShown = false
     private var materialPreview: Bubble?
@@ -41,7 +48,15 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
         window.title = "设置"; window.isReleasedWhenClosed = false; window.delegate = self
         window.styleMask.insert(.fullSizeContentView)
-        window.minSize = NSSize(width:800,height:540); window.setFrameAutosaveName("BailongSettingsWindow")
+        window.minSize = NSSize(width:800,height:540)
+        if let screen = NSScreen.main {window.setContentSize(NSSize(width:900,height:min(900,screen.visibleFrame.height-80)))}
+        window.setFrameAutosaveName("BailongSettingsWindow")
+        window.focusSearch = { [weak self] in
+            guard let self else {return}
+            self.searchItem?.beginSearchInteraction(); self.window.makeFirstResponder(self.searchField)
+        }
+        searchResults.onOpen = { [weak self] in self?.revealSetting($0) }
+        searchResults.onCancel = { [weak self] in self?.clearSearch(); self?.window.makeFirstResponder(self?.searchField) }
         let side = NSVisualEffectView(); side.material = .sidebar; side.blendingMode = .behindWindow
         side.state = .followsWindowActiveState
         let sideScroll = NSScrollView(); sideScroll.drawsBackground = false; sideScroll.hasVerticalScroller = true; sideScroll.autohidesScrollers = true
@@ -56,6 +71,20 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         side.addSubview(sideScroll)
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
         let detail = NSView(), document = TopDownView(); scroll.documentView = document; detail.addSubview(scroll)
+        let aboutView = aboutPage.view; aboutView.isHidden = true; aboutView.translatesAutoresizingMaskIntoConstraints = false
+        detail.addSubview(aboutView)
+        searchResults.isHidden = true; searchResults.translatesAutoresizingMaskIntoConstraints = false
+        detail.addSubview(searchResults)
+        NSLayoutConstraint.activate([
+            searchResults.topAnchor.constraint(equalTo:detail.safeAreaLayoutGuide.topAnchor),searchResults.bottomAnchor.constraint(equalTo:detail.bottomAnchor),
+            searchResults.leadingAnchor.constraint(equalTo:detail.leadingAnchor),searchResults.trailingAnchor.constraint(equalTo:detail.trailingAnchor)
+        ])
+        NSLayoutConstraint.activate([
+            aboutView.topAnchor.constraint(equalTo:detail.safeAreaLayoutGuide.topAnchor),aboutView.bottomAnchor.constraint(equalTo:detail.bottomAnchor),
+            aboutView.centerXAnchor.constraint(equalTo:detail.centerXAnchor),aboutView.widthAnchor.constraint(lessThanOrEqualToConstant:708),
+            aboutView.leadingAnchor.constraint(greaterThanOrEqualTo:detail.leadingAnchor),aboutView.trailingAnchor.constraint(lessThanOrEqualTo:detail.trailingAnchor)
+        ])
+        let aboutWidth = aboutView.widthAnchor.constraint(equalTo:detail.widthAnchor); aboutWidth.priority = .defaultHigh; aboutWidth.isActive = true
         content.orientation = .vertical; content.alignment = .leading; content.spacing = 24
         document.addSubview(content)
         resetButton.target = self; resetButton.action = #selector(restorePage); resetButton.focusRingType = .exterior
@@ -122,18 +151,18 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         NSApp.setActivationPolicy(.regular)
         NSApp.addWindowsItem(window,title:window.title,filename:false)
         if window.isMiniaturized {window.deminiaturize(nil)}
-        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
+        if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil)
     }
-    func select(_ section: SettingsSection) {selected = section; sidebar.selectRowIndexes(IndexSet(integer:section.rawValue),byExtendingSelection:false); render()}
+    func select(_ section: SettingsSection) {clearSearch(); selected = section; sidebar.selectRowIndexes(IndexSet(integer:section.rawValue),byExtendingSelection:false); render()}
     func numberOfRows(in tableView: NSTableView) -> Int {SettingsSection.allCases.count}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {AccentHistoryRow()}
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let section = SettingsSection(rawValue:row)!
         let cell = HistoryConversationCell(title:section.title,symbol:section.symbol)
-        cell.toolTip = nil
+        cell.hoverHelp = nil
         return cell
     }
-    func tableViewSelectionDidChange(_ notification: Notification) {if let section = SettingsSection(rawValue:sidebar.selectedRow) {window.makeFirstResponder(nil); selected = section; render()}}
+    func tableViewSelectionDidChange(_ notification: Notification) {if let section = SettingsSection(rawValue:sidebar.selectedRow) {window.makeFirstResponder(nil); clearSearch(); selected = section; render()}}
     func windowWillClose(_ notification: Notification) {window.makeFirstResponder(nil); dismissMaterialPreview(); NSApp.removeWindowsItem(window); onClose()}
     func windowWillReturnFieldEditor(_ sender:NSWindow, to client:Any?) -> Any? {
         guard let field = client as? SettingsTemplateField else {return nil}
@@ -146,6 +175,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else {return}
         if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() {return}
+        if field === searchField {searchSettings(); return}
         textActions[ObjectIdentifier(field)]?(field.stringValue)
         (field as? SettingsTemplateField)?.refreshHighlight()
         identityPreview?.stringValue = preferences.statusLine("greetingTemplate")
@@ -179,22 +209,78 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             fill(row,in:items)
         }
         fill(surface,in:section); fill(section,in:content)
+        searchAnchors[title] = section
+        for row in rows {
+            if let key = row.identifier?.rawValue,key.hasPrefix("setting:") {
+                searchAnchors[title+"/"+key.dropFirst("setting:".count)] = row
+            }
+        }
     }
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {[.init("settings-sidebar"),.init("settings-divider"),.flexibleSpace]}
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {[.init("settings-sidebar"),.init("settings-divider"),.flexibleSpace,.init("settings-search")]}
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {toolbarAllowedItemIdentifiers(toolbar)}
     func toolbar(_ toolbar: NSToolbar,itemForItemIdentifier id: NSToolbarItem.Identifier,willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
+        if id.rawValue == "settings-search" {
+            let item = NSSearchToolbarItem(itemIdentifier:id)
+            searchField.placeholderString = "搜索设置"; searchField.setAccessibilityLabel("搜索具体设置项")
+            searchField.sendsSearchStringImmediately = true; searchField.delegate = self
+            searchField.target = self; searchField.action = #selector(searchSettings)
+            item.searchField = searchField; item.label = "搜索设置"; item.preferredWidthForSearchField = 240
+            searchItem = item
+            return item
+        }
         if id.rawValue == "settings-divider" {return NSTrackingSeparatorToolbarItem(identifier:id,splitView:splitController.splitView,dividerIndex:0)}
         guard id.rawValue == "settings-sidebar" else {return nil}
-        let item = NSToolbarItem(itemIdentifier:id); item.label = "显示或隐藏侧栏"; item.toolTip = item.label
+        let item = NSToolbarItem(itemIdentifier:id); item.label = "显示或隐藏侧栏"
         item.image = NSImage(systemSymbolName:"sidebar.left",accessibilityDescription:item.label)
-        item.target = splitController; item.action = #selector(NSSplitViewController.toggleSidebar(_:)); item.isBordered = true
+        item.target = splitController; item.action = #selector(NSSplitViewController.toggleSidebar(_:)); item.isBordered = true; item.installHoverHelp()
         return item
+    }
+    private func searchable(_ view:NSView,title:String) -> NSView {
+        view.identifier = .init("setting:"+title); return view
+    }
+    @objc private func searchSettings() {
+        if let editor = searchField.currentEditor() as? NSTextView,editor.hasMarkedText() {return}
+        searchResults.show(SettingsSearchEntry.matching(searchField.stringValue,in:searchIndex))
+        updateSearchPresentation()
+    }
+    private func updateSearchPresentation() {
+        let searching = !searchField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
+        searchResults.isHidden = !searching
+        scroll.isHidden = searching || selected == .about
+        aboutPage.view.isHidden = searching || selected != .about
+        resetButton.isEnabled = !searching && !selected.keys.isEmpty
+        window.title = searching ? "搜索设置" : selected.title
+    }
+    private func clearSearch() {
+        searchField.stringValue = ""; searchResults.show([]); updateSearchPresentation()
+    }
+    func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector) -> Bool {
+        guard control === searchField,!textView.hasMarkedText(),!searchField.stringValue.isEmpty else {return false}
+        switch selector {
+        case #selector(NSResponder.moveDown(_:)): searchResults.focus(); return true
+        case #selector(NSResponder.insertNewline(_:)): searchResults.openSelection(); return true
+        case #selector(NSResponder.cancelOperation(_:)): clearSearch(); return true
+        default: return false
+        }
+    }
+    private func revealSetting(_ entry:SettingsSearchEntry) {
+        window.makeFirstResponder(nil); select(entry.section)
+        window.contentView?.layoutSubtreeIfNeeded()
+        guard let target = searchAnchors[entry.anchor] ?? searchAnchors[entry.group],let document = scroll.documentView else {return}
+        let rect = target.convert(target.bounds,to:document)
+        let y = max(0,min(rect.midY-scroll.contentView.bounds.height/2,document.bounds.height-scroll.contentView.bounds.height))
+        scroll.contentView.scroll(to:NSPoint(x:0,y:y)); scroll.reflectScrolledClipView(scroll.contentView)
+        let highlight = SettingsSearchHighlight(frame:target.bounds)
+        highlight.autoresizingMask = [.width,.height]
+        target.addSubview(highlight,positioned:.below,relativeTo:nil); searchHighlight = highlight
+        NSAccessibility.post(element:target,notification:.layoutChanged)
+        DispatchQueue.main.asyncAfter(deadline:.now()+2) { [weak highlight] in highlight?.removeFromSuperview() }
     }
     private func row(_ title: String, detail: String? = nil, control: NSView) -> NSView {
         let texts = NSStackView(); texts.orientation = .vertical; texts.alignment = .leading; texts.spacing = 4
         fill(label(title),in:texts)
         if let detail {let explanation = label(detail); explanation.font = .systemFont(ofSize:11); explanation.textColor = .secondaryLabelColor; fill(explanation,in:texts)}
-        return alignedRow(leading:texts,control:control)
+        return searchable(alignedRow(leading:texts,control:control),title:title)
     }
     private func alignedRow(leading: NSView, control: NSView) -> NSView {
         // 显式固定左右两端；多余宽度留给左侧说明，不拉长开关或按钮。
@@ -244,6 +330,14 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
+        if identifier == "animationQuality" {
+            let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.tabStops = [NSTextTab(textAlignment:.left,location:64)]
+            for item in menu.itemArray {
+                item.attributedTitle = NSAttributedString(string:item.title,attributes:[.font:font,.paragraphStyle:paragraph])
+            }
+        }
         menu.widthAnchor.constraint(equalToConstant:width).isActive = true; menu.setAccessibilityLabel(title)
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
         return row(title,control:menu)
@@ -251,7 +345,6 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func choice(_ title: String, _ key: String, _ options: [(String,String)]) -> NSView {
         popup(title,options:options,value:preferences.string(key),width:key == "sendShortcut" ? 260 : key == "animationQuality" ? 250 : 190,identifier:key) { [weak self] value in
             self?.preferences.set(value,for:key)
-            if key == "addressMode" {self?.render()}
             self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
     }
@@ -327,7 +420,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             field.heightAnchor.constraint(equalToConstant:52).isActive = true
             let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = 8
             fill(label(title),in:row); fill(controls,in:row)
-            return row
+            return searchable(row,title:title)
         }
         field.widthAnchor.constraint(equalToConstant:240).isActive = true
         let caption = identityLabel(title,token:tokenHint)
@@ -338,7 +431,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             leading.addArrangedSubview(image)
         }
         leading.addArrangedSubview(caption)
-        return alignedRow(leading:leading,control:controls)
+        return searchable(alignedRow(leading:leading,control:controls),title:title)
     }
     private func identityLabel(_ title:String,token:String?) -> NSTextField {
         let caption = label(title)
@@ -350,19 +443,6 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             caption.attributedStringValue = value
         }
         return caption
-    }
-    private func addressChoice() -> NSView {
-        let radios = NSStackView(); radios.orientation = .horizontal; radios.alignment = .centerY; radios.spacing = 16
-        for (key,title) in [("name","你的名字"),("custom","特定称呼")] {
-            let button = AccentChoiceButton(title:title,type:.radio)
-            button.state = preferences.string("addressMode") == key ? .on : .off
-            attach(button) { [weak self] _ in
-                guard let self else {return}
-                self.window.makeFirstResponder(nil); self.preferences.set(key,for:"addressMode"); self.render()
-            }
-            radios.addArrangedSubview(button)
-        }
-        return alignedRow(leading:identityLabel("怎么称呼你",token:"{特定称呼}"),control:radios)
     }
     private func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20) -> NSView {
         let icon:NSImage?
@@ -442,11 +522,13 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func render() {
         guard window.contentView != nil else {return}
+        searchHighlight?.removeFromSuperview(); searchHighlight = nil; searchAnchors.removeAll()
         dismissMaterialPreview(); accentButtons.removeAll(); accentNames.removeAll(); glassControls.removeAll()
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
         actions.removeAll(); textActions.removeAll(); textEndActions.removeAll(); bufferControls.removeAll(); bufferRow = nil; identityPreview = nil
         window.title = selected.title
         resetButton.isEnabled = !selected.keys.isEmpty
+        scroll.isHidden = selected == .about; aboutPage.view.isHidden = selected != .about
         switch selected {
         case .general: general()
         case .identity: identity()
@@ -455,14 +537,16 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .appearance: appearance()
         case .advanced: advanced()
         case .updates: updates()
+        case .about: break
         case .developer:
-            group("动画", [choice("画质", "animationQuality", [("512", "清晰 · 512×512"), ("384", "均衡 · 384×384"), ("256", "省运行内存 (RAM) · 256×256")]),
+            group("动画", [choice("画质", "animationQuality", [("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")]),
                 choice("素材帧率上限", "animationFPSLimit", [("full", "满帧 (≥ 24 FPS)"), ("20", "20 FPS"), ("15", "15 FPS")]),
                 bufferFrames(),
                 toggle("整段动画预加载", "preloadWholeAnimation", detail: "不推荐，会显著增加运行内存 (RAM) 占用。")])
             group("应用统计", [toggle("开启应用性能信息统计浮窗", "showDiagnostics")])
         }
         scroll.contentView.scroll(to:.zero)
+        updateSearchPresentation()
     }
     private func general() {
         let login = SMAppService.mainApp.status
@@ -488,9 +572,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         } catch {showError("登录启动设置失败",error)}
     }
     private func identity() {
-        fill(note("{用户名} 是你的名字，{桌宠名} 是桌宠的名字；{特定称呼} 按“怎么称呼你”的选择生成。每个变量按 1 字计数。"),in:content)
-        var names = [text("你的名字","ownerName",placeholder:"默认为“主人”"),text("桌宠的名字","petName",placeholder:"白龙娘"),addressChoice()]
-        if preferences.string("addressMode") == "custom" {names.append(text("特定称呼","customAddress",placeholder:"{桌宠名}最喜欢的{用户名}"))}
+        fill(note("{用户名} 是你的名字，{桌宠名} 是桌宠的名字；{特定称呼} 使用下面填写的内容，留空沿用你的名字。每个变量按 1 字计数。"),in:content)
+        let names = [text("你的名字","ownerName",placeholder:"默认为“主人”"),text("桌宠的名字","petName",placeholder:"白龙娘"),text("特定称呼","customAddress",placeholder:"留空沿用你的名字")]
         group("我们怎么称呼彼此",names)
         let preview = label(preferences.statusLine("greetingTemplate")); preview.font = .systemFont(ofSize:15,weight:.medium); identityPreview = preview
         group("见面时说",[text("问候语","greetingTemplate",limit:120),alignedRow(leading:preview,control:ActionButton("预览消息") { [weak self] in self?.onMessagePreview(.preview) })])
@@ -547,10 +630,14 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         fill(alignedRow(leading:nameStack,control:controls),in:stack)
         let options = [("0.75","0.75×"),("1.0","1×（默认）"),("1.25","1.25×"),("1.5","1.5×")]
         fill(popup("此动作播放速度",options:options,value:String(preferences.clipSpeed(clip.id))) { [weak self] in self?.preferences.setSpeed(Double($0)!,for:clip.id) },in:stack)
-        return stack
+        return searchable(stack,title:clip.title)
     }
     private func messages() {
         group("历史记录",[toggle("记录历史","recordHistory"),note("关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
+        group("气泡卡片与任务概览",[
+            slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，仅保留在本次运行的内存中。同一任务更新原卡片，正在阅读和待处理卡片保留；不删除历史对话。"),
+            toggle("互动气泡显示任务概览","showTaskOverview",detail:"在随机动画台词下显示当前任务与近期结束的任务，点击任务行跳转 Codex。"),
+            slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"默认 5 条，每个会话显示最新轮次。任务概览关闭时保留此设置。")])
         group("输入快捷键",[
             choice("发送与换行","sendShortcut",[("commandReturn","⌘ Command + ↩ Enter 发送"),("returnToSend","↩ Enter 发送")]),
             note("默认：⌘ Command + ↩ Enter 发送，↩ Enter 换行。\n备选：↩ Enter 发送；⇧ Shift + ↩ Enter 或 ⌥ Option + ↩ Enter 换行。\n临时对话和历史对话同步生效，中文输入法选词时不会发送。")])

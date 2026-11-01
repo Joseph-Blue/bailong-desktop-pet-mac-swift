@@ -58,7 +58,7 @@ final class QuestionForm: NSView {
             input.setAccessibilityLabel(q.prompt+"：输入回答")
             input.onTextChange = { [weak self] in self?.changedInput(qi) }
             input.send = { [weak self] in self?.advance() }
-            let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+            let scroll = GutterScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
             scroll.drawsBackground = false; scroll.documentView = input
             let box = MessageInputBox(scroll:scroll,editor:input)
             inputs.append(input); editors.append(box); addSubview(box)

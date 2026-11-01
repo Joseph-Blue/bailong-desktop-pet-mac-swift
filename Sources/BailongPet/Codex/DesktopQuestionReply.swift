@@ -11,7 +11,7 @@ enum DesktopQuestionReply {
                 guard !replies.isEmpty else {throw PetFailure(message:"请填写回答后再提交。")}
                 let json = try JSONSerialization.data(withJSONObject:replies)
                 let text = "<send_user_message_question_reply>\n"+String(decoding:json,as:UTF8.self)+"\n</send_user_message_question_reply>"
-                let connection = try DesktopQuestionSocket()
+                let connection = try DesktopSocket()
                 let initial = try connection.call("initialize",params:["clientType":"bailong-pet"],version:0)
                 guard let client = (initial["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:"Codex 未返回本机连接标识。")}
                 connection.clientID = client
@@ -27,10 +27,12 @@ enum DesktopQuestionReply {
     }
 }
 
-private final class DesktopQuestionSocket {
+final class DesktopSocket {
     private let fd:Int32
+    private let timeoutSeconds:Int
     var clientID = "initializing-client"
-    init() throws {
+    init(timeoutSeconds:Int = 8) throws {
+        self.timeoutSeconds = timeoutSeconds
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
         let path = root+"/ipc/ipc.sock"
         var address = sockaddr_un(); address.sun_family = sa_family_t(AF_UNIX)
@@ -40,7 +42,7 @@ private final class DesktopQuestionSocket {
         guard lstat(path,&info) == 0, info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFSOCK else {throw PetFailure(message:"Codex 本机通信尚未就绪，请打开 Codex 后重试。")}
         fd = socket(AF_UNIX,SOCK_STREAM,0)
         guard fd >= 0 else {throw PetFailure(message:"无法创建本机通信连接。")}
-        var timeout = timeval(tv_sec:8,tv_usec:0), noSignal:Int32 = 1
+        var timeout = timeval(tv_sec:timeoutSeconds,tv_usec:0), noSignal:Int32 = 1
         setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout.size(ofValue:timeout)))
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,socklen_t(MemoryLayout.size(ofValue:timeout)))
         setsockopt(fd,SOL_SOCKET,SO_NOSIGPIPE,&noSignal,socklen_t(MemoryLayout.size(ofValue:noSignal)))
@@ -51,7 +53,7 @@ private final class DesktopQuestionSocket {
     deinit {close(fd)}
     func call(_ method:String,params:[String:Any],version:Int,target:String? = nil) throws -> [String:Any] {
         let id = UUID().uuidString
-        var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":7000]
+        var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":(timeoutSeconds-1)*1000]
         if let target {request["targetClientId"] = target}
         let json = try JSONSerialization.data(withJSONObject:request)
         var length = UInt32(json.count).littleEndian
@@ -63,7 +65,7 @@ private final class DesktopQuestionSocket {
                 guard sent > 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}; offset += sent
             }
         }
-        let deadline = Date().addingTimeInterval(8)
+        let deadline = Date().addingTimeInterval(Double(timeoutSeconds))
         while Date() < deadline {
             let header = try read(4), size = header.enumerated().reduce(UInt32(0)) {$0 | UInt32($1.element) << (8*$1.offset)}
             guard size > 0 && size <= 16*1024*1024 else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}

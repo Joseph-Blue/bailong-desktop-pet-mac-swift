@@ -55,6 +55,7 @@ final class PetController: NSObject, NSMenuDelegate {
     let defaults: UserDefaults
     let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     var onComposer: () -> Void = {}
+    var onReply: (String) -> Void = {_ in}
     var onHistory: (String?) -> Void = { _ in }
     var onCodex: (String?) -> Void = { _ in CodexConnection.openDesktop() }
     var onQuota: () -> Void = {}
@@ -157,7 +158,7 @@ final class PetController: NSObject, NSMenuDelegate {
         manualHidden = !preferences.bool("showOnLaunch"); playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
         bubble.preferences = preferences
         sound = NSSound(contentsOf: Paths.resources.appendingPathComponent("sounds/click.wav"), byReference: true)
-        status.button?.title = PetPreferences.productName; status.button?.toolTip = preferences.appName; refreshMenu()
+        status.button?.title = PetPreferences.productName; status.button?.hoverHelp = preferences.appName; refreshMenu()
         bubble.onClose = { [weak self] in self?.quotaActive = false }
         settings.petSymbol = { [weak self] in self?.status.button?.image }
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
@@ -191,7 +192,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if self.motion != nil { movementReady = now + 10 }; motion = nil
         loading = true
         // 气泡生命周期由自身计时和明确关闭控制，不随动作切换清空。
-        if mode == "interaction", let line = preferences.line(for:clip) { say(line, kind:"interaction",personalizeTitle:false) }
+        if mode == "interaction" {say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false)}
         if preferences.bool("preloadWholeAnimation"), current.id == clip.id,
            let animation, animation.stream == nil, animation.frames.count > 1 {
             decoder.cancel(); loading = false; self.mode = mode
@@ -415,11 +416,19 @@ final class PetController: NSObject, NSMenuDelegate {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
-        bubble.onQuestionSubmit = question?.submit; bubble.onQuestionsSkipped = question?.skip
-        bubble.onDetails = { [weak self] in self?.onHistory(thread) }
-        bubble.onCodex = { [weak self] in self?.onCodex(thread) }
-        bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title, body:body, kind:kind, scale:Double(bubblePercent)/100, seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body), details:thread != nil, followsText:followsText, resetText:resetText, animateHeading:animateHeading || kind == "quotaLoading", attentionAction:attentionAction, questions:question?.questions ?? [], timing:timing)
-        bubble.purpose = purpose; bubble.relatedConversation = thread
+        if kind.hasPrefix("quota") {
+            bubble.onQuestionSubmit = nil; bubble.onQuestionsSkipped = nil
+            bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),animateHeading:animateHeading || kind == "quotaLoading")
+            bubble.purpose = purpose
+        } else {
+            let identity = timing?.key.map {key in (thread ?? "")+":"+key+":"+String(timing?.start?.timeIntervalSince1970 ?? 0)} ?? UUID().uuidString
+            let reply:(() -> Void)? = thread.flatMap {key in attentionAction ? nil : { [weak self] in self?.onReply(key) }}
+            bubble.onCardLayout = { [weak self] in self?.placeBubble() }
+            bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
+                scale:Double(bubblePercent)/100,seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
+                followsText:followsText,resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply))
+        }
         placeBubble()
     }
     var stableLocalBounds: CGRect {
@@ -456,6 +465,10 @@ final class PetController: NSObject, NSMenuDelegate {
     func keepOnScreen() { motion = nil; move(constrained(position,screen:screen)); if dock != nil { let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y)) } }
     func taskStarted(_ key: String) { let first = activeTasks.isEmpty; activeTasks.insert(key); interaction()
         if preferences.bool("taskOpening") && first && !hidden && dock == nil && press == nil, let clip = catalog.work.first(where:{$0.id == "work01"}) { play(clip,"opening") }
+    }
+    func stopObservingTask(_ key:String) {
+        activeTasks.remove(key)
+        if activeTasks.isEmpty && !hidden && dock == nil && press == nil {idle()}
     }
     func taskEnded(_ key: String, status: String) {
         bubble.finishTask(key,status:status); activeTasks.remove(key); interaction()
@@ -562,7 +575,7 @@ final class PetController: NSObject, NSMenuDelegate {
         menu.addItem(MenuAction("应用性能信息统计…",symbol:"chart.xyaxis.line") { [weak self] in self?.showDiagnostics() })
         menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.showSettings() })
         menu.addItem(.separator())
-        menu.addItem(MenuAction("关于"+preferences.appName+"…") {AppIcons.showAbout()})
+        menu.addItem(MenuAction("关于"+preferences.appName+"…") { [weak self] in self?.showSettings(section:.about) })
         menu.addItem(MenuAction("检查更新…",symbol:"arrow.triangle.2.circlepath") {UpdateWindow.show()})
         menu.addItem(MenuAction("退出"+preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak self] in self?.onQuit() })
         return menu
@@ -576,23 +589,20 @@ final class PetController: NSObject, NSMenuDelegate {
         dock = nil; dockProgress = 0; dockAnimating = false; motion = nil
         move(constrained(position,screen:display)); activityOrigin = position; savePosition()
     }
-    func showSettings() { settingsOpen = true; interaction(); settings.show()}
+    func showSettings(section:SettingsSection? = nil) { settingsOpen = true; interaction(); settings.show(section:section)}
     func showDiagnostics() {
-        if preferences.bool("showDiagnostics") { diagnostics?.show() }
-        else { preferences.set(true, for:"showDiagnostics") }
+        if !preferences.bool("showDiagnostics") {preferences.set(true,for:"showDiagnostics")}
+        diagnostics?.show(takeFocus:true)
     }
     func updateDiagnostics() {
-        let preserveSettingsFocus = settings.window.isKeyWindow
         if preferences.bool("showDiagnostics") {
-            if diagnostics == nil { diagnostics = DiagnosticsPanel(pet:self) }
-            diagnostics?.show(takeFocus: !preserveSettingsFocus)
+            if diagnostics == nil {
+                diagnostics = DiagnosticsPanel(pet:self)
+                diagnostics?.show(takeFocus:false)
+            }
         } else {
             let old = diagnostics; diagnostics = nil
             old?.shutdown()
-        }
-        if preserveSettingsFocus {
-            NSApp.activate(ignoringOtherApps: true)
-            settings.window.makeKey()
         }
     }
     func settingsChanged(_ keys: [String]) {
@@ -624,6 +634,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if keys.contains("appearanceMode") {AppAppearance.apply()}
         if keys.contains("accentStyle") || keys.contains("accentRGB") {NotificationCenter.default.post(name:AppAccent.didChange,object:nil)}
         if !preferences.allows(bubble.purpose) {bubble.hide()}
+        if !Set(keys).isDisjoint(with:["bubbleCardLimit","recentTaskCount","showTaskOverview"]) {bubble.refreshCardPreferences()}
         if keys.contains("typingEffect") && !preferences.bool("typingEffect") {bubble.finishTyping()}
         if !Set(keys).isDisjoint(with:["interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime"]) {bubble.refreshDuration()}
         interaction(); checkDesktop(); refreshMenu(); onPreferencesChanged()
