@@ -79,12 +79,9 @@ Codex 工作时，桌宠会显示回复和需要你处理的提醒。单击桌�
 - **选择颜色和材质**：外观可跟随系统或选择浅色、深色，强调色可以自定义；macOS 26 起支持液态玻璃，也能切回普通材质、调整背景不透明度并预览。
 - **快速找到设置**：设置搜索覆盖具体选项、动作和台词，点击结果直接定位。历史与设置使用原生分栏窗口，绿灯按钮填满屏幕可用区域，再点一次恢复。
 
-<details>
-<summary>查看称呼与台词设置截图</summary>
 <p align="center">
-  <a href=".github/images/personality.png"><img src=".github/images/personality.png" alt="称呼与个性设置：名字、变量、问候语以及思考和工具调用台词" width="800"></a>
+  <a href=".github/images/personality.png"><img src=".github/images/personality.png" alt="称呼与个性设置：名字、变量、问候语和任务状态台词" width="800"></a>
 </p>
-</details>
 
 ### 想热闹一点，或安静陪着
 
