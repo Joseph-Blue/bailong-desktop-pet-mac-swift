@@ -281,12 +281,13 @@ final class ChatController {
             case .success(let receipt):
                 // 观察器与发送回执均以真实 turn ID 合并，避免生成两条记录。
                 if let turn = conversation.turns.first(where:{$0.id == receipt.turnID}) {
+                    turn.lastMessageAt = started
                     if target.mode == .steer {turn.input += (turn.input.isEmpty ? "" : "\n\n")+"插话："+text}
                     else {turn.input = text}
                 }
                 else {
                     let turn = Turn(); turn.id = receipt.turnID; turn.input = text; turn.owned = false
-                    turn.date = target.mode == .steer ? target.start : started; turn.status = receipt.status; conversation.turns.append(turn)
+                    turn.date = target.mode == .steer ? target.start : started; turn.status = receipt.status; turn.lastMessageAt = started; conversation.turns.append(turn)
                 }
                 self.ui.clearSubmittedDraft(key:key,fromComposer:fromComposer,text:text)
                 self.desktopReplyNotes.removeValue(forKey:key)
@@ -455,7 +456,13 @@ final class ChatController {
         default:break
         }
     }
-    func updateText() { running?.1.messages = messageOrder.compactMap{messages[$0]}.joined(separator:"\n\n"); running?.1.summary = summaries.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n"); running?.1.steps = steps.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n\n") }
+    func updateText() {
+        guard let turn = running?.1 else {return}
+        let text = messageOrder.compactMap{messages[$0]}.joined(separator:"\n\n")
+        if turn.messages != text {turn.lastMessageAt = Date(); turn.messages = text}
+        turn.summary = summaries.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n")
+        turn.steps = steps.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n\n")
+    }
     func scheduleUpdate() {
         if updateTimer != nil {return}
         let timer = Timer(timeInterval:1.0/30,repeats:false) { [weak self] _ in

@@ -10,6 +10,7 @@ final class Turn: Codable {
     var model: String? = nil, effort: String? = nil
     var date = Date()
     var completedAt:Date? = nil
+    var lastMessageAt:Date? = nil
     var owned = true
     var finished = false
     var notices = [String:Double]()
@@ -18,7 +19,7 @@ final class Turn: Codable {
         t.id = id; t.key = key; t.input = input; t.status = status
         t.messages = messages; t.summary = summary; t.steps = steps; t.final = final; t.error = error
         t.sensitiveInputNotice = sensitiveInputNotice; t.sensitiveQuestionNotice = sensitiveQuestionNotice
-        t.model = model; t.effort = effort; t.date = date; t.completedAt = completedAt; t.owned = owned
+        t.model = model; t.effort = effort; t.date = date; t.completedAt = completedAt; t.lastMessageAt = lastMessageAt; t.owned = owned
         t.finished = finished; t.notices = notices
         return t
     }
@@ -32,6 +33,9 @@ final class Conversation: Codable {
     var external = false
     var historyMode = "legacy"
     var turns = [Turn]()
+    var lastActivity:Date {
+        turns.map {max($0.date,$0.completedAt ?? .distantPast,$0.lastMessageAt ?? .distantPast)}.max() ?? .distantPast
+    }
     func snapshot() -> Conversation {
         let copy = Conversation()
         copy.key = key; copy.threadID = threadID; copy.title = title; copy.localTitle = localTitle

@@ -1,9 +1,28 @@
 import AppKit
 
+// 正文按宽度换行，只允许纵向阅读；排版、选择及恢复位置不能横移正文。
+private class VerticalReadingClipView:NSClipView {
+    override func scroll(to newOrigin:NSPoint) {
+        super.scroll(to:NSPoint(x:documentView?.frame.minX ?? 0,y:newOrigin.y))
+    }
+    override func constrainBoundsRect(_ proposedBounds:NSRect) -> NSRect {
+        var result = super.constrainBoundsRect(proposedBounds)
+        result.origin.x = documentView?.frame.minX ?? 0
+        return result
+    }
+}
+
 // 跟随系统滚动条样式；覆盖式滚动条也占用独立的正文留白。
 class GutterScrollView:NSScrollView {
     static var gutter:CGFloat {NSScroller.scrollerWidth(for:.regular,scrollerStyle:.legacy)+4}
     static func documentWidth(for width:CGFloat) -> CGFloat {max(0,width-gutter)}
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        let clip = VerticalReadingClipView()
+        clip.drawsBackground = false; contentView = clip
+        hasHorizontalScroller = false; horizontalScrollElasticity = .none
+    }
+    required init?(coder:NSCoder) {fatalError()}
     override func tile() {
         // 使用原生留白，避免每次 tile 先撑宽正文、再缩窄，反复触发文本换行。
         let right:CGFloat = hasVerticalScroller ? (scrollerStyle == .overlay ? Self.gutter : 4) : 0
@@ -15,7 +34,7 @@ class GutterScrollView:NSScrollView {
 }
 
 // 新审批持续锚定顶部；原生文本排版和窗口高度动画不能把首段移出视口。
-private final class InitialReadingClipView:NSClipView {
+private final class InitialReadingClipView:VerticalReadingClipView {
     var holdsTop = false
     override func scroll(to newOrigin:NSPoint) {
         var proposed = bounds; proposed.origin = newOrigin

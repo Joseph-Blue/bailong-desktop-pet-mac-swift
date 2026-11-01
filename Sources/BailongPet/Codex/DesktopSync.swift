@@ -179,6 +179,10 @@ final class DesktopSync {
                 fingerprints[key] = value.fingerprint; changedAt[key] = now
                 if value.hasSensitiveQuestion {turn.sensitiveQuestionNotice = chat.pet.preferences.sensitiveQuestionNotice}
                 if value.hasSensitiveInput {turn.sensitiveInputNotice = chat.pet.preferences.sensitiveInputNotice}
+                if turn.messages != value.messages || turn.final != value.final {
+                    let time = previous == nil ? (value.completed ?? value.started) : now
+                    turn.lastMessageAt = Date(timeIntervalSince1970:time)
+                }
                 turn.status = value.status; turn.messages = value.messages; turn.final = value.final; turn.steps = value.attention?.isSensitive == true ? "" : value.alert.isEmpty ? value.step : value.alert; turn.error = value.error; changed = true
             }
             if different {

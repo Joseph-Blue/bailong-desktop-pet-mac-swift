@@ -28,7 +28,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var composerVisible: Bool {composerMotion.presented}
     var composerFrame: NSRect {composerMotion.frame}
     func moveComposer(to origin: NSPoint) {composerMotion.move(to:origin)}
-    let history = HistoryWindow(contentRect:NSRect(x:0,y:0,width:920,height:700),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+    let history = HistoryWindow(contentRect:NSRect(x:0,y:0,width:1100,height:850),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
     let composerEditor = MessageEditor(), historyEditor = MessageEditor(), transcript = StreamingTextView()
     private let historySplit = NSSplitViewController()
     private var historyDetailItem: NSSplitViewItem!
@@ -206,7 +206,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyEditor.send = { [weak self] in guard let self else{return}; self.submit(self.historyEditor) }
         for text in [composerKeys,historyKeys] {text.font = .systemFont(ofSize:11); text.textColor = .secondaryLabelColor}
         updateShortcuts()
-        history.center()
+        if !history.setFrameUsingName("BailongHistory") {
+            if let screen = NSScreen.main {
+                history.setContentSize(NSSize(width:min(1100,screen.visibleFrame.width-80),height:min(850,screen.visibleFrame.height-100)))
+            }
+            history.center()
+        }
+        history.setFrameAutosaveName("BailongHistory")
         NotificationCenter.default.addObserver(self,selector:#selector(accentChanged),name:AppAccent.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(modelStateChanged),name:ChatModelSettings.changed,object:models)
         NotificationCenter.default.addObserver(self,selector:#selector(updateShortcuts),name:PetPreferences.didChange,object:nil)
@@ -471,7 +477,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             historyEditor.string = drafts[selected.key]?.history ?? ""
             clearFailure()
         }
-        self.conversations = conversations.reversed(); self.selected = selected.key; self.busy = busy
+        self.conversations = conversations.enumerated().sorted {
+            let left = $0.element.lastActivity, right = $1.element.lastActivity
+            return left == right ? $0.offset > $1.offset : left > right
+        }.map(\.element)
+        self.selected = selected.key; self.busy = busy
         historyReadOnly = readOnly
         self.external = selected.external; externalSending = sending; externalUnconfirmed = unconfirmed; self.replyNote = replyNote
         externalMode = replyMode; externalModelNote = modelNote

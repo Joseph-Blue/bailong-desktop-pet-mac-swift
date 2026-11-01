@@ -67,6 +67,13 @@ enum LoginLauncher {
 
 final class FollowLauncher {
     private(set) static var lastUpdateError:String?
+    static let didChange = Notification.Name("BailongFollowRegistrationDidChange")
+    private static let updateQueue = DispatchQueue(label:"白龙桌宠跟随启动维护")
+    private static var updating = false
+    private struct CommandFailure:LocalizedError {
+        let operation:String, status:Int32, output:String
+        var errorDescription:String? {"launchctl \(operation) 执行失败（\(status)）\n\(output)"}
+    }
     static let label = "com.bailongpet.appkit.follow"
     static let plist = URL(fileURLWithPath: NSHomeDirectory()+"/Library/LaunchAgents/"+label+".plist")
     static var helper: URL {
@@ -86,10 +93,11 @@ final class FollowLauncher {
     private static func command(_ arguments: [String]) throws {
         let result = try launchctl(arguments)
         guard result.status == 0 else {
-            throw PetFailure(message: "launchctl 执行失败（\(result.status)）\n\(result.output)")
+            throw CommandFailure(operation:arguments[0],status:result.status,output:result.output)
         }
     }
     static var statusText: String {
+        if updating {return "正在更新跟随启动项…"}
         if let lastUpdateError {return "启动项更新失败："+lastUpdateError}
         guard FileManager.default.fileExists(atPath: plist.path) else { return "打开 Codex 或 ChatGPT 时启动桌宠" }
         do {
@@ -114,10 +122,11 @@ final class FollowLauncher {
             guard config["Disabled"] as? Bool != true else {return}
             let version = config["BailongVersion"] as? String
             guard !StartupLocation.isOlder(than:version),arguments != expectedArguments || version != Paths.version else {return}
-            try install()
+            beginUpdate(enabled:true,automatic:true)
         } catch {lastUpdateError = error.localizedDescription}
     }
     static func configure() {
+        guard !updating else {return}
         let exists = FileManager.default.fileExists(atPath: plist.path)
         let alert = NSAlert(); alert.messageText = "随 Codex 启动"
         alert.informativeText = exists
@@ -129,14 +138,49 @@ final class FollowLauncher {
         alert.applyAccent(primary:1,keyboardDefault:1)
         let response = alert.runModal()
         guard response != .alertFirstButtonReturn else { return }
-        do {
-            lastUpdateError = nil
-            if response == .alertThirdButtonReturn { try disable() }
-            else { try install() }
-        } catch { showError("跟随启动设置失败", error) }
+        beginUpdate(enabled:response != .alertThirdButtonReturn,automatic:false)
+    }
+    private static func beginUpdate(enabled:Bool,automatic:Bool) {
+        guard !updating else {return}
+        updating = true; lastUpdateError = nil
+        NotificationCenter.default.post(name:didChange,object:nil)
+        updateQueue.async {
+            let result = Result<Void,Error> {
+                if !enabled {try disable(); return}
+                do {try install()}
+                catch let failure as CommandFailure where failure.operation == "bootstrap" && failure.status == 5 {
+                    // 用户已观察到第二次配置可成功；仅对这项加载错误补一次延后更新。
+                    NSLog("跟随启动首次加载失败，稍后重试一次：%@",failure.localizedDescription)
+                    Thread.sleep(forTimeInterval:1)
+                    guard SMAppService.statusForLegacyPlist(at:plist) != .requiresApproval else {throw failure}
+                    try install()
+                }
+            }
+            DispatchQueue.main.async {
+                updating = false
+                if case .failure(let error) = result {
+                    lastUpdateError = error.localizedDescription
+                    if !automatic {showError("跟随启动设置失败",error)}
+                }
+                NotificationCenter.default.post(name:didChange,object:nil)
+            }
+        }
+    }
+    private static func removeLoadedService() throws {
+        try command(["bootout",service])
+        let deadline = ProcessInfo.processInfo.systemUptime+5
+        while true {
+            let result = try launchctl(["print",service])
+            if result.status == 113 {return} // launchd：服务已不存在。
+            if result.status != 0 {throw CommandFailure(operation:"确认旧监测器退出",status:result.status,output:result.output)}
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw PetFailure(message:"旧监测器尚未退出，跟随启动项未更新。")
+            }
+            Thread.sleep(forTimeInterval:0.1)
+        }
     }
     private static func disable() throws {
-        if try launchctl(["print", service]).status == 0 { try command(["bootout", service]) }
+        if try launchctl(["print", service]).status == 0 {try removeLoadedService()}
         if FileManager.default.fileExists(atPath: plist.path) { try FileManager.default.removeItem(at: plist) }
     }
     private static func install() throws {
@@ -147,14 +191,14 @@ final class FollowLauncher {
         let manager = FileManager.default
         let oldData = manager.fileExists(atPath: plist.path) ? try Data(contentsOf: plist) : nil
         let loaded = try launchctl(["print", service]).status == 0
-        if loaded { try command(["bootout", service]) }
+        if loaded {try removeLoadedService()}
         do {
             let config: [String: Any] = ["Label": label, "ProgramArguments": expectedArguments,
                 "RunAtLoad": true, "KeepAlive": true, "ThrottleInterval": 10, "ProcessType": "Background", "BailongVersion": Paths.version]
             try manager.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
             try PropertyListSerialization.data(fromPropertyList: config, format: .xml, options: 0).write(to: plist, options: .atomic)
             try command(["bootstrap", "gui/\(getuid())", plist.path])
-            FollowSessions.clearManualExit(); lastUpdateError = nil
+            FollowSessions.clearManualExit()
         } catch {
             let failure = error
             // 重新注册失败时还原用户原来的设置，错误仍明确显示。

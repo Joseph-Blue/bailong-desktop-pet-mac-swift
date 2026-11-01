@@ -49,6 +49,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     init(preferences: PetPreferences = .shared, catalog: Catalog? = nil) {
         self.preferences = preferences; self.catalog = catalog
         super.init()
+        NotificationCenter.default.addObserver(self,selector:#selector(startupRegistrationChanged),name:FollowLauncher.didChange,object:nil)
         templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
         window.title = "设置"; window.isReleasedWhenClosed = false; window.delegate = self
         window.styleMask.insert(.fullSizeContentView)
@@ -558,6 +559,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         picker.setAccessibilityLabel(title)
         attach(picker) { [weak self] sender in let c = Calendar.current.dateComponents([.hour,.minute],from:(sender as! NSDatePicker).dateValue); self?.preferences.set((c.hour ?? 0)*60+(c.minute ?? 0),for:key) }
         return row(title,control:picker)
+    }
+    @objc private func startupRegistrationChanged() {
+        if selected == .general && window.isVisible {render()}
     }
     private func render() {
         guard window.contentView != nil else {return}
