@@ -348,7 +348,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return row(title,control:menu)
     }
     private func choice(_ title: String, _ key: String, _ options: [(String,String)]) -> NSView {
-        popup(title,options:options,value:preferences.string(key),width:key == "sendShortcut" ? 260 : key == "animationQuality" ? 250 : 190,identifier:key) { [weak self] value in
+        popup(title,options:options,value:preferences.string(key),width:["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190,identifier:key) { [weak self] value in
             self?.preferences.set(value,for:key)
             self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
@@ -600,7 +600,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func activity() {
-        let actions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),("random","随机动画")]
+        let actions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),("random","显示任务进度、播放随机动画")]
         group("鼠标互动",[choice("单击桌宠","singleClickAction",actions),choice("双击桌宠","doubleClickAction",actions),choice("右键双击桌宠","rightDoubleClickAction",actions),note("普通状态单击松手立即执行，双击的第一下会先执行单击动作。躲在角落时，单击松手后等待 250 毫秒再召回，不执行单击动作；期间第二击取消召回并执行双击动作。拖动立即召回。右键按下立即打开菜单，双击时关闭菜单并执行所选动作。")])
         let interval = preferences.number("leisureInterval")
         let preset = interval == 60 ? "60" : interval == 15 ? "15" : interval == 8 ? "8" : "custom"
@@ -644,7 +644,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         group("历史记录",[toggle("记录历史","recordHistory"),note("关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
         group("气泡卡片与任务概览",[
             slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，可设为 5～100 条，仅保留在本次运行的运行内存 (RAM) 中。普通对白不计入，任务概览只占一条；正在阅读和待处理卡片保留，不删除历史对话。"),
-            toggle("互动气泡显示任务概览","showTaskOverview",detail:"在随机动画台词下显示当前任务与近期结束的任务，点击任务行跳转 Codex。"),
+            toggle("互动气泡显示任务概览","showTaskOverview",detail:"通过按键执行“显示任务进度、播放随机动画”时，在台词下显示当前与近期结束任务；点击任务行跳转 Codex。"),
             slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"默认 5 条，每个会话显示最新轮次。任务概览关闭时保留此设置。")])
         group("输入快捷键",[
             choice("发送与换行","sendShortcut",[("commandReturn","⌘ Command + ↩ Enter 发送"),("returnToSend","↩ Enter 发送")]),
