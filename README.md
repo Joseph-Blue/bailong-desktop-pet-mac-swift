@@ -13,8 +13,8 @@
 需要 **Apple Silicon Mac、macOS 14 或更新版本**。Codex 功能需要在本机安装并登录 Codex。
 
 1. [下载 Apple Silicon 版（ZIP）](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
-2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，从访达打开。
-3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。
+2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录（推荐拖拽进访达的"应用程序"目录，以便在应用中设置随 Codex 启动等设置），从访达打开。
+3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。（注：每次版本更新后，都需重新设置此项）
 
 App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一次，再到“系统设置 → 隐私与安全性 → 仍要打开”。[Apple 操作说明](https://support.apple.com/zh-cn/102445)
 
