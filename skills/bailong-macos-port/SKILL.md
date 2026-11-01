@@ -91,14 +91,14 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 普通气泡两个按钮等宽：左“转到 Codex”，右“查看记录详情”，右侧强调色。前者用 codex://threads/<thread-id>，无 ID 只打开桌面端，不创建任务；技术错误的详情／重试保留原语义。
 - 每次额度必须新请求，禁止跨查询缓存、TTL 或旧结果替代。QuotaQuery 先发 rateLimits/read，再并行 account/read；额度先显示，账号晚到只补同次结果。保留 serial／quotaActive 防过期回调，进行中的重复请求合并不等于结果缓存。
 - 重置卡只读不 consume：availableCount 为权威总数，明细可截断；expiresAt 显式 null 为不限期，缺失字段／明细为未提供，按本机时区显示。默认完整读取，不为提速跳过明细。授权测时只输出耗时与字段是否提供，不输出账号资料或凭证。
-- 数据位于 ~/Library/Application Support/BailongPetAppKit；不读取凭证、不改全局 Codex 配置、不自动启用 LaunchAgent。跟随启动仅识别 Codex／ChatGPT 桌面应用、不监测 CLI，拒绝 AppTranslocation 临时路径，由用户主动修复／更新配置。
-- 产品名固定为白龙娘桌宠MacOS-Swift版，自定义名字只用于称呼互动。历史、任务回复、输入与技术错误保留复制，非交互标签不选中。
+- 数据位于 ~/Library/Application Support/BailongPetAppKit；不读取凭证、不改全局 Codex 配置、不自动启用 LaunchAgent。跟随启动仅识别 Codex／ChatGPT 桌面应用、不监测 CLI，拒绝 AppTranslocation 临时路径，首次启用由用户明确配置，之后新版运行自动维护已启用项的路径和版本。
+- 产品名固定为白龙桌宠Swift，自定义名字只用于称呼互动。历史、任务回复、输入与技术错误保留复制，非交互标签不选中。
 
 ## 更新检查
 
 - URLSession 读取公开仓库 releases/latest，沿用系统代理，TUN 由系统路由处理；不读凭证、不硬编码端口、不改全局网络配置。这不代表改变 Codex CLI 的联网配置。
-- SemVer 比较支持普通版本、v 前缀及既有中文“白龙娘桌宠v”标签，过滤草稿／预发布，区分本地领先，不引导降级。
-- 更新页含当前版本、手动检查、发布页、自动检查、上次完成时间及结果。启动自动检查默认开并记忆，仅发现新版提醒，失败仅记录更新页。自动提醒中的“😡 不许打扰我，禁用自动更新检查”放在重新检查右侧并同步设置，手动提醒不显示。
+- SemVer 比较支持普通版本、v 前缀、新产品“白龙桌宠Swiftv”及既有中文“白龙娘桌宠v”标签，过滤草稿／预发布，区分本地领先，不引导降级。
+- 更新页含当前版本、手动检查、发布页、自动检查、上次完成时间及结果。启动自动检查默认关闭并记忆，仅发现新版提醒，失败仅记录更新页。自动提醒中的“😡 不许打扰我，禁用自动更新检查”放在重新检查右侧并同步设置，手动提醒不显示。
 - 手动失败允许重试；错误短标题加一句原因，原始错误／HTTP 状态放可拷贝的折叠技术详情，不伪报最新版。仅系统明确离线才说未联网，GitHub 失败／超时不等于断网，不猜代理故障、不要求开启 TUN；访问拒绝与明确限流分开，有恢复时间再显示。
 - 已打开的手动检查超过 8 秒显示连接较慢并保留加载／取消，不新增后台提醒。完成／取消／退出清理计时器，generation 丢弃过期回调。
 - 当前仅查看版本、说明和打开发布页，没有自动下载／安装，不退出或替换运行中的 App。API 请求与编译通过不代表代理／PAC／TUN 或窗口真机验收。
@@ -107,7 +107,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 - 已导出 PNG 的修复使用独立 bailong-webm-edge-repair 技能：禁止 imagegen，在新副本处理，保持透明、原尺寸与编号。原始 WebM／PNG、修复副本、备份、蒙版及报告保留本地，不进 Git 或运行包。
 - 授权接入时使用 scripts/apply-native-png-repairs.sh <PNG根目录>；加 --landing 仅处理落地。Core Image 读取 PNG，AVAssetWriter 输出 ProRes 4444，系统 avconvert 编码透明 HEVC，成功后切换 catalog 并保留旧目录。原作 WebM 目录不能直接充当运行资源。
-- 准备 HEVC catalog、sounds、应用图标、openai-logo.png 及玻璃 PDF 后执行 scripts/build.sh arm64。仅交付 Silicon，保留 Intel 入口但不自动追加构建；主程序与 helper 必须同架构。输出 dist/native-hevc/<VERSION>/<架构>/白龙娘桌宠MacOS-Swift版.app。
+- 准备 HEVC catalog、sounds、应用图标、openai-logo.png 及玻璃 PDF 后执行 scripts/build.sh arm64。仅交付 Silicon，保留 Intel 入口但不自动追加构建；主程序与 helper 必须同架构。输出 dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app。
 - scripts/prepare-native-hevc.sh 仅复制已有 MOV 及 samples.json，复用 VERSION；AVPlayerLayer 预览不等于桌宠交互验收。包内不带原始素材、中间文件或用户数据。
 - VERSION 为版本单一来源；独立 SemVer，功能升次版本、兼容修复升补丁，开发用 dev 标识。中文 commit／CHANGELOG，提交、合并、推送、Release 各按授权执行，公开仓库不代表获得发布许可。
 - README 简洁介绍下载、安全拦截、特色与使用；CHANGELOG 保留版本记录，现行架构和规则写入 docs/来源与架构.md、AGENTS.md。过程与未验证项留在忽略的 docs/实施记录.md，不把迭代流水堆入技能。
@@ -141,3 +141,12 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - HoverHelp 展示完整原文，无固定行数／160pt 限高／省略尾部；使用 NSTextFieldCell 实际测量高度，长文本换行，接近屏幕高度时增宽。
 - 独立窗口后台刷新与关闭回调不主动激活其他窗口；性能开关联动仅首次非激活显示，不再恢复设置焦点、不反复置前；后台恢复报告非激活显示。明确菜单／Dock 召回聚焦指定窗口，应用已活动时不重复激活；Dock 优先当前窗口，历史打开不调用全应用 unhide。
 - 图标由 Tools/GenerateAppIcon/main.swift 从已修复 idle PNG 母版通过 Core Graphics 生成透明多尺寸 iconset，再用 iconutil 打包；源图及旧图标备份只保留 local-assets。透明像素经预乘 Alpha 重采样，不重绘角色。
+
+## 菜单、兼容与启动维护
+
+- 产品名／包名为白龙桌宠Swift／白龙桌宠Swift.app，保留 Bundle ID 和历史目录、角色名。根目录使用 launch.command、build.command、run-dev.command；启动按 VERSION 与架构定位 native-hevc 构建。
+- 桌宠菜单常用操作留顶层，动作、快捷开关、工具与帮助进入子菜单。历史绿色按钮只填满可用屏幕／恢复，不进入独立全屏。
+- 自动更新检查默认关闭并保留显式选择。登录及跟随启动仅自动维护已启用的注册，更新版本和路径；尊重系统撤销许可、不创建未经用户启用的服务、不降级绑定新版注册。支持用户选择的固定目录，拒绝 AppTranslocation，不强制 /Applications。
+- 设置在 settings.v2 独立域迁移已知字段并保留旧域；旧变量只在模板字段、自定义台词和特定称呼中定向转换，不改名字字面值或历史正文。导出格式 2、导入 1/2，异常播放参数保留原值后恢复默认并说明。
+- 历史 schema 1 先备份再原子升级 2。读取／升级失败或不支持格式以只读方式进入，不阻止桌宠和设置，不用空历史覆盖原文件；高级页提供原文件导出和重读，禁止只读状态下写入或发送。
+- 卡片按真实消息 ID 区分独立回复，同条流式更新原地刷新，不能按整轮或空行覆盖。互动台词各自保留，实时任务概览仅在最新互动卡片显示；列表去重不删除消息。

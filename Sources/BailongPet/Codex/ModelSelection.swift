@@ -9,7 +9,7 @@ struct ChatModel: Decodable {
 final class ChatModelSettings {
     static let changed = Notification.Name("BailongChatModelChanged")
     private let defaults: UserDefaults
-    init(defaults: UserDefaults = .standard) {self.defaults = defaults}
+    init(defaults: UserDefaults = SettingsStorage.defaults) {self.defaults = defaults}
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
     private(set) var loading = false

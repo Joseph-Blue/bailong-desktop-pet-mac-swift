@@ -109,6 +109,7 @@ enum DesktopHistoryReader {
                 ORDER BY rollout_ordinal DESC LIMIT 200
                 """,[actual,turn["turn_id"]!]).reversed()
                 var messages = [String](), final = "", alert = "", step = ""
+                var agentMessages = [PublicAgentMessage]()
                 var questions = [[String:Any]](), approval:TaskAttention?, hasSensitiveInput = false, hasSensitiveQuestion = false
                 for item in items {
                     if item["item_type"] == "userMessage" {continue}
@@ -126,6 +127,9 @@ enum DesktopHistoryReader {
                     }
                     if item["item_type"] == "agentMessage" {
                         if let text = item["text"], !text.isEmpty {
+                            if let id = item["item_id"],item["phase"] == nil || ["commentary","final_answer","final"].contains(item["phase"]!) {
+                                agentMessages.append(.init(id:id,text:text,isFinal:["final_answer","final"].contains(item["phase"] ?? "")))
+                            }
                             if ["final_answer","final"].contains(item["phase"] ?? "") {final = text; step = ""}
                             else if item["phase"] == nil || item["phase"] == "commentary" {messages.append(text)}
                         }
@@ -146,6 +150,7 @@ enum DesktopHistoryReader {
                 if ["completed","failed","interrupted"].contains(turn["status"] ?? "") {attention = nil; step = ""}
                 alert = attention?.body ?? ""
                 result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion))
+                result[result.count-1].agentMessages = agentMessages
                 result[result.count-1].isLatest = turn["turn_id"] == latestTurn
             }
         }

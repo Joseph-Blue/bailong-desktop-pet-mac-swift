@@ -16,7 +16,7 @@ struct SemanticVersion: Comparable {
     }
 
     static func releaseTag(_ tag: String) -> SemanticVersion? {
-        for prefix in ["白龙娘桌宠v","v"] where tag.hasPrefix(prefix) {
+        for prefix in ["白龙桌宠Swift v","白龙桌宠Swiftv","白龙娘桌宠v","v"] where tag.hasPrefix(prefix) {
             return SemanticVersion(String(tag.dropFirst(prefix.count)))
         }
         return SemanticVersion(tag)

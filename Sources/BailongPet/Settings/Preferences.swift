@@ -50,7 +50,7 @@ final class PetPreferences {
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
         "recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,
-        "automaticallyCheckUpdates":true,
+        "automaticallyCheckUpdates":false,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
@@ -79,24 +79,35 @@ final class PetPreferences {
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
     static let choices = ["bubbleMaterial":["glass","plain"],"animationQuality":["720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":["commandReturn","returnToSend"],"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
+    private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = SettingsStorage.defaults) {
         self.defaults = defaults
+        guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {return}
         TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
         defaults.removeObject(forKey:"addressMode")
         if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
     }
     func validatePlayback() throws {
-        for key in ["animationQuality","animationFPSLimit"] {
-            guard Self.choices[key]!.contains(string(key)) else {throw PlaybackSettingsError(key:key)}
+        guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {
+            throw PetFailure(message:"设置由更新版本的应用保存，请使用新版打开。原配置未修改。")
+        }
+        var repaired = [String:Any]()
+        for key in ["animationQuality","animationFPSLimit"] where !Self.choices[key]!.contains(string(key)) {
+            repaired[key] = defaults.object(forKey:key); defaults.removeObject(forKey:key)
         }
         for key in ["animationBufferFrames","playbackSpeed","petPercent","bubblePercent"] {
             let number = number(key)
-            guard number.isFinite,Self.ranges[key]!.contains(number),key == "playbackSpeed" || number.rounded() == number else {
-                throw PlaybackSettingsError(key:key)
+            if !number.isFinite || !Self.ranges[key]!.contains(number) || (key != "playbackSpeed" && number.rounded() != number) {
+                repaired[key] = defaults.object(forKey:key); defaults.removeObject(forKey:key)
             }
         }
+        if !repaired.isEmpty {
+            defaults.set(repaired,forKey:"compatibilityRecoveredValues")
+            compatibilityNotice = "已将不支持的画质、帧率或播放数值恢复为默认值，原值保留在配置兼容备份中。"
+        }
     }
+
     static func displayID(_ screen: NSScreen) -> String {(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? ""}
     func value(_ key: String) -> Any {defaults.object(forKey:key) ?? Self.defaults[key]!}
     func bool(_ key: String) -> Bool {value(key) as? Bool ?? false}
@@ -113,8 +124,8 @@ final class PetPreferences {
     func reset(_ keys: [String]) {for key in keys {defaults.removeObject(forKey:key)}; notify(keys)}
     var petName: String {let s = string("petName").trimmingCharacters(in:.whitespacesAndNewlines); return s.isEmpty ? "白龙娘" : s}
     // 产品身份固定；petName 只用于角色称呼和互动文案。
-    static let productName = "白龙娘"
-    var appName: String {Self.productName+"桌宠MacOS-Swift版"}
+    static let productName = "白龙桌宠Swift"
+    var appName: String {Self.productName}
     var ownerName:String {
         let name = string("ownerName").trimmingCharacters(in:.whitespacesAndNewlines)
         return name.isEmpty ? "主人" : name
@@ -200,12 +211,15 @@ final class PetPreferences {
     }
     func exportData() throws -> Data {
         let values = Dictionary(uniqueKeysWithValues:Self.defaults.keys.map {($0,value($0))})
-        return try JSONSerialization.data(withJSONObject:["schemaVersion":1,"settings":values],options:[.prettyPrinted,.sortedKeys])
+        return try JSONSerialization.data(withJSONObject:["schemaVersion":SettingsStorage.schemaVersion,"settings":values],options:[.prettyPrinted,.sortedKeys])
     }
     func importData(_ data: Data, clipIDs: Set<String>) throws {
         guard let document = try JSONSerialization.jsonObject(with:data) as? [String:Any],
-              document["schemaVersion"] as? Int == 1, var values = document["settings"] as? [String:Any] else {
+              let schema = document["schemaVersion"] as? Int,var values = document["settings"] as? [String:Any] else {
             throw PetFailure(message:"请选择本应用导出的设置文件。")
+        }
+        guard (1...SettingsStorage.schemaVersion).contains(schema) else {
+            throw PetFailure(message:"不支持设置格式 \(schema)，请使用对应版本的应用。尚未导入任何更改。")
         }
         values = TemplateSyntax.migrate(values)
         values.removeValue(forKey:"addressMode")

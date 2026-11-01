@@ -1,6 +1,12 @@
 import AppKit
 
 final class HistoryWindow: NSWindow {
+    private var restoredFrame:NSRect?
+    override func zoom(_ sender:Any?) {
+        guard let area = screen?.visibleFrame else {return}
+        if frame.equalTo(area),let restoredFrame {setFrame(restoredFrame,display:true,animate:!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion); self.restoredFrame = nil}
+        else {restoredFrame = frame; setFrame(area,display:true,animate:!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)}
+    }
     var focusSearch: () -> Void = {}
     var nextMatch: (Bool) -> Void = {_ in}
     override func performKeyEquivalent(with event:NSEvent) -> Bool {
@@ -59,6 +65,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var composerInput: NSView!
     private var historyInput: MessageInputBox!
     private var external = false, externalSending = false, externalUnconfirmed = false, externalReady = false
+    private var historyReadOnly = false
     private var replyNote:String?
     private var externalMode:DesktopReply.Mode?
     private var externalModelNote:String?
@@ -77,6 +84,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     init(models: ChatModelSettings) {
         self.models = models
         super.init()
+        history.collectionBehavior.insert(.fullScreenNone)
         composer.title = ""; history.title = PetPreferences.productName+" · 历史对话"
         for w in [composer as NSWindow,history] {w.isReleasedWhenClosed = false; w.delegate = self}
         composer.level = .floating; composer.contentMinSize = NSSize(width:500,height:350)
@@ -195,12 +203,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let shortcut = PetPreferences.shared.sendShortcut
         let action = external ? (externalSending ? "正在发送…" : externalUnconfirmed ? "检查发送结果" : externalMode == .steer ? "插话到 Codex" : "发送到 Codex") : busy ? "停止" : "发送"
         let hint = external ? (externalSending ? "正在发送到原会话…" : externalUnconfirmed ? "发送结果待确认，草稿已保留" : !externalReady ? "当前会话等待处理，请转到 Codex" : replyNote ?? shortcut.hint) : busy ? "停止："+shortcut.sendLabel : shortcut.hint
-        composerKeys.stringValue = hint; historyKeys.stringValue = hint.replacingOccurrences(of:"\n",with:"  ·  ")
+        let displayHint = historyReadOnly ? "历史只读：请在设置 → 高级导出原文件或重新读取" : hint
+        composerKeys.stringValue = displayHint; historyKeys.stringValue = displayHint.replacingOccurrences(of:"\n",with:"  ·  ")
         composerButton.title = action; historyButton.title = action
         composerButton.hoverHelp = action+"："+shortcut.sendLabel
         historyButton.hoverHelp = composerButton.hoverHelp
         composerButton.keyEquivalent = ""; historyButton.keyEquivalent = ""
-        composerEditor.setAccessibilityHelp(hint); historyEditor.setAccessibilityHelp(hint)
+        composerEditor.setAccessibilityHelp(displayHint); historyEditor.setAccessibilityHelp(displayHint)
     }
 
     func showComposer() {
@@ -290,7 +299,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     @objc private func modelStateChanged() {
         let enabled = external ? !busy && !externalSending && (externalReady || externalUnconfirmed) : busy || !models.loading
-        composerButton.isEnabled = enabled; historyButton.isEnabled = enabled
+        composerButton.isEnabled = enabled && !historyReadOnly; historyButton.isEnabled = enabled && !historyReadOnly
         let selectorWidth = max(280,composerModel.intrinsicContentSize.width.rounded(.up))
         let hintWidth = ("选择模型与推理强度：" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)+6
         let composerWidth = max(500,selectorWidth+hintWidth+40)
@@ -436,7 +445,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             drafts[key] = draft
         }
     }
-    func refresh(_ conversations: [Conversation], selected: Conversation, busy: Bool, sending:Bool = false, unconfirmed:Bool = false, replyNote:String? = nil, replyMode:DesktopReply.Mode? = nil, modelNote:String? = nil) {
+    func refresh(_ conversations: [Conversation], selected: Conversation, busy: Bool, sending:Bool = false, unconfirmed:Bool = false, replyNote:String? = nil, replyMode:DesktopReply.Mode? = nil, modelNote:String? = nil,readOnly:Bool = false) {
         if self.selected != selected.key {
             if let old = self.selected,conversations.contains(where:{$0.key == old}) {drafts[old] = (composerEditor.string,historyEditor.string)}
             composerEditor.string = drafts[selected.key]?.composer ?? ""
@@ -444,6 +453,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             clearFailure()
         }
         self.conversations = conversations.reversed(); self.selected = selected.key; self.busy = busy
+        historyReadOnly = readOnly
         self.external = selected.external; externalSending = sending; externalUnconfirmed = unconfirmed; self.replyNote = replyNote
         externalMode = replyMode; externalModelNote = modelNote
         externalReady = selected.threadID != nil && replyMode != nil
@@ -470,7 +480,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = "历史对话"
         resizeHistoryInput()
         composerEditor.placeholder = external ? "回复这条 Codex 会话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
-        historyEditor.isEditable = !busy && !sending; composerEditor.isEditable = !busy && !sending
+        historyEditor.isEditable = !busy && !sending && !readOnly; composerEditor.isEditable = !busy && !sending && !readOnly
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}
         guard history.isVisible && !history.isMiniaturized else {return}
@@ -484,7 +494,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func accentChanged() {
         transcriptCache.removeAll()
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedConversation = nil
-        if let c = conversations.first(where:{$0.key == selected}) {refresh(Array(conversations.reversed()),selected:c,busy:busy,sending:externalSending,unconfirmed:externalUnconfirmed,replyNote:replyNote,replyMode:externalMode,modelNote:externalModelNote)}
+        if let c = conversations.first(where:{$0.key == selected}) {refresh(Array(conversations.reversed()),selected:c,busy:busy,sending:externalSending,unconfirmed:externalUnconfirmed,replyNote:replyNote,replyMode:externalMode,modelNote:externalModelNote,readOnly:historyReadOnly)}
     }
     private func transcriptContent(_ conversation: Conversation) -> NSAttributedString {
         var result = NSMutableAttributedString()

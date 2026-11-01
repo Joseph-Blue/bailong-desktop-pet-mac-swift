@@ -41,9 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ownsInstance = true; unfinishedRun = lifecycle.begin(version:Paths.version)
             }
             FollowSessions.clearManualExit()
+            LoginLauncher.refreshExistingRegistration()
+            FollowLauncher.refreshExistingRegistration()
             let pet = PetController(catalog:try Catalog.load()); self.pet = pet
             pet.onQuit = { [weak self] in self?.quitFromMenu() }
-            pet.onAutostart = {FollowLauncher.configure()}
             localEvents = NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.keyDown,.scrollWheel]) { [weak self, weak pet] event in
                 if event.type == .keyDown, event.charactersIgnoringModifiers?.lowercased() == "q",
                    event.modifierFlags.intersection([.command,.control,.option,.shift]) == .command {

@@ -48,7 +48,7 @@ struct HistoryRecordingPolicy: Codable {
     var deletedThreads: Set<String>? = nil
 }
 struct HistoryDocument: Codable {
-    var schemaVersion = 1
+    var schemaVersion = 2
     var conversations: [Conversation]
     var recordingPolicy: HistoryRecordingPolicy? = nil
     func validateIdentity() throws {
@@ -65,6 +65,8 @@ final class HistoryStore {
     var conversations = [Conversation]()
     var onError: (Error) -> Void = { _ in }
     var onSaved: () -> Void = {}
+    private(set) var readOnlyReason:String?
+    var isReadOnly:Bool {readOnlyReason != nil}
     private let queue = DispatchQueue(label:"白龙娘历史保存")
     private let lock = NSLock()
     private let url: URL
@@ -81,11 +83,23 @@ final class HistoryStore {
         url = directory.appendingPathComponent("conversations.json")
         self.recording = recording
         if FileManager.default.fileExists(atPath:url.path) {
-            let document = try JSONDecoder().decode(HistoryDocument.self,from:Data(contentsOf:url))
-            guard document.schemaVersion == 1 else {throw PetFailure(message:"历史格式不兼容，原文件已保留。")}
-            try document.validateIdentity()
-            conversations = document.conversations
-            policy = document.recordingPolicy ?? HistoryRecordingPolicy()
+            do {
+                var document = try JSONDecoder().decode(HistoryDocument.self,from:Data(contentsOf:url))
+                try document.validateIdentity()
+                conversations = document.conversations
+                policy = document.recordingPolicy ?? HistoryRecordingPolicy()
+                if document.schemaVersion == 1 {
+                    let backup = directory.appendingPathComponent("conversations-before-schema2-\(Int(Date().timeIntervalSince1970*1000)).json")
+                    try FileManager.default.copyItem(at:url,to:backup)
+                    document.schemaVersion = 2
+                    let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
+                    try encoder.encode(document).write(to:url,options:.atomic)
+                } else if document.schemaVersion != 2 {
+                    readOnlyReason = "历史格式 \(document.schemaVersion) 由其他版本保存，当前只读展示可识别的内容。"
+                }
+            } catch {
+                readOnlyReason = "历史读取或升级未完成，原文件保留："+error.localizedDescription
+            }
             archive = makeSnapshot(preservingExcluded:false)
             for conversation in conversations {for turn in conversation.turns where turn.owned && (activeStatuses.contains(turn.status) || turn.status == "unknown") {
                 turn.status = "interrupted"; turn.error = "上次程序退出，任务未确认完成。"
@@ -100,7 +114,21 @@ final class HistoryStore {
     private func freezeCurrentTurns() {
         policy.excludedTurns.formUnion(conversations.flatMap {$0.turns.map(\.key)})
     }
+    func requireWritable() throws {
+        if let readOnlyReason {throw PetFailure(message:readOnlyReason+" 请在设置 → 高级中导出原文件或重新读取。")}
+    }
+    func exportOriginal(to destination:URL) throws {try Data(contentsOf:url).write(to:destination,options:.atomic)}
+    func reload(recording:Bool) throws {
+        guard isReadOnly else {return}
+        let fresh = try HistoryStore(recording:recording,directory:url.deletingLastPathComponent())
+        try fresh.requireWritable()
+        queue.sync {}
+        conversations = fresh.conversations; archive = fresh.archive; policy = fresh.policy; self.recording = fresh.recording
+        readOnlyReason = nil
+        lock.withLock {suspended = false; pending = nil; writeEpoch += 1}
+    }
     func setRecording(_ enabled:Bool) {
+        guard !isReadOnly else {return}
         guard recording != enabled else {return}
         if recording {archive = makeSnapshot()}
         freezeCurrentTurns()
@@ -136,12 +164,14 @@ final class HistoryStore {
         return HistoryDocument(conversations:records,recordingPolicy:policy)
     }
     private func save(retrying:Bool) {
+        guard !isReadOnly else {return}
         if !recording {freezeCurrentTurns()}
         guard retrying || (recording && !lock.withLock({suspended})) else {return}
         if recording {archive = makeSnapshot()}
         enqueue(HistoryDocument(conversations:archive.conversations,recordingPolicy:policy),retrying:retrying)
     }
     private func enqueue(_ document:HistoryDocument,retrying:Bool) {
+        guard !isReadOnly else {return}
         let start = lock.withLock { () -> Bool in
             if retrying {suspended = false}
             guard !suspended else {return false}
@@ -202,6 +232,7 @@ final class HistoryStore {
         policy = nextPolicy; conversations.removeAll {$0.key == conversation.key}
     }
     private func commitManagement(_ document:HistoryDocument) throws {
+        try requireWritable()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
         let data = try encoder.encode(document)
         try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true)
@@ -211,6 +242,7 @@ final class HistoryStore {
         onSaved()
     }
     func clear() throws {
+        try requireWritable()
         queue.sync {}
         let fresh = HistoryRecordingPolicy(externalBefore:Date().timeIntervalSince1970,disabled:!recording)
         let document = HistoryDocument(conversations:[],recordingPolicy:fresh)

@@ -41,6 +41,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onMessagePreview: (MessagePurpose) -> Void = { _ in }
     var onPreviewDetails: () -> Void = {}
     var onClearLocalData: (() throws -> Void)?
+    var historyRecoveryReason:() -> String? = {nil}
+    var onReloadHistory:(() throws -> Void)?
+    var onExportHistory:((URL) throws -> Void)?
     private var storageGeneration = 0
     init(preferences: PetPreferences = .shared, catalog: Catalog? = nil) {
         self.preferences = preferences; self.catalog = catalog
@@ -322,6 +325,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func toggle(_ title: String, _ key: String, detail: String? = nil) -> NSView {
         let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.setAccessibilityLabel(title)
+        if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
         if key == "showDiagnostics" { diagnosticsSwitch = control }
         if key == "automaticallyCheckUpdates" { automaticUpdateSwitch = control }
         attach(control) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:key) }
@@ -549,8 +553,11 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         updateSearchPresentation()
     }
     private func general() {
+        if let notice = preferences.compatibilityNotice ?? SettingsStorage.compatibilityNotice {
+            group("配置兼容",[note(notice),row("兼容备份",control:ActionButton("导出…") { [weak self] in self?.exportCompatibilitySettings() })])
+        }
         let login = SMAppService.mainApp.status
-        let loginText = login == .enabled ? "已启用" : login == .requiresApproval ? "等待系统批准" : "未启用"
+        let loginText = LoginLauncher.statusText
         group("启动",[
             row("登录时启动",detail:loginText,control:ActionButton(login == .enabled ? "停用…" : login == .requiresApproval ? "打开登录项…" : "启用…") { [weak self] in self?.configureLogin() }),
             row("随 Codex 启动",detail:FollowLauncher.statusText,control:ActionButton("配置…") { [weak self] in FollowLauncher.configure(); self?.render() }),
@@ -564,9 +571,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         guard Bundle.main.bundleURL.pathExtension == "app" else {showError("请从应用包设置登录启动",PetFailure(message:"开发脚本不会注册登录项。请使用构建后的 .app。")); return}
         do {
             switch SMAppService.mainApp.status {
-            case .enabled: try SMAppService.mainApp.unregister()
+            case .enabled: try LoginLauncher.setEnabled(false)
             case .requiresApproval: SMAppService.openSystemSettingsLoginItems()
-            default: try SMAppService.mainApp.register()
+            default: try LoginLauncher.setEnabled(true)
             }
             render()
         } catch {showError("登录启动设置失败",error)}
@@ -748,6 +755,14 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         group("安装",[note("从 GitHub 下载新版，退出桌宠后替换 App。设置和聊天记录保留。")])
     }
     private func advanced() {
+        if let reason = historyRecoveryReason() {
+            group("历史恢复",[note(reason),
+                row("导出历史原文件",control:ActionButton("导出…") { [weak self] in self?.exportOriginalHistory() }),
+                row("重新读取历史",control:ActionButton("重新读取") { [weak self] in
+                    guard let self else {return}
+                    do {try self.onReloadHistory?(); self.render()} catch {showError("历史仍为只读",error)}
+                })])
+        }
         group("设置文件",[row("导出设置",detail:"只包含本页设置，不含会话、凭证或模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),row("导入设置",detail:"导入前检查全部字段；登录启动项不随设置文件改变。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })])
         let data = label("正在统计…"), work = label("正在统计…"), cache = label("正在统计…")
         let total = label("正在统计本应用磁盘存储…")
@@ -808,6 +823,27 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         confirm.hasDestructiveAction = true
         alert.buttons[0].keyEquivalent = "\u{1b}"; confirm.keyEquivalent = ""
         alert.beginDangerousSheet(for:window) { [weak self] response in guard response == .alertSecondButtonReturn, let self else {return}; self.preferences.reset(Array(PetPreferences.defaults.keys)); self.render() }
+    }
+    private func exportCompatibilitySettings() {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "白龙桌宠Swift-配置兼容备份.json"
+        panel.beginSheetModal(for:window) { [weak self] response in
+            guard response == .OK,let url = panel.url,let self else {return}
+            do {
+                var values = [String:Any]()
+                let source = SettingsStorage.compatibilityNotice == nil ? self.preferences.defaults : UserDefaults(suiteName:SettingsStorage.domain)!
+                for key in PetPreferences.defaults.keys {if let value = source.object(forKey:key) {values[key] = value}}
+                let original = self.preferences.defaults.dictionary(forKey:"compatibilityRecoveredValues") ?? [:]
+                values.merge(original) {_,old in old}
+                try JSONSerialization.data(withJSONObject:["settings":values,"schemaVersion":source.integer(forKey:SettingsStorage.schemaKey)],options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)
+            } catch {showError("导出兼容备份失败",error)}
+        }
+    }
+    private func exportOriginalHistory() {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "白龙桌宠Swift-历史原文件.json"
+        panel.beginSheetModal(for:window) { [weak self] response in
+            guard response == .OK,let url = panel.url,let self else {return}
+            do {try self.onExportHistory?(url)} catch {showError("导出历史原文件失败",error)}
+        }
     }
     private func exportSettings() {
         window.makeFirstResponder(nil)

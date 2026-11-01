@@ -1,5 +1,11 @@
 import Foundation
 
+struct PublicAgentMessage:Equatable {
+    let id:String
+    let text:String
+    let isFinal:Bool
+}
+
 struct PublicSnapshot {
     var logical: String, actual: String, turn: String, title: String, cwd: String, historyMode: String
     var status: String, started: Double, messages: String, final: String, alert: String, step: String, error: String
@@ -7,9 +13,10 @@ struct PublicSnapshot {
     var attention: TaskAttention?
     var hasSensitiveInput = false
     var hasSensitiveQuestion = false
+    var agentMessages = [PublicAgentMessage]()
     var isLatest = true
     var key: String { actual+":"+turn }
-    var fingerprint: [String] { [status,messages,final,alert,step,error,attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
+    var fingerprint: [String] { agentMessages.flatMap {[$0.id,$0.text]} + [status,messages,final,alert,step,error,attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
 }
 
 final class DesktopSync {
@@ -111,7 +118,8 @@ final class DesktopSync {
             if chat.store.recordsAutomatically && conversation.localTitle == nil && !value.title.isEmpty && conversation.title != value.title {conversation.title = value.title; changed = true}
             var t = conversation.turns.first(where:{$0.id == value.turn})
             if t == nil {t = Turn(); t!.id = value.turn; t!.owned = false; t!.date = Date(timeIntervalSince1970:value.started); conversation.turns.append(t!); changed = true}
-            let turn = t!, previousAttention = tracked[key]?.attention?.kind, different = fingerprints[key] != value.fingerprint
+            let previous = tracked[key]
+            let turn = t!, previousAttention = previous?.attention?.kind, different = fingerprints[key] != value.fingerprint
             if value.started > 0,turn.date != Date(timeIntervalSince1970:value.started) {
                 turn.date = Date(timeIntervalSince1970:value.started); changed = true
             }
@@ -130,15 +138,26 @@ final class DesktopSync {
                 if value.hasSensitiveInput {turn.sensitiveInputNotice = chat.pet.preferences.sensitiveInputNotice}
                 turn.status = value.status; turn.messages = value.messages; turn.final = value.final; turn.steps = value.attention?.isSensitive == true ? "" : value.alert.isEmpty ? value.step : value.alert; turn.error = value.error; changed = true
             }
+            if different {
+                // 保留消息边界；一次轮询读到多条也逐条入卡，同一 item 的流式变化原地更新。
+                let messages = value.agentMessages.filter {!$0.isFinal}
+                let incoming = previous == nil && value.started < born ? Array(messages.suffix(1)) : messages
+                for message in incoming where previous?.agentMessages.first(where:{$0.id == message.id})?.text != message.text {
+                    chat.pet.say(chat.pet.preferences.statusLine("taskProgressTemplate"),body:message.text,kind:"task",thread:conversation.key,
+                        followsText:false,purpose:.progress,personalizeTitle:false,animateHeading:active,
+                        timing:.init(start:Date(timeIntervalSince1970:value.started),key:key,finished:active ? nil : turn.completedAt,status:active ? nil : value.status),messageID:message.id)
+                }
+            }
             if active {
                 if !running.contains(key) {running.insert(key); chat.pet.taskStarted(key)}
                 let repeatDue = now-(noticedAt[key] ?? 0) >= 300
                 if !skippedAll && (different || repeatDue) {
                     let quiet = now-(changedAt[key] ?? now) >= 90
-                    let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.messages.components(separatedBy:"\n\n").last!
+                    let hasAssistantMessage = value.agentMessages.contains {!$0.isFinal}
+                    let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.agentMessages.last(where:{!$0.isFinal})?.text ?? value.messages
                     let questionIDs = value.attention?.questions.map(\.id).joined(separator:"\u{001f}") ?? ""
                     let signature = (value.attention?.kind.rawValue ?? "progress")+":"+questionIDs+":"+text
-                    if !text.isEmpty && (turn.notices[signature] == nil || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
+                    if (!hasAssistantMessage || value.attention != nil || quiet || value.status.hasPrefix("waiting")) && !text.isEmpty && (turn.notices[signature] == nil || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
                         chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key, followsText:false, purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key), question:.init(questions:value.attention?.questions ?? [],submit:value.attention?.kind == .answer && value.attention?.isSensitive == false && value.attention?.questions.allSatisfy({!$0.id.isEmpty}) == true ? { [weak self] answers,completion in
                             self?.submitAnswers(value,answers:answers,completion:completion)
                         } : nil,skip:{ [weak self] ids in self?.skippedQuestionIDs.formUnion(ids) }))
@@ -149,7 +168,7 @@ final class DesktopSync {
                 running.remove(key)
                 if !turn.finished {
                     turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.final), kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status))
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.final), kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result")
                 }
             }
         }

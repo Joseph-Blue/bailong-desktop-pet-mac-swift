@@ -32,9 +32,9 @@ enum TemplateSyntax {
         return result
     }
     static func migrateOnce(_ defaults:UserDefaults,keys:[String]) {
-        guard defaults.integer(forKey:migrationKey) < 1 else {return}
+        guard defaults.integer(forKey:migrationKey) < 2 else {return}
         let values = Dictionary(uniqueKeysWithValues:keys.compactMap {key in defaults.object(forKey:key).map {(key,$0)}})
         for (key,value) in migrate(values) {defaults.set(value,forKey:key)}
-        defaults.set(1,forKey:migrationKey)
+        defaults.set(2,forKey:migrationKey)
     }
 }

@@ -4,7 +4,7 @@ import CoreImage
 // 只覆盖本应用外观；nil 交给 AppKit 随系统明暗模式实时更新。
 enum AppAppearance {
     static let choices = [("system","跟随系统"),("light","浅色"),("dark","深色")]
-    static var selection: String {UserDefaults.standard.string(forKey:"appearanceMode") ?? "system"}
+    static var selection: String {SettingsStorage.defaults.string(forKey:"appearanceMode") ?? "system"}
     private static let systemColorObserver = NotificationCenter.default.addObserver(forName:NSColor.systemColorsDidChangeNotification,object:nil,queue:.main) { _ in
         NotificationCenter.default.post(name:AppAccent.didChange,object:nil)
     }
@@ -17,7 +17,7 @@ enum AppAppearance {
         }
     }
     static func select(_ value: String) {
-        UserDefaults.standard.set(value,forKey:"appearanceMode")
+        SettingsStorage.defaults.set(value,forKey:"appearanceMode")
         apply()
     }
 }
@@ -25,7 +25,7 @@ enum AppAppearance {
 enum AppAccent {
     static let didChange = Notification.Name("BailongAccentDidChange")
     static let choices = [("system","跟随系统"),("blue","蓝色"),("purple","紫色"),("pink","粉色"),("red","红色"),("orange","橙色"),("yellow","黄色"),("green","绿色"),("gray","石墨色"),("custom","自定义")]
-    static var selection: String {UserDefaults.standard.string(forKey:"accentStyle") ?? "system"}
+    static var selection: String {SettingsStorage.defaults.string(forKey:"accentStyle") ?? "system"}
     static var color: NSColor {color(for:selection)}
     // 用户图三：每个色点中心 19×19 区域的 RGB 众数，排除边缘、双环与阴影。
     static let paletteRGB: [String:(Int,Int,Int)] = [
@@ -34,14 +34,14 @@ enum AppAccent {
     ]
     static func color(for key:String) -> NSColor {
         if key == "system" {return .controlAccentColor}
-        if key == "custom", let rgb = UserDefaults.standard.array(forKey:"accentRGB") as? [Double], rgb.count == 3 {
+        if key == "custom", let rgb = SettingsStorage.defaults.array(forKey:"accentRGB") as? [Double], rgb.count == 3 {
             return NSColor(srgbRed:rgb[0],green:rgb[1],blue:rgb[2],alpha:1)
         }
         let rgb = paletteRGB[key] ?? paletteRGB["purple"]!
         return NSColor(srgbRed:Double(rgb.0)/255,green:Double(rgb.1)/255,blue:Double(rgb.2)/255,alpha:1)
     }
     static func select(_ key: String) {
-        UserDefaults.standard.set(key,forKey:"accentStyle")
+        SettingsStorage.defaults.set(key,forKey:"accentStyle")
         NotificationCenter.default.post(name:didChange,object:nil)
     }
     static func selectionColor(for appearance: NSAppearance) -> NSColor {
@@ -51,7 +51,7 @@ enum AppAccent {
     }
     static func setCustom(_ color: NSColor) {
         guard let rgb = color.usingColorSpace(.sRGB) else {return}
-        UserDefaults.standard.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],forKey:"accentRGB")
+        SettingsStorage.defaults.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],forKey:"accentRGB")
         select("custom")
     }
 }

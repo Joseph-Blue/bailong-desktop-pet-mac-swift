@@ -63,7 +63,6 @@ final class PetController: NSObject, NSMenuDelegate {
     var onVisibility: (Bool) -> Void = { _ in }
     var onGeometry: () -> Void = {}
     var onPreferencesChanged: () -> Void = {}
-    var onAutostart: () -> Void = {}
     var syncStatus: () -> String = { "正在准备读取本机 Codex 的任务记录。" }
     var current: Clip
     var animation: Animation?
@@ -134,9 +133,9 @@ final class PetController: NSObject, NSMenuDelegate {
         let dx = dock == "left" ? exposure * bounds.width - bounds.maxX : size - exposure * bounds.width - bounds.minX
         return rotation.concatenating(CGAffineTransform(translationX: dx * dockProgress, y: 0))
     }
-    init(catalog: Catalog, defaults: UserDefaults = .standard) {
+    init(catalog: Catalog, defaults: UserDefaults = SettingsStorage.defaults) {
         self.defaults = defaults; self.catalog = catalog; current = catalog.idle
-        preferences = defaults === UserDefaults.standard ? .shared : PetPreferences(defaults:defaults)
+        preferences = defaults === SettingsStorage.defaults ? .shared : PetPreferences(defaults:defaults)
         settings = SettingsPanel(preferences:preferences,catalog:catalog)
         window = PetWindow(contentRect: NSRect(x: 0,y: 0,width: 256,height: 256), styleMask: [.borderless,.nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
@@ -192,7 +191,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if self.motion != nil { movementReady = now + 10 }; motion = nil
         loading = true
         // 气泡生命周期由自身计时和明确关闭控制，不随动作切换清空。
-        if mode == "interaction" {say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false)}
+        if mode == "interaction" {say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:true)}
         if preferences.bool("preloadWholeAnimation"), current.id == clip.id,
            let animation, animation.stream == nil, animation.frames.count > 1 {
             decoder.cancel(); loading = false; self.mode = mode
@@ -412,7 +411,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if !kind.hasPrefix("quota") && bubble.kind.hasPrefix("quota") { quotaActive = false }
@@ -421,15 +420,13 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.show(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,scale:Double(bubblePercent)/100,seconds:kind == "quotaLoading" ? 0 : preferences.duration(purpose,text:body),animateHeading:animateHeading || kind == "quotaLoading")
             bubble.purpose = purpose
         } else {
-            // 点击互动共用一张实时概览卡片，重复点击只更新台词，不堆积相同任务列表。
-            let identity = kind == "interaction" ? "interaction-overview" :
-                (timing?.key.map {key in (thread ?? "")+":"+key+":"+String(timing?.start?.timeIntervalSince1970 ?? 0)} ?? UUID().uuidString)
+            let identity = timing?.key.map {key in (thread ?? "")+":"+key+":"+String(timing?.start?.timeIntervalSince1970 ?? 0)+":"+(messageID ?? "status")} ?? UUID().uuidString
             let reply:(() -> Void)? = thread.flatMap {key in attentionAction ? nil : { [weak self] in self?.onReply(key) }}
             bubble.onCardLayout = { [weak self] in self?.placeBubble() }
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 scale:Double(bubblePercent)/100,seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 followsText:followsText,resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply))
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,showsTaskOverview:taskOverview))
         }
         placeBubble()
     }
@@ -559,26 +556,39 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func makeMenu() -> NSMenu {
         let menu = NSMenu(); menu.delegate = self
-        menu.addItem(MenuAction(manualHidden ? "显示桌宠" : "隐藏桌宠") { [weak self] in guard let self else{return}; self.manualHidden.toggle(); self.applyVisibility() })
+        func submenu(_ title:String,symbol:String) -> NSMenu {
+            let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
+            item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
+            item.image?.isTemplate = true
+            let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
+        }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.onComposer() })
         menu.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.onHistory(nil) })
-        menu.addItem(MenuAction("查询额度") { [weak self] in self?.soundOnce(); self?.onQuota() })
+        menu.addItem(MenuAction("查询额度",symbol:"gauge.with.dots.needle.50percent") { [weak self] in self?.soundOnce(); self?.onQuota() })
         menu.addItem(.separator())
+        let animations = submenu("播放动作",symbol:"play.rectangle")
         for (name,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations)] {
-            let item = NSMenuItem(title:name,action:nil,keyEquivalent:""); let sub = NSMenu()
-            for clip in clips { sub.addItem(MenuAction(clip.title) { [weak self] in self?.preview(clip) }) }; item.submenu = sub; menu.addItem(item)
+            let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
+            for clip in clips {group.addItem(MenuAction(clip.title) { [weak self] in self?.preview(clip) })}
+            item.submenu = group; animations.addItem(item)
         }
-        menu.addItem(MenuAction("自主移动",checked:autoMove) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoMove,for:"autoMove") })
-        menu.addItem(MenuAction("播放音效",checked:soundEnabled) { [weak self] in guard let self else {return}; self.preferences.set(!self.soundEnabled,for:"soundEnabled") })
-        menu.addItem(MenuAction("任务气泡提醒",checked:taskBubbles) { [weak self] in guard let self else{return}; self.preferences.set(!self.taskBubbles,for:"taskBubbles") })
-        menu.addItem(MenuAction("全屏时自动隐藏",checked:autoFullscreen) { [weak self] in guard let self else {return}; self.preferences.set(!self.autoFullscreen,for:"autoFullscreen") })
-        menu.addItem(MenuAction("随 Codex 启动设置…") { [weak self] in self?.onAutostart() })
-        menu.addItem(MenuAction("任务同步状态…") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "Codex 任务同步状态"; a.informativeText = self.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:"任务同步"); a.addButton(withTitle:"知道了"); a.applyAccent(); a.runModal() })
-        menu.addItem(MenuAction("应用性能信息统计…",symbol:"chart.xyaxis.line") { [weak self] in self?.showDiagnostics() })
-        menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.showSettings() })
+        let switches = submenu("快捷开关",symbol:"switch.2")
+        switches.addItem(MenuAction("自主移动",checked:autoMove) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoMove,for:"autoMove") })
+        switches.addItem(MenuAction("播放音效",checked:soundEnabled) { [weak self] in guard let self else{return}; self.preferences.set(!self.soundEnabled,for:"soundEnabled") })
+        switches.addItem(MenuAction("任务气泡提醒",checked:taskBubbles) { [weak self] in guard let self else{return}; self.preferences.set(!self.taskBubbles,for:"taskBubbles") })
+        switches.addItem(MenuAction("全屏时自动隐藏",checked:autoFullscreen) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoFullscreen,for:"autoFullscreen") })
+        switches.addItem(.separator())
+        switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak self] in self?.showSettings(section:.general) })
+        menu.addItem(MenuAction(manualHidden ? "显示桌宠" : "隐藏桌宠",symbol:manualHidden ? "eye" : "eye.slash") { [weak self] in guard let self else{return}; self.manualHidden.toggle(); self.applyVisibility() })
         menu.addItem(.separator())
-        menu.addItem(MenuAction("关于"+preferences.appName+"…") { [weak self] in self?.showSettings(section:.about) })
-        menu.addItem(MenuAction("检查更新…",symbol:"arrow.triangle.2.circlepath") {UpdateWindow.show()})
+        menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.showSettings() })
+        let tools = submenu("工具与帮助",symbol:"questionmark.circle")
+        tools.addItem(MenuAction("任务同步状态…",symbol:"arrow.triangle.2.circlepath") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "Codex 任务同步状态"; a.informativeText = self.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:"任务同步"); a.addButton(withTitle:"知道了"); a.applyAccent(); a.runModal() })
+        tools.addItem(MenuAction("性能统计…",symbol:"chart.xyaxis.line") { [weak self] in self?.showDiagnostics() })
+        tools.addItem(.separator())
+        tools.addItem(MenuAction("检查更新…",symbol:"arrow.down.circle") {UpdateWindow.show()})
+        tools.addItem(MenuAction("关于"+preferences.appName+"…",symbol:"info.circle") { [weak self] in self?.showSettings(section:.about) })
+        menu.addItem(.separator())
         menu.addItem(MenuAction("退出"+preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak self] in self?.onQuit() })
         return menu
     }

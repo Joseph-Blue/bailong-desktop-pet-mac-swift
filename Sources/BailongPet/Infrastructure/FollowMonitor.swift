@@ -53,7 +53,7 @@ final class FollowMonitor {
         NSWorkspace.shared.openApplication(at: applicationURL, configuration: config) { [weak self] _, error in
             DispatchQueue.main.async {
                 self?.opening = false
-                if let error { NSLog("白龙娘跟随启动失败：%@", error.localizedDescription) }
+                if let error { NSLog("白龙桌宠Swift跟随启动失败：%@", error.localizedDescription) }
             }
         }
     }

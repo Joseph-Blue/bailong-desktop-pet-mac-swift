@@ -12,6 +12,8 @@ final class ChatController {
     var running: (Conversation,Turn)?
     var cancelled = false, closing = false
     var messages = [String:String](), messageOrder = [String](), summaries = [String:String](), steps = [String:String]()
+    private var previewedMessages = [String:String]()
+    private var finalMessageID:String?
     var lastPreview = "", lastKind = "output"
     var saveError: String?
     var updateTimer: Timer?
@@ -33,6 +35,13 @@ final class ChatController {
     private var desktopSending = [String:UUID]()
     private var desktopUnconfirmed = Set<String>()
     private var desktopReplyNotes = [String:String]()
+    func reloadHistory() throws {
+        guard running == nil && desktopSending.isEmpty else {throw PetFailure(message:"请等待当前任务和发送完成后重新读取历史。")}
+        let key = selected.key
+        try store.reload(recording:pet.preferences.bool("recordHistory"))
+        selected = store.conversations.first(where:{$0.key == key}) ?? store.conversations.last ?? store.create(cwd:LocalStorage.workspace.path)
+        refresh()
+    }
     func clearLocalData() throws {
         guard running == nil && desktopSending.isEmpty else {throw PetFailure(message:"请先结束当前任务或等待消息发送完成，再清空数据。")}
         saveTimer?.invalidate(); saveTimer = nil
@@ -48,6 +57,9 @@ final class ChatController {
         let workspace = Paths.data.appendingPathComponent("Workspace")
         try FileManager.default.createDirectory(at:workspace,withIntermediateDirectories:true)
         selected = store.conversations.last(where:{!$0.external}) ?? store.create(cwd:workspace.path)
+        pet.settings.historyRecoveryReason = { [weak self] in self?.store.readOnlyReason }
+        pet.settings.onReloadHistory = { [weak self] in try self?.reloadHistory() }
+        pet.settings.onExportHistory = { [weak self] url in try self?.store.exportOriginal(to:url) }
         store.onError = { [weak self] error in
             guard let self else{return}
             self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史保存失败，请检查磁盘空间。"; self.ui.status.isHidden = false
@@ -119,6 +131,8 @@ final class ChatController {
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
                 tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt))
             }
+            // 去重只作用于实时任务行，不合并任何消息或历史卡片。
+            tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
             let active = tasks.filter(\.active).sorted {$0.start < $1.start}
             let recent = tasks.filter {["completed","failed","interrupted","cancelled","canceled"].contains($0.status)}
                 .sorted {($0.end ?? $0.start) > ($1.end ?? $1.start)}
@@ -141,8 +155,9 @@ final class ChatController {
     }
     func refresh() {
         ui.refresh(store.conversations,selected:selected,busy:running != nil,
-            sending:desktopSending[selected.key] != nil,unconfirmed:desktopUnconfirmed.contains(selected.key),replyNote:desktopReplyNotes[selected.key],replyMode:desktopReplyTarget(selected)?.mode,modelNote:desktopModelNotes[selected.key])
+            sending:desktopSending[selected.key] != nil,unconfirmed:desktopUnconfirmed.contains(selected.key),replyNote:desktopReplyNotes[selected.key],replyMode:desktopReplyTarget(selected)?.mode,modelNote:desktopModelNotes[selected.key],readOnly:store.isReadOnly)
         ui.status.stringValue = selected.external ? "回复至："+selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ") : pet.preferences.fixedText(saveError != nil ? "历史保存失败，请检查磁盘空间。" : running != nil ? (cancelled ? "正在停止任务…" : "主人，我正在认真忙着呢…") : "主人，今天想让我帮什么忙呀？")
+        if store.isReadOnly {ui.status.stringValue = "历史处于只读模式，请在设置 → 高级导出原文件或重新读取。"; ui.status.isHidden = false}
     }
     func approvalParent() -> NSWindow {
         if ui.history.isVisible { return ui.history }
@@ -325,6 +340,7 @@ final class ChatController {
         }
     }
     func submit(_ text: String, closeComposer: Bool = false) {
+        guard !store.isReadOnly else {pet.showSettings(section:.advanced); return}
         if selected.external {submitDesktop(text,fromComposer:closeComposer); return}
         guard running == nil && !closing && !ui.models.loading else{return}
         let modelParams: [String:Any]
@@ -334,7 +350,7 @@ final class ChatController {
         let c = selected, turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
-        running = (c,turn); cancelled = false; messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
+        running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
         pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, timing:.init(start:turn.date,key:"own")); persist()
@@ -396,7 +412,7 @@ final class ChatController {
         switch item["type"] as? String {
         case "agentMessage":
             if messages[id] == nil {messageOrder.append(id)}; messages[id] = item["text"] as? String ?? ""; lastKind = "output"
-            if item["phase"] as? String == "final_answer" {running?.1.final = item["text"] as? String ?? ""}
+            if item["phase"] as? String == "final_answer" {finalMessageID = id; running?.1.final = item["text"] as? String ?? ""}
         case "reasoning":
             // 只读取协议公开 summary，不读取 content 或加密推理字段。
             for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {summaries["\(id):\(index)"] = part as? String ?? (part as? [String:Any])?["text"] as? String ?? ""}; lastKind = "summary"
@@ -414,6 +430,8 @@ final class ChatController {
             guard let self else{return}; self.updateTimer = nil; self.updateText(); self.refresh(); self.scheduleSave()
             guard let (c,t) = self.running else{return}
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
+            self.presentAgentMessages(conversation:c,turn:t)
+            guard self.lastKind != "output" else {return}
             let text = self.lastKind == "summary" ? t.summary : self.lastKind == "progress" ? t.steps : t.messages
             if !text.isEmpty && text != self.lastPreview {
                 self.lastPreview = text
@@ -421,6 +439,14 @@ final class ChatController {
             }
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)
+    }
+    private func presentAgentMessages(conversation:Conversation,turn:Turn) {
+        for id in messageOrder where id != finalMessageID {
+            guard let text = messages[id],!text.isEmpty,previewedMessages[id] != text else {continue}
+            previewedMessages[id] = text
+            pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:text,kind:"task",thread:conversation.key,personalizeTitle:false,
+                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:id)
+        }
     }
     func scheduleSave() {
         guard saveTimer == nil else{return}
@@ -430,7 +456,8 @@ final class ChatController {
     func finish(_ status: String, error: String = "") {
         guard let (c,t) = running else{return}
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
-        if t.final.isEmpty {t.final = messageOrder.last.flatMap{messages[$0]} ?? ""}
+        if t.final.isEmpty {finalMessageID = messageOrder.last; t.final = finalMessageID.flatMap{messages[$0]} ?? ""}
+        presentAgentMessages(conversation:c,turn:t)
         running = nil; requestCoordinator.dismiss(); pet.bubble.resolveQuestions(taskKey:"own"); pet.taskEnded("own",status:status); persist()
         let title = pet.preferences.taskResultLine(status)
         if !error.isEmpty && status != "completed" && !closing {
@@ -443,7 +470,7 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:t.final, kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status))}
+        } else {pet.say(title, body:t.final, kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:finalMessageID ?? "result")}
         if closing {finishShutdown()}
     }
     func stop() {

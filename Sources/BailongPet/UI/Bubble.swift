@@ -94,7 +94,7 @@ final class Bubble {
         // 只保留本次运行的近期卡片；等待回答的卡片和正在阅读的卡片不被裁掉。
         while cards.count > Int(preferences.number("bubbleCardLimit")),let old = cards.firstIndex(where:{$0.id != currentID && $0.id != message.id && !$0.attentionAction}) {cards.remove(at:old)}
         cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
-        if !wasVisible || cardIndex == nil || message.kind == "interaction" && !submittingQuestion {cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()}
+        if !wasVisible || cardIndex == nil || (message.kind == "interaction" || message.attentionAction) && !submittingQuestion {cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()}
         else if currentID == message.id {renderCard()}
         else {updateCardNavigation(); layout(bodyHeight:layoutBodyHeight); onCardLayout()}
     }
@@ -132,7 +132,7 @@ final class Bubble {
              attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true)
         relatedConversation = card.thread; purpose = card.purpose
         cards[index].form = questionForm
-        if card.kind == "interaction" && preferences.bool("showTaskOverview") {
+        if card.showsTaskOverview && cards.last(where:{$0.showsTaskOverview})?.id == card.id && preferences.bool("showTaskOverview") {
             let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:scroll.frame.width),scale:scale,provider:taskProvider)
             taskList = list; scroll.documentView = list
             list.onResize = { [weak self] height in guard let self else {return}; self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout() }

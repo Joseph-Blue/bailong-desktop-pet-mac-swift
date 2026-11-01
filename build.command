@@ -1,4 +1,4 @@
 #!/bin/zsh
 set -e
 cd "${0:A:h}"
-exec ./scripts/build.sh
+exec ./scripts/build.sh "$@"

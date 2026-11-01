@@ -27,7 +27,7 @@ if (( rebuild )); then
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>com.bailongpet.appkit</string>
-<key>CFBundleName</key><string>白龙娘桌宠MacOS-Swift版（开发）</string>
+<key>CFBundleName</key><string>白龙桌宠Swift（开发）</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>CFBundleAllowMixedLocalizations</key><true/>

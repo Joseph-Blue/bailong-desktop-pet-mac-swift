@@ -10,7 +10,7 @@ struct RecoveryReport {
     var facts: [String] = []
     let date = Date()
     var text: String {
-        var lines = ["白龙娘桌宠错误报告", "版本："+Paths.version,
+        var lines = [PetPreferences.shared.appName+"错误报告", "版本："+Paths.version,
                      "系统："+ProcessInfo.processInfo.operatingSystemVersionString,
                      "架构："+architecture, "时间："+date.formatted(date:.numeric,time:.standard),
                      "模块："+module, "操作："+operation, "状态："+title, "说明："+message]

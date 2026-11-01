@@ -22,7 +22,7 @@ xcrun swiftc -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache Sources/BailongPet/Infrastructure/FollowMonitor.swift Tools/FollowHelper/main.swift \
     -framework AppKit -o ".build/$target_arch/BailongFollow"
 
-app="$output/白龙娘桌宠MacOS-Swift版.app"
+app="$output/白龙桌宠Swift.app"
 staging="$(mktemp -d "$output/.pet-XXXXXX")"
 mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources/outputs/白龙桌宠素材"
 cp ".build/$target_arch/BailongPet" "$staging/Contents/MacOS/BailongPet"
@@ -37,8 +37,8 @@ cat > "$staging/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>com.bailongpet.appkit</string>
-<key>CFBundleName</key><string>白龙娘桌宠MacOS-Swift版</string>
-<key>CFBundleDisplayName</key><string>白龙娘桌宠MacOS-Swift版</string>
+<key>CFBundleName</key><string>白龙桌宠Swift</string>
+<key>CFBundleDisplayName</key><string>白龙桌宠Swift</string>
 <key>CFBundleExecutable</key><string>BailongPet</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
@@ -60,7 +60,7 @@ cat > "$helper/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>com.bailongpet.appkit.follow-helper</string>
-<key>CFBundleName</key><string>白龙娘跟随启动监测器</string>
+<key>CFBundleName</key><string>白龙桌宠Swift跟随启动监测器</string>
 <key>CFBundleExecutable</key><string>BailongFollow</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>

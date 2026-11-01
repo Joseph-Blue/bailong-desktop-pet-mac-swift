@@ -28,6 +28,7 @@ struct BubbleCard {
     var details:() -> Void
     var codex:() -> Void
     var reply:(() -> Void)?
+    var showsTaskOverview = false
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
 }

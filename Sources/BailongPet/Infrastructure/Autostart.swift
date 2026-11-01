@@ -1,6 +1,72 @@
 import AppKit
+import ServiceManagement
+
+enum StartupLocation {
+    static func validate() throws {
+        guard Bundle.main.bundleURL.pathExtension == "app" else {
+            throw PetFailure(message:"请从构建完整的 .app 设置启动项。")
+        }
+        guard !Bundle.main.bundleURL.path.contains("/AppTranslocation/") else {
+            throw PetFailure(message:"当前应用位于系统临时运行位置。请在访达中移到你选择的固定目录，从那里打开后设置启动项。")
+        }
+    }
+    static func isOlder(than recorded:String?) -> Bool {
+        guard let recorded,let previous = SemanticVersion(recorded),let current = SemanticVersion(Paths.version) else {return false}
+        return current < previous
+    }
+}
+
+// 启用意图和绑定位置属于本机启动注册，不导入／导出为普通设置。
+enum LoginLauncher {
+    private static let requestedKey = "loginLaunchRequested"
+    private static let pathKey = "loginLaunchBundlePath"
+    private static let versionKey = "loginLaunchVersion"
+    private static var defaults:UserDefaults {PetPreferences.shared.defaults}
+    private(set) static var lastError:String?
+    static var statusText:String {
+        if let lastError {return "启动项更新失败："+lastError}
+        switch SMAppService.mainApp.status {
+        case .enabled: return "已启用，打开新版时自动更新启动项"
+        case .requiresApproval: return "等待系统批准"
+        default: return "未启用"
+        }
+    }
+    private static func rememberRegistration() {
+        defaults.set(true,forKey:requestedKey)
+        defaults.set(Bundle.main.bundleURL.path,forKey:pathKey)
+        defaults.set(Paths.version,forKey:versionKey)
+        lastError = nil
+    }
+    static func setEnabled(_ enabled:Bool) throws {
+        try StartupLocation.validate()
+        if enabled {
+            try SMAppService.mainApp.register(); rememberRegistration()
+        } else {
+            try SMAppService.mainApp.unregister()
+            defaults.set(false,forKey:requestedKey); defaults.removeObject(forKey:pathKey); defaults.removeObject(forKey:versionKey)
+            lastError = nil
+        }
+    }
+    static func refreshExistingRegistration() {
+        guard Bundle.main.bundleURL.pathExtension == "app",!StartupLocation.isOlder(than:defaults.string(forKey:versionKey)) else {return}
+        let status = SMAppService.mainApp.status
+        // requiresApproval 同时表示系统设置中撤销了许可，不能自动重新启用。
+        guard status != .requiresApproval else {return}
+        if status == .enabled {defaults.set(true,forKey:requestedKey)}
+        guard defaults.bool(forKey:requestedKey) else {return}
+        let changed = defaults.string(forKey:pathKey) != Bundle.main.bundleURL.path || defaults.string(forKey:versionKey) != Paths.version
+        if status == .notRegistered && !changed {defaults.set(false,forKey:requestedKey); return}
+        guard changed || status == .notFound else {return}
+        do {
+            try StartupLocation.validate()
+            if status == .enabled {try SMAppService.mainApp.unregister()}
+            try SMAppService.mainApp.register(); rememberRegistration()
+        } catch {lastError = error.localizedDescription}
+    }
+}
 
 final class FollowLauncher {
+    private(set) static var lastUpdateError:String?
     static let label = "com.bailongpet.appkit.follow"
     static let plist = URL(fileURLWithPath: NSHomeDirectory()+"/Library/LaunchAgents/"+label+".plist")
     static var helper: URL {
@@ -24,8 +90,10 @@ final class FollowLauncher {
         }
     }
     static var statusText: String {
+        if let lastUpdateError {return "启动项更新失败："+lastUpdateError}
         guard FileManager.default.fileExists(atPath: plist.path) else { return "打开 Codex 或 ChatGPT 时启动桌宠" }
         do {
+            if SMAppService.statusForLegacyPlist(at:plist) == .requiresApproval {return "请在系统登录项中允许跟随启动"}
             let config = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as? [String: Any]
             let arguments = config?["ProgramArguments"] as? [String] ?? []
             if arguments.contains(where: { $0.contains("/AppTranslocation/") }) { return "需要修复：旧配置指向临时运行位置" }
@@ -33,6 +101,21 @@ final class FollowLauncher {
             let result = try launchctl(["print", service])
             return result.status == 0 ? "已启用跟随启动" : "需要修复：监测器未加载（\(result.status)）"
         } catch { return "无法读取启动状态：\(error.localizedDescription)" }
+    }
+    static func refreshExistingRegistration() {
+        guard Bundle.main.bundleURL.pathExtension == "app",FileManager.default.fileExists(atPath:plist.path) else {return}
+        // 仅维护已经存在的用户启动项；系统撤销许可时不重新加载。
+        guard SMAppService.statusForLegacyPlist(at:plist) != .requiresApproval else {return}
+        do {
+            guard let config = try PropertyListSerialization.propertyList(from:Data(contentsOf:plist),format:nil) as? [String:Any],
+                  config["Label"] as? String == label,let arguments = config["ProgramArguments"] as? [String] else {
+                throw PetFailure(message:"跟随启动配置格式错误。请在通用设置中修复。")
+            }
+            guard config["Disabled"] as? Bool != true else {return}
+            let version = config["BailongVersion"] as? String
+            guard !StartupLocation.isOlder(than:version),arguments != expectedArguments || version != Paths.version else {return}
+            try install()
+        } catch {lastUpdateError = error.localizedDescription}
     }
     static func configure() {
         let exists = FileManager.default.fileExists(atPath: plist.path)
@@ -47,6 +130,7 @@ final class FollowLauncher {
         let response = alert.runModal()
         guard response != .alertFirstButtonReturn else { return }
         do {
+            lastUpdateError = nil
             if response == .alertThirdButtonReturn { try disable() }
             else { try install() }
         } catch { showError("跟随启动设置失败", error) }
@@ -56,11 +140,9 @@ final class FollowLauncher {
         if FileManager.default.fileExists(atPath: plist.path) { try FileManager.default.removeItem(at: plist) }
     }
     private static func install() throws {
-        guard Bundle.main.bundleURL.pathExtension == "app", FileManager.default.isExecutableFile(atPath: helper.path) else {
+        try StartupLocation.validate()
+        guard FileManager.default.isExecutableFile(atPath: helper.path) else {
             throw PetFailure(message: "请从构建完整的 .app 设置跟随启动。")
-        }
-        guard !Bundle.main.bundleURL.path.contains("/AppTranslocation/") else {
-            throw PetFailure(message: "当前应用正在系统临时位置运行。请退出桌宠，在访达中将 .app 拖到“应用程序”等固定位置，再从那里打开并设置跟随启动。")
         }
         let manager = FileManager.default
         let oldData = manager.fileExists(atPath: plist.path) ? try Data(contentsOf: plist) : nil
@@ -68,11 +150,11 @@ final class FollowLauncher {
         if loaded { try command(["bootout", service]) }
         do {
             let config: [String: Any] = ["Label": label, "ProgramArguments": expectedArguments,
-                "RunAtLoad": true, "KeepAlive": true, "ThrottleInterval": 10, "ProcessType": "Background"]
+                "RunAtLoad": true, "KeepAlive": true, "ThrottleInterval": 10, "ProcessType": "Background", "BailongVersion": Paths.version]
             try manager.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
             try PropertyListSerialization.data(fromPropertyList: config, format: .xml, options: 0).write(to: plist, options: .atomic)
             try command(["bootstrap", "gui/\(getuid())", plist.path])
-            FollowSessions.clearManualExit()
+            FollowSessions.clearManualExit(); lastUpdateError = nil
         } catch {
             let failure = error
             // 重新注册失败时还原用户原来的设置，错误仍明确显示。
