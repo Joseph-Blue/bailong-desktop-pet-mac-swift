@@ -139,16 +139,11 @@ final class AboutPageController: NSViewController {
         paragraph("感谢原作者及以下项目。本页分别记录原作、素材和软件组件的来源；它们各自适用的许可并不相同。",to:text,color:.secondaryLabelColor)
 
         heading("原作 · GPT白龙娘动态桌宠",to:text)
-        paragraph("作者：jingh12312-rgb。行为与文案参考 v0.5.1 源码。原作 README 声明尚未指定开源许可证，不能将公开源码等同于任意使用或再分发授权。",to:text)
+        paragraph("作者：jingh12312-rgb。行为与文案参考 v0.5.1 源码。原作 README 声明尚未指定开源许可证。",to:text)
         link("原作仓库与说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
 
         heading("角色动画与应用图标",to:text)
-        paragraph("角色动画来自原作者 v0.5.1 发布包。应用图标由待机画面制作；本项目对部分素材的本地处理不改变其原始来源。上游 ASSETS.md 未额外授予美术素材商用或再分发许可。",to:text)
-        link("原作素材说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet/blob/main/ASSETS.md",to:text)
-
-        heading("点击音效",to:text)
-        paragraph("来自原作 app/sounds/click.wav。随附来源说明标注为程序合成的柔和点击音，无外部录音采样；来源说明未另列许可证。",to:text)
-        link("音效及来源说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/main/app/sounds",to:text)
+        paragraph("角色动画与应用图标来自原作者 v0.5.1 发布包。",to:text)
 
         heading("原生透明动画",to:text)
         paragraph("角色动画使用 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 与 Core Image 解码和缩放。PNG 素材接入由 AVAssetWriter 和 Apple avconvert 完成。",to:text)
@@ -159,7 +154,7 @@ final class AboutPageController: NSViewController {
         link("SQLite 官方版权说明",url:"https://www.sqlite.org/copyright.html",to:text)
 
         heading("macOS 界面设计参考 · macos-golden-gate-design",to:text)
-        paragraph("设置、侧栏、工具栏与原生控件布局参考 gambadio 的 macos-golden-gate-design 技能。该技能声明采用 MIT 许可证，用于开发阶段的设计与审查，不作为应用运行依赖。",to:text)
+        paragraph("设置、侧栏、工具栏与原生控件布局参考 gambadio 的 macos-golden-gate-design 技能。该技能声明采用 MIT 许可证，用于开发阶段的设计与审查。",to:text)
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)
 
         heading("开发技术与系统服务",to:text)
