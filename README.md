@@ -139,9 +139,17 @@ Codex 工作时，桌宠会显示回复和需要你处理的提醒。单击桌�
 
 流式播放和整段预加载可按设备调整；独立性能窗口提供当前占用与帧率。实现细节见 [来源与架构](docs/来源与架构.md)。
 
+## 开发分支与资源
+
+`main` 保留正式版源码与使用说明；[joseph/dev 开发分支](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/joseph/dev) 用于后续开发，保留完整开发变更、调查文档与待办，不提供开发版 App 下载。
+
+开发者可直接下载 [开发资源 ZIP（约 111 MiB）](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/dev-assets-2026-11-02/bailong-dev-assets-2026-11-02.zip)，在仓库根目录解压获得 `local-assets/`。资源包包含 35 段透明 HEVC、素材清单、`samples.json`、音效、图标和来源说明；详细步骤见 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md)。
+
+[资源发布页](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/dev-assets-2026-11-02) 标记为 Pre-release，供源码开发使用，不包含应用程序，也不会进入正式版更新提醒。普通用户使用上方的正式版下载入口即可。
+
 ## 从源码构建
 
-需要 Apple Command Line Tools，以及以下本地资源：
+需要 Apple Command Line Tools 或 Xcode，以及包含 macOS 27 API 的 SDK；当前使用 SDK 27.2、Apple Swift 6.4.2。应用运行目标仍为 macOS 14 起。以下资源可从上述开发资源包获得：
 
 ```text
 local-assets/
@@ -154,7 +162,7 @@ local-assets/
   openai-logo.png
 ```
 
-资源不存放在 Git 中，可从原生 HEVC 版 App 的 `Contents/Resources` 提取。PNG 素材接入见 [原生素材工具](Tools/NativeHEVC/README.md)。
+资源不存放在 Git 中，也可从原生 HEVC 版 App 的 `Contents/Resources` 提取运行资源。独立预览和 PNG 替换另外需要开发资源包中的 `samples.json`。PNG 素材接入见 [原生素材工具](Tools/NativeHEVC/README.md)。
 
 ```sh
 ./scripts/build.sh arm64           # 构建 Apple Silicon App
@@ -162,7 +170,7 @@ local-assets/
 ./scripts/run-dev.sh               # 开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码构建入口为 `./scripts/build.sh x86_64`。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码入口保留；因缺少符合要求的真机环境，Intel 适配与交付暂时搁置。
 
 ## 来源与反馈
 
