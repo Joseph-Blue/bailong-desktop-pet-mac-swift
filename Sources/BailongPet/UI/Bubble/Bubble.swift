@@ -33,16 +33,17 @@ final class Bubble {
     private var approval:ApprovalPresentation?
     private var previousCard:ActionButton!, nextCard:ActionButton!, replyButton:ActionButton!
     private let cardCount = NSTextField(labelWithString:"")
-    private var cards = [BubbleCard]()
-    private var cardIndex:Int?
+    private let cardStore = BubbleCardStore()
+    private var cards:[BubbleCard] {cardStore.cards}
+    private var cardIndex:Int? {cardStore.cardIndex}
     private var renderedCardID:String?
     private var refreshStandalone:(() -> Void)?
-    private var isBrowsingCards = false
+    private var isBrowsingCards:Bool {cardStore.isBrowsingCards}
     private var submittingQuestion:Bool {questionForm?.isSubmitting == true}
     var onCardLayout:() -> Void = {}
     var taskProvider:() -> BubbleTaskOverview = {BubbleTaskOverview(status:"任务同步尚未初始化")}
     private var taskList:BubbleTaskList?
-    private var timer: Timer?
+    private let countdown = BubbleCountdown()
     private var headingTimer: Timer?
     private var plainHeading = ""
     private var headingPhase = 0
@@ -96,8 +97,7 @@ final class Bubble {
             card.attentionAction && (taskKey == nil || card.timing?.key == taskKey) && (form == nil || card.form === form)
         }.map(\.id)
         let currentID = cardIndex.map {cards[$0].id}
-        cards.removeAll {affected.contains($0.id)}
-        cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
+        cardStore.remove {affected.contains($0.id)}
         if (taskKey == nil && form == nil) || currentID.map({affected.contains($0)}) == true {
             questionForm = nil; questionModels = []; questionSize = nil; onQuestionSubmit = nil
             pendingAttention = false; questionTaskKey = nil
@@ -106,60 +106,29 @@ final class Bubble {
     }
     func removeActivity(taskKey:String) {
         let currentID = cardIndex.map {cards[$0].id}
-        cards.removeAll {$0.timing?.key == taskKey && $0.id.hasSuffix(":activity")}
-        cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
+        cardStore.remove {$0.timing?.key == taskKey && $0.id.hasSuffix(":activity")}
         if currentID != nil && cardIndex == nil {hide()}
         else {updateCardNavigation()}
     }
     func discardCards(conversation:String? = nil) {
-        let currentID = cardIndex.map {cards[$0].id}
-        cards.removeAll {conversation == nil || $0.thread == conversation}
-        cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
+        cardStore.remove {conversation == nil || $0.thread == conversation}
         if cardIndex == nil {hide()}
         updateCardNavigation()
     }
     private func saveCardForm() {
-        guard let index = cardIndex,cards.indices.contains(index) else {return}
-        cards[index].form = questionForm; cards[index].questionSize = questionSize
+        cardStore.saveForm(questionForm,size:questionSize)
     }
     func present(_ message:BubbleCard,select:Bool = false) {
         saveCardForm()
-        let currentID = cardIndex.map {cards[$0].id}, wasVisible = visible
-        if let index = cards.firstIndex(where:{$0.id == message.id}) {
-            var updated = message
-            if let old = cards[index].approval,let new = message.approval,old.request.identity == new.request.identity,old.request.details == new.request.details {updated.approval = old}
-            if message.question?.submit != nil {
-                updated.form = cards[index].form; updated.questionSize = cards[index].questionSize
-            }
-            if message.showsTaskOverview {cards.remove(at:index); cards.append(updated)}
-            else {cards[index] = updated}
-        } else {cards.append(message)}
-        // 只保留本次运行的近期卡片；等待回答的卡片和正在阅读的卡片不被裁掉。
-        while cards.count > Int(preferences.number("bubbleCardLimit")),let old = cards.firstIndex(where:{$0.id != currentID && $0.id != message.id && !$0.attentionAction}) {cards.remove(at:old)}
-        cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
-        let current = cardIndex.map {cards[$0]}
-        // 概览与随机台词让位于任务消息；阅读对话、填写及提交问卷时不自动切卡。
-        let protectsCurrent = submittingQuestion || questionForm != nil || (isBrowsingCards && current?.priority != .companion)
-        let replacesCurrent = current.map {
-            message.priority.rawValue > $0.priority.rawValue ||
-            (message.priority == $0.priority && message.priority != .request)
-        } ?? false
-        // 主动发送或按键召回概览可选中新卡，但不打断待处理请求或问卷。
-        let requestedCard = (select || message.showsTaskOverview) && !pendingAttention && questionForm == nil && !submittingQuestion
-        if !wasVisible || cardIndex == nil || requestedCard || (!protectsCurrent && replacesCurrent) {
-            if currentID != message.id {isBrowsingCards = false}
-            cardIndex = cards.firstIndex(where:{$0.id == message.id}); renderCard()
-        }
-        else if currentID == message.id {renderCard()}
+        let render = cardStore.present(message,select:select,limit:Int(preferences.number("bubbleCardLimit")),
+            wasVisible:visible,protectsInput:submittingQuestion || questionForm != nil,pendingAttention:pendingAttention)
+        if render {renderCard()}
         else {updateCardNavigation(); layout(bodyHeight:layoutBodyHeight); onCardLayout()}
     }
     func refreshCardPreferences() {
         saveCardForm()
         let currentID = cardIndex.map {cards[$0].id}
-        if !preferences.bool("showTaskOverview") {cards.removeAll {$0.showsTaskOverview}}
-        while cards.count > Int(preferences.number("bubbleCardLimit")),
-              let old = cards.firstIndex(where:{$0.id != currentID && !$0.attentionAction}) {cards.remove(at:old)}
-        cardIndex = currentID.flatMap {id in cards.firstIndex(where:{$0.id == id})}
+        cardStore.applyLimit(Int(preferences.number("bubbleCardLimit")),showOverview:preferences.bool("showTaskOverview"))
         if visible {
             if cardIndex != nil {renderCard()}
             else if currentID != nil {hide()}
@@ -167,7 +136,7 @@ final class Bubble {
     }
     @discardableResult func refreshAppearance() -> Bool {
         saveCardForm()
-        for index in cards.indices {cards[index].questionSize = nil}
+        cardStore.clearQuestionSizes()
         questionSize = nil
         guard visible else {return false}
         if cardIndex != nil {renderCard(refreshingAppearance:true)}
@@ -177,9 +146,9 @@ final class Bubble {
         onCardLayout(); return true
     }
     private func navigateCard(_ delta:Int) {
-        guard !submittingQuestion,let index = cardIndex,cards.indices.contains(index+delta) else {return}
-        isBrowsingCards = true
-        saveCardForm(); cardIndex = index+delta; renderCard()
+        guard !submittingQuestion else {return}
+        saveCardForm()
+        if cardStore.navigate(delta) {renderCard()}
     }
     private func updateCardNavigation() {
         let hasCard = cardIndex != nil
@@ -204,10 +173,10 @@ final class Bubble {
              attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"))
         relatedConversation = card.thread; purpose = card.purpose
         renderedCardID = card.id
-        cards[index].form = questionForm
+        cardStore.saveForm(questionForm,size:questionSize)
         if changedCard {scroll.showTop()}
         if card.showsTaskOverview && preferences.bool("showTaskOverview") {
-            let list = BubbleTaskList(width:GutterScrollView.documentWidth(for:layoutWidth-32*scale),scale:scale*preferences.number("messageFontSize")/13,provider:{ [weak self] in
+            let list = BubbleTaskList(width:bodyLayout.contentWidth,scale:scale*preferences.number("messageFontSize")/13,provider:{ [weak self] in
                 self?.taskProvider() ?? BubbleTaskOverview(status:"任务同步已停止")
             })
             taskList = list
@@ -244,6 +213,7 @@ final class Bubble {
         // 正文宽度由气泡布局统一提供，不随滚动条显隐自动拉伸。
         text.isVerticallyResizable = false; text.isHorizontallyResizable = false; text.autoresizingMask = []
         text.textContainer?.widthTracksTextView = true; text.textContainerInset = NSSize(width:0,height:2)
+        text.textContainer?.lineFragmentPadding = 0 // 水平留白由 BubbleBodyLayout 统一分配。
         text.textColor = .labelColor
         scroll.setBody(text,height:0)
         closeButton.onClose = { [weak self] in self?.hide(); self?.onClose() }
@@ -344,10 +314,12 @@ final class Bubble {
         return max(usesCustomAspect ? aspectWidth : 320*scale,320*scale,32*scale+gap+2*column,questionWidth)
     }
     private var layoutWidth:CGFloat {min(max(questionSize?.width ?? 0,minimumLayoutWidth),kind == "progressToast" ? 360*scale : .greatestFiniteMagnitude,placementArea?.width ?? .greatestFiniteMagnitude)}
+    private var bodyLayout:BubbleBodyLayout {BubbleBodyLayout(width:layoutWidth,scale:scale)}
     private func layout(bodyHeight: Double) {
         layoutBodyHeight = bodyHeight
         configureButtons()
         let w = layoutWidth, margin = 16*scale
+        let bodyLayout = self.bodyLayout
         if !questionModels.isEmpty {window.minSize = NSSize(width:min(minimumLayoutWidth,placementArea?.width ?? minimumLayoutWidth),height:220*scale)}
         let hasElapsed = taskStartedAt != nil
         let elapsedWidth = hasElapsed ? elapsedGroupWidth : 0
@@ -375,7 +347,7 @@ final class Bubble {
             self.closeButton.frame = NSRect(x:margin-2*scale,y:height-margin-firstLineHeight/2-closeSide/2,width:closeSide,height:closeSide)
             self.closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
             let textHeight = max(0,height-chromeHeight)
-            let viewport = NSRect(x:margin,y:margin+footer,width:w-2*margin,height:ceil(textHeight))
+            let viewport = bodyLayout.viewport(y:margin+footer,height:ceil(textHeight))
             self.scroll.setViewport(viewport)
             self.scroll.isHidden = bodyHeight <= 0
             // 两列共享边界与控件高度；翻页留在左下，正文高度不影响导航位置。
@@ -411,7 +383,7 @@ final class Bubble {
         motion.resize(to:NSSize(width:w,height:h))
     }
     private func layoutQuestions() {
-        let width = GutterScrollView.documentWidth(for:layoutWidth-32*scale)
+        let width = bodyLayout.contentWidth
         let document:NSView
         if let questionForm {
             questionForm.updateAppearance(scale:scale,fontSize:preferences.number("messageFontSize")*scale)
@@ -424,9 +396,9 @@ final class Bubble {
 
     func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true) {
         taskList?.stop(); taskList = nil
-        if !fromCard {saveCardForm(); approval = nil; cardIndex = nil; renderedCardID = nil; isBrowsingCards = false; updateCardNavigation()}
+        if !fromCard {saveCardForm(); approval = nil; cardStore.clearSelection(); renderedCardID = nil; updateCardNavigation()}
         let taskKey = timing?.key
-        if !preserveCountdown {timer?.invalidate()}
+        if !preserveCountdown {countdown.stop()}
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
         let same = self.kind == kind && scroll.documentView === text
         self.kind = kind; self.scale = scale
@@ -495,7 +467,7 @@ final class Bubble {
         } else if laysOutBody {
             let rendered = approval.map {ApprovalText.render($0,font:bodyFont)} ?? (kind == "task" ? MarkdownText.render(body,font:bodyFont,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:bodyFont,.foregroundColor:NSColor.labelColor]))
             let changed = text.setContent(rendered,reset:!same || resetText)
-            let width = GutterScrollView.documentWidth(for:layoutWidth-32*scale)
+            let width = bodyLayout.contentWidth
             let naturalHeight = text.contentHeight(for:width)
             scroll.setBody(text,height:naturalHeight)
             let limit:CGFloat = kind == "progressToast" ? .greatestFiniteMagnitude : (approval == nil ? 180 : 320)*scale
@@ -525,9 +497,7 @@ final class Bubble {
         }
     }
     private func resolveApproval(_ form:ApprovalPresentation) {
-        let currentID = cardIndex.map {cards[$0].id}
-        cards.removeAll {$0.approval === form}
-        cardIndex = currentID.flatMap {id in cards.firstIndex {$0.id == id}}
+        cardStore.remove {$0.approval === form}
         if approval === form {approval = nil; window.defaultButtonCell = nil; hide()}
         else {updateCardNavigation()}
     }
@@ -599,28 +569,17 @@ final class Bubble {
         layoutElapsed(in:window.frame.size)
     }
     func finishTask(_ key: String, status: String) {
-        for index in cards.indices where cards[index].timing?.key == key && cards[index].timing?.finished == nil {
-            cards[index].timing?.finished = Date(); cards[index].timing?.status = status
-            cards[index].animateHeading = false
-        }
+        cardStore.finishTask(key,status:status)
         guard timedTaskKey == key else {return}
         taskFinishedAt = Date(); setElapsedColor(status)
         setHeading(plainHeading,animated:false)
         refreshElapsed(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil
     }
-    private func startCountdown(_ seconds: Double) {
-        timer?.invalidate(); timer = nil
-        guard seconds > 0 else {return}
-        var remaining = seconds, previous = ProcessInfo.processInfo.systemUptime
-        let timer = Timer(timeInterval:0.1,repeats:true) { [weak self] _ in
-            guard let self else {return}
-            let now = ProcessInfo.processInfo.systemUptime, delta = now-previous; previous = now
-            let hovering = self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation)
-            if hovering {return}
-            remaining -= delta
-            if remaining <= 0 {self.hide(); self.onClose()}
-        }
-        self.timer = timer; RunLoop.main.add(timer,forMode:.common)
+    private func startCountdown(_ seconds:Double) {
+        countdown.start(seconds,paused:{ [weak self] in
+            guard let self else {return false}
+            return self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation)
+        },expired:{ [weak self] in self?.hide(); self?.onClose() })
     }
     func refreshDuration() {if visible {startCountdown(pendingAttention || kind == "error" ? 0 : kind == "progressToast" ? preferences.number("progressToastSeconds") : preferences.duration(purpose,text:currentBody))}}
     func showFailure(_ failure: AppFailure, scale: Double, retry: (() -> Void)? = nil, taskStartedAt: Date? = nil, taskFinishedAt: Date? = nil, taskStatus: String? = nil) {
@@ -640,13 +599,13 @@ final class Bubble {
     func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, retry: (() -> Void)? = nil) {
         let fontScale = scale*preferences.number("messageFontSize")/13
         if let failure {
-            purpose = .attention; timer?.invalidate(); timer = nil
+            purpose = .attention; countdown.stop()
             codexButton.isHidden = true
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
             if let retry {retryButton.title = "重试"; retryButton.callback = retry; retryButton.isHidden = false}
         }
         configureButtons()
-        let width = GutterScrollView.documentWidth(for:layoutWidth-32*self.scale)
+        let width = bodyLayout.contentWidth
         let content = TopDownView(frame:NSRect(x:0,y:0,width:width,height:1))
         var y = 0.0
         @discardableResult func addText(_ value: String, font: NSFont, color: NSColor = .labelColor) -> CGFloat {
@@ -738,6 +697,6 @@ final class Bubble {
         if !keepOrigin {move(to:result.frame.origin); placementSide = result.side}
         placement = (rect,dock,area,size)
     }
-    deinit { timer?.invalidate(); headingTimer?.invalidate(); elapsedTimer?.invalidate() }
-    func hide() {window.defaultButtonCell = nil; saveCardForm(); isBrowsingCards = false; taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; timer?.invalidate(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil}
+    deinit { countdown.stop(); headingTimer?.invalidate(); elapsedTimer?.invalidate() }
+    func hide() {window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil}
 }

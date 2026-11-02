@@ -18,7 +18,7 @@ final class CopyFeedback:NSObject {
     }
     private init(button:NSButton,value:@escaping () -> String?) {
         self.button = button; self.value = value
-        originalTitle = button.title; originalHelp = button.hoverHelp
+        originalTitle = button.imagePosition == .imageOnly ? "" : button.title; originalHelp = button.hoverHelp
         originalImage = button.image; originalTint = button.contentTintColor; originalPosition = button.imagePosition
         super.init()
         if button.imagePosition != .imageOnly {
@@ -39,6 +39,7 @@ final class CopyFeedback:NSObject {
             button.image = NSImage(systemSymbolName:success ? "checkmark" : "exclamationmark.triangle",accessibilityDescription:status)
             button.contentTintColor = success ? .systemGreen : .systemOrange
         }
+        button.imagePosition = originalPosition
         button.hoverHelp = success ? status : "复制失败，请重试"
         button.setAccessibilityLabel(status)
         button.needsDisplay = true
@@ -47,7 +48,7 @@ final class CopyFeedback:NSObject {
     }
     private func restore() {
         guard let button else {return}
-        button.title = originalTitle; button.image = originalImage; button.contentTintColor = originalTint
+        button.title = originalTitle; button.image = originalImage; button.imagePosition = originalPosition; button.contentTintColor = originalTint
         button.hoverHelp = originalHelp
         button.setAccessibilityLabel(originalTitle.isEmpty ? (originalHelp ?? "复制") : originalTitle)
         button.needsDisplay = true; timer = nil

@@ -97,15 +97,14 @@ final class ActionButton: NSButton {
     }
     @objc func invokeCallback() { callback() }
 }
-final class BubbleCloseButton: NSButton {
-    var onClose: () -> Void = {}
+class HoverIconButton: NSButton {
     private var tracking: NSTrackingArea?
     private var hovering = false
-    init() {
+    init(symbol:String,label:String) {
         super.init(frame:.zero)
-        title = ""; image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")
+        title = ""; image = NSImage(systemSymbolName:symbol,accessibilityDescription:label)
         imagePosition = .imageOnly; isBordered = false; contentTintColor = .secondaryLabelColor
-        setAccessibilityLabel("关闭气泡"); target = self; action = #selector(closeBubble)
+        setAccessibilityLabel(label)
     }
     required init?(coder: NSCoder) {fatalError()}
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
@@ -123,6 +122,14 @@ final class BubbleCloseButton: NSButton {
         }
         super.draw(dirtyRect)
     }
+}
+final class BubbleCloseButton: HoverIconButton {
+    var onClose:() -> Void = {}
+    init() {
+        super.init(symbol:"xmark",label:"关闭气泡")
+        target = self; action = #selector(closeBubble)
+    }
+    required init?(coder:NSCoder) {fatalError()}
     @objc private func closeBubble() {onClose()}
 }
 final class TopDownView: NSView {override var isFlipped: Bool {true}}

@@ -1,5 +1,23 @@
 import AppKit
 
+// 一次分配正文边界和原生滚动条轨道；轨道使用右侧边距，不再额外压窄正文。
+struct BubbleBodyLayout {
+    let inset:CGFloat, contentWidth:CGFloat
+    private let gutter:CGFloat
+
+    init(width:CGFloat,scale:CGFloat) {
+        gutter = GutterScrollView.gutter
+        // 原默认正文起点为 16pt 外边距 + 5pt TextKit 行内留白。
+        // 小比例下仍为系统尺寸的滚动条保留空间，两侧正文边界始终对称。
+        inset = max(21*scale,gutter+2*scale)
+        contentWidth = max(0,width-2*inset)
+    }
+
+    func viewport(y:CGFloat,height:CGFloat) -> NSRect {
+        NSRect(x:inset,y:y,width:contentWidth+gutter,height:height)
+    }
+}
+
 // 普通消息、审批、问卷、任务列表、额度与短进展共用的正文容器。
 // 文档尺寸由内容提供，视口由气泡提供；滚动条只在真正溢出时存在。
 final class BubbleBodyScrollView:GutterScrollView {

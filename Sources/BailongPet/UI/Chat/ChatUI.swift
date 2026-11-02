@@ -18,27 +18,25 @@ final class HistoryWindow: NSWindow {
         return super.performKeyEquivalent(with:event)
     }
 }
-final class ComposerPanel: NSPanel {
-    override var canBecomeKey: Bool {true}
-    override var canBecomeMain: Bool {false}
-}
 final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSToolbarDelegate {
-    let composer = ComposerPanel(contentRect:NSRect(x:0,y:0,width:500,height:350),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
-    private lazy var composerMotion = BubbleMotion(window:composer)
-    var composerVisible: Bool {composerMotion.presented}
-    var composerFrame: NSRect {composerMotion.frame}
-    func moveComposer(to origin: NSPoint) {composerMotion.move(to:origin)}
+    private let composerView:ChatComposer
+    var composer:ComposerPanel {composerView.composer}
+    var composerEditor:MessageEditor {composerView.composerEditor}
+    var status:NSTextField {composerView.status}
+    var composerVisible:Bool {composerView.composerVisible}
+    var composerFrame:NSRect {composerView.composerMotion.frame}
+    func moveComposer(to origin:NSPoint) {composerView.composerMotion.move(to:origin)}
     let history = HistoryWindow(contentRect:NSRect(x:0,y:0,width:1100,height:850),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
-    let composerEditor = MessageEditor(), historyEditor = MessageEditor(), transcript = MessageTextView()
+    let historyEditor = MessageEditor(), transcript = MessageTextView()
     private let historySplit = NSSplitViewController()
     private var historyDetailItem: NSSplitViewItem!
     private var historyInputHeight: NSLayoutConstraint!
-    let list = HistoryTableView(), status = label(PetPreferences.shared.fixedText("主人，今天想让我帮什么忙呀？")), folder = label("")
+    let list = HistoryTableView(), folder = label("")
     let historyStatus = label(PetPreferences.shared.fixedText("主人的叮嘱，我都记在这台电脑里啦"))
-    private let composerKeys = label(""), historyKeys = label("")
+    private let historyKeys = label("")
     let models: ChatModelSettings
-    private(set) var composerModel: ModelSelector!, historyModel: ModelSelector!
-    var composerButton: ActionButton!, historyButton: ActionButton!
+    private(set) var historyModel: ModelSelector!
+    var historyButton: ActionButton!
     var conversations: [Conversation] = []
     private(set) var visibleConversations: [Conversation] = []
     let searchField = NSSearchField()
@@ -57,82 +55,36 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var selected: String?
     var onSelect: (String) -> Void = { _ in }, onSubmit: (String,Bool) -> Void = { _,_ in }
     var onStop: () -> Void = {}, onNew: () -> Void = {}, onFolder: () -> Void = {}, onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
-    private let recovery = NSStackView()
-    private var composerFooterButtons = [ActionButton]()
-    private var composerButtonHeight:NSLayoutConstraint?
-    private let composerClose = BubbleCloseButton()
-    private var localDismissMonitor: Any?, globalDismissMonitor: Any?
-    var presentingFolderPicker = false
-    var isPetInteraction:(NSEvent) -> Bool = {_ in false}
-    private var composerInput: NSView!
+    var presentingFolderPicker:Bool {get {composerView.presentingFolderPicker} set {composerView.presentingFolderPicker = newValue}}
+    var isPetInteraction:(NSEvent) -> Bool {get {composerView.isPetInteraction} set {composerView.isPetInteraction = newValue}}
     private var historyInput: MessageInputBox!
     private var external = false, externalSending = false, externalUnconfirmed = false, externalReady = false
     private var historyReadOnly = false
     private var replyNote:String?
     private var externalMode:DesktopReply.Mode?
     private var externalModelNote:String?
-    private let composerInheritedSettings = label("正在读取 Codex 会话设置…")
     private var drafts = [String:(composer:String,history:String)]()
-    private var composerModelRow:NSStackView!
     private let inheritedSettings = label("沿用 Codex 原会话的模型与权限")
     private var historyPlaceholder: String {PetPreferences.shared.fixedText("主人，我们接着聊吧…")}
-    private var composerFolder: ActionButton!, composerNew: ActionButton!
     private var renderedTranscriptSignature = [String]()
     private var renderedConversation: String?
-    private var transcriptCache = [String:([String],NSAttributedString)]()
+    private let transcriptRenderer = TranscriptRenderer()
     var busy = false
     private var updatingList = false
     private var listSnapshot = [String]()
     override convenience init() {self.init(models:ChatModelSettings())}
     init(models: ChatModelSettings) {
-        self.models = models
+        self.models = models; composerView = ChatComposer(models:models)
         super.init()
         history.collectionBehavior.insert(.fullScreenNone)
         composer.title = ""; history.title = PetPreferences.productName+" · 历史对话"
         for w in [composer as NSWindow,history] {w.isReleasedWhenClosed = false; w.delegate = self}
-        composer.level = .floating; composer.contentMinSize = NSSize(width:500,height:350)
-        composer.isOpaque = false; composer.backgroundColor = .clear; composer.hasShadow = true
-        composer.isMovable = false; composer.isMovableByWindowBackground = false
-        composer.hidesOnDeactivate = false
-        composer.collectionBehavior.insert(.fullScreenNone)
         history.contentMinSize = NSSize(width:760,height:600)
-        let c = BubbleBackgroundView(); composer.contentView = c
-        composerInput = inputBox(composerEditor)
-        recovery.orientation = .vertical; recovery.alignment = .leading; recovery.spacing = 8; recovery.isHidden = true
-        status.font = .systemFont(ofSize:14); status.textColor = .labelColor
-        status.maximumNumberOfLines = 2; status.lineBreakMode = .byTruncatingTail
-        composerClose.onClose = { [weak self] in self?.hideComposer() }
-        composerClose.widthAnchor.constraint(equalToConstant:24).isActive = true
-        composerClose.heightAnchor.constraint(equalToConstant:24).isActive = true
-        let header = NSStackView(views:[composerClose,status,NSView()]); header.spacing = 8; header.alignment = .centerY
-        composerButton = ActionButton("发送") { [weak self] in guard let self else{return}; self.submit(self.composerEditor) }
-        composerButton.emphasize()
-        // 快捷键由聚焦的 MessageEditor 处理，避免输入法选词误触默认按钮。
-        composerButton.keyEquivalent = ""
-        composerFolder = ActionButton("文件夹…") { [weak self] in self?.onFolder() }
-        let historyLink = ActionButton("历史") { [weak self] in self?.openHistory() }
-        composerNew = ActionButton("开启新对话") { [weak self] in self?.onNew() }
-        composerFooterButtons = [composerFolder,historyLink,composerNew,composerButton]
-        for button in composerFooterButtons {
-            button.configureFlexible(font:.systemFont(ofSize:13))
-        }
-        composerButtonHeight = composerButton.heightAnchor.constraint(equalToConstant:28); composerButtonHeight?.isActive = true
-        let footer = NSStackView(views:[composerFolder,historyLink,composerNew,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
-        // 跨控件约束必须在共同父视图建立后启用，否则 AppKit 会中断整个会话初始化。
-        for button in composerFooterButtons where button !== composerButton {
-            button.heightAnchor.constraint(equalTo:composerButton.heightAnchor).isActive = true
-        }
-        composerModel = ModelSelector(models)
-        let modelRow = NSStackView(views:[modelHint(),composerModel,NSView()]); modelRow.spacing = 8; modelRow.alignment = .centerY
-        composerModelRow = modelRow
-        let stack = NSStackView(views:[header,composerInput,composerKeys,recovery,modelRow,composerInheritedSettings,footer]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
-        pin(stack,to:c.body,inset:16)
-        [composerInput!,composerKeys,recovery,header,modelRow,composerInheritedSettings,footer].forEach {v in v.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
-        composerInheritedSettings.font = .systemFont(ofSize:11); composerInheritedSettings.textColor = .secondaryLabelColor
-        composerInheritedSettings.maximumNumberOfLines = 2
-        composerInput.heightAnchor.constraint(greaterThanOrEqualToConstant:120).isActive = true
-        composerEditor.send = { [weak self] in guard let self else{return}; self.submit(self.composerEditor) }
-
+        composerView.onSubmit = { [weak self] in guard let self else {return}; self.submit(self.composerEditor) }
+        composerView.onFolder = { [weak self] in self?.onFolder() }
+        composerView.onNew = { [weak self] in self?.onNew() }
+        composerView.onHistory = { [weak self] in self?.openHistory() }
+        composerView.onHide = { [weak self] in self?.onHide() }
         history.styleMask.insert(.fullSizeContentView)
         let sidebar = NSVisualEffectView(); sidebar.material = .sidebar; sidebar.blendingMode = .behindWindow; sidebar.state = .followsWindowActiveState
         let left = NSScrollView(); left.hasVerticalScroller = true; left.autohidesScrollers = true; left.drawsBackground = false
@@ -163,10 +115,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         list.target = self; list.action = #selector(revealSearchResult)
         historySplit.splitView.setPosition(240,ofDividerAt:0)
         transcript.isEditable = false; transcript.isSelectable = true
-        let reading = editorScroll(transcript); reading.drawsBackground = false
+        let reading = ChatViewLayout.editorScroll(transcript); reading.drawsBackground = false
         transcript.textContainerInset = NSSize(width:24,height:20)
         historyEditor.placeholder = historyPlaceholder
-        historyInput = inputBox(historyEditor)
+        historyInput = ChatViewLayout.inputBox(historyEditor)
         let drafting = historyInput!
         historyButton = ActionButton("发送") { [weak self] in
             guard let self else{return}
@@ -204,7 +156,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyInputHeight = drafting.heightAnchor.constraint(equalToConstant:76); historyInputHeight.isActive = true
         historyEditor.onTextChange = { [weak self] in self?.resizeHistoryInput() }
         historyEditor.send = { [weak self] in guard let self else{return}; self.submit(self.historyEditor) }
-        for text in [composerKeys,historyKeys] {text.font = .systemFont(ofSize:11); text.textColor = .secondaryLabelColor}
+        for text in [composerView.composerKeys,historyKeys] {text.font = .systemFont(ofSize:11); text.textColor = .secondaryLabelColor}
         updateShortcuts()
         if !history.setFrameUsingName("BailongHistory") {
             if let screen = NSScreen.main {
@@ -222,67 +174,16 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let action = external ? (externalSending ? "正在发送…" : externalUnconfirmed ? "检查发送结果" : externalMode == .steer ? "插话到 Codex" : "发送到 Codex") : busy ? "停止" : "发送"
         let hint = external ? (externalSending ? "正在发送到原会话…" : externalUnconfirmed ? "发送结果待确认，草稿已保留" : !externalReady ? "当前会话等待处理，请转到 Codex" : replyNote ?? shortcut.hint) : busy ? "停止："+shortcut.sendLabel : shortcut.hint
         let displayHint = historyReadOnly ? "历史只读：请在设置 → 高级导出原文件或重新读取" : hint
-        composerKeys.stringValue = displayHint; historyKeys.stringValue = displayHint.replacingOccurrences(of:"\n",with:"  ·  ")
-        composerButton.title = action; historyButton.title = action
-        composerButton.hoverHelp = action+"："+shortcut.sendLabel
-        historyButton.hoverHelp = composerButton.hoverHelp
-        composerButton.keyEquivalent = ""; historyButton.keyEquivalent = ""
+        composerView.composerKeys.stringValue = displayHint; historyKeys.stringValue = displayHint.replacingOccurrences(of:"\n",with:"  ·  ")
+        composerView.composerButton.title = action; historyButton.title = action
+        composerView.composerButton.hoverHelp = action+"："+shortcut.sendLabel
+        historyButton.hoverHelp = composerView.composerButton.hoverHelp
+        composerView.composerButton.keyEquivalent = ""; historyButton.keyEquivalent = ""
         composerEditor.setAccessibilityHelp(displayHint); historyEditor.setAccessibilityHelp(displayHint)
     }
 
-    func showComposer() {
-        composerMotion.show(key:true)
-        composer.makeFirstResponder(composerEditor)
-        stopDismissMonitoring()
-        let clicks: NSEvent.EventTypeMask = [.leftMouseDown,.rightMouseDown,.otherMouseDown]
-        localDismissMonitor = NSEvent.addLocalMonitorForEvents(matching:clicks) { [weak self] event in
-            self?.dismissComposerIfOutside(event); return event
-        }
-        globalDismissMonitor = NSEvent.addGlobalMonitorForEvents(matching:clicks) { [weak self] event in
-            self?.dismissComposerIfOutside(event)
-        }
-    }
-    func hideComposer() {
-        stopDismissMonitoring(); composerModel.closeChoices(); composerMotion.hide(); onHide()
-    }
-    private func dismissComposerIfOutside(_ event: NSEvent) {
-        guard composerVisible, !presentingFolderPicker, composer.attachedSheet == nil else{return}
-        if isPetInteraction(event) {return}
-        let point = NSEvent.mouseLocation
-        if composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) {return}
-        hideComposer()
-    }
-    private func stopDismissMonitoring() {
-        if let localDismissMonitor {NSEvent.removeMonitor(localDismissMonitor)}
-        if let globalDismissMonitor {NSEvent.removeMonitor(globalDismissMonitor)}
-        localDismissMonitor = nil; globalDismissMonitor = nil
-    }
-    deinit {stopDismissMonitoring()}
-    private func modelHint() -> NSTextField {
-        let hint = NSTextField(labelWithString:"选择模型与推理强度：")
-        hint.font = .systemFont(ofSize:12); hint.textColor = .secondaryLabelColor
-        hint.hoverHelp = "选择会自动记忆，并同步到两个聊天入口。"
-        return hint
-    }
-    private func pin(_ view: NSView, to parent: NSView, inset: CGFloat = 0, verticalInset: CGFloat? = nil) {
-        view.translatesAutoresizingMaskIntoConstraints = false; parent.addSubview(view)
-        NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo:parent.leadingAnchor,constant:inset),view.trailingAnchor.constraint(equalTo:parent.trailingAnchor,constant:-inset),view.topAnchor.constraint(equalTo:parent.topAnchor,constant:verticalInset ?? inset),view.bottomAnchor.constraint(equalTo:parent.bottomAnchor,constant:-(verticalInset ?? inset))])
-    }
-    private func inputBox(_ editor: MessageEditor) -> MessageInputBox {
-        MessageInputBox(scroll:editorScroll(editor),editor:editor)
-    }
-    func editorScroll(_ editor: NSTextView) -> NSScrollView {
-        let scroll = GutterScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
-        editor.frame = NSRect(x:0,y:0,width:300,height:100)
-        editor.isVerticallyResizable = true; editor.isHorizontallyResizable = false; editor.autoresizingMask = [.width]
-        editor.textContainer?.widthTracksTextView = true; editor.textContainer?.containerSize = NSSize(width:300,height:CGFloat.greatestFiniteMagnitude)
-        editor.font = .systemFont(ofSize:14); editor.textColor = .labelColor; editor.drawsBackground = false
-        editor.textContainerInset = NSSize(width:4,height:6); editor.isRichText = false; editor.allowsUndo = true
-        editor.isAutomaticQuoteSubstitutionEnabled = false; editor.isAutomaticDashSubstitutionEnabled = false
-        editor.minSize = .zero; editor.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
-        scroll.documentView = editor
-        return scroll
-    }
+    func showComposer() {composerView.showComposer()}
+    func hideComposer() {composerView.hideComposer()}
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.init("history-sidebar"),.init("history-divider"),.init("new"),.init("folder"),.init("codex"),.init("reveal"),.flexibleSpace,.init("search")] }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {toolbarAllowedItemIdentifiers(toolbar)}
     func toolbar(_ toolbar: NSToolbar,itemForItemIdentifier id: NSToolbarItem.Identifier,willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
@@ -317,13 +218,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     @objc private func modelStateChanged() {
         let enabled = external ? !busy && !externalSending && (externalReady || externalUnconfirmed) : busy || !models.loading
-        composerButton.isEnabled = enabled && !historyReadOnly; historyButton.isEnabled = enabled && !historyReadOnly
-        let selectorWidth = max(280,composerModel.intrinsicContentSize.width.rounded(.up))
+        composerView.composerButton.isEnabled = enabled && !historyReadOnly; historyButton.isEnabled = enabled && !historyReadOnly
+        let selectorWidth = max(280,composerView.composerModel.intrinsicContentSize.width.rounded(.up))
         let hintWidth = ("选择模型与推理强度：" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)+6
-        let footerWidth = composerFooterButtons.filter {!$0.isHidden}.reduce(CGFloat(32+4*8)) {$0+$1.intrinsicContentSize.width}
+        let footerWidth = composerView.composerFooterButtons.filter {!$0.isHidden}.reduce(CGFloat(32+4*8)) {$0+$1.intrinsicContentSize.width}
         let composerWidth = max(500,selectorWidth+hintWidth+40,footerWidth)
         composer.contentMinSize = NSSize(width:composerWidth,height:350)
-        if let content = composer.contentView, content.bounds.width < composerWidth {composerMotion.resize(to:NSSize(width:composerWidth,height:content.bounds.height))}
+        if let content = composer.contentView, content.bounds.width < composerWidth {composerView.composerMotion.resize(to:NSSize(width:composerWidth,height:content.bounds.height))}
         let detailWidth = max(520,historyModel.intrinsicContentSize.width.rounded(.up)+historyButton.intrinsicContentSize.width+64)
         historyDetailItem.minimumThickness = detailWidth
         let historyWidth = max(800,detailWidth+180)
@@ -420,7 +321,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     func discardHistory(_ key:String) {
-        transcriptCache.removeValue(forKey:key)
+        transcriptRenderer.discard(key)
         drafts.removeValue(forKey:key)
         if selected == key {historyEditor.string = ""; renderedConversation = nil}
     }
@@ -428,27 +329,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func newChat() {onNew()}
     @objc private func chooseFolder() {onFolder()}
     @objc private func revealFolder() {onRevealFolder()}
-    func clearFailure() {recovery.isHidden = true; composerInput.isHidden = false; composerButton.isHidden = false}
-    func showFailure(_ failure: AppFailure, restore: @escaping () -> Void) {
-        recovery.arrangedSubviews.forEach {recovery.removeArrangedSubview($0); $0.removeFromSuperview()}
-        let title = label(failure.title,bold:true), message = label(failure.message)
-        let restoreButton = ActionButton("返回输入") { [weak self] in self?.clearFailure(); restore() }; restoreButton.emphasize()
-        let details = ActionButton("技术详情…") {failure.showDetails()}
-        let recoveryFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
-        for button in [details,restoreButton] {
-            button.configureFlexible(font:recoveryFont)
-            button.heightAnchor.constraint(equalToConstant:button.intrinsicContentSize.height).isActive = true
-        }
-        let actions = NSStackView(views:[details,restoreButton]); actions.spacing = 8; actions.distribution = .fillEqually
-        for v in [title,message,actions] {recovery.addArrangedSubview(v); v.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true}
-        if failure.openDesktop {
-            let open = ActionButton("打开 Codex") {CodexConnection.openDesktop()}; open.emphasize()
-            open.configureFlexible(font:recoveryFont); open.heightAnchor.constraint(equalToConstant:open.intrinsicContentSize.height).isActive = true
-            recovery.insertArrangedSubview(open,at:2)
-            open.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true
-        }
-        composerInput.isHidden = true; recovery.isHidden = false; composerButton.isHidden = !busy
-    }
+    func clearFailure() {composerView.clearFailure()}
+    func showFailure(_ failure:AppFailure,restore:@escaping () -> Void) {composerView.showFailure(failure,busy:busy,restore:restore)}
     func submit(_ editor: NSTextView) {
         if external {
             if externalUnconfirmed {onCheckDelivery(); return}
@@ -489,22 +371,19 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         inheritedSettings.stringValue = inherited; inheritedSettings.hoverHelp = inherited
         inheritedSettings.lineBreakMode = .byTruncatingMiddle
         inheritedSettings.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        composerInheritedSettings.stringValue = inherited; composerInheritedSettings.hoverHelp = inherited; composerInheritedSettings.isHidden = !external
+        composerView.composerInheritedSettings.stringValue = inherited; composerView.composerInheritedSettings.hoverHelp = inherited; composerView.composerInheritedSettings.isHidden = !external
         refreshList()
         folder.stringValue = "文件夹："+URL(fileURLWithPath:selected.cwd).lastPathComponent; folder.hoverHelp = selected.cwd
         historyInput.fillColor = .textBackgroundColor
         historyEditor.placeholder = external ? "回复这条 Codex 会话…" : historyPlaceholder
         updateShortcuts()
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
-        composerEditor.font = messageFont; historyEditor.font = messageFont; status.font = messageFont
-        for button in composerFooterButtons {button.configureFlexible(font:messageFont)}
-        composerButtonHeight?.constant = composerFooterButtons.map {$0.intrinsicContentSize.height}.max() ?? 28
-        composerButton.isHidden = !recovery.isHidden && !busy
-        composerButton.emphasize(!busy); historyButton.emphasize(!busy)
+        historyEditor.font = messageFont
+        composerView.refresh(font:messageFont,busy:busy,external:external)
+        historyButton.emphasize(!busy)
         modelStateChanged()
-        composerFolder.isEnabled = !busy && !external; composerNew.isEnabled = !busy
-        composerModel.isEnabled = !busy && !external; historyModel.isEnabled = !busy && !external
-        composerModelRow.isHidden = external; historyModel.isHidden = external; inheritedSettings.isHidden = !external
+        historyModel.isEnabled = !busy && !external
+        historyModel.isHidden = external; inheritedSettings.isHidden = !external
         let streaming = selected.turns.last.map {activeStatuses.contains($0.status)} ?? false
         historyStatus.stringValue = sending ? "正在发送…" : unconfirmed ? "发送结果待确认" : streaming ? "处理中" : selected.external ? "Codex · 原会话回复" : ""
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = "历史对话"
@@ -515,11 +394,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.linkBaseDirectory = {messageDirectory}
         guard history.isVisible && !history.isMiniaturized else {return}
         let selectionChanged = renderedConversation != selected.key
-        let signature = transcriptStyle(selected) + selected.turns.flatMap {[ $0.key ] + transcriptTurnSignature($0)}
+        let signature = transcriptRenderer.style(selected) + selected.turns.flatMap {[ $0.key ] + transcriptRenderer.turnSignature($0)}
         let contentChanged = selectionChanged || signature != renderedTranscriptSignature
         if contentChanged {
             let readingOrigin = transcript.enclosingScrollView?.contentView.bounds.origin
-            transcript.setContent(transcriptContent(selected),reset:selectionChanged)
+            transcript.setContent(transcriptRenderer.content(selected),reset:selectionChanged)
             if selectionChanged && !searching {transcript.scrollToEndOfDocument(nil)}
             else if let scroll = transcript.enclosingScrollView,let readingOrigin {
                 scroll.contentView.scroll(to:readingOrigin); scroll.reflectScrolledClipView(scroll.contentView)
@@ -531,68 +410,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if contentChanged || searching || !findMatches.isEmpty {updateSearchHighlights(reveal:searching && selectionChanged)}
     }
     @objc private func accentChanged() {
-        transcriptCache.removeAll()
+        transcriptRenderer.invalidate()
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedTranscriptSignature = []
         refreshVisibleHistory()
-    }
-    private func transcriptStyle(_ conversation:Conversation) -> [String] {
-        let preferences = PetPreferences.shared
-        return [preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
-    }
-    private func transcriptTurnSignature(_ turn:Turn) -> [String] {
-        [turn.input,turn.status,turn.messages,turn.summary,turn.steps,turn.final,turn.error,
-         turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)]
-    }
-    private func transcriptContent(_ conversation: Conversation) -> NSAttributedString {
-        var result = NSMutableAttributedString()
-        func append(_ text: String, font: NSFont = .systemFont(ofSize:PetPreferences.shared.number("messageFontSize")), color: NSColor = .labelColor, after: CGFloat = 12) {
-            guard !text.isEmpty else {return}
-            let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 4; paragraph.paragraphSpacing = after
-            result.append(NSAttributedString(string:text+"\n",attributes:[.font:font,.foregroundColor:color,.paragraphStyle:paragraph]))
-        }
-        func appendMarkdown(_ text: String, font: NSFont = .systemFont(ofSize:PetPreferences.shared.number("messageFontSize")), color: NSColor = .labelColor) {
-            guard !text.isEmpty else{return}
-            result.append(MarkdownText.render(text,font:font,color:color))
-            result.append(NSAttributedString(string:"\n",attributes:[.font:font]))
-        }
-        if conversation.turns.isEmpty {
-            append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.color)
-            append("在下方输入想做的事。",color:.secondaryLabelColor)
-            return result
-        }
-        let style = transcriptStyle(conversation)
-        let keys = Set(conversation.turns.map(\.key))
-        transcriptCache = transcriptCache.filter {keys.contains($0.key)}
-        for turn in conversation.turns {
-            let signature = style + transcriptTurnSignature(turn)
-            if let cached = transcriptCache[turn.key],cached.0 == signature {result.append(cached.1); continue}
-            let accumulated = result
-            result = NSMutableAttributedString()
-            if !turn.input.isEmpty {
-                append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
-                append(turn.input)
-            }
-            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
-            // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。
-            let steps = conversation.external && turn.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : turn.steps
-            for (heading,text) in [("公开思考摘要",turn.summary),("执行记录",steps)] where !text.isEmpty {
-                append(heading,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1),weight:.medium),color:.secondaryLabelColor,after:4)
-                if heading == "公开思考摘要" {appendMarkdown(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
-                else {append(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
-            }
-            if let notice = turn.sensitiveQuestionNotice {append(notice,color:.secondaryLabelColor)}
-            if let notice = turn.sensitiveInputNotice {append(notice,color:.secondaryLabelColor)}
-            if !turn.messages.isEmpty {appendMarkdown(turn.messages)}
-            if !turn.final.isEmpty && !turn.messages.contains(turn.final) {appendMarkdown(turn.final)}
-            if !turn.error.isEmpty {let failure = AppFailure.codex(turn.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
-            append(" ",font:.systemFont(ofSize:4),after:12)
-            transcriptCache[turn.key] = (signature,result)
-            accumulated.append(result); result = accumulated
-        }
-        return result
-    }
-    private func turnStatus(_ value: String) -> String {
-        ["pending":"准备中","running":"处理中","inProgress":"处理中","completed":"已完成","failed":"未完成","interrupted":"已停止","waitingForApproval":"等待批准","waitingForInput":"等待补充","unknown":"状态待确认"][value] ?? "状态待确认"
     }
     func numberOfRows(in tableView: NSTableView) -> Int { visibleConversations.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {

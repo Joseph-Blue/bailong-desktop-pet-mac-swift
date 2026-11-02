@@ -585,51 +585,7 @@ final class PetController: NSObject, NSMenuDelegate {
         tracking.invalidate()
         if doubleClicked {performGesture(preferences.string("rightDoubleClickAction"))}
     }
-    func makeMenu() -> NSMenu {
-        let menu = NSMenu(); menu.delegate = self
-        func submenu(_ title:String,symbol:String) -> NSMenu {
-            let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
-            item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
-            item.image?.isTemplate = true
-            let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
-        }
-        menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.onComposer() })
-        menu.addItem(MenuAction("历史会话",symbol:"book.closed") { [weak self] in self?.onHistory(nil) })
-        menu.addItem(MenuAction("查询额度",symbol:"gauge.with.dots.needle.50percent") { [weak self] in self?.soundOnce(); self?.onQuota() })
-        let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
-        codex.image = AppIcons.openAI?.copy() as? NSImage
-        codex.image?.size = NSSize(width:16,height:16)
-        menu.addItem(codex)
-        menu.addItem(.separator())
-        menu.addItem(MenuAction("随机动画",symbol:"shuffle") { [weak self] in self?.randomAnimation() })
-        let animations = submenu("播放动作",symbol:"play.rectangle")
-        for (name,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations)] {
-            let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
-            for clip in clips {group.addItem(MenuAction(clip.title) { [weak self] in self?.preview(clip) })}
-            item.submenu = group; animations.addItem(item)
-        }
-        let switches = submenu("快捷开关",symbol:"switch.2")
-        switches.addItem(MenuAction("自主移动",checked:autoMove) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoMove,for:"autoMove") })
-        switches.addItem(MenuAction("播放音效",checked:soundEnabled) { [weak self] in guard let self else{return}; self.preferences.set(!self.soundEnabled,for:"soundEnabled") })
-        switches.addItem(MenuAction("任务气泡提醒",checked:taskBubbles) { [weak self] in guard let self else{return}; self.preferences.set(!self.taskBubbles,for:"taskBubbles") })
-        switches.addItem(MenuAction("全屏时自动隐藏",checked:autoFullscreen) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoFullscreen,for:"autoFullscreen") })
-        switches.addItem(.separator())
-        switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak self] in self?.showSettings(section:.general) })
-        menu.addItem(.separator())
-        menu.addItem(MenuAction("更改桌宠、气泡与文字大小…",symbol:"textformat.size") { [weak self] in self?.showSettings(section:.appearance) })
-        menu.addItem(MenuAction("更改桌宠称呼和台词…",symbol:"person.text.rectangle") { [weak self] in self?.showSettings(section:.identity) })
-        menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.showSettings() })
-        let tools = submenu("工具与帮助",symbol:"questionmark.circle")
-        tools.addItem(MenuAction("任务同步状态…",symbol:"arrow.triangle.2.circlepath") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "Codex 任务同步状态"; a.informativeText = self.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:"任务同步"); a.addButton(withTitle:"知道了"); a.applyAccent(); a.runModal() })
-        tools.addItem(MenuAction("性能统计…",symbol:"chart.xyaxis.line") { [weak self] in self?.showDiagnostics() })
-        tools.addItem(.separator())
-        tools.addItem(MenuAction("检查更新…",symbol:"arrow.down.circle") {UpdateWindow.show()})
-        tools.addItem(MenuAction("关于"+preferences.appName+"…",symbol:"info.circle") { [weak self] in self?.showSettings(section:.about) })
-        menu.addItem(.separator())
-        menu.addItem(MenuAction("退出"+preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak self] in self?.onQuit() })
-        menu.showProvidedImages()
-        return menu
-    }
+    func makeMenu() -> NSMenu {PetMenu.make(for:self,random:{ [weak self] in self?.randomAnimation() })}
     func savePosition() {
         guard preferences.bool("rememberPosition") else {return}
         defaults.set(window.frame.minX,forKey:"x"); defaults.set(window.frame.minY,forKey:"y")

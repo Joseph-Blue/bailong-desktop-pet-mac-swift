@@ -7,6 +7,7 @@ extension NSAttributedString.Key {
 final class CodeBlockContent:NSObject {
     let code:String, language:String
     let font:NSFont
+    var headerHeight:CGFloat {CodeBlockHeaderLayout.height(for:font)}
     init(code:String,language:String,font:NSFont) {self.code = code; self.language = language; self.font = font}
     var label:String {
         ["swift":"Swift","python":"Python","py":"Python","js":"JavaScript","javascript":"JavaScript","ts":"TypeScript","typescript":"TypeScript","json":"JSON","html":"HTML","css":"CSS","sql":"SQL" ][language.lowercased()] ?? (language.isEmpty ? "代码" : language)
@@ -26,6 +27,12 @@ private final class RoundedCodeBlock:NSTextTableBlock {
         NSColor.controlBackgroundColor.setFill(); path.fill()
         NSColor.separatorColor.setStroke(); path.lineWidth = 0.5; path.stroke()
     }
+}
+
+enum CodeBlockHeaderLayout {
+    static let padding:CGFloat = 10
+    static let gap:CGFloat = 6
+    static func height(for font:NSFont) -> CGFloat {max(24,ceil(font.ascender-font.descender)+4)}
 }
 
 enum CodeBlockRendering {
@@ -54,19 +61,21 @@ enum CodeBlockRendering {
     }
     static func render(_ code:String,language:String,font:NSFont) -> NSAttributedString {
         let mono = NSFont.monospacedSystemFont(ofSize:max(10,font.pointSize-1),weight:.regular)
-        let data = CodeBlockContent(code:code,language:language,font:mono)
+        let headerFont = NSFont.systemFont(ofSize:font.pointSize,weight:.medium)
+        let data = CodeBlockContent(code:code,language:language,font:headerFont)
         let table = NSTextTable(); table.numberOfColumns = 1; table.layoutAlgorithm = .fixedLayoutAlgorithm
         table.setContentWidth(100,type:.percentageValueType); table.collapsesBorders = true
         let cell = RoundedCodeBlock(table:table,startingRow:0,rowSpan:1,startingColumn:0,columnSpan:1)
-        cell.setContentWidth(100,type:.percentageValueType); cell.setWidth(10,type:.absoluteValueType,for:.padding)
+        cell.setContentWidth(100,type:.percentageValueType); cell.setWidth(CodeBlockHeaderLayout.padding,type:.absoluteValueType,for:.padding)
+        cell.setWidth(6,type:.absoluteValueType,for:.padding,edge:.minY)
         func paragraph(_ row:Int) -> NSParagraphStyle {
             let style = NSMutableParagraphStyle(); style.textBlocks = [cell]; style.paragraphSpacing = 0; style.lineSpacing = 2
             style.defaultTabInterval = ("    " as NSString).size(withAttributes:[.font:mono]).width
             style.lineBreakMode = .byCharWrapping
-            if row == 0 {style.tailIndent = -38; style.minimumLineHeight = max(24,font.pointSize+8); style.paragraphSpacing = 8}
+            if row == 0 {style.tailIndent = -(data.headerHeight+CodeBlockHeaderLayout.gap); style.minimumLineHeight = data.headerHeight; style.paragraphSpacing = CodeBlockHeaderLayout.gap}
             return style
         }
-        let result = NSMutableAttributedString(string:data.label+"\n",attributes:[.font:NSFont.systemFont(ofSize:font.pointSize,weight:.medium),.foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph(0),.codeBlockHeader:data])
+        let result = NSMutableAttributedString(string:data.label+"\n",attributes:[.font:headerFont,.foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph(0),.codeBlockHeader:data])
         let body = highlighted(code,language:language,font:mono)
         if !code.hasSuffix("\n") {body.append(NSAttributedString(string:"\n",attributes:[.font:mono]))}
         body.addAttribute(.paragraphStyle,value:paragraph(1),range:NSRange(location:0,length:body.length))
@@ -79,10 +88,10 @@ final class CodeBlockToolbar:NSView {
     private let copyButton:NSButton
     init(_ content:CodeBlockContent) {
         self.content = content
-        copyButton = NSButton(image:NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:"复制代码")!,target:nil,action:nil)
+        copyButton = HoverIconButton(symbol:"doc.on.doc",label:"复制代码")
         super.init(frame:NSRect(x:0,y:0,width:30,height:26))
         copyButton.isBordered = false; copyButton.bezelStyle = .inline; copyButton.target = self
-        copyButton.frame = NSRect(x:0,y:0,width:28,height:26); addSubview(copyButton)
+        copyButton.frame = bounds; copyButton.autoresizingMask = [.width,.height]; addSubview(copyButton)
         copyButton.hoverHelp = "复制完整代码"
         CopyFeedback.attach(to:copyButton) { [weak self] in self?.content.code }
     }

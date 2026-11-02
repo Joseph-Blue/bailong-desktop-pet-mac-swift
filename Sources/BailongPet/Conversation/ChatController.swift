@@ -11,27 +11,14 @@ final class ChatController {
     var selected: Conversation
     var running: (Conversation,Turn)?
     var cancelled = false, closing = false
-    var messages = [String:String](), messageOrder = [String](), summaries = [String:String](), steps = [String:String]()
-    private var previewedMessages = [String:String]()
-    private var finalMessageID:String?
-    private var imageMessageIDs = Set<String>()
-    var lastPreview = "", lastKind = "output"
-    var currentActivity:TaskActivity?
-    private var activityItems = [[String:Any]]()
-    private func updateActivity(_ item:[String:Any]) {
-        guard let id = item["id"] as? String else {return}
-        let projected = DesktopRuntimeProjection.item(item)
-        if let index = activityItems.firstIndex(where:{$0["id"] as? String == id}) {activityItems[index] = projected}
-        else {activityItems.append(projected)}
-        currentActivity = TaskActivity.current(items:activityItems)
-    }
+    private var messagesState = TaskMessageAccumulator()
+    var currentActivity:TaskActivity? {messagesState.currentActivity}
     var saveError: String?
     var updateTimer: Timer?
     var saveTimer: Timer?
     lazy var requestCoordinator = RequestCoordinator(chat:self)
-    var quotaSerial = 0
-    var quotaRequestInFlight = false
-    var quotaAccount: [String:Any]?
+    private lazy var quotaCoordinator = QuotaCoordinator(pet:pet,connection:connection,isClosing:{ [unowned self] in self.closing })
+    func quota() {quotaCoordinator.query()}
     var modelDirectory: String?
     var onFinishedShutdown: (() -> Void)?
     var onHistoryDeleted: (Conversation) -> Void = {_ in}
@@ -39,25 +26,26 @@ final class ChatController {
     private var titleRequests = [String:UUID]()
     var desktopTasks = [BubbleTaskSummary]()
     var desktopTaskReadStatus:String? = "正在同步 Codex 任务状态…"
-    private var desktopModelNotes = [String:String]()
-    private var desktopModelChecked = [String:Date]()
-    private var desktopModelRequests = [String:UUID]()
-    private var desktopSending = [String:UUID]()
-    private var desktopUnconfirmed = Set<String>()
-    private var desktopReplyNotes = [String:String]()
+    private lazy var desktopSession:DesktopConversationSession = {
+        let session = DesktopConversationSession(store:store,ui:ui,selection:{ [unowned self] in self.selected },
+            tasks:{ [unowned self] in self.desktopTasks },canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
+        session.onChange = { [weak self] in self?.refresh() }; session.onPersist = { [weak self] in self?.persist() }
+        return session
+    }()
+    func refreshDesktopSettingsIfNeeded() {desktopSession.refreshSettings()}
     func reloadHistory() throws {
-        guard running == nil && desktopSending.isEmpty else {throw PetFailure(message:"请等待当前任务和发送完成后重新读取历史。")}
+        guard running == nil && !desktopSession.hasPendingSend else {throw PetFailure(message:"请等待当前任务和发送完成后重新读取历史。")}
         let key = selected.key
         try store.reload(recording:pet.preferences.bool("recordHistory"))
         selected = store.conversations.first(where:{$0.key == key}) ?? store.conversations.last ?? store.create(cwd:LocalStorage.workspace.path)
         refresh()
     }
     func clearLocalData() throws {
-        guard running == nil && desktopSending.isEmpty else {throw PetFailure(message:"请先结束当前任务或等待消息发送完成，再清空数据。")}
+        guard running == nil && !desktopSession.hasPendingSend else {throw PetFailure(message:"请先结束当前任务或等待消息发送完成，再清空数据。")}
         saveTimer?.invalidate(); saveTimer = nil
         try store.clear()
         selected = store.create(cwd:LocalStorage.workspace.path)
-        ui.clearDrafts(); desktopUnconfirmed.removeAll(); desktopReplyNotes.removeAll()
+        ui.clearDrafts(); desktopSession.clear()
         pet.bubble.resolveQuestions(); pet.bubble.discardCards()
         pet.preferences.reset(Array(PetPreferences.defaults.keys))
         persist()
@@ -88,7 +76,7 @@ final class ChatController {
         }
         ui.models.onLoad = { [weak self] force in self?.loadModels(force:force) }
         ui.onGoCodex = { [weak self] in CodexConnection.openConversation(self?.selected.threadID) }
-        ui.onCheckDelivery = { [weak self] in self?.checkDesktopDelivery() }
+        ui.onCheckDelivery = { [weak self] in self?.desktopSession.checkDelivery() }
         ui.onRename = { [weak self] key,title in self?.renameHistory(key,title:title) }
         ui.onSyncTitle = { [weak self] key in self?.syncHistoryTitle(key) }
         ui.onDelete = { [weak self] key in self?.deleteHistory(key) }
@@ -139,7 +127,7 @@ final class ChatController {
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
-                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.currentActivity) : nil))
+                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.messagesState.currentActivity) : nil))
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
@@ -165,7 +153,7 @@ final class ChatController {
     }
     func refresh() {
         ui.refresh(store.conversations,selected:selected,busy:running != nil,
-            sending:desktopSending[selected.key] != nil,unconfirmed:desktopUnconfirmed.contains(selected.key),replyNote:desktopReplyNotes[selected.key],replyMode:desktopReplyTarget(selected)?.mode,modelNote:desktopModelNotes[selected.key],readOnly:store.isReadOnly)
+            sending:desktopSession.sending(selected.key),unconfirmed:desktopSession.unconfirmed(selected.key),replyNote:desktopSession.replyNote(selected.key),replyMode:desktopSession.target(selected)?.mode,modelNote:desktopSession.modelNote(selected.key),readOnly:store.isReadOnly)
         ui.status.stringValue = selected.external ? "回复至："+selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ") : pet.preferences.fixedText(saveError != nil ? "历史保存失败，请检查磁盘空间。" : running != nil ? (cancelled ? "正在停止任务…" : "主人，我正在认真忙着呢…") : "主人，今天想让我帮什么忙呀？")
         if store.isReadOnly {ui.status.stringValue = "历史处于只读模式，请在设置 → 高级导出原文件或重新读取。"; ui.status.isHidden = false}
     }
@@ -201,11 +189,11 @@ final class ChatController {
     private func deleteHistory(_ key:String) {
         guard let conversation = store.conversations.first(where:{$0.key == key}) else {return}
         guard running?.0 !== conversation else {showError("记录尚未删除",PetFailure(message:"请先停止这条对话中的任务，再删除记录。")); return}
-        guard desktopSending[key] == nil else {showError("记录尚未删除",PetFailure(message:"请等待这条会话的消息发送完成。")); return}
+        guard !desktopSession.sending(key) else {showError("记录尚未删除",PetFailure(message:"请等待这条会话的消息发送完成。")); return}
         do {
             try store.delete(conversation)
             titleRequests.removeValue(forKey:key); ui.discardHistory(key); onHistoryDeleted(conversation)
-            desktopUnconfirmed.remove(key); desktopReplyNotes.removeValue(forKey:key)
+            desktopSession.forget(key)
             pet.bubble.discardCards(conversation:key)
             if selected === conversation {selected = store.conversations.last ?? store.create(cwd:LocalStorage.workspace.path)}
             refresh()
@@ -241,78 +229,6 @@ final class ChatController {
     }
 
     func showHistory(_ key: String?) { if let key, let c = store.conversations.first(where:{$0.key == key}) {selected = c}; refresh(); ui.openHistory() }
-    private func desktopReplyTarget(_ conversation:Conversation) -> (id:String,mode:DesktopReply.Mode,start:Date)? {
-        if let live = desktopTasks.first(where:{$0.threadID == conversation.threadID}) {
-            guard let id = live.turnID,let mode = DesktopReply.mode(for:live.status) else {return nil}
-            return (id,mode,live.start)
-        }
-        // 读取未完成或失败时，不用旧历史中的执行状态开放插话。
-        guard let last = conversation.turns.max(by:{$0.date < $1.date}),let id = last.id,
-              DesktopReply.mode(for:last.status) == .start else {return nil}
-        return (id,.start,last.date)
-    }
-    func refreshDesktopSettingsIfNeeded() {
-        guard !closing,selected.external,(ui.composerVisible || ui.history.isVisible),let thread = selected.threadID else {return}
-        let key = selected.key
-        guard desktopModelRequests[key] == nil,Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
-        let request = UUID(); desktopModelRequests[key] = request; desktopModelChecked[key] = Date()
-        DesktopReply.readSettings(thread:thread) { [weak self] result in
-            guard let self,!self.closing,self.desktopModelRequests[key] == request else {return}
-            self.desktopModelRequests.removeValue(forKey:key)
-            guard self.store.conversations.contains(where:{$0.key == key}) else {return}
-            switch result {
-            case .success(let text): self.desktopModelNotes[key] = text
-            case .failure(let error): self.desktopModelNotes[key] = "未读取到模型设置 · "+error.localizedDescription
-            }
-            if self.selected.key == key {self.refresh()}
-        }
-    }
-    private func submitDesktop(_ text:String,fromComposer:Bool) {
-        let conversation = selected, key = conversation.key
-        guard !closing,running == nil,desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
-              let thread = conversation.threadID,let target = desktopReplyTarget(conversation) else {return}
-        let request = UUID(), started = Date()
-        desktopSending[key] = request; desktopReplyNotes.removeValue(forKey:key); refresh()
-        DesktopReply.submit(thread:thread,previousTurn:target.id,cwd:conversation.cwd,text:text,mode:target.mode) { [weak self,weak conversation] result in
-            guard let self,let conversation,!self.closing,self.desktopSending[key] == request,
-                  self.store.conversations.contains(where:{$0 === conversation}) else {return}
-            self.desktopSending.removeValue(forKey:key)
-            switch result {
-            case .success(let receipt):
-                // 观察器与发送回执均以真实 turn ID 合并，避免生成两条记录。
-                if let turn = conversation.turns.first(where:{$0.id == receipt.turnID}) {
-                    turn.lastMessageAt = started
-                    if target.mode == .steer {turn.input += (turn.input.isEmpty ? "" : "\n\n")+"插话："+text}
-                    else {turn.input = text}
-                }
-                else {
-                    let turn = Turn(); turn.id = receipt.turnID; turn.input = text; turn.owned = false
-                    turn.date = target.mode == .steer ? target.start : started; turn.status = receipt.status; turn.lastMessageAt = started; conversation.turns.append(turn)
-                }
-                self.ui.clearSubmittedDraft(key:key,fromComposer:fromComposer,text:text)
-                self.desktopReplyNotes.removeValue(forKey:key)
-                if fromComposer && self.selected === conversation {self.ui.hideComposer()}
-                self.persist()
-            case .failure(let error):
-                if error is DesktopReply.Unconfirmed {self.desktopUnconfirmed.insert(key)}
-                self.desktopReplyNotes[key] = error is DesktopReply.Unconfirmed ? "发送结果待确认，请检查 Codex" : error.localizedDescription
-                self.refresh()
-                showError(error is DesktopReply.Unconfirmed ? "发送结果待确认" : "消息未发送",error)
-            }
-        }
-    }
-    private func checkDesktopDelivery() {
-        let conversation = selected, key = conversation.key
-        guard desktopUnconfirmed.contains(key) else {return}
-        CodexConnection.openConversation(conversation.threadID)
-        let alert = NSAlert(); alert.messageText = "检查 Codex 中的发送结果"
-        alert.informativeText = "请查看“\(conversation.title)”是否已收到这条消息。草稿仍保留；确认未发送后才重新启用发送。"
-        alert.addButton(withTitle:"保留待确认状态"); alert.addButton(withTitle:"已确认未发送"); alert.applyAccent()
-        alert.beginSheetModal(for:ui.composerVisible ? ui.composer : ui.history) { [weak self] response in
-            guard response == .alertSecondButtonReturn,let self,self.store.conversations.contains(where:{$0 === conversation}) else {return}
-            self.desktopUnconfirmed.remove(key); self.desktopReplyNotes.removeValue(forKey:key); self.refresh()
-        }
-    }
     func loadModels(force: Bool = false) {
         let settings = ui.models, directory = selected.cwd
         guard !selected.external && !closing && !settings.loading && (force || settings.models.isEmpty || modelDirectory != directory) else{return}
@@ -352,7 +268,7 @@ final class ChatController {
     }
     func submit(_ text: String, closeComposer: Bool = false) {
         guard !store.isReadOnly else {pet.showSettings(section:.advanced); return}
-        if selected.external {submitDesktop(text,fromComposer:closeComposer); return}
+        if selected.external {desktopSession.submit(text,fromComposer:closeComposer); return}
         guard running == nil && !closing && !ui.models.loading else{return}
         let modelParams: [String:Any]
         do {modelParams = try ui.models.parameters()}
@@ -361,7 +277,7 @@ final class ChatController {
         let c = selected, turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
-        running = (c,turn); cancelled = false; previewedMessages = [:]; finalMessageID = nil; imageMessageIDs.removeAll(); messages = [:]; messageOrder = []; summaries = [:]; steps = [:]; lastPreview = ""; currentActivity = nil; activityItems.removeAll()
+        running = (c,turn); cancelled = false; messagesState = TaskMessageAccumulator()
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
         pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
@@ -399,69 +315,18 @@ final class ChatController {
         if let id = p["turnId"] as? String, let current = t.id, id != current {return}
         switch method {
         case "turn/started": t.id = (p["turn"] as? [String:Any])?["id"] as? String; t.status = "running"; if cancelled {interrupt()}
-        case "item/agentMessage/delta":
-            guard let id = p["itemId"] as? String else {return}; if messages[id] == nil {messageOrder.append(id)}
-            messages[id,default:""] += p["delta"] as? String ?? ""; lastKind = "output"
-            updateActivity(["id":id,"type":"agentMessage"]); lastPreview = ""
-        case "item/reasoning/summaryTextDelta":
-            let key = "\(p["itemId"] ?? ""):\(p["summaryIndex"] ?? 0)"; summaries[key,default:""] += p["delta"] as? String ?? ""; lastKind = "summary"
-            updateActivity(["id":p["itemId"] as? String ?? "","type":"reasoning","summary":summaries.filter {$0.key.hasPrefix("\(p["itemId"] ?? ""):")}.sorted {$0.key < $1.key}.map(\.value)])
-        case "item/started", "item/completed": if let item = p["item"] as? [String:Any] {
-            record(item)
-            let type = item["type"] as? String ?? ""
-            if type != "agentMessage" && !(type == "imageGeneration" && imageMessageIDs.contains(item["id"] as? String ?? "")) {
-                var progress = item
-                progress["status"] = item["status"] as? String ?? (method == "item/started" ? "inProgress" : "completed")
-                if type == "reasoning",TaskActivity.summary(item["summary"] as? [Any] ?? []).isEmpty,let id = item["id"] as? String {
-                    progress["summary"] = summaries.filter {$0.key.hasPrefix(id+":")}.sorted {$0.key < $1.key}.map(\.value)
-                }
-                updateActivity(progress)
-                lastKind = type == "reasoning" ? "summary" : "progress"
-            } else if type == "agentMessage" {
-                updateActivity(item)
-            }
-        }
-        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); lastKind = "progress"; currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "")
         case "turn/completed":
             guard let turn = p["turn"] as? [String:Any], t.id == nil || t.id == turn["id"] as? String else{return}
-            for item in turn["items"] as? [[String:Any]] ?? [] {record(item)}
+            for item in turn["items"] as? [[String:Any]] ?? [] {messagesState.record(item)}
             updateText(); finish(turn["status"] as? String ?? "unknown",error:(turn["error"] as? [String:Any])?["message"] as? String ?? ""); return
         case "error": t.error = (p["error"] as? [String:Any])?["message"] as? String ?? "Codex 报告错误"
-        default:return
+        default:guard messagesState.receive(method,p) else {return}
         }
         scheduleUpdate()
     }
-    func record(_ item: [String:Any]) {
-        let id = item["id"] as? String ?? UUID().uuidString
-        switch item["type"] as? String {
-        case "agentMessage":
-            currentActivity = nil; lastPreview = ""
-            if messages[id] == nil {messageOrder.append(id)}; messages[id] = item["text"] as? String ?? ""; lastKind = "output"
-            if item["phase"] as? String == "final_answer" {finalMessageID = id; running?.1.final = item["text"] as? String ?? ""}
-        case "imageGeneration":
-            if let link = GeneratedImageLink.markdown(status:item["status"] as? String,savedPath:item["savedPath"] as? String) {
-                if messages[id] == nil {messageOrder.append(id)}
-                messages[id] = link; imageMessageIDs.insert(id); steps.removeValue(forKey:id); lastKind = "output"
-                currentActivity = nil; lastPreview = ""
-            } else if ["inProgress","running"].contains(item["status"] as? String ?? "") {
-                steps[id] = "正在生成图片"; lastKind = "progress"
-            } else {steps.removeValue(forKey:id)}
-        case "reasoning":
-            // 只读取协议公开 summary，不读取 content 或加密推理字段。
-            for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {summaries["\(id):\(index)"] = part as? String ?? (part as? [String:Any])?["text"] as? String ?? ""}; lastKind = "summary"
-        case "commandExecution": steps[id] = "\(item["status"] ?? "") · \(item["command"] ?? "")\n\(item["aggregatedOutput"] ?? "")"; lastKind = "progress"
-        case "fileChange": steps[id] = (item["changes"] as? [[String:Any]] ?? []).compactMap{$0["path"] as? String}.joined(separator:"\n"); lastKind = "progress"
-        case "mcpToolCall", "dynamicToolCall": steps[id] = "\(item["status"] ?? "") · \(item["tool"] ?? "工具")"; lastKind = "progress"
-        case "webSearch": steps[id] = "搜索：\(item["query"] ?? "")"; lastKind = "progress"
-        default:break
-        }
-    }
     func updateText() {
         guard let turn = running?.1 else {return}
-        let text = messageOrder.compactMap{messages[$0]}.joined(separator:"\n\n")
-        if turn.messages != text {turn.lastMessageAt = Date(); turn.messages = text}
-        turn.summary = summaries.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n")
-        turn.steps = steps.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n\n")
+        messagesState.apply(to:turn)
     }
     func scheduleUpdate() {
         if updateTimer != nil {return}
@@ -469,19 +334,17 @@ final class ChatController {
             guard let self else{return}; self.updateTimer = nil; self.updateText(); self.refresh(); self.scheduleSave()
             guard let (c,t) = self.running else{return}
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
-            if self.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
+            if self.messagesState.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
             self.presentAgentMessages(conversation:c,turn:t)
-            self.pet.showProgressToast(self.currentActivity,key:"own",timing:.init(start:t.date,key:"own"))
+            self.pet.showProgressToast(self.messagesState.currentActivity,key:"own",timing:.init(start:t.date,key:"own"))
 
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)
     }
     private func presentAgentMessages(conversation:Conversation,turn:Turn) {
-        for id in messageOrder where id != finalMessageID {
-            guard let text = messages[id],!text.isEmpty,previewedMessages[id] != text else {continue}
-            previewedMessages[id] = text
-            pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
-                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:id)
+        for message in messagesState.takeChangedMessages() {
+            pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
+                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:message.id)
         }
     }
     func scheduleSave() {
@@ -491,9 +354,9 @@ final class ChatController {
     }
     func finish(_ status: String, error: String = "") {
         guard let (c,t) = running else{return}
-        pet.bubble.removeActivity(taskKey:"own"); currentActivity = nil; activityItems.removeAll()
+        pet.bubble.removeActivity(taskKey:"own"); messagesState.clearActivity()
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
-        if t.final.isEmpty {finalMessageID = messageOrder.last(where:{!imageMessageIDs.contains($0)}); t.final = finalMessageID.flatMap{messages[$0]} ?? ""}
+        messagesState.finalize(t)
         presentAgentMessages(conversation:c,turn:t)
         running = nil; requestCoordinator.dismiss(); pet.bubble.resolveQuestions(taskKey:"own"); pet.taskEnded("own",status:status); persist()
         let title = pet.preferences.taskResultLine(status)
@@ -507,7 +370,7 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:GeneratedImageLink.appending(messageOrder.filter {imageMessageIDs.contains($0)}.compactMap {messages[$0]},to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:finalMessageID ?? "result")}
+        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result")}
         if closing {finishShutdown()}
     }
     func stop() {
@@ -519,45 +382,6 @@ final class ChatController {
         guard let (c,t) = running, let thread = c.threadID, let turn = t.id else{return}
         connection.call("turn/interrupt",["threadId":thread,"turnId":turn]) { [weak self] result in if case .failure(let error) = result {self?.running?.1.error = error.localizedDescription; self?.persist()} }
     }
-    func quota() {
-        guard !(quotaRequestInFlight && pet.quotaActive) else {return}
-        quotaRequestInFlight = true; pet.quotaActive = true; quotaSerial += 1; let serial = quotaSerial
-        quotaAccount = nil
-        if pet.dock == nil {pet.play(pet.catalog.quotaAnimation,"quota")}
-        pet.say(pet.preferences.statusLine("quotaLoadingTemplate"),kind:"quotaLoading",personalizeTitle:false)
-        connection.connect { [weak self] error in
-            guard let self else{return}
-            if let error {self.quotaResult(serial,.failure(error));return}
-            guard serial == self.quotaSerial, self.pet.quotaActive, !self.closing else {return}
-            let query = QuotaQuery { [weak self] result in
-                guard let self, serial == self.quotaSerial, self.pet.quotaActive, !self.closing else {return}
-                switch result {
-                case .success(let snapshot):
-                    self.quotaAccount = snapshot.account
-                    self.quotaResult(serial,.success(snapshot.value))
-                case .failure(let error): self.quotaResult(serial,.failure(error))
-                }
-            }
-            query.start { [connection = self.connection] method,params,reply in connection.call(method,params,completion:reply) }
-        }
-    }
-    func quotaResult(_ serial: Int, _ result: Result<[String:Any],Error>) {
-        guard serial == quotaSerial && pet.quotaActive && !closing else{return}
-        quotaRequestInFlight = false
-        switch result {
-        case .failure(let error):
-            pet.quotaActive = false
-            pet.say("Codex 额度",body:" ",kind:"quota")
-            pet.bubble.quotaRows(QuotaPresentation.unavailable(account:quotaAccount),scale:Double(pet.bubblePercent)/100,
-                failure:AppFailure.codex(error.localizedDescription),retry:{ [weak self] in self?.quota() })
-            pet.placeBubble()
-        case .success(let value):
-            let overview = QuotaPresentation.overview(value,account:quotaAccount)
-            if pet.bubble.kind != "quota" {pet.say("Codex 额度",body:" ",kind:"quota")}
-            pet.bubble.quotaRows(overview,scale:Double(pet.bubblePercent)/100); pet.placeBubble()
-        }
-    }
-
     func shutdown(_ completion: @escaping () -> Void) {
         closing = true; onFinishedShutdown = completion
         if running != nil {

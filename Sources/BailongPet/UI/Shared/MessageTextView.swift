@@ -11,19 +11,24 @@ final class MessageTextView: AppTextView {
     override func layout() {
         super.layout()
         guard codeLayoutDirty || codeLayoutWidth != bounds.width else {return}
-        guard let storage = textStorage,let manager = layoutManager,let container = textContainer else {return}
+        guard let storage = textStorage,let manager = layoutManager else {return}
         codeLayoutDirty = false; codeLayoutWidth = bounds.width
         var seen = Set<Int>()
         storage.enumerateAttribute(.codeBlockHeader,in:NSRange(location:0,length:storage.length)) {value,range,_ in
-            guard let content = value as? CodeBlockContent else {return}
+            guard let content = value as? CodeBlockContent,
+                  let paragraph = storage.attribute(.paragraphStyle,at:range.location,effectiveRange:nil) as? NSParagraphStyle,
+                  let block = paragraph.textBlocks.first else {return}
             seen.insert(range.location)
             let toolbar = codeToolbars[range.location] ?? CodeBlockToolbar(content)
             toolbar.content = content
             if toolbar.superview == nil {addSubview(toolbar); codeToolbars[range.location] = toolbar}
             manager.ensureLayout(forCharacterRange:range)
             let glyphs = manager.glyphRange(forCharacterRange:range,actualCharacterRange:nil)
-            let rect = manager.boundingRect(forGlyphRange:glyphs,in:container)
-            toolbar.frame = NSRect(x:max(textContainerOrigin.x,bounds.width-textContainerInset.width-46),y:rect.minY+textContainerOrigin.y,width:30,height:26)
+            let line = manager.lineFragmentRect(forGlyphAt:glyphs.location,effectiveRange:nil)
+            let blockBounds = manager.boundsRect(for:block,at:glyphs.location,effectiveRange:nil)
+            let side = content.headerHeight
+            toolbar.frame = NSRect(x:blockBounds.maxX-CodeBlockHeaderLayout.padding+textContainerOrigin.x-side,
+                y:line.midY+textContainerOrigin.y-side/2,width:side,height:side)
         }
         for key in Array(codeToolbars.keys) where !seen.contains(key) {codeToolbars.removeValue(forKey:key)?.removeFromSuperview()}
     }

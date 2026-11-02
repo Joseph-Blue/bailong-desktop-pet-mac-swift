@@ -24,14 +24,14 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 | --- | --- |
 | 启动与退出 | App/main.swift、App/RunLifecycle.swift |
 | 动画、素材与位置 | Pet/Pet.swift、Pet/Resources.swift、Pet/StreamingAnimation.swift |
-| 气泡、材质与输入 | UI/Bubble.swift、UI/NativeControls.swift、UI/MessageEditor.swift、UI/TextInteraction.swift |
-| 计时、概览与问卷 | UI/BubblePresentation.swift、UI/BubbleTaskList.swift、UI/BubbleBodyScrollView.swift、UI/QuestionForm.swift |
-| Markdown 与代码块 | UI/MarkdownText.swift、UI/CodeBlockRendering.swift、UI/MessageTextView.swift |
-| 偏好与设置 | Settings/Preferences.swift、Settings/Settings.swift、Settings/SettingsControls.swift、Settings/AboutPage.swift |
-| 内置任务与请求 | Conversation/ChatController.swift、Codex/RequestCoordinator.swift、Codex/CodexProtocol.swift |
-| 外部观察与明确回答 | Codex/DesktopHistoryReader.swift、Codex/DesktopSync.swift、Codex/DesktopApprovalReader.swift、Codex/DesktopRuntimeProjection.swift、Codex/DesktopApproval.swift、Codex/TaskActivity.swift、Codex/DesktopQuestionReply.swift |
-| 历史、搜索与显示 | Conversation/History.swift、Conversation/HistorySearch.swift、UI/ChatUI.swift |
-| 额度与订阅入口 | Codex/QuotaQuery.swift、Codex/QuotaResetCards.swift、UI/SubscriptionManagement.swift |
+| 气泡、材质与输入 | UI/Bubble/Bubble.swift、UI/Shared/NativeControls.swift、UI/Shared/MessageEditor.swift、UI/Shared/TextInteraction.swift |
+| 计时、概览与问卷 | UI/Bubble/BubblePresentation.swift、UI/Bubble/BubbleCardStore.swift、UI/Bubble/BubbleCountdown.swift、UI/Bubble/BubbleTaskList.swift、UI/Bubble/BubbleBodyScrollView.swift、UI/Bubble/QuestionForm.swift |
+| Markdown 与代码块 | UI/Shared/MarkdownText.swift、UI/Shared/CodeBlockRendering.swift、UI/Shared/MessageTextView.swift |
+| 偏好与设置 | Settings/Preferences.swift、Settings/Settings.swift、Settings/SettingsForm.swift、Settings/Pages、Settings/SettingsControls.swift、Settings/AboutPage.swift |
+| 内置任务与请求 | Conversation/ChatController.swift、Conversation/TaskMessageAccumulator.swift、Conversation/CommandSummary.swift、Codex/RequestCoordinator.swift、Codex/CodexProtocol.swift |
+| 外部观察与明确回答 | Conversation/DesktopConversationSession.swift、Codex/DesktopHistoryReader.swift、Codex/DesktopSync.swift、Codex/DesktopApprovalReader.swift、Codex/DesktopRuntimeProjection.swift、Codex/DesktopApproval.swift、Codex/TaskActivity.swift、Codex/DesktopQuestionReply.swift |
+| 历史、搜索与显示 | Conversation/History.swift、Conversation/HistorySearch.swift、UI/Chat/ChatUI.swift、UI/Chat/ChatComposer.swift、UI/Chat/TranscriptRenderer.swift |
+| 额度与订阅入口 | Conversation/QuotaCoordinator.swift、Codex/QuotaQuery.swift、Codex/QuotaResetCards.swift、UI/SubscriptionManagement.swift |
 | 更新与跟随启动 | Infrastructure/Updates.swift、Infrastructure/Autostart.swift、Infrastructure/FollowMonitor.swift |
 | 构建与 PNG 接入 | scripts/swift-sources.sh、scripts/build.sh、Tools/NativeHEVC/ApplyPNGRepairs.swift |
 
@@ -113,7 +113,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 ## 代码块与气泡尺寸
 
 - Markdown 代码块使用单个 NSTextTableBlock 承载语言头与等宽正文，绘制完整圆角背景和细边界，仅保留原生复制按钮；基础词法着色不改变原文，未知语言保持纯文本。正文仍在文本存储中，保留选择、历史搜索和流式未闭合围栏显示，不把代码变成图片或执行代码。
-- 气泡与历史共用 MarkdownText／CodeBlockRendering／StreamingTextView；复制取完整代码正文，保留空行与缩进。代码按可用宽度换行，已移除放大按钮及展开窗口。没有外部语法依赖。
+- 气泡与历史共用 MarkdownText／CodeBlockRendering／MessageTextView；复制取完整代码正文，保留空行与缩进。代码按可用宽度换行，已移除放大按钮及展开窗口。没有外部语法依赖。
 - 外观页“气泡形状”提供自定义宽高比，默认关闭；开启后宽 : 高为 0.6～3.0，初始 1.5，应用于消息与进展气泡。按钮和屏幕边界保留必要空间，超出正文滚动；问卷手动拉伸优先，额度按内容排版。偏好导入导出、恢复、搜索及已有气泡外观刷新共用现有链路。
 - 消息与提醒中，“气泡卡片与任务概览”紧接“显示哪些消息”；“进展小气泡停留时间”位于“停留时间”组最后，自动显示开关仍在概览组。前端修改继续读取 macos-golden-gate-design，使用 AppKit 原生控件与语义分组。
 
@@ -214,7 +214,6 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 短进展气泡标题单行，思考及工具状态均启用标题流水和强调色盲文，右侧秒表与标题同排右对齐，使用任务原始开始时间及 MM:SS／H:MM:SS；缺少开始时间不伪造。工具项完成仍可展示进展动画，真实轮次结束停止。关闭动态效果或减少动态效果时保留静态盲文。
 - 个性页增加 taskCommandTemplate／taskCommandCompletedTemplate，默认“{桌宠名}正在运行命令”／“{桌宠名}已运行命令”，分别用于命令执行与结束项；设置搜索、恢复和导入导出同步，泛工具调用台词独立保留。
 - 概览进展仅在文字超过可用宽度且允许动态效果时滚动，末尾以同字体三个空格间距衔接下一遍首字，28pt/s 连续循环；短文本静止，同文刷新保留相位，内容变化重新开始。
-- 静态正文打开或切换时从顶部显示；同一条内容刷新保留手动阅读位置，不自动追到末尾。外部只读会话的回复、审批、问卷及历史适用；桌宠临时聊天未触发打字机的整段回复也适用。实际打字机追加继续保留跟随末尾和手动滚动停止跟随，历史搜索显式定位仍生效。
 
 - 显示思考过程、显示工具调用、自动显示进展小气泡位于“消息与提醒 → 显示哪些消息”，紧接互动台词；原生开关与次级说明不变，搜索索引使用同一分组。
 - 审批阅读位置按请求 identity 与完整详情判断是否为新内容，不能只比较整轮通用卡片 ID；新请求先清除旧选择、完成富文本排版再回到顶部，视口高度过渡保留阅读位置。审批／问卷不播放正文打字机。概览滚动使用两个完整 CATextLayer，移除 NSTextField 子视图位移动画，保留三个空格衔接、超宽条件及动态效果设置。
@@ -222,7 +221,6 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 - 设置说明采用紧凑副标题排版（4pt 间距）；单项说明归入该控件，组级说明保留全宽并收紧间距。首次无保存记录时设置窗口填满屏幕可用区域，使用自定义绿灯缩放而非独立全屏；已有窗口记录恢复位置与尺寸、不重新居中，绿灯可恢复标准尺寸。
 - 高级页统一使用“清空本应用的本机数据”，含设置项、按钮及确认对话框，搜索保留旧称作为关键词；“关于”内标签改为“开源项目、技术栈与致谢”，搜索可直接打开对应原生分页。
 
-- 审批新请求或详情变化时，InitialReadingScrollView 在裁剪视图持续锚定正文顶部，覆盖 constrainBoundsRect 与直接 scroll(to:) 两条路径；用户滚轮、滚动条、键盘导航或文本选择后释放。非审批内容不锁定。不能用一次 scroll(to: .zero) 冒充完整布局后的初始定位。
 - 气泡有卡片就显示左右导航和页码，单卡显示 1 / 1 且两箭头禁用；额度、临时进展等无卡片页面不增加导航。问卷底部题目导航统一为上一题／跳过／下一题或提交回答三列，末题与单题提交固定最右；Codex 跳转独立整行，消息卡片翻页另置底部。
 
 - 跑马灯与标题流水按所属视图 effectiveAppearance 显式解析动态色；Core Text 图层使用 CGColor，外观或强调色变化立即重绘，保留滚动相位。普通气泡、额度加载及短进展标题共用刷新路径；静态标题恢复语义 labelColor。
@@ -234,11 +232,11 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 - 0.6.0 正式版标签为 白龙桌宠Swiftv0.6.0；本轮保留全部现有菜单图标，外观三选预览与图标精简仅为讨论建议，未实施。发布说明按相较 0.5.0 的累计变化整理。
 
-- 滚动刷新仅处理发生变化的正文：外部同步每批至多保存／刷新一次，聊天正文按会话内容签名跳过无关更新；静态富文本保留相同前缀、只替换变化尾部，不在每次刷新强制全文排版和 sizeToFit。代码框复制按钮仅在正文或宽度变化时重新定位；滚动条留白使用原生 contentInsets，禁止 tile 中反复撑宽再缩窄正文。问卷同页同尺寸不重建，任务列表等高更新不触发布局，额度补充结果保留阅读位置。消息翻页箭头不显示 hover 提示，保留辅助功能名称。
+- 滚动刷新仅处理发生变化的正文：外部同步每批至多保存／刷新一次，聊天正文按会话内容签名跳过无关更新；静态富文本保留相同前缀、只替换变化尾部，不在每次刷新强制全文排版和 sizeToFit。代码框复制按钮仅在正文或宽度变化时重新定位；滚动条轨道由 GutterScrollView 单独分配，禁止重复扣减留白或反复撑宽再缩窄正文。问卷同页同尺寸不重建，任务列表等高更新不触发布局，额度补充结果保留阅读位置。消息翻页箭头不显示 hover 提示，保留辅助功能名称。
 
 - 跟随启动更新在后台串行执行，先确认旧 launchd 服务卸载完成再注册新 helper；bootstrap 错误 5 延后一秒自动再试一次，失败保留真实错误，通用页同步更新状态。仍只自动维护用户已启用的启动项，系统撤销许可时不重载。
 - 历史会话按最近消息／任务开始或结束时间倒序，同时间保持原列表逆序；流式助手消息真正变化才更新 lastMessageAt，首次导入按来源时间。排序不改变当前选中会话和草稿。历史窗口初始内容 1100×850pt，适配屏幕可用范围，记忆用户尺寸与位置。
-- 气泡正文与输入滚动视口仅允许纵向滚动，关闭横向弹性；裁剪视图的约束和直接滚动入口均固定横坐标到正文左边缘，保留纵向阅读位置。聊天、任务概览、额度、审批、问卷、进展和历史共用；审批的顶部锚定独立保留。
+- 气泡正文与输入滚动视口仅允许纵向滚动，关闭横向弹性；裁剪视图的约束和直接滚动入口均固定横坐标到正文左边缘，保留纵向阅读位置。聊天、任务概览、额度、审批、问卷、进展和历史共用；新内容起始位置由各阅读场景决定。
 
 - 气泡正文宽度由气泡布局减去固定滚动条留白统一计算，禁用正文的自动宽度拉伸；高度过渡不从 contentView.bounds.width 回写文本宽度。滚动条显隐不改变换行，真实气泡宽度／字号调整仍重新排版；任务概览、额度、问卷使用相同留白计算。
 
@@ -246,22 +244,19 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 - 额度百分比使用真实 remaining 值判断：≤5% 为 systemRed，>5% 且 ≤10% 为 systemOrange，其他百分比保持普通文字与应用强调色进度条；额度点数等无百分比行不套用阈值。
 - Astra 所有推理档位使用同一句普通橙色额度提醒；模型菜单固定预留双行警告、双行说明与默认提示空间，显隐或换行不推移标题／模型控件。
-- 内置任务完成后不继续正文打字机或自动追尾；结束只改变播放状态，不将同卡当作新正文重置。滚轮、触控板、滚动条、键盘或选择正文立即停止本卡自动跟随，新卡恢复跟随资格；追加和收尾保留阅读位置。气泡使用 AppKit 原生滚动条，绘制、样式与显隐由系统负责；通过公开 willStartLiveScroll／didLiveScroll 通知和滚轮事件处理阅读状态，不替换滚动条子类或覆写轨道绘制。
 - 任务列表计时文字与会话名按基线对齐，秒表以数字 capHeight 的中心定位；标题计时使用同样的图标定位方式，不按不同高度控件的矩形中心混排。
 
-## 当前气泡重构规则（0.6.3-dev.2，替代此前追尾／锁顶及文字动画规则）
+## 当前气泡与复用规则（0.6.3-dev.5）
 
-- BubbleBodyScrollView 统一管理消息、审批、问卷、任务概览、额度、短进展及预览的文档高度、视口和纵向阅读位置。内容提供自然高度，气泡提供视口；只有自然高度大于视口时才创建原生纵向滚动条，不接管滚动条绘制。固定正文留白与滚动条显隐无关。
-- MessageTextView 只更新收到的富文本快照，保留未变前缀与代码块工具栏；气泡关闭文本自身自动增高，使用同一 TextKit 容器测量真实内容高度，正文或宽度不变时复用测量。消息来源不再携带 followsText 显示策略。
-- 打开、切卡、正文变化或外观调整统一从顶部显示；手动阅读期间没有持续锁顶、跟随末尾或位置锁。窗口高度调整只约束合法阅读范围。历史正文同样即时显示、更新回顶部，搜索仍可显式定位匹配。
-- 暂时停用打字机、标题扫光、概览文字循环，删除对应动画路径；状态盲文与任务计时保留。typingEffect／countAfterReveal 偏好保留但不参与运行，设置开关显示关闭并置灰，说明与搜索索引注明暂时停用。
-- 问卷草稿、审批回执和消息身份不归滚动容器管理；临时聊天、历史输入和问卷编辑仍使用原生 NSTextView 编辑逻辑，不对输入光标套用正文回顶部规则。
-
-## 0.6.3-dev.3 显示策略与公共组件
-
-- 普通对话气泡打开、切卡及正文变化默认从顶部显示。消息记录进入会话或重新打开窗口时定位最下方；同一会话正文刷新保留阅读位置，不按内置／外部来源分叉。搜索显式定位匹配优先。修改配色不视为重新进入会话。
-- ProgressTextEffects 统一标题流水与概览循环的动态效果策略；主气泡、进展小气泡、额度加载复用同一标题路径。标题 1.2 秒扫光、2.8 秒停顿，盲文独立。正文打字机仍停用，typingEffect／countAfterReveal 保留偏好并置灰。
-- ProgressMarqueeView 完整双图层仅超宽时循环，28pt/s、同字体三个空格衔接；同文刷新保留相位，内容变化重置，宽度／字体变化更新布局；隐藏、离屏和关闭时暂停并保存相位，动态效果关闭或减少动态效果时显示静态文字。任务行按会话和轮次身份复用，不能仅因进展对象变化重建文字动画。
-- GutterScrollView 只在正文宽度减一次 gutter，contentInsets／scrollerInsets 不重复挤入右侧留白；原生滚动条位于滚动区右缘。气泡、历史与输入区使用同一几何规则，保留不可滚动气泡不创建滚动条。
-- InlineStatusLayout 统一原生文字基线及图标 capHeight 中心定位，覆盖气泡标题计时、任务行盲文、状态图标、时间及跳转箭头。
-- CopyFeedback 为应用自有复制按钮统一写入剪贴板及反馈；成功后文字按钮显示“已复制”、图标按钮显示绿色对钩，失败显示“复制失败”，1.5 秒后恢复。重复点击重计时，按钮释放清理定时器；不接管系统编辑菜单。错误详情复制后保留窗口，允许看到反馈。代码块与历史使用同一工具栏。
+- BubbleBodyScrollView 统一管理消息、审批、问卷、任务概览、额度、短进展及预览的文档高度、视口和纵向阅读位置；只有自然高度大于视口时才创建原生滚动条，不接管绘制。
+- BubbleBodyLayout 统一正文宽度和滚动视口。正文左右边距对称，默认 21pt 随气泡比例缩放；小比例至少容纳系统滚动条轨道及 2pt 缩放间距。视口向右扩展，让轨道使用右边距；气泡 lineFragmentPadding 为 0，滚动条显隐不改变换行宽度。输入框和历史窗口保留自己的边距。
+- MessageTextView 使用收到的富文本快照与同一 TextKit 容器测量高度，复用未变化前缀及代码工具栏；禁止额外的高度估算、持续锁顶和自动追尾。消息来源不携带 followsText 显示策略。
+- 普通气泡打开、切卡及正文变化从顶部显示；消息记录进入会话或重新打开窗口时定位底部，同会话刷新保留阅读位置。搜索显式定位优先，配色变化不视为重新进入会话。审批按请求 identity 和详情识别新内容，保留原请求回执及问卷草稿。
+- 标题流水、概览循环共用 ProgressTextEffects；标题 1.2 秒扫光、2.8 秒停顿，盲文独立。ProgressMarqueeView 仅超宽时循环，28pt/s、三个空格衔接，同文刷新保留相位；隐藏停动画，动态效果关闭或减少动态效果时静态显示。正文打字机停用，typingEffect／countAfterReveal 偏好保留并置灰。
+- InlineStatusLayout 统一标题、任务行的文字基线及图标 capHeight 中心定位。CopyFeedback 统一剪贴板写入及 1.5 秒成功／失败反馈，恢复原标题、图片及 imagePosition；纯图标按钮保持空标题和 imageOnly。代码复制与关闭按钮共用 HoverIconButton 悬停／按压底色。
+- 代码语言标签和复制按钮使用同一 CodeBlockHeaderLayout 尺寸；复制按钮沿实际原生文本块右边界定位，与语言首行居中对齐，气泡和历史复用 CodeBlockRendering／MessageTextView。
+- BubbleCardStore 负责身份合并、上限、优先级和选卡，BubbleCountdown 负责停留时间；正文容器不持有发送或任务生命周期。BubbleCard 继续保存对应问卷表单与草稿，不因拆分重建表单。
+- 内置公开消息聚合由 TaskMessageAccumulator 负责；外部会话设置同步、回复／插话、待确认状态由 DesktopConversationSession 负责，额度由 QuotaCoordinator 负责。ChatController 保留任务生命周期、连接与历史协调，不混用内外会话的模型、审批和发送权限。
+- 新命令执行记录只保存状态与命令摘要，不将 aggregatedOutput 塞入桌宠历史；已有历史保持原文，完整工具输出在原 Codex 会话中查看。
+- UI 按 Bubble／Chat／Shared 分组，设置页面按 Pages 分组；保持单 target 和递归源码清单。ChatComposer 拥有临时窗口控件与显隐，TranscriptRenderer 拥有历史富文本缓存；SettingsForm 统一控件、编辑回调和搜索定位，外观／个性／消息／活动页独立维护，窗口负责导航与搜索。
+- 拆分以已有复用点和明确职责为依据，状态保留私有；不建立通用消息总线、插件框架或仅为跨文件而增加的转发层。文件接近 500 行时评估职责，行数不是强制拆分标准。优先维护一个组件和实际调用方，避免为两种消息分别修同一个显示问题。
