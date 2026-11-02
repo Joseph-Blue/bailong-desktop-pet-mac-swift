@@ -7,7 +7,7 @@ description: 维护白龙娘桌宠 macOS 原生 Swift/AppKit 工程的动画、�
 
 ## 工作边界
 
-- 当当前分支为 joseph/dev 时，按 AGENTS.md 的开发线规则维护完整 CHANGELOG、开发 README 与文档白名单；不创建 Release，不自动同步 main。其他分支继续遵守正式版文档规则。
+- 当当前分支为 joseph/dev 时，按 AGENTS.md 的开发线规则维护完整 CHANGELOG、开发 README 与文档白名单；不发布开发版程序，不自动同步 main。开发资源经用户授权可单独创建 dev-assets-* Pre-release，显式设置非 Latest。其他分支继续遵守正式版文档规则。
 
 - 先读目标 AGENTS.md、VERSION 与 Git 状态。当前工程为 bailong-desktop-pet-appkit，公开仓库 Joseph-Blue/bailong-desktop-pet-mac-swift；旧 Python/PySide6 工程仅供交互参考，不混用依赖、构建和数据目录。不派发其他 agent。
 - 原作基线 v0.5.1 / b102e73；只读相关函数，不整仓复制、不修改参考仓库、不运行 Windows EXE。素材修复及反哺同意不扩大为其他许可，不擅自添加许可证。

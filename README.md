@@ -13,7 +13,7 @@
 - `main`：正式版源码与普通用户说明。
 - `joseph/dev`：开发源码、完整开发变更、调查记录与待办；本地和 GitHub 使用相同分支名。
 - 两条分支独立提交；需要同步时明确选取改动，不自动合并或变基，不把开发文档整体覆盖到主线。
-- `-dev` 是源码版本的预发布后缀。本分支不创建 GitHub Release，也不发布可执行附件。
+- `-dev` 是源码版本的预发布后缀。本分支不发布开发版可执行程序；开发资源单独提供 Pre-release ZIP 附件，不设为 Latest。
 - 应用更新检查只读取 GitHub 的最新正式 Release，不读取分支中的 VERSION；同时排除草稿、预发布 Release 和带预发布后缀的版本。因此开发分支版本号更高也不会成为正式更新提醒。
 
 ## 开发资料
@@ -21,6 +21,7 @@
 - [完整变更记录](CHANGELOG.md)：恢复开发迭代，保留正式版汇总。
 - [历史变更索引](docs/开发变更索引.md)：逐份查看原始 CHANGELOG。
 - [开发分支维护](docs/开发分支.md)：历史接入、分支同步与跟踪范围。
+- [开发资源 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/dev-assets-2026-11-02/bailong-dev-assets-2026-11-02.zip) 与 [获取说明](docs/开发资源获取.md)：完整动画、工具元数据、音效和图标。
 - [开发待办](todo.md)：后续功能、滚动实验与跨 App 隐私通知排查。
 - [来源与架构](docs/来源与架构.md)：当前设计、技术栈与行为约束。
 - [启动闪退调查](docs/启动闪退调查.md)：早期版本的故障与修复记录。
@@ -28,20 +29,24 @@
 
 ## 从源码构建
 
-需要 Apple Command Line Tools，以及以下本地资源：
+首次准备请按 [开发资源获取](docs/开发资源获取.md) 操作：可直接解压开发资源 ZIP，也可从现有正式版 App 提取运行资源。文档包含下载来源、复制命令、目录对应及素材制作入口。
+
+当前源码需要包含 macOS 27 API 的 SDK；本项目使用 SDK 27.2、Apple Swift 6.4.2。应用运行目标仍为 macOS 14 起。资源目录如下：
 
 ```text
 local-assets/
   native-hevc/catalog/素材清单.json
+  native-hevc/catalog/samples.json
   native-hevc/catalog/透明HEVC/*.mov
   sounds/click.wav
   sounds/来源.txt
+  sounds/Kenney-License.txt
   glass-symbols/
   BailongPet.icns
   openai-logo.png
 ```
 
-资源不存放在 Git 中，可从原生 HEVC 版 App 的 `Contents/Resources` 提取。PNG 素材接入见 [原生素材工具](Tools/NativeHEVC/README.md)。
+资源不存放在 Git 中。`samples.json` 随开发资源包提供，用于独立预览与 PNG 替换，不是普通 App 运行必需文件。
 
 ```sh
 ./scripts/build.sh arm64           # 构建 Apple Silicon App
@@ -49,7 +54,7 @@ local-assets/
 ./scripts/run-dev.sh               # 开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码构建入口为 `./scripts/build.sh x86_64`。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码入口保留；因缺少符合要求的真机环境，Intel 适配与验证暂时搁置。
 
 ## 来源与反馈
 
