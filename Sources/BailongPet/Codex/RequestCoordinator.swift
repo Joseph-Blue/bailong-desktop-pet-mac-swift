@@ -19,7 +19,7 @@ final class RequestCoordinator {
     }
     private func showAttention(_ attention:TaskAttention, submit: (([String:String], @escaping (Error?) -> Void) -> Void)? = nil) {
         guard let (conversation,turn) = self.chat.running else {return}
-        self.chat.pet.say(self.chat.pet.preferences.statusLine(attention.kind.templateKey), body:attention.body, kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:.attention, personalizeTitle:false, animateHeading:false, attentionAction:true, timing:.init(start:turn.date,key:"own"), question:.init(questions:attention.questions,submit:submit))
+        self.chat.pet.say(self.chat.pet.preferences.statusLine(attention.kind.templateKey), body:attention.body, kind:"task", thread:conversation.key,  resetText:true, purpose:.attention, personalizeTitle:false, animateHeading:false, attentionAction:true, timing:.init(start:turn.date,key:"own"), question:.init(questions:attention.questions,submit:submit))
     }
     private func clearAttention() {
         self.chat.pet.bubble.resolveQuestions(taskKey:"own")

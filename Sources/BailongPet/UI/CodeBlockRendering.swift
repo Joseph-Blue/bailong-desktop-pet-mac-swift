@@ -16,7 +16,6 @@ final class CodeBlockContent:NSObject {
         return code == other.code && language == other.language && font == other.font
     }
     override var hash:Int {code.hashValue ^ language.hashValue ^ font.hash}
-    func copyCode() {NSPasteboard.general.clearContents(); NSPasteboard.general.setString(code,forType:.string)}
 }
 
 // 单个原生文本表格单元承载语言栏与正文，绘制统一圆角边界。
@@ -84,8 +83,8 @@ final class CodeBlockToolbar:NSView {
         super.init(frame:NSRect(x:0,y:0,width:30,height:26))
         copyButton.isBordered = false; copyButton.bezelStyle = .inline; copyButton.target = self
         copyButton.frame = NSRect(x:0,y:0,width:28,height:26); addSubview(copyButton)
-        copyButton.action = #selector(copyCode); copyButton.hoverHelp = "复制完整代码"
+        copyButton.hoverHelp = "复制完整代码"
+        CopyFeedback.attach(to:copyButton) { [weak self] in self?.content.code }
     }
     required init?(coder:NSCoder) {fatalError()}
-    @objc private func copyCode() {content.copyCode()}
 }

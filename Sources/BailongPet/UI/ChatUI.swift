@@ -29,7 +29,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var composerFrame: NSRect {composerMotion.frame}
     func moveComposer(to origin: NSPoint) {composerMotion.move(to:origin)}
     let history = HistoryWindow(contentRect:NSRect(x:0,y:0,width:1100,height:850),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
-    let composerEditor = MessageEditor(), historyEditor = MessageEditor(), transcript = StreamingTextView()
+    let composerEditor = MessageEditor(), historyEditor = MessageEditor(), transcript = MessageTextView()
     private let historySplit = NSSplitViewController()
     private var historyDetailItem: NSSplitViewItem!
     private var historyInputHeight: NSLayoutConstraint!
@@ -456,7 +456,6 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         } else if busy { onStop(); return }
         let text = editor.string.trimmingCharacters(in:.whitespacesAndNewlines)
         if !text.isEmpty {
-            if editor === historyEditor && !external {transcript.scrollToEndOfDocument(nil)}
             onSubmit(text,editor === composerEditor)
         }
     }
@@ -516,21 +515,24 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.linkBaseDirectory = {messageDirectory}
         guard history.isVisible && !history.isMiniaturized else {return}
         let selectionChanged = renderedConversation != selected.key
-        transcript.startsSnapshotsAtTop = selected.external
-        transcript.automaticallyFollowsEnd = !searching && !selected.external
-        let signature = transcriptStyle(selected) + [String(PetPreferences.shared.bool("typingEffect"))] + selected.turns.flatMap {[ $0.key ] + transcriptTurnSignature($0)}
+        let signature = transcriptStyle(selected) + selected.turns.flatMap {[ $0.key ] + transcriptTurnSignature($0)}
         let contentChanged = selectionChanged || signature != renderedTranscriptSignature
         if contentChanged {
-            transcript.setContent(transcriptContent(selected),animated:!searching && !selected.external && streaming && PetPreferences.shared.bool("typingEffect"),reset:selectionChanged)
+            let readingOrigin = transcript.enclosingScrollView?.contentView.bounds.origin
+            transcript.setContent(transcriptContent(selected),reset:selectionChanged)
+            if selectionChanged && !searching {transcript.scrollToEndOfDocument(nil)}
+            else if let scroll = transcript.enclosingScrollView,let readingOrigin {
+                scroll.contentView.scroll(to:readingOrigin); scroll.reflectScrolledClipView(scroll.contentView)
+            }
             renderedTranscriptSignature = signature
-        } else if searching && transcript.isRevealing {transcript.finishReveal()}
+        }
         if selectionChanged {matchIndex = 0}
         renderedConversation = selected.key
         if contentChanged || searching || !findMatches.isEmpty {updateSearchHighlights(reveal:searching && selectionChanged)}
     }
     @objc private func accentChanged() {
         transcriptCache.removeAll()
-        list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedConversation = nil
+        list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedTranscriptSignature = []
         refreshVisibleHistory()
     }
     private func transcriptStyle(_ conversation:Conversation) -> [String] {
@@ -620,7 +622,6 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         refreshVisibleHistory()
         history.contentView?.layoutSubtreeIfNeeded()
         if searching {updateSearchHighlights(reveal:true)}
-        else if external {transcript.scrollToBeginningOfDocument(nil)}
         else {transcript.scrollToEndOfDocument(nil)}
     }
     private func refreshVisibleHistory() {

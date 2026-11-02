@@ -38,7 +38,7 @@ final class BubbleTaskList: NSView {
         let timer = Timer(timeInterval:0.1,repeats:true) { [weak self] _ in
             guard let self else {return}; self.tick += 1
             if self.tick % 2 == 0 {self.rebuild()}
-            let animated = PetPreferences.shared.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let animated = ProgressTextEffects.enabled
             for row in self.rows {row.refresh(frame:animated ? self.tick % 10 : 0)}
         }
         self.timer = timer; RunLoop.main.add(timer,forMode:.common)
@@ -64,7 +64,8 @@ final class BubbleTaskList: NSView {
                 empty.frame = NSRect(x:0,y:y,width:bounds.width,height:height); addSubview(empty); y += height
             }
             for task in section.1 {
-                let row = previousRows.first(where:{$0.task == task}) ?? BubbleTaskRow(task:task,scale:scale)
+                let row = previousRows.first(where:{$0.task.key == task.key && $0.task.start == task.start && $0.task.turnID == task.turnID}) ?? BubbleTaskRow(task:task,scale:scale)
+                row.update(task)
                 row.frame = NSRect(x:0,y:y,width:bounds.width,height:(task.activityLine == nil ? 32 : 52)*scale)
                 addSubview(row); rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height+2*scale
             }
@@ -76,10 +77,10 @@ final class BubbleTaskList: NSView {
 
 private final class BubbleTaskRow:NSButton {
     override var isFlipped:Bool {false}
-    let task:BubbleTaskSummary
+    private(set) var task:BubbleTaskSummary
     let scale:CGFloat
     private let spinner = NSTextField(labelWithString:"⠋"), name = NSTextField(labelWithString:""), elapsed = NSTextField(labelWithString:"00:00")
-    private let activity = MarqueeProgressField(frame:.zero)
+    private let activity = ProgressMarqueeView(frame:.zero)
     private let watch = NSImageView()
     private let stateIcon = NSImageView()
     private let jump = NSImageView()
@@ -91,7 +92,7 @@ private final class BubbleTaskRow:NSButton {
         title = ""; isBordered = false; bezelStyle = .inline; target = self; action = #selector(openThread)
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         name.font = .systemFont(ofSize:12*scale); name.lineBreakMode = .byTruncatingTail; name.maximumNumberOfLines = 1
-        spinner.font = .monospacedSystemFont(ofSize:13*scale,weight:.medium)
+        spinner.font = .monospacedSystemFont(ofSize:12*scale,weight:.medium)
         elapsed.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.regular); elapsed.alignment = .right
         watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
         activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = .secondaryLabelColor
@@ -99,12 +100,19 @@ private final class BubbleTaskRow:NSButton {
         for view in [spinner,name,elapsed,watch,stateIcon,jump,activity] as [NSView] {addSubview(view)}
         jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:"在 Codex 中打开")
         jump.contentTintColor = .tertiaryLabelColor
+        update(task)
+    }
+    func update(_ task:BubbleTaskSummary) {
+        self.task = task
+        name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
+        activity.stringValue = task.activityLine ?? ""; activity.isHidden = task.activityLine == nil
         let symbol = task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
         stateIcon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
         hoverHelp = [name.stringValue,task.activity?.text,"在 Codex 中打开"].compactMap {$0}.joined(separator:"\n")
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
     }
+    func stopMotion() {activity.stop()}
     required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
     override func hitTest(_ point:NSPoint) -> NSView? {super.hitTest(point) == nil ? nil : self}
     override func updateTrackingAreas() {
@@ -123,7 +131,6 @@ private final class BubbleTaskRow:NSButton {
         }
         super.draw(dirtyRect)
     }
-    func stopMotion() {activity.stop()}
     @objc private func openThread() {CodexConnection.openConversation(task.threadID)}
     func refresh(frame index:Int) {
         spinner.isHidden = !task.active; stateIcon.isHidden = task.active
@@ -136,12 +143,21 @@ private final class BubbleTaskRow:NSButton {
         elapsed.textColor = color; watch.contentTintColor = color; stateIcon.contentTintColor = color
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
         activity.frame = NSRect(x:22*scale,y:32*scale,width:max(0,bounds.width-26*scale),height:20*scale)
-        activity.refresh()
+        activity.start()
         jump.frame = NSRect(x:bounds.width-15*scale,y:(h-11*scale)/2,width:11*scale,height:11*scale)
-        elapsed.frame = NSRect(x:trailing-width,y:(h-18*scale)/2,width:width,height:18*scale)
-        watch.frame = NSRect(x:elapsed.frame.minX-16*scale,y:(h-13*scale)/2,width:13*scale,height:13*scale)
+        let watchX = trailing-width-16*scale
         spinner.frame = NSRect(x:0,y:(h-20*scale)/2,width:18*scale,height:20*scale)
         stateIcon.frame = NSRect(x:1*scale,y:(h-14*scale)/2,width:14*scale,height:14*scale)
-        name.frame = NSRect(x:22*scale,y:(h-20*scale)/2,width:max(0,(hasTime ? watch.frame.minX-8*scale : trailing)-22*scale),height:20*scale)
+        let nameHeight = name.fittingSize.height
+        name.frame = NSRect(x:22*scale,y:(h-nameHeight)/2,width:max(0,(hasTime ? watchX-8*scale : trailing)-22*scale),height:nameHeight)
+        let baseline = InlineStatusLayout.baseline(of:name)
+        InlineStatusLayout.align(spinner,to:baseline)
+        InlineStatusLayout.align(stateIcon,to:name,side:14*scale)
+        InlineStatusLayout.align(jump,to:name,side:11*scale)
+        elapsed.frame = NSRect(x:trailing-width,y:0,width:width,height:elapsed.fittingSize.height)
+        InlineStatusLayout.align(elapsed,to:baseline)
+        let side = 13*scale
+        watch.frame = NSRect(x:watchX,y:0,width:side,height:side)
+        InlineStatusLayout.align(watch,to:elapsed,side:side)
     }
 }

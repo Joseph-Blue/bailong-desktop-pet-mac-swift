@@ -266,10 +266,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         detailsRow.spacing = 10
         for view in [disclosure,NSView(),copyDetails] {detailsRow.addArrangedSubview(view)}
         disclosure.callback = { [weak self] in guard let self else {return}; self.detailsExpanded.toggle(); self.refresh() }
-        copyDetails.callback = {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(UpdateChecker.shared.technicalDetails,forType:.string)
-        }
+        CopyFeedback.attach(to:copyDetails) {UpdateChecker.shared.technicalDetails}
         close.callback = { [weak self] in self?.window.performClose(nil) }
         download.callback = {
             let url = UpdateChecker.shared.releaseURL ?? UpdateChecker.releases

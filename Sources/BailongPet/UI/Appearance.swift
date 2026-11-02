@@ -169,6 +169,7 @@ final class AccentSwatch: NSButton {
 
 // 仍使用 AppKit 进度控件的数据和辅助功能，仅将确定进度条着色为应用强调色。
 final class AccentProgressIndicator: NSProgressIndicator {
+    var progressColor: NSColor? {didSet {needsDisplay = true}}
     override init(frame: NSRect) {
         super.init(frame:frame)
         NotificationCenter.default.addObserver(self,selector:#selector(updateColor),name:AppAccent.didChange,object:nil)
@@ -179,12 +180,13 @@ final class AccentProgressIndicator: NSProgressIndicator {
     override func draw(_ dirtyRect: NSRect) {
         guard !isIndeterminate && style == .bar else {super.draw(dirtyRect); return}
         let track = NSBezierPath(roundedRect:bounds,xRadius:bounds.height/2,yRadius:bounds.height/2)
-        AppAccent.color.withAlphaComponent(0.16).setFill(); track.fill()
+        let color = progressColor ?? AppAccent.color
+        color.withAlphaComponent(0.16).setFill(); track.fill()
         let amount = max(0,min(1,(doubleValue-minValue)/max(1,maxValue-minValue)))
         guard amount > 0 else {return}
         NSGraphicsContext.saveGraphicsState(); track.addClip()
         let fill = NSRect(x:bounds.minX,y:bounds.minY,width:bounds.width*amount,height:bounds.height)
-        AppAccent.color.setFill(); NSBezierPath(roundedRect:fill,xRadius:bounds.height/2,yRadius:bounds.height/2).fill()
+        color.setFill(); NSBezierPath(roundedRect:fill,xRadius:bounds.height/2,yRadius:bounds.height/2).fill()
         NSGraphicsContext.restoreGraphicsState()
     }
 }

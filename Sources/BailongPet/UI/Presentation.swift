@@ -67,7 +67,8 @@ struct AppFailure {
         scroll.documentView = text; scroll.hasVerticalScroller = true; alert.accessoryView = scroll
         alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"复制详情")
         alert.applyAccent(primary:1,keyboardDefault:1)
-        if alert.runModal() == .alertSecondButtonReturn {NSPasteboard.general.clearContents(); NSPasteboard.general.setString(detail,forType:.string)}
+        CopyFeedback.attach(to:alert.buttons[1]) {self.detail}
+        alert.runModal()
     }
 }
 

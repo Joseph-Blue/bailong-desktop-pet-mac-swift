@@ -23,7 +23,7 @@ struct BubbleCard {
     var seconds:Double
     var thread:String?
     var purpose:MessagePurpose
-    var followsText:Bool, resetText:Bool, animateHeading:Bool, attentionAction:Bool
+    var resetText:Bool, animateHeading:Bool, attentionAction:Bool
     var timing:TaskTiming?
     var question:QuestionPresentation?
     var details:() -> Void

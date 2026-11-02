@@ -32,7 +32,6 @@ final class ChatModelSettings {
         ["none":"无","minimal":"极低","low":"轻度","medium":"中","high":"高","xhigh":"极高","max":"Max","ultra":"Ultra","persistent":"持续"][raw] ?? raw
     }
     var effortTitle: String {currentEffort.map(Self.effortName) ?? "不可调"}
-    var showsAstraRedWarning: Bool {currentModelID == "gpt-6-astra" && (currentEffort == "max" || currentEffort == "ultra")}
     var effortExplanation: String {
         guard let effort = currentEffort else {return "跟随 Codex 的模型与推理强度设置。"}
         let descriptions = ["none":"直接作答，不额外展开推理。", "minimal":"尽量减少思考，适合简单任务。",
@@ -42,7 +41,6 @@ final class ChatModelSettings {
         return descriptions[effort] ?? "使用当前模型提供的「\(Self.effortName(effort))」推理强度。"
     }
     var caution: String? {
-        if showsAstraRedWarning {return "⚠️ 穷玩车，富玩表，顶富就玩 Astra 快跑。如果不是顶富，请更换模型及推理强度！"}
         if currentModelID == "gpt-6-astra" {return "⚠️ 发送消息后会使用 Astra 模型，注意额度消耗！"}
         return nil
     }
@@ -200,7 +198,7 @@ final class ModelSelectorContent: NSViewController {
         defaultInfo.isHidden = settings.loading || settings.error != nil || settings.selectedEffort != nil || options.isEmpty
         caution.stringValue = settings.caution ?? ""
         caution.isHidden = settings.loading || settings.error != nil || settings.caution == nil
-        caution.textColor = settings.showsAstraRedWarning ? .systemRed : .systemOrange
+        caution.textColor = .systemOrange
         explanation.hoverHelp = settings.error
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading
         luna.isEnabled = !settings.loading && settings.lunaMinimum != nil
@@ -209,9 +207,11 @@ final class ModelSelectorContent: NSViewController {
     }
     private func layoutControls() {
         var y: CGFloat = 49
-        // 从底部向上排，阅读顺序为灰色说明、蓝色默认提示、红/橙彩蛋。
-        for text in [caution,defaultInfo,explanation] where !text.isHidden {
-            let height = max(20,(text.stringValue as NSString).boundingRect(with:NSSize(width:428,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:text.font!]).height.rounded(.up)+4)
+        // 提示区预留固定行高，警告换行、默认提示显隐不移动标题和模型控件。
+        for text in [caution,defaultInfo,explanation] {
+            let font = text.font!
+            let lines:CGFloat = text === defaultInfo ? 1 : 2
+            let height = ((font.ascender-font.descender+font.leading)*lines).rounded(.up)+4
             text.frame = NSRect(x:16,y:y,width:428,height:height); y += height+8
         }
         if !slider.isHidden {
@@ -222,8 +222,8 @@ final class ModelSelectorContent: NSViewController {
                 mark.frame = NSRect(x:max(16,min(16+tick.midX-width/2,444-width)),y:y,width:width,height:18)
                 mark.isHidden = false
             }
-            y += 60
         } else {effortMarks.forEach {$0.isHidden = true}}
+        y += 60
         effort.frame = NSRect(x:16,y:y,width:428,height:22); y += 30
         picker.frame = NSRect(x:16,y:y,width:428,height:28); y += 40
         heading.frame = NSRect(x:16,y:y,width:428,height:22); y += 38

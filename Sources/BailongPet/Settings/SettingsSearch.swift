@@ -88,6 +88,10 @@ struct SettingsSearchEntry {
                 add(.activity,group,clips.map(\.title),"动画 播放速度 倍速 频率 偏爱 预览")
             }
         }
+        for index in entries.indices where ["逐步显示文字","文字显示完毕后开始计时"].contains(entries[index].title) {
+            entries[index].condition = "暂时停用；正文即时显示"
+            entries[index].keywords += " 暂停 停用 流水 重构"
+        }
         return entries
     }
     static func matching(_ query:String,in entries:[Self]) -> [Self] {

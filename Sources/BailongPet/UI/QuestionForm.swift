@@ -139,7 +139,7 @@ final class QuestionForm: NSView {
         input.minSize.height = editor.contentSize.height
         input.frame.size.height = max(input.frame.height,editor.contentSize.height); y += editor.frame.height+8*scale
         let shortcut = PetPreferences.shared.sendShortcut
-        let hint = text("\(isLast ? "提交" : "下一题")：\(shortcut.sendLabel)\n换行：\(shortcut.newlineLabel)",11*scale,usable,true)
+        let hint = text(shortcut.hint,11*scale,usable,true)
         hint.frame.origin = NSPoint(x:inset,y:y); add(hint); y += hint.frame.height+10*scale
         frame.size = NSSize(width:width,height:y+5*scale)
         window?.invalidateCursorRects(for:self)

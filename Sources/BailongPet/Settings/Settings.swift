@@ -338,8 +338,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             }
         }
     }
-    private func toggle(_ title: String, _ key: String, detail: String? = nil) -> NSView {
-        let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.setAccessibilityLabel(title)
+    private func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true) -> NSView {
+        let control = AccentSwitch(); control.state = enabled && preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
         if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
         if key == "showDiagnostics" { diagnosticsSwitch = control }
         if key == "automaticallyCheckUpdates" { automaticUpdateSwitch = control }
@@ -701,9 +701,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"默认 5 条，每个会话显示最新轮次。任务概览关闭时保留此设置。")])
         group("停留时间",[
             slider("互动台词","interactionSeconds",range:0...60,suffix:"秒"),slider("任务进展","progressSeconds",range:0...60,suffix:"秒"),slider("最终回复","resultSeconds",range:0...120,suffix:"秒"),slider("额度信息","quotaSeconds",range:0...120,suffix:"秒"),note("设为 0 秒表示手动关闭。审批、补充输入和失败提示保留到处理或手动关闭。"),
-            toggle("长回复自动延长阅读时间","autoReadTime",detail:"最多延长到 120 秒；手动关闭模式不受影响。"),toggle("鼠标移入时暂停倒计时","pauseOnHover"),toggle("文字显示完毕后开始计时","countAfterReveal"),
+            toggle("长回复自动延长阅读时间","autoReadTime",detail:"最多延长到 120 秒；手动关闭模式不受影响。"),toggle("鼠标移入时暂停倒计时","pauseOnHover"),toggle("文字显示完毕后开始计时","countAfterReveal",detail:"暂时停用。正文即时显示，计时从气泡出现开始。",enabled:false),
             slider("进展小气泡停留时间","progressToastSeconds",range:1...10,suffix:"秒",detail:"默认 2 秒，思考与工具调用共用；内容更新后重新计时，不占气泡记录。")])
-        group("显示与声音",[toggle("逐步显示文字","typingEffect"),toggle("播放音效","soundEnabled"),row("最终回复时长",control:ActionButton("预览…") { [weak self] in self?.onMessagePreview(.result) })])
+        group("显示与声音",[toggle("逐步显示文字","typingEffect",detail:"正文打字机暂时停用；保留原设置。",enabled:false),toggle("播放音效","soundEnabled"),row("最终回复时长",control:ActionButton("预览…") { [weak self] in self?.onMessagePreview(.result) })])
         group("安静陪伴",[toggle("安静陪伴模式","quietCompanion",detail:"减少自主活动、停止自动移动，关闭互动台词、进展气泡和音效。最终回复与待处理通知保留。"),toggle("启用专注时段","quietSchedule"),time("开始时间","quietStart"),time("结束时间","quietEnd"),note("按本机时间生效，支持跨午夜；起止相同表示全天。")])
     }
     private func appearance() {
