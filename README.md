@@ -6,9 +6,9 @@
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
-**正式版：[0.6.1](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙桌宠Swiftv0.6.1)。**
+**正式版：[0.6.2](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙桌宠Swiftv0.6.2)。**
 
-源码已更新至 **0.6.2 修复版**：修复消息卡片滚动不畅，以及文本框左右滑动导致内容显示不全的问题。
+本版修复消息卡片滚动不畅，以及文本框左右滑动导致内容显示不全的问题。
 
 ## 下载与使用
 
@@ -16,19 +16,19 @@
 
 1. [下载 Apple Silicon 版（ZIP）](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
 2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，推荐拖入访达的“应用程序”，再从访达打开。
-3. 在“设置 → 通用”中选择是否随登录或 Codex 启动；每次更新后，重新检查并设置这一项。
+3. 在“设置 → 通用”中选择是否随登录或 Codex 启动；新版会维护已启用的启动项。
 
 App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一次，再到“系统设置 → 隐私与安全性 → 仍要打开”。[Apple 操作说明](https://support.apple.com/zh-cn/102445)
 
 ### 从旧版升级
 
-退出旧桌宠，再打开新版。新版保留设置与历史，升级历史格式前会备份原文件。更新版本或移动 App 后，先手动打开新版，再到“设置 → 通用”检查并重新设置登录启动或随 Codex 启动。
+退出旧桌宠，再打开新版。新版保留设置与历史，升级历史格式前会备份原文件。更新版本或移动 App 后，先手动打开新版，已启用的登录启动与随 Codex 启动会自动维护注册信息；状态可在“设置 → 通用”查看。
 
 历史和任务文件位于 `~/Library/Application Support/BailongPetAppKit`。历史备份为 `conversations-before-schema2-<时间戳>.json`；若切回 0.2.1，使用升级前的备份。
 
 ## 特色功能
 
-这里介绍截至 **0.6.1** 已有的功能，各版本的更新见 [变更记录](CHANGELOG.md)。截图可点击查看原图；消息气泡图保留自 0.5.0，其余为 0.6.0。
+这里介绍截至 **0.6.2** 已有的功能，各版本的更新见 [变更记录](CHANGELOG.md)。截图可点击查看原图；消息气泡图保留自 0.5.0，其余为 0.6.0。
 
 ### 在桌面看进展，也能回看消息
 
