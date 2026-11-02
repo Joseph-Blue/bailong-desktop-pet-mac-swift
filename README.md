@@ -8,7 +8,7 @@
 
 **正式版：[0.6.1](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/白龙桌宠Swiftv0.6.1)。**
 
-本版修复了点击文件链接时访达报错的问题。
+源码已更新至 **0.6.2 修复版**：修复消息卡片滚动不畅，以及文本框左右滑动导致内容显示不全的问题。
 
 ## 下载与使用
 
