@@ -54,7 +54,14 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - `MessageTextView` 用同一 TextKit 容器测量富文本，只替换变化尾部；未变化文本不重新排版。`TranscriptRenderer` 缓存包含全部显示内容，新增结构化字段须同步签名和搜索。
 - `ProgressTextEffects` 共用标题流水与概览跑马灯，盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，保留并置灰原偏好。
 - `InlineStatusLayout` 共用文字基线、盲文与秒表定位；`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
-- 代码块使用原生 NSTextTableBlock，语言标签与复制按钮共用 `CodeBlockHeaderLayout`。复制与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
+- 代码块使用原生 NSTextTableBlock，语言标签与拷贝按钮共用 `CodeBlockHeaderLayout`。拷贝与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
+
+## 会话入口与选择状态
+
+- `ChatNavigation` 负责目标切换，`ChatDraftCache` 按入口和会话分别保留内存草稿；历史浏览目标、临时发送目标与运行任务不可共用一个选择变量。
+- `ChatInputState` 只提供显示状态；发送传递明确会话与入口，异步回执不得清空或关闭后来选择的会话。主按钮统一“发送”，停止任务独立且核对目标身份。
+- `ChatModelLoader` 每入口独立，并核对工作区请求身份；外部会话原设置只读。`AccentTabSelector` 共用关于页和输入窗的主题色原生分页。
+- 临时输入窗继续独立于消息卡片；窗口展示协调、Dock 关闭及误召唤待处理，勿把当前代码描述为已经修复。
 
 ## 两种会话与数据
 

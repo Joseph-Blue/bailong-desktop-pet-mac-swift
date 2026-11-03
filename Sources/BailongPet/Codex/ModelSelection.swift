@@ -9,14 +9,28 @@ struct ChatModel: Decodable {
 final class ChatModelSettings {
     static let changed = Notification.Name("BailongChatModelChanged")
     private let defaults: UserDefaults
-    init(defaults: UserDefaults = SettingsStorage.defaults) {self.defaults = defaults}
+    init(defaults: UserDefaults = SettingsStorage.defaults) {
+        self.defaults = defaults
+        selectedModel = defaults.string(forKey:"petChatModel"); selectedEffort = defaults.string(forKey:"petChatEffort")
+    }
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
     private(set) var loading = false
     private(set) var error: String?
     var onLoad: (Bool) -> Void = {_ in}
-    var selectedModel: String? {defaults.string(forKey:"petChatModel")}
-    var selectedEffort: String? {defaults.string(forKey:"petChatEffort")}
+    private(set) var selectedModel:String?, selectedEffort:String?
+    private var selectionKey:String?
+    private var selections = [String:(model:String?,effort:String?)]()
+    func activate(_ key:String) {
+        guard selectionKey != key else {return}
+        if let selectionKey {selections[selectionKey] = (selectedModel,selectedEffort)}
+        selectionKey = key
+        let choice = selections[key] ?? (defaults.string(forKey:"petChatModel"),defaults.string(forKey:"petChatEffort"))
+        selectedModel = choice.0; selectedEffort = choice.1
+        notify()
+    }
+    func clearSelections() {selections.removeAll(); selectionKey = nil}
+    func forget(_ key:String) {selections.removeValue(forKey:key)}
     var currentModelID: String? {selectedModel ?? configuredModel ?? models.first(where:{$0.isDefault})?.model}
     var currentModel: ChatModel? {models.first(where:{$0.model == currentModelID})}
     var supportedEfforts: [ChatModel.Effort] {currentModel?.supportedReasoningEfforts ?? []}
@@ -60,11 +74,13 @@ final class ChatModelSettings {
     func chooseLunaMinimum() {
         guard let (model,effort) = lunaMinimum else {return}
         defaults.set(model,forKey:"petChatModel")
-        defaults.set(effort,forKey:"petChatEffort"); notify()
+        selectedModel = model; selectedEffort = effort
+        defaults.set(effort,forKey:"petChatEffort")
     }
     func syncWithCodex() {
         defaults.removeObject(forKey:"petChatModel")
         defaults.removeObject(forKey:"petChatEffort")
+        selectedModel = nil; selectedEffort = nil
         notify(); onLoad(true)
     }
     var title: String {
@@ -76,20 +92,24 @@ final class ChatModelSettings {
         self.models = models.filter {!$0.hidden}; self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
         if let effort = selectedEffort, !supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
             defaults.removeObject(forKey:"petChatEffort")
+            selectedEffort = nil
         }
         loading = false; error = nil; notify()
     }
     func failed(_ error: Error) {loading = false; self.error = error.localizedDescription; notify()}
     func chooseModel(_ model: String?) {
         defaults.set(model,forKey:"petChatModel")
+        selectedModel = model
         if let effort = selectedEffort, currentModel?.supportedReasoningEfforts.contains(where:{$0.reasoningEffort == effort}) != true {
             defaults.removeObject(forKey:"petChatEffort")
+            selectedEffort = nil
         }
         notify()
     }
     func chooseEffort(_ effort: String?) {
         guard effort == nil || supportedEfforts.contains(where:{$0.reasoningEffort == effort}) else{return}
         defaults.set(effort,forKey:"petChatEffort"); notify()
+        selectedEffort = effort; notify()
     }
     func parameters() throws -> [String:Any] {
         if let selectedModel, !models.contains(where:{$0.model == selectedModel}) {

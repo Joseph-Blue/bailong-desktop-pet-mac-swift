@@ -2,11 +2,11 @@ import AppKit
 
 // 外部 Codex 会话的发送、待确认和只读设置状态；不持有内置 CodexConnection。
 final class DesktopConversationSession {
-    private let store:HistoryStore, ui:ChatInterface
-    private let selection:() -> Conversation
+    private let store:HistoryStore
     private let tasks:() -> [BubbleTaskSummary]
     private let canSend:() -> Bool, isClosing:() -> Bool
     var onChange:() -> Void = {}, onPersist:() -> Void = {}
+    var onSubmitted:(String,String,ChatEntry) -> Void = {_,_,_ in}
     private var desktopModelNotes = [String:String]()
     private var desktopModelChecked = [String:Date]()
     private var desktopModelRequests = [String:UUID]()
@@ -14,8 +14,8 @@ final class DesktopConversationSession {
     private var desktopUnconfirmed = Set<String>()
     private var desktopReplyNotes = [String:String]()
 
-    init(store:HistoryStore,ui:ChatInterface,selection:@escaping () -> Conversation,tasks:@escaping () -> [BubbleTaskSummary],canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
-        self.store = store; self.ui = ui; self.selection = selection; self.tasks = tasks
+    init(store:HistoryStore,tasks:@escaping () -> [BubbleTaskSummary],canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
+        self.store = store; self.tasks = tasks
         self.canSend = canSend; self.isClosing = isClosing
     }
     var hasPendingSend:Bool {!desktopSending.isEmpty}
@@ -41,9 +41,12 @@ final class DesktopConversationSession {
               DesktopReply.mode(for:last.status) == .start else {return nil}
         return (id,.start,last.date)
     }
-    func refreshSettings() {
-        guard !isClosing(),selection().external,(ui.composerVisible || ui.history.isVisible),let thread = selection().threadID else {return}
-        let key = selection().key
+    func refreshSettings(_ conversations:[Conversation]) {
+        for conversation in conversations where conversation.external {refreshSettings(conversation)}
+    }
+    private func refreshSettings(_ conversation:Conversation) {
+        guard !isClosing(),let thread = conversation.threadID else {return}
+        let key = conversation.key
         guard desktopModelRequests[key] == nil,Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
         let request = UUID(); desktopModelRequests[key] = request; desktopModelChecked[key] = Date()
         DesktopReply.readSettings(thread:thread) { [weak self] result in
@@ -54,11 +57,11 @@ final class DesktopConversationSession {
             case .success(let text): self.desktopModelNotes[key] = text
             case .failure(let error): self.desktopModelNotes[key] = "未读取到模型设置 · "+error.localizedDescription
             }
-            if self.selection().key == key {self.onChange()}
+            self.onChange()
         }
     }
-    func submit(_ text:String,fromComposer:Bool) {
-        let conversation = selection(), key = conversation.key
+    func submit(_ text:String,to conversation:Conversation,entry:ChatEntry) {
+        let key = conversation.key
         guard !isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
               let thread = conversation.threadID,let target = target(conversation) else {return}
         let request = UUID(), started = Date()
@@ -79,9 +82,8 @@ final class DesktopConversationSession {
                     let turn = Turn(); turn.id = receipt.turnID; turn.input = text; turn.owned = false
                     turn.date = target.mode == .steer ? target.start : started; turn.status = receipt.status; turn.lastMessageAt = started; conversation.turns.append(turn)
                 }
-                self.ui.clearSubmittedDraft(key:key,fromComposer:fromComposer,text:text)
+                self.onSubmitted(key,text,entry)
                 self.desktopReplyNotes.removeValue(forKey:key)
-                if fromComposer && self.selection() === conversation {self.ui.hideComposer()}
                 self.onPersist()
             case .failure(let error):
                 if error is DesktopReply.Unconfirmed {self.desktopUnconfirmed.insert(key)}
@@ -91,14 +93,14 @@ final class DesktopConversationSession {
             }
         }
     }
-    func checkDelivery() {
-        let conversation = selection(), key = conversation.key
+    func checkDelivery(_ conversation:Conversation,parent:NSWindow) {
+        let key = conversation.key
         guard desktopUnconfirmed.contains(key) else {return}
         CodexConnection.openConversation(conversation.threadID)
         let alert = NSAlert(); alert.messageText = "检查 Codex 中的发送结果"
         alert.informativeText = "请查看“\(conversation.title)”是否已收到这条消息。草稿仍保留；确认未发送后才重新启用发送。"
         alert.addButton(withTitle:"保留待确认状态"); alert.addButton(withTitle:"已确认未发送"); alert.applyAccent()
-        alert.beginSheetModal(for:ui.composerVisible ? ui.composer : ui.history) { [weak self] response in
+        alert.beginSheetModal(for:parent) { [weak self] response in
             guard response == .alertSecondButtonReturn,let self,self.store.conversations.contains(where:{$0 === conversation}) else {return}
             self.desktopUnconfirmed.remove(key); self.desktopReplyNotes.removeValue(forKey:key); self.onChange()
         }

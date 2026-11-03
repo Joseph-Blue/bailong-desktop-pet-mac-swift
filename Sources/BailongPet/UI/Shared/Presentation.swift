@@ -65,7 +65,7 @@ struct AppFailure {
         text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = detail
         text.isHorizontallyResizable = false; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         scroll.documentView = text; scroll.hasVerticalScroller = true; alert.accessoryView = scroll
-        alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"复制详情")
+        alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"拷贝详情")
         alert.applyAccent(primary:1,keyboardDefault:1)
         CopyFeedback.attach(to:alert.buttons[1]) {self.detail}
         alert.runModal()

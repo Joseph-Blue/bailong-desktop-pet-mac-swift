@@ -88,11 +88,11 @@ final class CodeBlockToolbar:NSView {
     private let copyButton:NSButton
     init(_ content:CodeBlockContent) {
         self.content = content
-        copyButton = HoverIconButton(symbol:"doc.on.doc",label:"复制代码")
+        copyButton = HoverIconButton(symbol:"doc.on.doc",label:"拷贝代码")
         super.init(frame:NSRect(x:0,y:0,width:30,height:26))
         copyButton.isBordered = false; copyButton.bezelStyle = .inline; copyButton.target = self
         copyButton.frame = bounds; copyButton.autoresizingMask = [.width,.height]; addSubview(copyButton)
-        copyButton.hoverHelp = "复制完整代码"
+        copyButton.hoverHelp = "拷贝完整代码"
         CopyFeedback.attach(to:copyButton) { [weak self] in self?.content.code }
     }
     required init?(coder:NSCoder) {fatalError()}
