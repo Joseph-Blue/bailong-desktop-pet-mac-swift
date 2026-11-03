@@ -170,7 +170,7 @@ final class Bubble {
         updateCardNavigation()
         show(title:card.title,body:card.approval?.body ?? card.body,kind:card.kind,scale:preferences.number("bubblePercent")/100,seconds:preferences.duration(card.purpose,text:card.body),
              details:card.thread != nil,resetText:card.resetText || changedCard,animateHeading:card.animateHeading,
-             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"))
+             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits)
         relatedConversation = card.thread; purpose = card.purpose
         renderedCardID = card.id
         cardStore.saveForm(questionForm,size:questionSize)
@@ -215,6 +215,10 @@ final class Bubble {
         text.textContainer?.widthTracksTextView = true; text.textContainerInset = NSSize(width:0,height:2)
         text.textContainer?.lineFragmentPadding = 0 // 水平留白由 BubbleBodyLayout 统一分配。
         text.textColor = .labelColor
+        text.onContentLayoutChange = { [weak self] in
+            guard let self,self.scroll.documentView === self.text else {return}
+            self.layoutTextBody(); self.onCardLayout()
+        }
         scroll.setBody(text,height:0)
         closeButton.onClose = { [weak self] in self?.hide(); self?.onClose() }
         details = ActionButton("查看记录详情") { [weak self] in
@@ -394,7 +398,7 @@ final class Bubble {
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true) {
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = []) {
         taskList?.stop(); taskList = nil
         if !fromCard {saveCardForm(); approval = nil; cardStore.clearSelection(); renderedCardID = nil; updateCardNavigation()}
         let taskKey = timing?.key
@@ -466,12 +470,13 @@ final class Bubble {
             }
         } else if laysOutBody {
             let rendered = approval.map {ApprovalText.render($0,font:bodyFont)} ?? (kind == "task" ? MarkdownText.render(body,font:bodyFont,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:bodyFont,.foregroundColor:NSColor.labelColor]))
-            let changed = text.setContent(rendered,reset:!same || resetText)
-            let width = bodyLayout.contentWidth
-            let naturalHeight = text.contentHeight(for:width)
-            scroll.setBody(text,height:naturalHeight)
-            let limit:CGFloat = kind == "progressToast" ? .greatestFiniteMagnitude : (approval == nil ? 180 : 320)*scale
-            layout(bodyHeight:min(limit,naturalHeight))
+            let content = NSMutableAttributedString(attributedString:rendered)
+            if !fileEdits.isEmpty {
+                if content.length > 0 {content.append(NSAttributedString(string:"\n\n",attributes:[.font:bodyFont]))}
+                content.append(FileEditRendering.render(fileEdits,font:bodyFont,id:timing?.key ?? renderedCardID ?? "standalone"))
+            }
+            let changed = text.setContent(content,reset:!same || resetText)
+            layoutTextBody()
             if changed {scroll.showTop()}
         }
         motion.show()
@@ -480,8 +485,14 @@ final class Bubble {
             guard let self else {return}
             self.show(title:heading,body:body,kind:kind,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,
                 details:enabled,resetText:false,animateHeading:animateHeading,attentionAction:attentionAction,
-                questions:questions,timing:timing,preserveCountdown:true)
+                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits)
         }
+    }
+    private func layoutTextBody() {
+        let naturalHeight = text.contentHeight(for:bodyLayout.contentWidth)
+        scroll.setBody(text,height:naturalHeight)
+        let limit:CGFloat = kind == "progressToast" ? .greatestFiniteMagnitude : (approval == nil ? 180 : 320)*scale
+        layout(bodyHeight:min(limit,naturalHeight))
     }
     private func submitApproval(_ allow:Bool) {
         guard let form = approval,form.ready,!allow || form.request.canAllow else {return}

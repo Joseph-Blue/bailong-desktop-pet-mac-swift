@@ -2,6 +2,8 @@ import AppKit
 
 // 消息只呈现已收到的正文快照；内容更新、几何测量和阅读位置分别处理。
 final class MessageTextView: AppTextView {
+    private let fileEditPresentation = FileEditPresentation()
+    var onContentLayoutChange:(() -> Void)?
     private var measuredWidth:CGFloat = -1
     private var measuredHeight:CGFloat = 0
     private var codeToolbars = [Int:CodeBlockToolbar]()
@@ -35,10 +37,33 @@ final class MessageTextView: AppTextView {
 
     var linkBaseDirectory: (() -> URL?)?
     override func clicked(onLink link: Any, at charIndex: Int) {
+        if (link as? URL) == FileEditRendering.disclosureLink,
+           let section = textStorage?.attribute(.fileEditSection,at:charIndex,effectiveRange:nil) as? FileEditSection {
+            applyDisclosure(fileEditPresentation.toggle(section.id)); return
+        }
         if MessageFileLink.reveal(link,relativeTo:linkBaseDirectory?()) {return}
         super.clicked(onLink:link,at:charIndex)
     }
     @discardableResult func setContent(_ value:NSAttributedString,reset:Bool = false) -> Bool {
+        // 链接自身的属性决定颜色，允许文件目录与文件名区分；普通 Markdown 仍使用强调色。
+        linkTextAttributes = [.cursor:NSCursor.pointingHand]
+        return applyContent(fileEditPresentation.content(value),reset:reset)
+    }
+    func revealFileEdits(matching query:String) {
+        if let value = fileEditPresentation.revealMatches(query) {applyDisclosure(value)}
+    }
+    private func applyDisclosure(_ value:NSAttributedString) {
+        let origin = enclosingScrollView?.contentView.bounds.origin
+        setSelectedRange(NSRange(location:0,length:0))
+        applyContent(value,reset:false)
+        if isVerticallyResizable {sizeToFit()}
+        onContentLayoutChange?()
+        if let scroll = enclosingScrollView,let origin {
+            scroll.contentView.scroll(to:scroll.contentView.constrainBoundsRect(NSRect(origin:origin,size:scroll.contentView.bounds.size)).origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+    }
+    @discardableResult private func applyContent(_ value:NSAttributedString,reset:Bool) -> Bool {
         guard reset || !attributedString().isEqual(to:value) else {return false}
         if reset {setSelectedRange(NSRange(location:0,length:0)); textStorage?.setAttributedString(value)}
         else {replaceChangedSuffix(with:value)}

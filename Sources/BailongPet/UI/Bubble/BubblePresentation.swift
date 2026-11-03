@@ -30,6 +30,7 @@ struct BubbleCard {
     var codex:() -> Void
     var reply:(() -> Void)?
     var approval:ApprovalPresentation? = nil
+    var fileEdits = [FileEditSummary]()
     var showsTaskOverview = false
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil

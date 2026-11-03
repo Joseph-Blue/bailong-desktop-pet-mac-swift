@@ -9,6 +9,7 @@ final class TaskMessageAccumulator {
     private(set) var currentActivity:TaskActivity?
     private var activityItems = [[String:Any]]()
     private var finalText:String?
+    private var editsByItem = [String:[FileEditSummary]](), editOrder = [String]()
     var imageLinks:[String] {messageOrder.filter {imageMessageIDs.contains($0)}.compactMap {messages[$0]}}
     func clearActivity() {currentActivity = nil; activityItems.removeAll()}
     func finalize(_ turn:Turn) {
@@ -76,7 +77,10 @@ final class TaskMessageAccumulator {
             // 只读取协议公开 summary，不读取 content 或加密推理字段。
             for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {summaries["\(id):\(index)"] = part as? String ?? (part as? [String:Any])?["text"] as? String ?? ""}
         case "commandExecution": steps[id] = CommandSummary.text(item)
-        case "fileChange": steps[id] = (item["changes"] as? [[String:Any]] ?? []).compactMap{$0["path"] as? String}.joined(separator:"\n")
+        case "fileChange":
+            if editsByItem[id] == nil {editOrder.append(id)}
+            editsByItem[id] = FileEditSummary.read(item)
+            steps.removeValue(forKey:id)
         case "mcpToolCall", "dynamicToolCall": steps[id] = "\(item["status"] ?? "") · \(item["tool"] ?? "工具")"
         case "webSearch": steps[id] = "搜索：\(item["query"] ?? "")"
         default:break
@@ -88,5 +92,6 @@ final class TaskMessageAccumulator {
         if let finalText {turn.final = finalText}
         turn.summary = summaries.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n")
         turn.steps = steps.sorted{$0.key<$1.key}.map{$0.value}.joined(separator:"\n\n")
+        turn.fileEdits = FileEditSummary.merged(editOrder.flatMap {editsByItem[$0] ?? []})
     }
 }

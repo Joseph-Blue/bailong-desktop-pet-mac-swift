@@ -115,6 +115,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         list.target = self; list.action = #selector(revealSearchResult)
         historySplit.splitView.setPosition(240,ofDividerAt:0)
         transcript.isEditable = false; transcript.isSelectable = true
+        transcript.onContentLayoutChange = { [weak self] in self?.updateSearchHighlights(reveal:false) }
         let reading = ChatViewLayout.editorScroll(transcript); reading.drawsBackground = false
         transcript.textContainerInset = NSSize(width:24,height:20)
         historyEditor.placeholder = historyPlaceholder
@@ -249,6 +250,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         updateSearchHighlights(reveal:true)
     }
     private func updateSearchHighlights(reveal:Bool) {
+        if searching {transcript.revealFileEdits(matching:searchField.stringValue)}
         guard let layout = transcript.layoutManager else {return}
         let text = transcript.string, whole = NSRange(location:0,length:(text as NSString).length)
         if !findMatches.isEmpty {layout.removeTemporaryAttribute(.backgroundColor,forCharacterRange:whole)}

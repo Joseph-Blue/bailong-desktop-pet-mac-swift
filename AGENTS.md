@@ -2,7 +2,7 @@
 
 ## joseph/dev 开发线
 
-- 当前开发版本为 0.6.3-dev.5，基于正式版 0.6.2；本地与远端开发工作均使用 joseph/dev，跟踪 origin/joseph/dev。main 保留正式版，不自动合并、变基或推送到 main。
+- 当前开发版本为 0.7.0-dev.2，基于正式版 0.6.2；本地与远端开发工作均使用 joseph/dev，跟踪 origin/joseph/dev。main 保留正式版，不自动合并、变基或推送到 main。
 - 本分支 README 面向开发者，明确为 dev，不提供 Release 程序下载；不创建程序 Release 或应用版本标签。经用户授权可发布仅含素材的资源 Pre-release，使用独立 dev-assets-* 标签并显式设为非 Latest。更高的开发版本号不会进入只读取正式 Release 的更新检查。
 - 本分支 CHANGELOG 保留开发迭代与历史来源索引，未来整理正式版时不删除开发记录。开发文档跟踪范围以 .gitignore 白名单和 docs/开发分支.md 为准，覆盖下文仅追踪来源与架构的主线规则。原始本机实施流水仍不上传。
 - 本次历史归档已获用户授权；后续构建、跨分支合并、推送与发布按当次授权执行。
@@ -192,3 +192,11 @@
 - 新命令执行记录只保存状态与命令摘要，不将 aggregatedOutput 塞入桌宠历史；已有历史保持原文，完整工具输出在原 Codex 会话中查看。
 - UI 按 Bubble／Chat／Shared 分组，设置页面按 Pages 分组；保持单 target 和递归源码清单。ChatComposer 拥有临时窗口控件与显隐，TranscriptRenderer 拥有历史富文本缓存；SettingsForm 统一控件、编辑回调和搜索定位，外观／个性／消息／活动页独立维护，窗口负责导航与搜索。
 - 拆分以已有复用点和明确职责为依据，状态保留私有；不建立通用消息总线、插件框架或仅为跨文件而增加的转发层。文件接近 500 行时评估职责，行数不是强制拆分标准。优先维护一个组件和实际调用方，避免为两种消息分别修同一个显示问题。
+
+## 文件引用与修改摘要（0.7.0-dev.2）
+
+- `CodexFileCitation` 在共用 `MarkdownText` 入口将 `:codex-file-citation{path="…" ...}` 转成文件名链接，按绝对路径构造 URL；不按扩展名限制文件类型。使用 Foundation 源码位置排除代码块、行内代码及已有链接；不完整或缺少有效路径的标记保留原文，不改历史源文本。
+- Markdown 链接、图片入口、imageGeneration 保存链接、文件产物引用和修改摘要最终共用 `MessageTextView → MessageFileLink → FinderFileReveal`。相对路径使用消息所属会话 cwd，点击时才检查文件；网页等非本机链接交给系统。`sandbox:` 保持下载提示，不当成本机路径。
+- `FileEditSummary` 由内置事件与外部只读记录共用，只统计 completed 的 fileChange。内置按 item ID 替换，轮次内同路径合并；新增／删除文件按完整 diff 文本行数统计，update 按 diff hunk 的 +／− 行统计。统计为本轮已完成修改的累计行数，不代表最终 Git 净差异。无 diff 时只显示路径，不伪造 0。
+- `FileEditRendering` 为气泡和历史共用原生文本摘要：标题下显示总增减，默认展示 3 个文件，可展开／收起。目录灰色、文件名突出，新增 systemGreen、删除 systemRed，计数列按文字宽度布局。`FileEditPresentation` 在正文视图中管理展开状态，同一身份更新保留，移出当前正文清理；历史搜索展开隐藏匹配项。复用 TextKit 与现有滚动容器，不提供撤销或 diff 窗口。
+- 文件摘要单独存入 Turn.fileEdits 可选字段并随历史快照保存，不拼入助手回复或执行输出；旧历史无需迁移，保存开关与只读策略不变。历史搜索包含文件路径，缓存签名包含统计。外部统计读取完整轮次，近期 200 条消息限制不用于文件汇总。

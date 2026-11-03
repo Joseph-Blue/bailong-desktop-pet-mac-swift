@@ -2,6 +2,11 @@ import AppKit
 
 // 本地消息附件只定位文件；网页等链接仍由 NSTextView 交给系统处理。
 enum MessageFileLink {
+    static func url(forPath path:String) -> URL? {
+        if path.hasPrefix("/") {return URL(fileURLWithPath:path)}
+        var components = URLComponents(); components.path = path
+        return components.url
+    }
     static func reveal(_ link: Any, relativeTo directory: URL?) -> Bool {
         let url: URL
         if let value = link as? URL {url = value}

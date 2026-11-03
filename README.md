@@ -1,37 +1,40 @@
 # 白龙桌宠Swift · Dev
 
-**这是 `joseph/dev` 开发分支，面向开发与调试，不属于普通用户的安装与使用说明。本分支不提供 Release 程序下载。**
+**这是 `joseph/dev` 开发分支，面向开发者，不属于普通用户的安装说明，也不提供开发版 Release 程序下载。** 普通用户请前往 [main 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-当前源码版本：**0.6.3-dev.5**。基于 0.6.2 继续开发，当前重构气泡排版与滚动，复用进展文字动效和复制反馈；正文打字机暂时停用。
+当前源码版本：**0.7.0-dev.2**，基于正式版 **0.6.2** 继续开发。当前重点是稳定性、明确职责和共用组件，避免为两种会话重复修复同一个界面问题。
 
-普通用户请前往 [main 主线说明](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
+基于 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC、AVFoundation 与 Core Image；界面支持液态玻璃和系统外观。
 
-基于 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 进行 Swift + AppKit 原生重写，独立维护。当前使用透明 HEVC、AVFoundation 与 Core Image。
+## 当前开发内容
+
+| 方向 | 已落入源码的改动 |
+| --- | --- |
+| 气泡与滚动 | 共用正文尺寸和纵向滚动组件；按实际溢出显示原生滚动条，显隐不改变换行宽度。普通气泡从顶部阅读，历史进入会话时定位底部。 |
+| 会话职责 | 内置桌宠对话与外部 Codex 会话分别处理发送、模型设置和状态；共用 Markdown、代码块、文件链接及显示组件。卡片管理、倒计时、历史渲染和输入窗已拆分。 |
+| 进展与复制 | 复用标题流水、概览跑马灯、盲文及计时对齐；复制按钮统一反馈与恢复状态。正文打字机暂时停用，保留原设置值。 |
+| 产物文件 | 将 Codex 的 `:codex-file-citation` 产物引用显示为文件名链接，与已有文件、图片入口共用访达定位逻辑。 |
+| 文件修改摘要 | 气泡与历史共用文件列表，标题下显示总增减，默认展示 3 项并支持展开／收起；目录灰色、文件名突出，右侧显示绿色 `+N`／红色 `−N`。历史搜索可展开隐藏的匹配项，无撤销或 diff 查看按钮。 |
+| 设置与目录 | 设置页面按职责拆分，复用控件、搜索定位和编辑回调；保持单个 Swift target 与递归源码收集。 |
+
+沿用正式版的任务概览、额度查询、历史搜索、气泡审批与问卷、快捷回复／插话、原生代码块及本机文件定位。详细行为见 [来源与架构](docs/来源与架构.md)，开发迭代见 [CHANGELOG](CHANGELOG.md)。
+
+**当前验证状态：** 0.7.0-dev.2 的 Apple Silicon 主程序与跟随启动助手已编译、打包并完成本地签名。产物链接、文件摘要展开／收起及搜索定位由用户继续手动验收；构建记录见本机实施记录。
 
 ## 分支与更新检查
 
-- `main`：正式版源码与普通用户说明。
-- `joseph/dev`：开发源码、完整开发变更、调查记录与待办；本地和 GitHub 使用相同分支名。
-- 两条分支独立提交；需要同步时明确选取改动，不自动合并或变基，不把开发文档整体覆盖到主线。
-- `-dev` 是源码版本的预发布后缀。本分支不发布开发版可执行程序；开发资源单独提供 Pre-release ZIP 附件，不设为 Latest。
-- 应用更新检查只读取 GitHub 的最新正式 Release，不读取分支中的 VERSION；同时排除草稿、预发布 Release 和带预发布后缀的版本。因此开发分支版本号更高也不会成为正式更新提醒。
+- `main` 保留正式版源码和普通用户说明；`joseph/dev` 保留开发源码、完整开发变更、开发文档和待办。本地与远端使用相同开发分支名。
+- 两条分支独立提交，不自动合并或变基。同步时明确选取改动，不把开发文档整体覆盖到主线。
+- 本分支不创建程序 Release 或应用版本标签。开发素材通过独立的 `dev-assets-*` Pre-release 提供，不设为 Latest。
+- 应用更新检查读取 GitHub 最新正式 Release，并排除草稿、预发布和带预发布后缀的版本；不读取分支中的 VERSION。开发分支版本号更高也不会进入正式更新提醒。
 
-## 开发资料
+历史接入和文档跟踪范围见 [开发分支维护](docs/开发分支.md)。
 
-- [完整变更记录](CHANGELOG.md)：恢复开发迭代，保留正式版汇总。
-- [历史变更索引](docs/开发变更索引.md)：逐份查看原始 CHANGELOG。
-- [开发分支维护](docs/开发分支.md)：历史接入、分支同步与跟踪范围。
-- [开发资源 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/dev-assets-2026-11-02/bailong-dev-assets-2026-11-02.zip) 与 [获取说明](docs/开发资源获取.md)：完整动画、工具元数据、音效和图标。
-- [开发待办](todo.md)：后续功能、滚动实验与跨 App 隐私通知排查。
-- [来源与架构](docs/来源与架构.md)：当前设计、技术栈与行为约束。
-- [启动闪退调查](docs/启动闪退调查.md)：早期版本的故障与修复记录。
-- [设置界面检查](docs/设置界面检查.md)：0.6.0-dev.10 的界面检查与验收范围。
+## 获取资源与构建
 
-## 从源码构建
+先安装 Apple Command Line Tools，并使用包含 macOS 27 API 的 SDK。本项目当前使用 SDK 27.2、Apple Swift 6.4.2，应用运行目标为 macOS 14 起。
 
-首次准备请按 [开发资源获取](docs/开发资源获取.md) 操作：可直接解压开发资源 ZIP，也可从现有正式版 App 提取运行资源。文档包含下载来源、复制命令、目录对应及素材制作入口。
-
-当前源码需要包含 macOS 27 API 的 SDK；本项目使用 SDK 27.2、Apple Swift 6.4.2。应用运行目标仍为 macOS 14 起。资源目录如下：
+下载 [开发资源 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/dev-assets-2026-11-02/bailong-dev-assets-2026-11-02.zip)，按 [开发资源获取](docs/开发资源获取.md) 解压到仓库。该文档还提供从已有 App 提取资源的方法、目录对应和素材制作入口。
 
 ```text
 local-assets/
@@ -46,18 +49,38 @@ local-assets/
   openai-logo.png
 ```
 
-资源不存放在 Git 中。`samples.json` 随开发资源包提供，用于独立预览与 PNG 替换，不是普通 App 运行必需文件。
+资源不存放在 Git 中。`samples.json` 用于独立预览与 PNG 替换，不是 App 运行必需文件。
 
 ```sh
-./scripts/build.sh arm64           # 构建 Apple Silicon App
 ./scripts/run-dev.sh --build-only  # 仅编译
-./scripts/run-dev.sh               # 开发运行
+./scripts/build.sh arm64           # 构建 Apple Silicon App
+./scripts/run-dev.sh               # 编译并开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码入口保留；因缺少符合要求的真机环境，Intel 适配与验证暂时搁置。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码入口保留；因缺少符合要求的真机环境，适配与验证暂时搁置。
+
+## 代码与维护入口
+
+源码位于 `Sources/BailongPet/`，保持单个 Swift target：
+
+| 目录 | 职责 |
+| --- | --- |
+| `App/`、`Pet/` | 启动退出、桌宠动作、素材播放、菜单与位置 |
+| `Conversation/` | 任务与会话协调、消息聚合、历史及额度 |
+| `Codex/` | 协议连接、外部记录读取、请求与同步 |
+| `UI/Bubble/`、`UI/Chat/` | 气泡卡片与正文布局、临时输入和历史界面 |
+| `UI/Shared/` | 富文本、代码块、文件摘要、输入、复制反馈及文字动效 |
+| `Settings/`、`Infrastructure/` | 偏好与设置页、更新、启动项、存储及恢复 |
+
+- [维护 skill](skills/bailong-macos-port/SKILL.md)：修改入口、共用组件和维护流程。
+- [AGENTS.md](AGENTS.md)：协作边界与具体产品规则。
+- [来源与架构](docs/来源与架构.md)：技术方案、来源及现行行为。
+- [todo](todo.md)：稳定性观察、解耦、资源优化与后续功能。
+- [完整变更记录](CHANGELOG.md)与[历史变更索引](docs/开发变更索引.md)：保留开发过程及正式版汇总。
+- 历史调查：[启动闪退](docs/启动闪退调查.md)、[0.6.0-dev.10 设置界面检查](docs/设置界面检查.md)。
 
 ## 来源与反馈
 
-原作参考基线为 **v0.5.1 / b102e73**。动画、音效、图标与软件组件的来源见 [来源与架构](docs/来源与架构.md) 和设置中的“关于 → 开源项目、技术栈与致谢”。
+原作参考基线为 **v0.5.1 / b102e73**。动画、音效、图标与软件组件的来源见 [来源与架构](docs/来源与架构.md) 和应用设置中的“关于 → 开源项目、技术栈与致谢”。
 
-反馈问题请提供应用版本、macOS 版本和复现步骤；Codex 问题另附桌面端版本，并注明桌宠内置对话或 Codex 原会话。[提交 Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
+[提交 Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues) 时请提供应用版本、macOS 版本和复现步骤；Codex 问题另附桌面端版本，并注明是桌宠内置对话还是 Codex 原会话。

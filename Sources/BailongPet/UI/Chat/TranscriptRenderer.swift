@@ -11,7 +11,7 @@ final class TranscriptRenderer {
     }
     func turnSignature(_ turn:Turn) -> [String] {
         [turn.input,turn.status,turn.messages,turn.summary,turn.steps,turn.final,turn.error,
-         turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)]
+         turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)] + (turn.fileEdits ?? []).flatMap(\.signature)
     }
     func content(_ conversation: Conversation) -> NSAttributedString {
         var result = NSMutableAttributedString()
@@ -54,6 +54,7 @@ final class TranscriptRenderer {
             if let notice = turn.sensitiveInputNotice {append(notice,color:.secondaryLabelColor)}
             if !turn.messages.isEmpty {appendMarkdown(turn.messages)}
             if !turn.final.isEmpty && !turn.messages.contains(turn.final) {appendMarkdown(turn.final)}
+            result.append(FileEditRendering.render(turn.fileEdits ?? [],font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),id:turn.key))
             if !turn.error.isEmpty {let failure = AppFailure.codex(turn.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
             append(" ",font:.systemFont(ofSize:4),after:12)
             transcriptCache[turn.key] = (signature,result)

@@ -172,6 +172,16 @@ enum DesktopHistoryReader {
                 alert = attention?.body ?? ""
                 result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion))
                 result[result.count-1].agentMessages = agentMessages
+                // 修改摘要读取完整轮次，不受上方近期 200 条进展／消息窗口限制。
+                let edits = try history.rows("SELECT json_extract(item_json,'$.changes') changes FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type='fileChange' AND json_extract(item_json,'$.status')='completed' ORDER BY rollout_ordinal",[actual,turn["turn_id"]!])
+                var fileEdits = [FileEditSummary]()
+                for edit in edits {
+                    if let raw = edit["changes"],raw != "null" {
+                        let changes = try JSONSerialization.jsonObject(with:Data(raw.utf8))
+                        fileEdits += FileEditSummary.read(["type":"fileChange","status":"completed","changes":changes])
+                    }
+                }
+                result[result.count-1].fileEdits = FileEditSummary.merged(fileEdits)
                 result[result.count-1].activity = activity
                 result[result.count-1].isLatest = turn["turn_id"] == latestTurn
             }

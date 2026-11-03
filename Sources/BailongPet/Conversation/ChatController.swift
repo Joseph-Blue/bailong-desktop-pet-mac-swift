@@ -370,7 +370,7 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result")}
+        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [])}
         if closing {finishShutdown()}
     }
     func stop() {
