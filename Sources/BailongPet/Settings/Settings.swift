@@ -1,5 +1,6 @@
 import AppKit
 import ServiceManagement
+import UniformTypeIdentifiers
 
 final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate, NSToolbarDelegate {
     let window = SettingsWindow(contentRect:NSRect(x:0,y:0,width:1040,height:900),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
@@ -38,6 +39,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var historyRecoveryReason:() -> String? = {nil}
     var onReloadHistory:(() throws -> Void)?
     var onExportHistory:((URL) throws -> Void)?
+    var historyExportExtension:() -> String = {"json"}
     private var storageGeneration = 0
     init(preferences: PetPreferences = .shared, catalog: Catalog? = nil) {
         self.preferences = preferences; self.catalog = catalog
@@ -403,7 +405,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func exportOriginalHistory() {
-        let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "白龙桌宠Swift-历史原文件.json"
+        let ext = historyExportExtension()
+        let panel = NSSavePanel(); panel.allowedContentTypes = [UTType(filenameExtension:ext) ?? .data]; panel.nameFieldStringValue = "白龙桌宠Swift-历史原文件."+ext
         PanelPresentation.present(panel,relativeTo:window) { [weak self] response in
             guard response == .OK,let url = panel.url,let self else {return}
             do {try self.onExportHistory?(url)} catch {showError("导出历史原文件失败",error)}

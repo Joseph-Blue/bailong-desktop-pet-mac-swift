@@ -10,10 +10,10 @@ final class TranscriptRenderer {
         return [preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
     }
     func turnSignature(_ turn:Turn) -> [String] {
-        [turn.input,turn.status,turn.messages,turn.summary,turn.steps,turn.final,turn.error,
-         turn.sensitiveQuestionNotice ?? "",turn.sensitiveInputNotice ?? "",String(turn.date.timeIntervalSince1970)] + (turn.fileEdits ?? []).flatMap(\.signature)
+        [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970)]
     }
-    func content(_ conversation: Conversation) -> NSAttributedString {
+    func content(_ conversation: Conversation, turns:[Turn]? = nil) -> NSAttributedString {
+        let turns = turns ?? conversation.turns
         var result = NSMutableAttributedString()
         func append(_ text: String, font: NSFont = .systemFont(ofSize:PetPreferences.shared.number("messageFontSize")), color: NSColor = .labelColor, after: CGFloat = 12) {
             guard !text.isEmpty else {return}
@@ -25,37 +25,38 @@ final class TranscriptRenderer {
             result.append(MarkdownText.render(text,font:font,color:color))
             result.append(NSAttributedString(string:"\n",attributes:[.font:font]))
         }
-        if conversation.turns.isEmpty {
+        if turns.isEmpty {
             append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.color)
             append("在下方输入想做的事。",color:.secondaryLabelColor)
             return result
         }
         let style = style(conversation)
-        let keys = Set(conversation.turns.map(\.key))
+        let keys = Set(turns.map(\.key))
         transcriptCache = transcriptCache.filter {keys.contains($0.key)}
-        for turn in conversation.turns {
+        for turn in turns {
             let signature = style + turnSignature(turn)
             if let cached = transcriptCache[turn.key],cached.0 == signature {result.append(cached.1); continue}
+            let body = turn.bodyReference.value()
             let accumulated = result
             result = NSMutableAttributedString()
-            if !turn.input.isEmpty {
+            if !body.input.isEmpty {
                 append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
-                append(turn.input)
+                append(body.input)
             }
             append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
             // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。
-            let steps = conversation.external && turn.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : turn.steps
-            for (heading,text) in [("公开思考摘要",turn.summary),("执行记录",steps)] where !text.isEmpty {
+            let steps = conversation.external && body.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : body.steps
+            for (heading,text) in [("公开思考摘要",body.summary),("执行记录",steps)] where !text.isEmpty {
                 append(heading,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1),weight:.medium),color:.secondaryLabelColor,after:4)
                 if heading == "公开思考摘要" {appendMarkdown(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
                 else {append(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
             }
-            if let notice = turn.sensitiveQuestionNotice {append(notice,color:.secondaryLabelColor)}
-            if let notice = turn.sensitiveInputNotice {append(notice,color:.secondaryLabelColor)}
-            if !turn.messages.isEmpty {appendMarkdown(turn.messages)}
-            if !turn.final.isEmpty && !turn.messages.contains(turn.final) {appendMarkdown(turn.final)}
-            result.append(FileEditRendering.render(turn.fileEdits ?? [],font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),id:turn.key))
-            if !turn.error.isEmpty {let failure = AppFailure.codex(turn.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
+            if let notice = body.sensitiveQuestionNotice {append(notice,color:.secondaryLabelColor)}
+            if let notice = body.sensitiveInputNotice {append(notice,color:.secondaryLabelColor)}
+            if !body.messages.isEmpty {appendMarkdown(body.messages)}
+            if !body.final.isEmpty && !body.messages.contains(body.final) {appendMarkdown(body.final)}
+            result.append(FileEditRendering.render(body.fileEdits ?? [],font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),id:turn.key))
+            if !body.error.isEmpty {let failure = AppFailure.codex(body.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
             append(" ",font:.systemFont(ofSize:4),after:12)
             transcriptCache[turn.key] = (signature,result)
             accumulated.append(result); result = accumulated

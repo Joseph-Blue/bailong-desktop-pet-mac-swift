@@ -2,27 +2,104 @@ import Foundation
 
 let activeStatuses: Set<String> = ["pending","running","inProgress","waitingForApproval","waitingForInput"]
 final class Turn: Codable {
+    var bodyReference = HistoryBodyReference()
     var id: String? = nil
-    var key = UUID().uuidString
-    var input = "", status = "pending", messages = "", summary = "", steps = "", final = "", error = ""
-    var sensitiveInputNotice: String? = nil
-    var sensitiveQuestionNotice: String? = nil
-    var model: String? = nil, effort: String? = nil
-    var date = Date()
-    var completedAt:Date? = nil
-    var lastMessageAt:Date? = nil
-    var fileEdits:[FileEditSummary]? = nil
-    var owned = true
-    var finished = false
-    var notices = [String:Double]()
+    var key: String = UUID().uuidString
+    var status: String = "pending"
+    var model: String? = nil
+    var effort: String? = nil
+    var date: Date = Date()
+    var completedAt: Date? = nil
+    var lastMessageAt: Date? = nil
+    var owned: Bool = true
+    var finished: Bool = false
+    var input:String {
+        get {bodyReference.value().input}
+        set {var body = bodyReference.value(); guard body.input != newValue else {return}; body.input = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var messages:String {
+        get {bodyReference.value().messages}
+        set {var body = bodyReference.value(); guard body.messages != newValue else {return}; body.messages = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var summary:String {
+        get {bodyReference.value().summary}
+        set {var body = bodyReference.value(); guard body.summary != newValue else {return}; body.summary = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var steps:String {
+        get {bodyReference.value().steps}
+        set {var body = bodyReference.value(); guard body.steps != newValue else {return}; body.steps = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var final:String {
+        get {bodyReference.value().final}
+        set {var body = bodyReference.value(); guard body.final != newValue else {return}; body.final = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var error:String {
+        get {bodyReference.value().error}
+        set {var body = bodyReference.value(); guard body.error != newValue else {return}; body.error = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var sensitiveInputNotice:String? {
+        get {bodyReference.value().sensitiveInputNotice}
+        set {var body = bodyReference.value(); guard body.sensitiveInputNotice != newValue else {return}; body.sensitiveInputNotice = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var sensitiveQuestionNotice:String? {
+        get {bodyReference.value().sensitiveQuestionNotice}
+        set {var body = bodyReference.value(); guard body.sensitiveQuestionNotice != newValue else {return}; body.sensitiveQuestionNotice = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var fileEdits:[FileEditSummary]? {
+        get {bodyReference.value().fileEdits}
+        set {var body = bodyReference.value(); guard body.fileEdits != newValue else {return}; body.fileEdits = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    var notices:[String:Double] {
+        get {bodyReference.value().notices}
+        set {var body = bodyReference.value(); guard body.notices != newValue else {return}; body.notices = newValue; bodyReference = HistoryBodyReference(body)}
+    }
+    init() {}
+    private enum CodingKeys:String,CodingKey {case id,key,status,model,effort,date,completedAt,lastMessageAt,owned,finished,bodyID}
+    init(from decoder:Swift.Decoder) throws {
+        let c = try decoder.container(keyedBy:CodingKeys.self)
+        id = try c.decodeIfPresent(String.self,forKey:.id)
+        key = try c.decode(String.self,forKey:.key)
+        status = try c.decode(String.self,forKey:.status)
+        model = try c.decodeIfPresent(String.self,forKey:.model)
+        effort = try c.decodeIfPresent(String.self,forKey:.effort)
+        date = try c.decode(Date.self,forKey:.date)
+        completedAt = try c.decodeIfPresent(Date.self,forKey:.completedAt)
+        lastMessageAt = try c.decodeIfPresent(Date.self,forKey:.lastMessageAt)
+        owned = try c.decode(Bool.self,forKey:.owned)
+        finished = try c.decode(Bool.self,forKey:.finished)
+        if let id = try c.decodeIfPresent(String.self,forKey:.bodyID) {
+            guard let disk = decoder.userInfo[.historyDatabase] as? HistoryDatabase else {throw PetFailure(message:"历史正文引用缺少数据库")}
+            bodyReference = HistoryBodyReference(id:id,disk:disk)
+        } else {bodyReference = HistoryBodyReference(try HistoryBody(from:decoder))}
+    }
+    func encode(to encoder:Encoder) throws {
+        var c = encoder.container(keyedBy:CodingKeys.self)
+        try c.encodeIfPresent(id,forKey:.id)
+        try c.encode(key,forKey:.key)
+        try c.encode(status,forKey:.status)
+        try c.encodeIfPresent(model,forKey:.model)
+        try c.encodeIfPresent(effort,forKey:.effort)
+        try c.encode(date,forKey:.date)
+        try c.encodeIfPresent(completedAt,forKey:.completedAt)
+        try c.encodeIfPresent(lastMessageAt,forKey:.lastMessageAt)
+        try c.encode(owned,forKey:.owned)
+        try c.encode(finished,forKey:.finished)
+        if encoder.userInfo[.historyIndex] as? Bool == true {try c.encode(bodyReference.id,forKey:.bodyID)}
+        else {try bodyReference.value().encode(to:encoder)}
+    }
     func snapshot() -> Turn {
         let t = Turn()
-        t.id = id; t.key = key; t.input = input; t.status = status
-        t.messages = messages; t.summary = summary; t.steps = steps; t.final = final; t.error = error
-        t.sensitiveInputNotice = sensitiveInputNotice; t.sensitiveQuestionNotice = sensitiveQuestionNotice
-        t.model = model; t.effort = effort; t.date = date; t.completedAt = completedAt; t.lastMessageAt = lastMessageAt; t.owned = owned
-        t.finished = finished; t.notices = notices
-        t.fileEdits = fileEdits
+        t.id = id
+        t.key = key
+        t.status = status
+        t.model = model
+        t.effort = effort
+        t.date = date
+        t.completedAt = completedAt
+        t.lastMessageAt = lastMessageAt
+        t.owned = owned
+        t.finished = finished
+        t.bodyReference = bodyReference
         return t
     }
 }
@@ -71,11 +148,17 @@ final class HistoryStore {
     var conversations = [Conversation]()
     var onError: (Error) -> Void = { _ in }
     var onSaved: () -> Void = {}
-    private(set) var readOnlyReason:String?
+    private var initialReadOnlyReason:String?
+    var readOnlyReason:String? {initialReadOnlyReason ?? database?.readFailure}
+    private var database:HistoryDatabase?
+    var exportExtension:String {exportSourceURL.pathExtension}
+    func clearBodyCache() {database?.clearCache()}
+    var cachedBodyBytes:Int {database?.cachedBytes ?? 0}
     var isReadOnly:Bool {readOnlyReason != nil}
     private let queue = DispatchQueue(label:"白龙娘历史保存")
     private let lock = NSLock()
     private let url: URL
+    private var exportSourceURL:URL
     private var recording: Bool
     private var archive = HistoryDocument(conversations:[])
     private var policy = HistoryRecordingPolicy()
@@ -87,30 +170,37 @@ final class HistoryStore {
     var recordsAutomatically: Bool {recording}
     init(recording:Bool = true, directory:URL = Paths.data) throws {
         url = directory.appendingPathComponent("conversations.json")
+        exportSourceURL = url
         self.recording = recording
-        if FileManager.default.fileExists(atPath:url.path) {
-            do {
-                var document = try JSONDecoder().decode(HistoryDocument.self,from:Data(contentsOf:url))
-                try document.validateIdentity()
+        let databaseURL = directory.appendingPathComponent("history.sqlite")
+        do {
+            let existed = FileManager.default.fileExists(atPath:databaseURL.path)
+            var legacy:HistoryDocument?
+            func readLegacy() throws -> HistoryDocument {
+                let old = try JSONDecoder().decode(HistoryDocument.self,from:Data(contentsOf:url))
+                try old.validateIdentity()
+                guard [1,2].contains(old.schemaVersion) else {throw PetFailure(message:"历史格式不支持："+String(old.schemaVersion))}
+                return old
+            }
+            if !existed,FileManager.default.fileExists(atPath:url.path) {legacy = try readLegacy()}
+            if existed {exportSourceURL = databaseURL}
+            let disk = try HistoryDatabase(url:databaseURL)
+            var document = try disk.load()
+            if document == nil {
+                if legacy == nil,FileManager.default.fileExists(atPath:url.path) {exportSourceURL = url; legacy = try readLegacy()}
+                if let legacy {try disk.write(legacy); document = try disk.load()}
+            }
+            database = disk; exportSourceURL = databaseURL
+            if let document {
                 conversations = document.conversations
                 policy = document.recordingPolicy ?? HistoryRecordingPolicy()
-                if document.schemaVersion == 1 {
-                    let backup = directory.appendingPathComponent("conversations-before-schema2-\(Int(Date().timeIntervalSince1970*1000)).json")
-                    try FileManager.default.copyItem(at:url,to:backup)
-                    document.schemaVersion = 2
-                    let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
-                    try encoder.encode(document).write(to:url,options:.atomic)
-                } else if document.schemaVersion != 2 {
-                    readOnlyReason = "历史格式 \(document.schemaVersion) 由其他版本保存，当前只读展示可识别的内容。"
-                }
-            } catch {
-                readOnlyReason = "历史读取或升级未完成，原文件保留："+error.localizedDescription
             }
             archive = makeSnapshot(preservingExcluded:false)
             for conversation in conversations {for turn in conversation.turns where turn.owned && (activeStatuses.contains(turn.status) || turn.status == "unknown") {
                 turn.status = "interrupted"; turn.error = "上次程序退出，任务未确认完成。"
             }}
-        }
+        } catch {initialReadOnlyReason = "历史读取或升级未完成，原文件保留："+error.localizedDescription}
+        database?.onReadFailure = { [weak self] error in self?.onError(error) }
         if policy.disabled || !recording {
             freezeCurrentTurns()
             policy.externalBefore = Date().timeIntervalSince1970
@@ -123,14 +213,19 @@ final class HistoryStore {
     func requireWritable() throws {
         if let readOnlyReason {throw PetFailure(message:readOnlyReason+" 请在设置 → 高级中导出原文件或重新读取。")}
     }
-    func exportOriginal(to destination:URL) throws {try Data(contentsOf:url).write(to:destination,options:.atomic)}
+    func exportOriginal(to destination:URL) throws {
+        queue.sync {}
+        if let database {try database.export(to:destination)}
+        else {try Data(contentsOf:exportSourceURL).write(to:destination,options:.atomic)}
+    }
     func reload(recording:Bool) throws {
         guard isReadOnly else {return}
         let fresh = try HistoryStore(recording:recording,directory:url.deletingLastPathComponent())
         try fresh.requireWritable()
         queue.sync {}
         conversations = fresh.conversations; archive = fresh.archive; policy = fresh.policy; self.recording = fresh.recording
-        readOnlyReason = nil
+        database = fresh.database; exportSourceURL = fresh.exportSourceURL; initialReadOnlyReason = nil
+        database?.onReadFailure = { [weak self] error in self?.onError(error) }
         lock.withLock {suspended = false; pending = nil; writeEpoch += 1}
     }
     func setRecording(_ enabled:Bool) {
@@ -195,10 +290,8 @@ final class HistoryStore {
             }
             guard let (document,epoch) = next else {return}
             do {
-                let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
-                let data = try encoder.encode(document)
-                try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true)
-                try data.write(to:url,options:.atomic)
+                guard let database else {throw PetFailure(message:"历史数据库未打开")}
+                try database.write(document)
                 DispatchQueue.main.async { [self] in if lock.withLock({writeEpoch == epoch && !suspended}) {onSaved()} }
             } catch {
                 lock.withLock {suspended = true; pending = nil}
@@ -236,23 +329,25 @@ final class HistoryStore {
         document.recordingPolicy = nextPolicy
         try commitManagement(document)
         policy = nextPolicy; conversations.removeAll {$0.key == conversation.key}
+        database?.clearCache()
     }
     private func commitManagement(_ document:HistoryDocument) throws {
         try requireWritable()
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
-        let data = try encoder.encode(document)
-        try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true)
-        try data.write(to:url,options:.atomic)
+        guard let database else {throw PetFailure(message:"历史数据库未打开")}
+        try database.write(document)
         archive = document
         lock.withLock {suspended = false; pending = nil; writeEpoch += 1}
-        onSaved()
+        // 管理操作调用者还需更新当前会话；回执在其完成选择切换后刷新界面。
+        DispatchQueue.main.async { [weak self] in self?.onSaved() }
     }
     func clear() throws {
         try requireWritable()
         queue.sync {}
         let fresh = HistoryRecordingPolicy(externalBefore:Date().timeIntervalSince1970,disabled:!recording)
         let document = HistoryDocument(conversations:[],recordingPolicy:fresh)
-        try JSONEncoder().encode(document).write(to:url,options:.atomic)
+        guard let database else {throw PetFailure(message:"历史数据库未打开")}
+        try database.write(document)
+        database.clearCache()
         conversations.removeAll(); archive = document; policy = fresh
         lock.withLock {suspended = false; writeEpoch += 1}
     }

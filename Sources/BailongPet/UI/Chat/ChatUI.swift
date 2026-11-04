@@ -59,6 +59,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onSelect: (String) -> Void = { _ in }, onSubmit: (String,String,ChatEntry) -> Void = { _,_,_ in }
     var onStop:(String) -> Void = {_ in}, onNew:(ChatEntry) -> Void = {_ in}, onFolder:(ChatEntry) -> Void = {_ in}
     var onComposerSelect:(String) -> Void = {_ in}, onMode:(ConversationKind) -> Void = {_ in}
+    var onReleaseHistory:() -> Void = {}
     var onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
     var presentingFolderPicker:Bool {get {composerView.presentingFolderPicker} set {composerView.presentingFolderPicker = newValue}}
     var isPetInteraction:(NSEvent) -> Bool {get {composerView.isPetInteraction} set {composerView.isPetInteraction = newValue}}
@@ -73,11 +74,17 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let inheritedSettings = ChatReadOnlyModelField()
     private var historyPlaceholder: String {PetPreferences.shared.fixedText("主人，我们接着聊吧…")}
     private var renderedTranscriptSignature = [String]()
+    private var historyPage = HistoryPageWindow()
+    private var pageConversation:String?, pageQuery:String?
+    private var renderedPageStart:Int?
+    private let pageLabel = label("")
+    private var previousPage:ActionButton!, nextPage:ActionButton!
     private var renderedConversation: String?
     private let transcriptRenderer = TranscriptRenderer()
     var busy = false
     private var updatingList = false
     private var listSnapshot = [String]()
+    private var searchDataSignature = [String]()
     override convenience init() {self.init(models:ChatModelSettings())}
     init(models: ChatModelSettings) {
         self.models = models; composerView = ChatComposer(models:composerModels)
@@ -164,11 +171,16 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let targetMetadata = NSStackView(views:[sourceLabel,folder]); targetMetadata.orientation = .vertical; targetMetadata.alignment = .leading; targetMetadata.spacing = 3
         let metadata = NSStackView(views:[targetMetadata,NSView(),historyStatus,matchLabel,previousMatch!,nextMatch!]); metadata.spacing = 8; metadata.alignment = .centerY
         [matchLabel,previousMatch!,nextMatch!].forEach {$0.isHidden = true}
+        previousPage = ActionButton("较早记录") { [weak self] in self?.moveHistoryPage(-1) }
+        nextPage = ActionButton("较新记录") { [weak self] in self?.moveHistoryPage(1) }
+        pageLabel.font = .systemFont(ofSize:11); pageLabel.textColor = .secondaryLabelColor
+        let pages = NSStackView(views:[previousPage!,NSView(),pageLabel,NSView(),nextPage!]); pages.spacing = 8
         let separator = NSBox(); separator.boxType = .separator
-        for view in [metadata,reading,separator,inputArea] {view.translatesAutoresizingMaskIntoConstraints = false; right.addSubview(view)}
+        for view in [metadata,pages,reading,separator,inputArea] {view.translatesAutoresizingMaskIntoConstraints = false; right.addSubview(view)}
         NSLayoutConstraint.activate([
             metadata.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:24),metadata.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-24),metadata.topAnchor.constraint(equalTo:right.safeAreaLayoutGuide.topAnchor,constant:12),
-            reading.leadingAnchor.constraint(equalTo:right.leadingAnchor),reading.trailingAnchor.constraint(equalTo:right.trailingAnchor),reading.topAnchor.constraint(equalTo:metadata.bottomAnchor,constant:8),reading.bottomAnchor.constraint(equalTo:separator.topAnchor),reading.heightAnchor.constraint(greaterThanOrEqualToConstant:180),
+            pages.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:24),pages.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-24),pages.topAnchor.constraint(equalTo:metadata.bottomAnchor,constant:8),
+            reading.leadingAnchor.constraint(equalTo:right.leadingAnchor),reading.trailingAnchor.constraint(equalTo:right.trailingAnchor),reading.topAnchor.constraint(equalTo:pages.bottomAnchor,constant:8),reading.bottomAnchor.constraint(equalTo:separator.topAnchor),reading.heightAnchor.constraint(greaterThanOrEqualToConstant:180),
             separator.leadingAnchor.constraint(equalTo:right.leadingAnchor),separator.trailingAnchor.constraint(equalTo:right.trailingAnchor),
             inputArea.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:20),inputArea.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-20),inputArea.topAnchor.constraint(equalTo:separator.bottomAnchor,constant:16),inputArea.bottomAnchor.constraint(equalTo:right.bottomAnchor,constant:-16)
         ])
@@ -289,9 +301,14 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if reveal,!findMatches.isEmpty {transcript.scrollRangeToVisible(findMatches[matchIndex])}
     }
     private func refreshList() {
-        visibleConversations = HistorySearch.filter(conversations,query:searchField.stringValue)
+        guard history.isVisible && !history.isMiniaturized else {return}
+        let searchSignature = [searchField.stringValue] + conversations.flatMap {[$0.key,$0.title] + (searching ? $0.turns.map {$0.bodyReference.id} : [])}
+        if searchSignature != searchDataSignature {
+            visibleConversations = HistorySearch.filter(conversations,query:searchField.stringValue)
+            snippets = Dictionary(uniqueKeysWithValues:visibleConversations.compactMap {c in HistorySearch.snippet(c,query:searchField.stringValue).map {(c.key,$0)}})
+            searchDataSignature = searchSignature
+        }
         noSearchResults.isHidden = !searching || !visibleConversations.isEmpty
-        snippets = Dictionary(uniqueKeysWithValues:visibleConversations.compactMap {c in HistorySearch.snippet(c,query:searchField.stringValue).map {(c.key,$0)}})
         let snapshot = visibleConversations.map {$0.key+"\u{0}"+$0.title+"\u{0}"+(snippets[$0.key] ?? "")+"\u{0}"+searchField.stringValue}
         updatingList = true
         if snapshot != listSnapshot {list.reloadData(); list.noteHeightOfRows(withIndexesChanged:IndexSet(integersIn:0..<visibleConversations.count)); listSnapshot = snapshot}
@@ -409,20 +426,33 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.linkBaseDirectory = {messageDirectory}
         guard history.isVisible && !history.isMiniaturized else {return}
         let selectionChanged = renderedConversation != selected.key
-        let signature = transcriptRenderer.style(selected) + selected.turns.flatMap {[ $0.key ] + transcriptRenderer.turnSignature($0)}
-        let contentChanged = selectionChanged || signature != renderedTranscriptSignature
+        if pageConversation != selected.key {historyPage = HistoryPageWindow(); pageConversation = selected.key; pageQuery = nil}
+        if pageQuery != searchField.stringValue {
+            pageQuery = searchField.stringValue
+            if searching,let index = selected.turns.firstIndex(where:{HistorySearch.matches($0,query:searchField.stringValue)}) {historyPage.reveal(index)}
+            else if !searching {historyPage = HistoryPageWindow()}
+        }
+        let range = historyPage.range(count:selected.turns.count)
+        let turns = Array(selected.turns[range])
+        let pageChanged = renderedPageStart != range.lowerBound
+        previousPage.isEnabled = range.lowerBound > 0; nextPage.isEnabled = range.upperBound < selected.turns.count
+        pageLabel.stringValue = turns.isEmpty ? "暂无记录" : "第 \(range.lowerBound+1)–\(range.upperBound) 轮 · 共 \(selected.turns.count) 轮"
+        let signature = transcriptRenderer.style(selected) + turns.flatMap {[ $0.key ] + transcriptRenderer.turnSignature($0)}
+        let contentChanged = selectionChanged || pageChanged || signature != renderedTranscriptSignature
         if contentChanged {
             let readingOrigin = transcript.enclosingScrollView?.contentView.bounds.origin
-            transcript.setContent(transcriptRenderer.content(selected),reset:selectionChanged)
-            if selectionChanged && !searching {transcript.scrollToEndOfDocument(nil)}
+            transcript.setContent(transcriptRenderer.content(selected,turns:turns),reset:selectionChanged || pageChanged)
+            if (selectionChanged || pageChanged) && !searching {
+                if historyPage.followsLatest {transcript.scrollToEndOfDocument(nil)} else {transcript.scrollToBeginningOfDocument(nil)}
+            }
             else if let scroll = transcript.enclosingScrollView,let readingOrigin {
                 scroll.contentView.scroll(to:readingOrigin); scroll.reflectScrolledClipView(scroll.contentView)
             }
             renderedTranscriptSignature = signature
         }
         if selectionChanged {matchIndex = 0}
-        renderedConversation = selected.key
-        if contentChanged || searching || !findMatches.isEmpty {updateSearchHighlights(reveal:searching && selectionChanged)}
+        renderedConversation = selected.key; renderedPageStart = range.lowerBound
+        if contentChanged || searching || !findMatches.isEmpty {updateSearchHighlights(reveal:searching && (selectionChanged || pageChanged))}
     }
     @objc private func accentChanged() {
         transcriptRenderer.invalidate()
@@ -449,12 +479,24 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         sender.makeFirstResponder(nil)
         return true
     }
+    func invalidateHistoryDisplay() {
+        transcriptRenderer.invalidate(); renderedTranscriptSignature.removeAll()
+        renderedConversation = nil; searchDataSignature.removeAll()
+    }
+    private func moveHistoryPage(_ direction:Int) {
+        guard let current = conversations.first(where:{$0.key == selected}) else {return}
+        historyPage.move(direction,count:current.turns.count)
+        refreshVisibleHistory()
+    }
     func windowWillClose(_ notification:Notification) {
         guard notification.object as? NSWindow === history else {return}
         transcriptRenderer.invalidate()
         renderedTranscriptSignature.removeAll(); renderedConversation = nil
+        renderedPageStart = nil; pageConversation = nil; pageQuery = nil
+        searchDataSignature.removeAll(); snippets.removeAll()
         findMatches.removeAll(); matchIndex = 0
         transcript.releaseRenderedContent()
+        onReleaseHistory()
     }
     func openHistory() {
         hideComposer(); onOpenHistory()
