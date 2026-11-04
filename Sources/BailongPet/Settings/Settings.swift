@@ -144,7 +144,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             if !hasSavedFrame {window.zoom(nil)}
             hasShown = true
         }
-        NSApp.setActivationPolicy(.regular)
+        InterfaceWindows.shared.opened(window)
         NSApp.addWindowsItem(window,title:window.title,filename:false)
         if window.isMiniaturized {window.deminiaturize(nil)}
         if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil)

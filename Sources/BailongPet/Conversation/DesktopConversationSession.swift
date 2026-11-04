@@ -10,6 +10,7 @@ final class DesktopConversationSession {
     private var desktopModelNotes = [String:String]()
     private var desktopModelChecked = [String:Date]()
     private var desktopModelRequests = [String:UUID]()
+    private var settingsReady = Set<String>()
     private var desktopSending = [String:UUID]()
     private var desktopUnconfirmed = Set<String>()
     private var desktopReplyNotes = [String:String]()
@@ -23,11 +24,14 @@ final class DesktopConversationSession {
     func unconfirmed(_ key:String) -> Bool {desktopUnconfirmed.contains(key)}
     func replyNote(_ key:String) -> String? {desktopReplyNotes[key]}
     func modelNote(_ key:String) -> String? {desktopModelNotes[key]}
+    func canReply(_ key:String) -> Bool {settingsReady.contains(key)}
     func forget(_ key:String) {
+        settingsReady.remove(key)
         desktopUnconfirmed.remove(key); desktopReplyNotes.removeValue(forKey:key)
         desktopModelNotes.removeValue(forKey:key); desktopModelChecked.removeValue(forKey:key); desktopModelRequests.removeValue(forKey:key)
     }
     func clear() {
+        settingsReady.removeAll()
         desktopUnconfirmed.removeAll(); desktopReplyNotes.removeAll()
         desktopModelNotes.removeAll(); desktopModelChecked.removeAll(); desktopModelRequests.removeAll()
     }
@@ -44,25 +48,28 @@ final class DesktopConversationSession {
     func refreshSettings(_ conversations:[Conversation]) {
         for conversation in conversations where conversation.external {refreshSettings(conversation)}
     }
-    private func refreshSettings(_ conversation:Conversation) {
+    func refreshSettings(_ conversation:Conversation,force:Bool = false) {
         guard !isClosing(),let thread = conversation.threadID else {return}
         let key = conversation.key
-        guard desktopModelRequests[key] == nil,Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
+        guard desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
+        if force {settingsReady.remove(key); desktopModelNotes.removeValue(forKey:key)}
         let request = UUID(); desktopModelRequests[key] = request; desktopModelChecked[key] = Date()
         DesktopReply.readSettings(thread:thread) { [weak self] result in
             guard let self,!self.isClosing(),self.desktopModelRequests[key] == request else {return}
             self.desktopModelRequests.removeValue(forKey:key)
             guard self.store.conversations.contains(where:{$0.key == key}) else {return}
             switch result {
-            case .success(let text): self.desktopModelNotes[key] = text
-            case .failure(let error): self.desktopModelNotes[key] = "未读取到模型设置 · "+error.localizedDescription
+            case .success(let text): self.desktopModelNotes[key] = text; self.settingsReady.insert(key)
+            case .failure(let error):
+                self.settingsReady.remove(key)
+                self.desktopModelNotes[key] = error is DesktopReply.OwnerUnavailable ? error.localizedDescription : "读取会话设置失败："+error.localizedDescription
             }
             self.onChange()
         }
     }
     func submit(_ text:String,to conversation:Conversation,entry:ChatEntry) {
         let key = conversation.key
-        guard !isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
+        guard !isClosing(),canSend(),canReply(key),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
               let thread = conversation.threadID,let target = target(conversation) else {return}
         let request = UUID(), started = Date()
         desktopSending[key] = request; desktopReplyNotes.removeValue(forKey:key); onChange()
@@ -86,10 +93,15 @@ final class DesktopConversationSession {
                 self.desktopReplyNotes.removeValue(forKey:key)
                 self.onPersist()
             case .failure(let error):
-                if error is DesktopReply.Unconfirmed {self.desktopUnconfirmed.insert(key)}
-                self.desktopReplyNotes[key] = error is DesktopReply.Unconfirmed ? "发送结果待确认，请检查 Codex" : error.localizedDescription
+                if error is DesktopReply.OwnerUnavailable {
+                    self.settingsReady.remove(key); self.desktopModelNotes[key] = error.localizedDescription
+                    self.desktopReplyNotes.removeValue(forKey:key)
+                } else {
+                    if error is DesktopReply.Unconfirmed {self.desktopUnconfirmed.insert(key)}
+                    self.desktopReplyNotes[key] = error.localizedDescription
+                }
+                // 回执只更新原会话状态。用户已切换或关闭窗口时不弹模态框、激活应用。
                 self.onChange()
-                showError(error is DesktopReply.Unconfirmed ? "发送结果待确认" : "消息未发送",error)
             }
         }
     }

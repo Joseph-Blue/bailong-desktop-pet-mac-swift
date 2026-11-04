@@ -221,7 +221,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         pet?.preferences.set(pinSwitch.state == .on, for: "diagnosticsPinned")
     }
     func show(takeFocus: Bool = true) {
-        NSApp.setActivationPolicy(.regular)
+        InterfaceWindows.shared.opened(window)
         if timer == nil {
             sampledAt = ProcessInfo.processInfo.systemUptime; frames = PlaybackStatistics(time: sampledAt)
             previous = ProcessStatistics.read(); swapinRate = nil; graph.values.removeAll(); graph.needsDisplay = true
@@ -240,7 +240,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     }
     func stop() {
         timer?.invalidate(); timer = nil; previousGPU = nil
-        window.orderOut(nil); NSApp.removeWindowsItem(window)
+        window.orderOut(nil); InterfaceWindows.shared.closed(window)
     }
     func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool { false }
     func windowDidEndLiveResize(_ notification: Notification) { fitToContent() }

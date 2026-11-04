@@ -7,7 +7,6 @@ final class AboutPageController: NSViewController {
     private let titleLabel = NSTextField(wrappingLabelWithString:"")
     private let appIcon = NSImageView()
     private let tabs = NSTabView()
-    private let tabSelector = AccentTabSelector(labels:["关于","开源项目、技术栈与致谢"])
     private static var architecture: String {
         #if arch(arm64)
         return "Apple Silicon（arm64）"
@@ -43,8 +42,7 @@ final class AboutPageController: NSViewController {
         version.textColor = .secondaryLabelColor
         version.alignment = .center
 
-        tabs.tabViewType = .noTabsNoBorder
-        tabSelector.onSelect = { [weak self] index in self?.tabs.selectTabViewItem(at:index) }
+        tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
         tabs.font = .systemFont(ofSize:13)
         for (identifier,label,text) in [("about","关于",aboutText()),("credits","开源项目、技术栈与致谢",creditsText())] {
             let item = NSTabViewItem(identifier:identifier)
@@ -52,7 +50,7 @@ final class AboutPageController: NSViewController {
             item.view = readingView(text)
             tabs.addTabViewItem(item)
         }
-        for view in [icon,title,version,tabSelector,tabs] {
+        for view in [icon,title,version,tabs] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
@@ -66,11 +64,7 @@ final class AboutPageController: NSViewController {
             title.trailingAnchor.constraint(lessThanOrEqualTo:root.trailingAnchor,constant:-24),
             version.topAnchor.constraint(equalTo:title.bottomAnchor,constant:6),
             version.centerXAnchor.constraint(equalTo:root.centerXAnchor),
-            tabSelector.topAnchor.constraint(equalTo:version.bottomAnchor,constant:22),
-            tabSelector.centerXAnchor.constraint(equalTo:root.centerXAnchor),
-            tabSelector.leadingAnchor.constraint(greaterThanOrEqualTo:root.leadingAnchor,constant:24),
-            tabSelector.trailingAnchor.constraint(lessThanOrEqualTo:root.trailingAnchor,constant:-24),
-            tabs.topAnchor.constraint(equalTo:tabSelector.bottomAnchor,constant:12),
+            tabs.topAnchor.constraint(equalTo:version.bottomAnchor,constant:22),
             tabs.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24),
             tabs.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24),
             tabs.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-24)
@@ -79,7 +73,6 @@ final class AboutPageController: NSViewController {
 
     func selectTab(_ identifier:String) {
         loadViewIfNeeded(); tabs.selectTabViewItem(withIdentifier:identifier)
-        if let item = tabs.selectedTabViewItem {tabSelector.selectedSegment = tabs.indexOfTabViewItem(item)}
     }
 
     private func readingView(_ content: NSAttributedString) -> NSScrollView {

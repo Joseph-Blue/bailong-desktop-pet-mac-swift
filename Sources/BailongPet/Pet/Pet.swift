@@ -90,6 +90,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var manualHidden = false, fullscreenHidden = false, sleeping = false
     var menuOpen = false, settingsOpen = false
     var composerVisible = false {didSet {if composerVisible {progressBubble.hide()}}}
+    var composerFrame:() -> CGRect? = {nil}
     private var greetingPending = true
     var pauseTime: Double?
     var press: CGPoint?, pressOrigin = CGPoint.zero
@@ -119,7 +120,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var top: Double { NSScreen.screens[0].frame.maxY }
     var position: CGPoint { CGPoint(x: window.frame.minX, y: top - window.frame.maxY) }
     func area(_ screen: NSScreen) -> CGRect { let r = screen.visibleFrame; return CGRect(x: r.minX, y: top - r.maxY, width: r.width, height: r.height) }
-    func move(_ p: CGPoint) { window.setFrameOrigin(CGPoint(x: p.x, y: top - p.y - size)); placeBubble(); onGeometry() }
+    func move(_ p: CGPoint) { window.setFrameOrigin(CGPoint(x: p.x, y: top - p.y - size)); placeBubble() }
     func constrained(_ p: CGPoint, screen: NSScreen) -> CGPoint {
         let a = area(screen); return CGPoint(x: max(a.minX,min(p.x,a.maxX-size)), y: max(a.minY,min(p.y,a.maxY-size)))
     }
@@ -310,7 +311,7 @@ final class PetController: NSObject, NSMenuDelegate {
             updateMovement(at:(now-began)*playbackRate)
         }
         if wasDockAnimating {
-            view.needsDisplay = true; placeBubble(); onGeometry()
+            view.needsDisplay = true; placeBubble()
         }
     }
     private func updateMovement(at elapsed: Double) {
@@ -458,7 +459,10 @@ final class PetController: NSObject, NSMenuDelegate {
         progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing); placeBubble()
     }
     func placeBubble() {
-        if bubble.visible {bubble.place(near:visiblePetFrame,screen:screen,dock:dock)}
+        // 输入位置先确定；后台到达的消息主动避让，不移动正在编辑的窗口。
+        onGeometry()
+        let obstacles = composerVisible ? [composerFrame()].compactMap {$0} : []
+        if bubble.visible {bubble.place(near:visiblePetFrame,screen:screen,dock:dock,avoiding:obstacles)}
         if progressBubble.visible {
             if bubble.blocksProgressToast || composerVisible {progressBubble.hide(); return}
             progressBubble.place(near:visiblePetFrame,screen:screen,dock:dock)

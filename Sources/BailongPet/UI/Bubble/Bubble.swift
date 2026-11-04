@@ -674,7 +674,8 @@ final class Bubble {
             self.quotaRows(overview,scale:scale,failure:failure,retry:retry)
         }
     }
-    func place(near rect: CGRect, screen: NSScreen, dock: String?) {
+    private var placementObstacles = [CGRect]()
+    func place(near rect: CGRect, screen: NSScreen, dock: String?, avoiding:[CGRect] = []) {
         let area = screen.visibleFrame.insetBy(dx:8,dy:8)
         if placementArea != area {
             let previousWidth = layoutWidth
@@ -691,7 +692,8 @@ final class Bubble {
             } else {layout(bodyHeight:layoutBodyHeight)}
         }
         let size = motion.frame.size
-        if let previous = placement,previous.0 == rect,previous.1 == dock,previous.2 == area,previous.3 == size {return}
+        if let previous = placement,previous.0 == rect,previous.1 == dock,previous.2 == area,previous.3 == size,placementObstacles == avoiding {return}
+        placementObstacles = avoiding
         let preferred:[BubblePlacement.Side]
         if kind == "progressToast" {preferred = [.above,.below,.right,.left]}
         else if dock == "left" {preferred = [.right,.above,.below,.left]}
@@ -700,11 +702,12 @@ final class Bubble {
         else if kind == "task" || kind == "preview" {preferred = [.left,.right,.above,.below]}
         else {preferred = [.above,.below,.right,.left]}
         let oldSide = placement?.1 == dock ? placementSide : nil
-        let result = BubblePlacement.resolve(size:size,pet:rect,screen:screen.visibleFrame,preferred:preferred,previous:oldSide)
+        let result = BubblePlacement.resolve(size:size,pet:rect,screen:screen.visibleFrame,preferred:preferred,previous:oldSide,avoiding:avoiding)
         // 仅正文高度变化、原位置仍安全时保持位置；拖动、越界和遮挡时重新选边。
         let current = CGRect(origin:motion.frame.origin,size:size)
         let keepOrigin = placement.map {$0.0 == rect && $0.1 == dock && $0.2 == area} == true
             && area.contains(current) && !current.intersects(rect.insetBy(dx:-4,dy:-4))
+            && !avoiding.contains {current.intersects($0.insetBy(dx:-4,dy:-4))}
         if !keepOrigin {move(to:result.frame.origin); placementSide = result.side}
         placement = (rect,dock,area,size)
     }

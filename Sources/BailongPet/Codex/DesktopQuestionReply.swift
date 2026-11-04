@@ -28,6 +28,10 @@ enum DesktopQuestionReply {
 }
 
 final class DesktopSocket {
+    struct RequestFailure:LocalizedError {
+        let method:String, code:String
+        var errorDescription:String? {"Codex 请求失败（\(method)）：\(code)"}
+    }
     private let fd:Int32
     private let timeoutSeconds:Int
     var clientID = "initializing-client"
@@ -60,10 +64,10 @@ final class DesktopSocket {
         while Date() < deadline {
             let value = try receive()
             guard value["requestId"] as? String == id else {continue}
-            guard value["resultType"] as? String == "success" else {throw PetFailure(message:"Codex 未接受回答："+(value["error"] as? String ?? "请求失败"))}
+            guard value["resultType"] as? String == "success" else {throw RequestFailure(method:method,code:value["error"] as? String ?? "请求失败")}
             return value
         }
-        throw PetFailure(message:"Codex 未在规定时间内确认回答。请转到 Codex 检查提交结果。")
+        throw PetFailure(message:"Codex 请求超时（\(method)）。")
     }
     func broadcast(_ method:String,params:[String:Any],version:Int) throws {
         try send(["type":"broadcast","method":method,"sourceClientId":clientID,"params":params,"version":version])

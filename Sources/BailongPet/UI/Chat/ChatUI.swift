@@ -49,6 +49,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var previousMatch: ActionButton!, nextMatch: ActionButton!
     private var searching: Bool {!searchField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}
     var onGoCodex: () -> Void = {}
+    var onComposerHistory:() -> Void = {}
+    var onRetrySettings:(ChatEntry) -> Void = {_ in}
     var onCheckDelivery: (String,ChatEntry) -> Void = {_,_ in}
     var onRename: (String,String) -> Void = {_,_ in}
     var onSyncTitle: (String) -> Void = {_ in}
@@ -63,7 +65,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var historyInput: MessageInputBox!
     private var inputStates = [ChatEntry:ChatInputState]()
     private let drafts = ChatDraftCache()
-    private var historyStop:ActionButton!, historyCheck:ActionButton!
+    private var historyStop:ActionButton!, historyCheck:ActionButton!, historyRetrySettings:ActionButton!
     private let sourceLabel = label("",bold:true)
     func targetKey(_ entry:ChatEntry) -> String? {drafts.target(entry)}
     func modelSettings(_ entry:ChatEntry) -> ChatModelSettings {entry == .composer ? composerModels : models}
@@ -91,7 +93,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerView.onSelect = { [weak self] key in self?.onComposerSelect(key) }
         composerView.onStop = { [weak self] in self?.stopTarget(.composer) }
         composerView.onCheck = { [weak self] in self?.checkTarget(.composer) }
-        composerView.onHistory = { [weak self] in self?.openHistory() }
+        composerView.onHistory = { [weak self] in self?.onComposerHistory() }
+        composerView.onOpenCodex = { [weak self] in CodexConnection.openConversation(self?.inputStates[.composer]?.conversation?.threadID) }
+        composerView.onRetrySettings = { [weak self] in self?.onRetrySettings(.composer) }
         composerView.onHide = { [weak self] in self?.onHide() }
         history.styleMask.insert(.fullSizeContentView)
         let sidebar = NSVisualEffectView(); sidebar.material = .sidebar; sidebar.blendingMode = .behindWindow; sidebar.state = .followsWindowActiveState
@@ -139,7 +143,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         inheritedSettings.font = .systemFont(ofSize:11); inheritedSettings.textColor = .secondaryLabelColor
         historyStop = ActionButton("停止任务") { [weak self] in self?.stopTarget(.history) }
         historyCheck = ActionButton("检查发送结果") { [weak self] in self?.checkTarget(.history) }
-        let preferences = NSStackView(views:[historyModel,inheritedSettings,NSView(),historyStop,historyCheck,historyButton]); preferences.spacing = 12; preferences.alignment = .centerY
+        historyRetrySettings = ActionButton("重新读取") { [weak self] in self?.onRetrySettings(.history) }
+        let preferences = NSStackView(views:[historyModel,inheritedSettings,historyRetrySettings!,NSView(),historyStop,historyCheck,historyButton]); preferences.spacing = 12; preferences.alignment = .centerY
         let inputArea = NSStackView(views:[drafting,preferences,historyKeys]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
         for view in [drafting,preferences,historyKeys] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
         folder.font = .systemFont(ofSize:11); folder.textColor = .secondaryLabelColor; folder.maximumNumberOfLines = 1; folder.lineBreakMode = .byTruncatingMiddle
@@ -187,7 +192,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let shortcut = PetPreferences.shared.sendShortcut
         for entry in [ChatEntry.composer,.history] {
             let state = inputStates[entry] ?? ChatInputState()
-            let hint = [state.note,shortcut.hint].filter {!$0.isEmpty}.joined(separator:"\n")
+            let hint = shortcut.hint
             let button = entry == .composer ? composerView.composerButton! : historyButton!
             button.title = "发送"; button.keyEquivalent = ""
             button.hoverHelp = "发送："+shortcut.sendLabel
@@ -246,7 +251,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let hintWidth = ("选择模型与推理强度：" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)+6
         let footerWidth = composerView.composerFooterButtons.filter {!$0.isHidden}.reduce(CGFloat(32+4*8)) {$0+$1.intrinsicContentSize.width}
         let composerWidth = max(540,selectorWidth+hintWidth+40,footerWidth)
-        composer.contentMinSize = NSSize(width:composerWidth,height:460)
+        composer.contentMinSize = NSSize(width:composerWidth,height:560)
         if let content = composer.contentView, content.bounds.width < composerWidth {composerView.composerMotion.resize(to:NSSize(width:composerWidth,height:content.bounds.height))}
         let detailWidth = max(520,historyModel.intrinsicContentSize.width.rounded(.up)+historyButton.intrinsicContentSize.width+64)
         historyDetailItem.minimumThickness = detailWidth
@@ -401,8 +406,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyButton.emphasize()
         historyModel.isEnabled = historyState.canEdit && !selected.external
         historyModel.isHidden = selected.external; inheritedSettings.isHidden = !selected.external
+        historyRetrySettings.isHidden = !selected.external || historyState.desktopReady || historyState.modelNote == nil
+        historyRetrySettings.isEnabled = !historyState.sending
         historyStop.isHidden = !historyState.ownsRunningTask; historyCheck.isHidden = !historyState.unconfirmed
-        historyStatus.stringValue = historyState.note
+        historyStatus.stringValue = historyState.note; historyStatus.hoverHelp = historyState.replyNote ?? historyState.note
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
         resizeHistoryInput(); modelStateChanged()
         composerEditor.placeholder = composerState.kind == .project ? "发送到这条 Codex 项目对话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
@@ -446,11 +453,15 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         guard key != selected else { return }
         onSelect(key)
     }
-    func windowShouldClose(_ sender: NSWindow) -> Bool {if sender == composer {hideComposer()} else {sender.orderOut(nil)}; return false}
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if sender == composer {hideComposer(); return false}
+        sender.makeFirstResponder(nil)
+        return true
+    }
     func openHistory() {
         hideComposer(); onOpenHistory()
-        // 历史是标准主窗口。首次打开后保留 Dock 入口，隐藏或关闭也可以从图标找回。
-        NSApp.setActivationPolicy(.regular)
+        // 历史窗口打开或最小化期间保留 Dock 入口，关闭后移除。
+        InterfaceWindows.shared.opened(history)
         if let icon = AppIcons.application {NSApp.applicationIconImage = icon}
         history.miniwindowImage = NSApp.applicationIconImage
         if history.isMiniaturized {history.deminiaturize(nil)}

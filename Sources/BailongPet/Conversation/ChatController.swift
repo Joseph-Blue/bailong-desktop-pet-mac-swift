@@ -106,11 +106,22 @@ final class ChatController {
         ui.onRename = { [weak self] key,title in self?.renameHistory(key,title:title) }
         ui.onSyncTitle = { [weak self] key in self?.syncHistoryTitle(key) }
         ui.onDelete = { [weak self] key in self?.deleteHistory(key) }
+        ui.onComposerHistory = { [weak self] in
+            guard let self else {return}; self.showHistory(self.composerSelection?.key)
+        }
+        ui.onRetrySettings = { [weak self] entry in
+            guard let self,let key = self.ui.targetKey(entry),let conversation = self.allConversations.first(where:{$0.key == key}),conversation.external else {return}
+            self.desktopSession.refreshSettings(conversation,force:true); self.refresh()
+        }
         ui.onOpenHistory = { [weak self] in self?.loadModels(entry:.history) }
-        ui.onComposerResize = { [weak self] in self?.positionComposer() }
+        ui.onComposerResize = { [weak self] in self?.pet.placeBubble() }
         ui.onSelect = { [weak self] key in self?.selectConversation(key,entry:.history) }
-        ui.onHide = { [weak self] in self?.pet.composerVisible = false; self?.composerSide = nil }
-        ui.isPetInteraction = { [weak self] event in event.type == .leftMouseDown && event.window === self?.pet.window }
+        ui.onHide = { [weak self] in self?.pet.composerVisible = false; self?.composerSide = nil; self?.pet.placeBubble() }
+        ui.isPetInteraction = { [weak self] event in
+            guard let self else {return false}
+            return (event.type == .leftMouseDown && event.window === self.pet.window) || event.window === self.pet.bubble.window
+        }
+        pet.composerFrame = { [weak self] in self?.ui.composerFrame }
         pet.bubble.fileLinkDirectory = { [weak self] in
             guard let self,let key = self.pet.bubble.relatedConversation,
                   let conversation = self.store.conversations.first(where:{$0.key == key}),!conversation.cwd.isEmpty else {return nil}
@@ -188,6 +199,7 @@ final class ChatController {
             state.sending = desktopSession.sending(conversation.key); state.unconfirmed = desktopSession.unconfirmed(conversation.key)
             state.replyMode = desktopSession.target(conversation)?.mode
             state.modelNote = desktopSession.modelNote(conversation.key); state.replyNote = desktopSession.replyNote(conversation.key)
+            state.desktopReady = desktopSession.canReply(conversation.key)
         }
         return state
     }
@@ -245,6 +257,7 @@ final class ChatController {
         pet.reveal(); pet.undock(); pet.composerVisible = true; pet.interaction()
         positionComposer(); loadModels(entry:.composer)
         ui.showComposer()
+        pet.placeBubble(); refreshDesktopSettingsIfNeeded()
     }
     private var composerSide:BubblePlacement.Side?
     func positionComposer() {

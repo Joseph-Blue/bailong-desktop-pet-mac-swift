@@ -160,7 +160,7 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in self?.recoveryAction() }
     }
     private func present(takeFocus:Bool) {
-        NSApp.setActivationPolicy(.regular)
+        InterfaceWindows.shared.opened(window)
         NSApp.addWindowsItem(window,title:window.title,filename:false)
         if takeFocus {
             if window.isMiniaturized {window.deminiaturize(nil)}

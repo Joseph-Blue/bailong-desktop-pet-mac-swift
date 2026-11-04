@@ -39,9 +39,10 @@ struct ChatInputState {
     var sending = false, unconfirmed = false, readOnly = false
     var replyMode:DesktopReply.Mode?
     var modelNote:String?, replyNote:String?
+    var desktopReady = false
     var canEdit:Bool {conversation != nil && runningTitle == nil && !sending && !readOnly}
     func canSend(models:ChatModelSettings) -> Bool {
-        canEdit && !unconfirmed && (kind == .project ? conversation?.threadID != nil && replyMode != nil : !models.loading && models.error == nil)
+        canEdit && !unconfirmed && (kind == .project ? desktopReady && conversation?.threadID != nil && replyMode != nil : !models.loading && models.error == nil)
     }
     var note:String {
         if readOnly {return "历史只读：请在设置 → 高级导出原文件或重新读取"}
@@ -50,7 +51,7 @@ struct ChatInputState {
         if unconfirmed {return "发送结果待确认，草稿已保留"}
         if let runningTitle {return "桌宠任务正在执行："+runningTitle}
         if let replyNote {return replyNote}
-        if kind == .project {return replyMode == .steer ? "执行中 · 发送后插话" : replyMode == nil ? "当前会话等待处理，请转到 Codex" : "沿用原会话的工作区、模型与思考等级"}
+        if kind == .project {return replyMode == .steer ? "执行中 · 发送后插话" : replyMode == nil ? "当前会话等待处理，请转到 Codex" : ""}
         return ""
     }
 }
