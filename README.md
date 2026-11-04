@@ -25,7 +25,13 @@
 
 沿用正式版的任务概览、额度查询、历史搜索、气泡审批与问卷、快捷回复／插话、原生代码块及本机文件定位。详细行为见 [来源与架构](docs/来源与架构.md)，开发迭代见 [CHANGELOG](CHANGELOG.md)。
 
-当前候选版验证进度见 [P0 待办](todo.md)；本轮在历史按需加载与分页基础上，收紧外部实时观察的正文持有范围。最低目标机为 13 英寸 M1 MacBook Air，尚未完成该机型运行验收。
+当前候选版验证进度见 [P0 待办](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/todo.md)；本轮在历史按需加载与分页基础上，收紧外部实时观察的正文持有范围。
+
+Silicon 版，最低目标机为 13 英寸 M1 MacBook Air，最低目标操作系统为 MacOS 14 Sonoma。
+
+开发环境为16 英寸 M5 Pro MacBook Pro，当前操作系统为 MacOS 27.2 Golden Gate。
+
+尚未完成最低要求机型运行验收，也没有能够实机测试 Intel Mac 社区测试版的设备。
 
 ## 分支与更新检查
 
