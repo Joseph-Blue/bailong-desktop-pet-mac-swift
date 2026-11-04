@@ -53,7 +53,11 @@ final class TaskMessageAccumulator {
     }
     private func updateActivity(_ item:[String:Any]) {
         guard let id = item["id"] as? String else {return}
-        let projected = DesktopRuntimeProjection.item(item)
+        var projected = DesktopRuntimeProjection.item(item)
+        // 文件差异已由 record 统计为摘要；进展只显示路径，不再额外持有整份 diff。
+        if let changes = projected["changes"] as? [[String:Any]] {
+            projected["changes"] = changes.map {change in change.filter {$0.key == "path"}}
+        }
         if let index = activityItems.firstIndex(where:{$0["id"] as? String == id}) {activityItems[index] = projected}
         else {activityItems.append(projected)}
         currentActivity = TaskActivity.current(items:activityItems)

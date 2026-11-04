@@ -97,8 +97,8 @@ final class CodexConnection {
                     while let end = buffer.firstIndex(of:10) {
                         let line = Data(buffer[..<end]); buffer.removeSubrange(...end)
                         do {
-                            let message = try CodexProtocol.object(line)
-                            DispatchQueue.main.async { if self?.generation == token { self?.receive(message) } }
+                            let message = try autoreleasepool {try CodexProtocol.delivery(CodexProtocol.object(line))}
+                            if let message {DispatchQueue.main.async { if self?.generation == token { self?.receive(message) } }}
                         } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error) } }; return }
                     }
                 }

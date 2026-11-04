@@ -88,7 +88,7 @@ struct DesktopApproval {
             guard frame["sourceClientId"] as? String == source,frame["method"] as? String == "thread-stream-state-changed",frame["version"] as? Int == 11,
                   let p = frame["params"] as? [String:Any],p["hostId"] as? String == "local",p["conversationId"] as? String == thread,
                   let change = p["change"] as? [String:Any],change["type"] as? String == "snapshot",let value = change["conversationState"] as? [String:Any] else {continue}
-            return DesktopRuntimeProjection.conversation(value)
+            return DesktopRuntimeProjection.conversation(value,keepingTurns:[turn])
         }
         throw PetFailure(message:"未收到原会话的最新审批状态。")
     }

@@ -16,7 +16,11 @@ private final class BubbleHeadingField:NSTextField {
 
 final class Bubble {
     let window: PetWindow
-    private lazy var motion = BubbleMotion(window:window,preferences:preferences)
+    private lazy var motion:BubbleMotion = {
+        let value = BubbleMotion(window:window,preferences:preferences)
+        value.onHidden = { [weak self] in self?.releaseHiddenDisplay() }
+        return value
+    }()
     private var placement: (CGRect, String?, CGRect, NSSize)?
     private var placementSide:BubblePlacement.Side?
     private var placementArea:CGRect?
@@ -116,6 +120,7 @@ final class Bubble {
         updateCardNavigation()
     }
     private func saveCardForm() {
+        guard renderedCardID != nil,renderedCardID == cardStore.selectedID else {return}
         cardStore.saveForm(questionForm,size:questionSize)
     }
     func present(_ message:BubbleCard,select:Bool = false) {
@@ -400,6 +405,7 @@ final class Bubble {
 
     func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = []) {
         taskList?.stop(); taskList = nil
+        if (attentionAction && !questions.isEmpty || !laysOutBody) && !text.string.isEmpty {text.releaseRenderedContent()}
         if !fromCard {saveCardForm(); approval = nil; cardStore.clearSelection(); renderedCardID = nil; updateCardNavigation()}
         let taskKey = timing?.key
         if !preserveCountdown {countdown.stop()}
@@ -712,5 +718,16 @@ final class Bubble {
         placement = (rect,dock,area,size)
     }
     deinit { countdown.stop(); headingTimer?.invalidate(); elapsedTimer?.invalidate() }
+    private func releaseHiddenDisplay() {
+        // 卡片及问卷草稿已由 cardStore 保存；淡出结束后释放当前显示的独立持有。
+        window.makeFirstResponder(nil)
+        scroll.documentView = nil; taskList = nil
+        text.releaseRenderedContent(); text.hoverHelp = nil
+        currentBody = ""; plainHeading = ""; title.stringValue = ""; title.hoverHelp = nil
+        refreshStandalone = nil; renderedCardID = nil
+        questionForm = nil; questionModels.removeAll(); questionSize = nil; questionTaskKey = nil
+        onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
+        onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
+    }
     func hide() {window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil}
 }

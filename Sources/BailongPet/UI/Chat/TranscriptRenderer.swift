@@ -3,7 +3,6 @@ import AppKit
 // 只生成历史富文本并拥有其缓存，不管理窗口、输入或阅读位置。
 final class TranscriptRenderer {
     private var transcriptCache = [String:([String],NSAttributedString)]()
-    func discard(_ key:String) {transcriptCache.removeValue(forKey:key)}
     func invalidate() {transcriptCache.removeAll()}
     func style(_ conversation:Conversation) -> [String] {
         let preferences = PetPreferences.shared
@@ -26,6 +25,7 @@ final class TranscriptRenderer {
             result.append(NSAttributedString(string:"\n",attributes:[.font:font]))
         }
         if turns.isEmpty {
+            invalidate()
             append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.color)
             append("在下方输入想做的事。",color:.secondaryLabelColor)
             return result

@@ -11,18 +11,25 @@ final class DesktopApprovalReader {
     }
     private var socket:DesktopSocket?
     private var followed = Set<String>()
+    private var targetTurns = [String:Set<String>]()
     private var states = [String:State]()
     private var snapshotRequestedAt = [String:Date]()
     private(set) var unavailableCount = 0
     var knownThreads:Set<String> {Set(states.keys)}
     private(set) var activities = [String:TaskActivity]()
 
-    func close() {socket = nil; followed.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll()}
+    func close() {socket = nil; followed.removeAll(); targetTurns.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll()}
 
     func read(_ records:[PublicSnapshot]) throws -> [String:StateApproval] {
         let active = records.filter {$0.isLatest && activeStatuses.contains($0.status)}
         let wanted = Set(active.map(\.logical))
         guard !wanted.isEmpty else {close(); return [:]}
+        let nextTargets = Dictionary(grouping:active,by:\.logical).mapValues {Set($0.map(\.turn))}
+        // 切换轮次不能把已裁剪的旧状态当作新目标的完整数据。
+        for (id,turns) in nextTargets where targetTurns[id] != turns {
+            states.removeValue(forKey:id); snapshotRequestedAt.removeValue(forKey:id)
+        }
+        targetTurns = nextTargets
         do {
             if socket == nil {
                 let connection = try DesktopSocket(timeoutSeconds:2)
@@ -74,7 +81,7 @@ final class DesktopApprovalReader {
     private func consume(_ frame:[String:Any],_ socket:DesktopSocket) throws {
         guard frame["type"] as? String == "broadcast",frame["method"] as? String == "thread-stream-state-changed",
               let params = frame["params"] as? [String:Any],params["hostId"] as? String == "local",
-              let id = params["conversationId"] as? String,followed.contains(id) else {return}
+              let id = params["conversationId"] as? String,followed.contains(id),let turns = targetTurns[id] else {return}
         guard frame["version"] as? Int == 11,let source = frame["sourceClientId"] as? String,
               let change = params["change"] as? [String:Any],let revision = change["revision"] as? Int else {
             throw PetFailure(message:"Codex 审批状态协议不兼容。")
@@ -83,7 +90,7 @@ final class DesktopApprovalReader {
             guard let conversation = change["conversationState"] as? [String:Any],conversation["requests"] is [Any] else {
                 throw PetFailure(message:"Codex 审批快照缺少请求列表。")
             }
-            states[id] = State(source:source,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation),updatedAt:Date()); return
+            states[id] = State(source:source,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation,keepingTurns:turns),updatedAt:Date()); return
         }
         guard change["type"] as? String == "patches",let patches = change["patches"] as? [[String:Any]] else {
             throw PetFailure(message:"Codex 审批增量格式不兼容。")
@@ -91,7 +98,11 @@ final class DesktopApprovalReader {
         guard var state = states[id],state.source == source,state.revision == change["baseRevision"] as? Int else {
             states.removeValue(forKey:id); try follow(id,true,socket); return
         }
-        for patch in patches {try DesktopRuntimeProjection.patch(patch,state:&state.projection)}
+        for patch in patches {
+            guard try DesktopRuntimeProjection.patch(patch,state:&state.projection,keepingTurns:turns) else {
+                states.removeValue(forKey:id); try follow(id,true,socket); return
+            }
+        }
         state.revision = revision; state.updatedAt = Date(); states[id] = state
     }
 }

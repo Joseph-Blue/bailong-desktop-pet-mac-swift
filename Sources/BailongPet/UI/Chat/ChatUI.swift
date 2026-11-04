@@ -361,7 +361,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     func discardHistory(_ key:String) {
-        transcriptRenderer.discard(key)
+        // 渲染缓存按轮次键保存，会话删除必须清空整页，而不是拿会话键查轮次缓存。
+        invalidateHistoryDisplay()
         drafts.forget(key); models.forget(key); composerModels.forget(key)
         if selected == key {historyEditor.string = ""; renderedConversation = nil}
     }
@@ -494,6 +495,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         renderedTranscriptSignature.removeAll(); renderedConversation = nil
         renderedPageStart = nil; pageConversation = nil; pageQuery = nil
         searchDataSignature.removeAll(); snippets.removeAll()
+        visibleConversations.removeAll(); listSnapshot.removeAll(); list.reloadData()
         findMatches.removeAll(); matchIndex = 0
         transcript.releaseRenderedContent()
         onReleaseHistory()

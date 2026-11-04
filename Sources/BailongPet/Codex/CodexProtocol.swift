@@ -19,6 +19,29 @@ enum CodexProtocol {
         }
         return value
     }
+    // 接收线程只向 UI 交付实际消费的通知；请求和 RPC 回执保持原样。
+    // 工具输出、原始思考和图像数据不进入主线程等待队列。
+    static func delivery(_ message:[String:Any]) -> [String:Any]? {
+        guard message["id"] == nil,let method = message["method"] as? String else {return message}
+        guard ["thread/closed","turn/started","turn/completed","error","item/agentMessage/delta",
+               "item/reasoning/summaryTextDelta","item/started","item/completed","turn/plan/updated"].contains(method) else {return nil}
+        guard var params = message["params"] as? [String:Any] else {return message}
+        if let item = params["item"] as? [String:Any] {params["item"] = publicItem(item)}
+        if let turn = params["turn"] as? [String:Any] {
+            var projected = turn.filter {["id","status","error"].contains($0.key)}
+            if let items = turn["items"] as? [[String:Any]] {projected["items"] = items.map(publicItem)}
+            params["turn"] = projected
+        }
+        var result = message; result["params"] = params
+        return result
+    }
+    private static func publicItem(_ item:[String:Any]) -> [String:Any] {
+        var result = DesktopRuntimeProjection.item(item)
+        if item["type"] as? String == "agentMessage" {
+            result["text"] = item["text"]; result["phase"] = item["phase"]
+        } else if item["type"] as? String == "imageGeneration" {result["savedPath"] = item["savedPath"]}
+        return result
+    }
     static func validate(_ method:String,_ params:[String:Any]) throws {
         func requireID(_ value:Any?) throws {
             guard let id = value as? String,!id.isEmpty else {throw Failure.malformed("缺少有效标识")}

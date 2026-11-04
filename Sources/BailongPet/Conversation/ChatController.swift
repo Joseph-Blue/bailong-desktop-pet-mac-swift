@@ -398,6 +398,7 @@ final class ChatController {
                 pet.placeBubble()
             }
         } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [])}
+        messagesState = TaskMessageAccumulator()
         if closing {finishShutdown()}
     }
     func stop() {

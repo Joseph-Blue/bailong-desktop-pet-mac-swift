@@ -15,6 +15,7 @@ final class ChatComposer: NSObject {
     private(set) var composerModel:ModelSelector!
     private(set) var composerButton:ActionButton!
     private let recovery = NSStackView()
+    private var recoveryActions = [ActionButton]()
     private let composerClose = BubbleCloseButton()
     private(set) var composerFooterButtons = [ActionButton]()
     private var composerButtonHeight:NSLayoutConstraint?
@@ -152,12 +153,21 @@ final class ChatComposer: NSObject {
         localDismissMonitor = nil; globalDismissMonitor = nil
     }
     deinit {stopDismissMonitoring()}
-    func clearFailure() {recovery.isHidden = true; composerInput.isHidden = false; composerButton.isHidden = false; updateLayout()}
-    func showFailure(_ failure: AppFailure,busy:Bool, restore: @escaping () -> Void) {
+    private func releaseRecoveryContent() {
+        for button in recoveryActions {button.callback = {}}
+        recoveryActions.removeAll()
         recovery.arrangedSubviews.forEach {recovery.removeArrangedSubview($0); $0.removeFromSuperview()}
+    }
+    func clearFailure() {
+        releaseRecoveryContent()
+        recovery.isHidden = true; composerInput.isHidden = false; composerButton.isHidden = false; updateLayout()
+    }
+    func showFailure(_ failure: AppFailure,busy:Bool, restore: @escaping () -> Void) {
+        releaseRecoveryContent()
         let title = label(failure.title,bold:true), message = label(failure.message)
         let restoreButton = ActionButton("返回输入") { [weak self] in self?.clearFailure(); restore() }; restoreButton.emphasize()
         let details = ActionButton("技术详情…") {failure.showDetails()}
+        recoveryActions = [restoreButton,details]
         let recoveryFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
         for button in [details,restoreButton] {
             button.configureFlexible(font:recoveryFont)
@@ -167,6 +177,7 @@ final class ChatComposer: NSObject {
         for v in [title,message,actions] {recovery.addArrangedSubview(v); v.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true}
         if failure.openDesktop {
             let open = ActionButton("打开 Codex") {CodexConnection.openDesktop()}; open.emphasize()
+            recoveryActions.append(open)
             open.configureFlexible(font:recoveryFont); open.heightAnchor.constraint(equalToConstant:open.intrinsicContentSize.height).isActive = true
             recovery.insertArrangedSubview(open,at:2)
             open.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true
@@ -222,7 +233,7 @@ final class ChatComposer: NSObject {
         modes.select(state.kind.rawValue)
         conversationPicker.title = state.conversation?.title ?? "选择会话…"
         conversationPicker.hoverHelp = state.conversation?.title
-        conversationPicker.conversations = {conversations.filter {$0.kind == state.kind}}
+        conversationPicker.conversations = { [kind = state.kind] in conversations.filter {$0.kind == kind}}
         let path = state.conversation?.cwd ?? ""
         workspace.update(path:path)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
@@ -231,8 +242,7 @@ final class ChatComposer: NSObject {
         retrySettings.isHidden = state.desktopReady || state.modelNote == nil
         retrySettings.isEnabled = !state.sending
         openCodex.isEnabled = state.conversation?.threadID != nil
-        let reply = state.conversation?.turns.max(by:{$0.date < $1.date}).map { $0.final.isEmpty ? $0.messages : $0.final } ?? ""
-        recentReply.update(markdown:reply)
+        recentReply.update(turn:state.conversation?.turns.max(by:{$0.date < $1.date}))
         inputStatus.stringValue = state.note; inputStatus.hoverHelp = state.replyNote ?? state.note; inputStatus.isHidden = state.note.isEmpty
         stopButton.isHidden = !state.ownsRunningTask
         checkButton.isHidden = !state.unconfirmed
