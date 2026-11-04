@@ -7,17 +7,17 @@ final class DesktopApprovalReader {
         var source:String
         var revision:Int
         var projection:[String:Any]
-        var snapshotAt:Date
+        var updatedAt:Date
     }
     private var socket:DesktopSocket?
     private var followed = Set<String>()
     private var states = [String:State]()
-    private var lastSnapshot = Date.distantPast
+    private var snapshotRequestedAt = [String:Date]()
     private(set) var unavailableCount = 0
     var knownThreads:Set<String> {Set(states.keys)}
     private(set) var activities = [String:TaskActivity]()
 
-    func close() {socket = nil; followed.removeAll(); states.removeAll(); lastSnapshot = .distantPast; unavailableCount = 0; activities.removeAll()}
+    func close() {socket = nil; followed.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll()}
 
     func read(_ records:[PublicSnapshot]) throws -> [String:StateApproval] {
         let active = records.filter {$0.isLatest && activeStatuses.contains($0.status)}
@@ -34,18 +34,19 @@ final class DesktopApprovalReader {
             }
             guard let socket else {return [:]}
             for id in followed.subtracting(wanted) {
-                try follow(id,false,socket); states.removeValue(forKey:id)
+                try follow(id,false,socket); states.removeValue(forKey:id); snapshotRequestedAt.removeValue(forKey:id)
             }
-            // 首次订阅及每五秒快照校准；其余时间只接收增量，避免反复传输整段历史。
-            let refresh = Date().timeIntervalSince(lastSnapshot) >= 5
-            for id in wanted where refresh || !followed.contains(id) {try follow(id,true,socket)}
-            if refresh {lastSnapshot = Date()}
+            // 有连续、版本匹配的增量时直接复用；静默五秒或首次订阅才请求完整快照。
+            let now = Date()
+            for id in wanted where Self.needsSnapshot(now:now,updatedAt:states[id]?.updatedAt,requestedAt:snapshotRequestedAt[id]) {
+                try follow(id,true,socket)
+            }
             followed = wanted
             let deadline = Date().addingTimeInterval(0.15)
             while Date() < deadline,let frame = try socket.receiveIfAvailable(milliseconds:10) {
                 try consume(frame,socket)
             }
-            states = states.filter {Date().timeIntervalSince($0.value.snapshotAt) < 8}
+            states = states.filter {Date().timeIntervalSince($0.value.updatedAt) < 8}
             unavailableCount = wanted.subtracting(states.keys).count
             var result = [String:StateApproval](); activities.removeAll()
             for record in active {
@@ -63,8 +64,12 @@ final class DesktopApprovalReader {
     }
     struct StateApproval {let id:String; let attention:TaskAttention; let request:DesktopApproval}
     private static let methods:Set<String> = ["item/commandExecution/requestApproval","item/fileChange/requestApproval","item/permissions/requestApproval"]
+    static func needsSnapshot(now:Date,updatedAt:Date?,requestedAt:Date?) -> Bool {
+        now.timeIntervalSince(max(updatedAt ?? .distantPast,requestedAt ?? .distantPast)) >= 5
+    }
     private func follow(_ id:String,_ value:Bool,_ socket:DesktopSocket) throws {
         try socket.broadcast("thread-stream-following-changed",params:["hostId":"local","conversationId":id,"following":value],version:1)
+        if value {snapshotRequestedAt[id] = Date()}
     }
     private func consume(_ frame:[String:Any],_ socket:DesktopSocket) throws {
         guard frame["type"] as? String == "broadcast",frame["method"] as? String == "thread-stream-state-changed",
@@ -78,7 +83,7 @@ final class DesktopApprovalReader {
             guard let conversation = change["conversationState"] as? [String:Any],conversation["requests"] is [Any] else {
                 throw PetFailure(message:"Codex 审批快照缺少请求列表。")
             }
-            states[id] = State(source:source,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation),snapshotAt:Date()); return
+            states[id] = State(source:source,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation),updatedAt:Date()); return
         }
         guard change["type"] as? String == "patches",let patches = change["patches"] as? [[String:Any]] else {
             throw PetFailure(message:"Codex 审批增量格式不兼容。")
@@ -87,6 +92,6 @@ final class DesktopApprovalReader {
             states.removeValue(forKey:id); try follow(id,true,socket); return
         }
         for patch in patches {try DesktopRuntimeProjection.patch(patch,state:&state.projection)}
-        state.revision = revision; states[id] = state
+        state.revision = revision; state.updatedAt = Date(); states[id] = state
     }
 }

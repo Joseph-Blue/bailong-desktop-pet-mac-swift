@@ -27,7 +27,7 @@ struct PublicSnapshot {
 
 final class DesktopSync {
     let chat: ChatController
-    private let queue = DispatchQueue(label:"白龙娘外部任务只读观察",qos:.utility)
+    private let queue = DispatchQueue(label:"白龙娘外部任务只读观察",qos:.utility,autoreleaseFrequency:.workItem)
     private let approvalReader = DesktopApprovalReader()
     private var timer: Timer?
     private var reading = false, stopped = false, initial = true
@@ -144,7 +144,8 @@ final class DesktopSync {
             guard value.started > clearedBefore else {continue}
             if excluded.contains(value.logical) || excluded.contains(value.actual) {continue}
             let key = value.key, active = value.isLatest && activeStatuses.contains(value.status)
-            if tracked[key] == nil && !active && (initial || value.started < born) {
+            let previouslyFinished = chat.store.conversations.first(where:{$0.threadID == value.logical})?.turns.first(where:{$0.id == value.turn})?.finished == true
+            if tracked[key] == nil && !active && (initial || value.started < born || previouslyFinished) {
                 // 补齐扫描范围内已有历史的图片入口与文件摘要，不把旧任务重新弹出或新增为历史。
                 if chat.store.recordsAutomatically,!chat.store.isReadOnly,
                    let conversation = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical}),
@@ -226,6 +227,12 @@ final class DesktopSync {
         }
         initial = false
         let present = Set(values.map{$0.key}), missing = running.subtracting(present)
+        // 离开扫描范围的已结束轮次仅留在持久历史，不在观察器再留一份正文与指纹。
+        let retained = present.union(running)
+        tracked = tracked.filter {retained.contains($0.key)}
+        fingerprints = fingerprints.filter {retained.contains($0.key)}
+        changedAt = changedAt.filter {retained.contains($0.key)}
+        noticedAt = noticedAt.filter {retained.contains($0.key)}
         diagnostics = "\(values.count) 条 · 活跃 \(running.count) · 待更新 \(missing.count) · " + Date().formatted(.dateTime.hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))
         status = Self.describeStatus(values,missing:missing.count)
         return changed

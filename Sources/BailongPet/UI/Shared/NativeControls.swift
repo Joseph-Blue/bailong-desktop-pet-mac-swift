@@ -157,11 +157,12 @@ private final class BubbleBackingView: NSView {
     override var isOpaque: Bool {false}
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.withAlphaComponent(opacity).setFill()
-        NSBezierPath(roundedRect:bounds,xRadius:14,yRadius:14).fill()
+        NSBezierPath(roundedRect:bounds,xRadius:BubbleBackgroundView.cornerRadius,yRadius:BubbleBackgroundView.cornerRadius).fill()
     }
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }
 final class BubbleBackgroundView: NSView {
+    static let cornerRadius:CGFloat = 14
     let body = NSView()
     private let ordinary = BubbleBackingView(), glassBacking = BubbleBackingView()
     private var glass: NSView?
@@ -190,7 +191,7 @@ final class BubbleBackgroundView: NSView {
         if #available(macOS 26.0, *), enabled {
             if glass == nil {
                 let effect = NSGlassEffectView(frame:bounds)
-                effect.autoresizingMask = [.width,.height]; effect.cornerRadius = 14
+                effect.autoresizingMask = [.width,.height]; effect.cornerRadius = Self.cornerRadius
                 glassBacking.autoresizingMask = [.width,.height]
                 effect.contentView = glassBacking
                 addSubview(effect,positioned:.below,relativeTo:ordinary); glass = effect

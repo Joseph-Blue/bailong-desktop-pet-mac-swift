@@ -4,7 +4,7 @@
 
 ## 输入资源
 
-首次准备见 [开发资源获取](../../docs/开发资源获取.md)。开发资源 ZIP 包含 samples.json；普通正式 App 只包含运行素材，不含此工具元数据。
+首次准备见 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md)。开发资源 ZIP 包含 samples.json；普通正式 App 只包含运行素材，不含此工具元数据。
 
 完整应用读取 `local-assets/native-hevc/catalog/素材清单.json` 与 `透明HEVC/*.mov`。本地保留的原始 WebM 不参与运行。PNG 接入使用已有完整 catalog，其中 `samples.json` 是素材来源与预览元数据。
 

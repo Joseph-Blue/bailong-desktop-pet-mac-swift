@@ -16,11 +16,12 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 
 ## 分支与文档
 
-- `joseph/dev` 跟踪 `origin/joseph/dev`，保留开发 README、完整 CHANGELOG 与历史索引；跟踪范围以 `.gitignore` 和 [开发分支维护](../../docs/开发分支.md) 为准。main 保留正式版，不自动合并、变基或推送。
+- `joseph/dev` 跟踪 `origin/joseph/dev`，保留开发 README、完整 CHANGELOG 与历史索引；跟踪范围以 `.gitignore` 和 [开发分支维护](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发分支.md) 为准。main 保留正式版，不自动合并、变基或推送。
 - 开发线不发布程序 Release 或应用版本标签。素材资源经用户授权可用独立 `dev-assets-*` Pre-release，显式设为非 Latest。提交、推送、跨分支合并和发布分别按当次授权执行。
 - VERSION 是应用与工具版本来源，使用 SemVer 和中文变更记录。文档整理本身不升版本；用户要求进入候选阶段时使用 `rc.1` 等预发布标识，同步 VERSION、README、AGENTS 与 CHANGELOG。候选版仍遵守开发分支的发布边界，汇总不删除开发线历史记录。
-- 素材、构建产物、用户数据、原始本机实施流水及本地 Tests 不进 Git。资源下载与制作方法维护在 [开发资源获取](../../docs/开发资源获取.md)，不将资源包混作程序发行包。
-- README 面向当前分支读者；现行设计写入 [来源与架构](../../docs/来源与架构.md)，未来计划写入 [todo](../../todo.md)。本 skill 保留维护入口，精确产品参数与完整交互规则引用 AGENTS，避免再次逐版本追加重复规则。
+- 素材、构建产物、用户数据、原始本机实施流水及本地 Tests 不进 Git。资源下载与制作方法维护在 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md)，不将资源包混作程序发行包。
+- 主线 CHANGELOG 只记录相较上一个正式 Release 的最终变化，不搬入开发迭代流水；README 保留功能、安装和升级说明，实施进度与未验证项仅记入本机实施记录，主线不新增 todo。
+- README 面向当前分支读者；现行设计写入 [来源与架构](../../docs/来源与架构.md)，未来计划写入 [开发分支待办](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/todo.md)。本 skill 保留维护入口，精确产品参数与完整交互规则引用 AGENTS，避免再次逐版本追加重复规则。
 
 ## 代码职责地图
 
@@ -104,7 +105,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 
 ## 构建与交付
 
-资源准备见 [开发资源获取](../../docs/开发资源获取.md)。构建入口：
+资源准备见 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md)。构建入口：
 
 ```sh
 ./scripts/run-dev.sh --build-only  # 仅编译

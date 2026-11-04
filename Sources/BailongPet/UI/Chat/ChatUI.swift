@@ -449,6 +449,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         sender.makeFirstResponder(nil)
         return true
     }
+    func windowWillClose(_ notification:Notification) {
+        guard notification.object as? NSWindow === history else {return}
+        transcriptRenderer.invalidate()
+        renderedTranscriptSignature.removeAll(); renderedConversation = nil
+        findMatches.removeAll(); matchIndex = 0
+        transcript.releaseRenderedContent()
+    }
     func openHistory() {
         hideComposer(); onOpenHistory()
         // 历史窗口打开或最小化期间保留 Dock 入口，关闭后移除。

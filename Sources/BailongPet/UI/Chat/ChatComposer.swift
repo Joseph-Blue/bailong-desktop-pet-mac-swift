@@ -48,7 +48,11 @@ final class ChatComposer: NSObject {
         composer.isMovable = false; composer.isMovableByWindowBackground = false
         composer.hidesOnDeactivate = false
         composer.collectionBehavior.insert(.fullScreenNone)
-        let c = BubbleBackgroundView(); composer.contentView = c
+        let c = BubbleBackgroundView()
+        // 临时聊天窗统一裁切最终合成边界，避免圆角外露出矩形底板。
+        c.wantsLayer = true; c.layer?.backgroundColor = NSColor.clear.cgColor
+        c.layer?.cornerRadius = BubbleBackgroundView.cornerRadius; c.layer?.masksToBounds = true
+        composer.contentView = c
         composerInput = ChatViewLayout.inputBox(composerEditor)
         recovery.orientation = .vertical; recovery.alignment = .leading; recovery.spacing = 8; recovery.isHidden = true
         status.font = .systemFont(ofSize:14); status.textColor = .labelColor
