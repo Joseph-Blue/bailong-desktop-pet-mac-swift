@@ -8,9 +8,9 @@
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
-**当前源码：0.7.0。** 已发布版本与安装包见 [正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)。
+**当前源码：0.7.1。** 已发布版本与安装包见 [正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)。
 
-0.7.0 新增文件产物链接与可折叠修改摘要，区分桌宠人设对话和 Codex 项目对话，并改进消息阅读、输入布局与窗口召回。
+0.7.1 新增文件产物链接与可折叠修改摘要，区分桌宠人设对话和 Codex 项目对话，并改进消息阅读、输入布局与窗口召回。
 
 ## 下载与使用
 
@@ -30,7 +30,7 @@ App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一
 
 ## 特色功能
 
-这里介绍 **0.7.0** 的功能，各版本的更新见 [变更记录](CHANGELOG.md)。截图可点击查看原图；两张聊天窗图为本轮更新，消息气泡图保留自 0.5.0，其余为 0.6.0。
+这里介绍 **0.7.1** 的功能，各版本的更新见 [变更记录](CHANGELOG.md)。截图可点击查看原图；两张聊天窗图为本轮更新，消息气泡图保留自 0.5.0，其余为 0.6.0。
 
 ### 在桌面看进展，也能回看消息
 
@@ -115,7 +115,7 @@ Codex 回复中的文件产物引用显示为可点击文件名；文件修改�
 ### 动画播放和日常维护
 
 - **原画与性能可调**：默认 720×720，另有 512、384、256 三档；可以调整帧率和缓冲。动画默认边读取边播放，保留 24 帧缓冲，切换动作后释放旧缓冲。
-- **安装包约 112 MiB**：0.7.0 的 Apple Silicon ZIP 为 112.48 MiB。动画使用透明 HEVC，由系统 AVFoundation 播放，不再随包附带 FFmpeg。
+- **安装包约 112 MiB**：0.7.1 的 Apple Silicon ZIP 为 112.48 MiB。动画使用透明 HEVC，由系统 AVFoundation 播放，不再随包附带 FFmpeg。
 - **按需查看性能**：独立窗口显示 FPS、CPU、GPU、运行内存 (RAM) 和动画缓冲，关闭后停止统计。
 - **按需启动和检查更新**：可设为登录启动或随 Codex 启动；更新页可以检查正式版本并打开下载页，启动自动检查默认关闭。
 - **集中管理本机数据和权限**：设置中提供访达授权、文件权限、登录项入口，以及本应用的数据和缓存清理。历史格式升级前会备份原文件。

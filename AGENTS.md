@@ -2,7 +2,7 @@
 
 ## 应用实现约束
 
-- 当前主线版本为 0.7.0，基于上一个正式 Release 0.6.2，新增文件产物与修改摘要、两类会话入口及独立草稿，统一消息阅读和窗口生命周期；正式 CHANGELOG 仅汇总相较上一 Release 的变化。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 当前主线版本为 0.7.1，基于上一个正式 Release 0.6.2，新增文件产物与修改摘要、两类会话入口及独立草稿，统一消息阅读和窗口生命周期；正式 CHANGELOG 仅汇总相较上一 Release 的变化。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
@@ -208,3 +208,5 @@
 - 任务概览中执行中标题共用 ProgressTextEffects.title 流水扫光，使用列表已有刷新计时；结束或隐藏恢复静态，同任务更新保留相位，遵守 bubbleMotion 与减少动态效果。不把动画写入历史或改变标题几何。
 
 - 浏览与保存窗口通过 PanelPresentation 独立原生模态展示，按发起窗口所在屏幕可用区域居中，可独立拖动；首次显示完成布局后仅定位一次。自定义颜色使用 CenteredColorWell，在打开系统调色板时共用定位，不随颜色变化重复居中。SpriteView 左右键按下阻止默认窗口排序，桌宠互动不隐式召回其他窗口；明确打开窗口的行为保留。
+
+- 气泡及临时输入窗由 BubbleBackgroundView 根图层统一以 14pt 圆角裁切，普通背景重绘先清透明区域；玻璃与普通材质共用圆角边界，避免窗口四角直角白边。
