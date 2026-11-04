@@ -12,9 +12,20 @@
 
 ## 下载与使用
 
-需要 **Apple Silicon Mac、macOS 14 或更新版本，暂不支持 Intel Mac 机型**。Codex 功能需要在本机安装并登录 Codex。
+需要 **macOS 14 或更新版本**，提供 Apple Silicon 版和 Intel 社区测试版。Codex 功能需要在本机安装并登录 Codex。
 
-1. [下载 Apple Silicon 版（ZIP）](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
+| 你的 Mac | 下载哪个包 |
+| --- | --- |
+| Apple Silicon 芯片 | 文件名以 `macos-apple-silicon.zip` 结尾 |
+| Intel 芯片 | 文件名以 `macos-intel.zip` 结尾，社区测试版 |
+
+不确定机型时，打开苹果菜单 → 关于本机，查看“芯片”一栏。
+
+**Apple Silicon 用户请下载原生版，强烈不推荐通过 Rosetta 运行 Intel 版。**
+
+**Intel 社区测试版未经 Intel Mac 实机测试，仅通过 Rosetta 转译进行了少量测试。** 欢迎反馈机型、macOS 版本和使用情况。
+
+1. 前往[正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)，下载对应机型的 ZIP 并解压。
 2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，推荐拖入访达的“应用程序”，再从访达打开。
 3. 在“设置 → 通用”中选择是否随登录或 Codex 启动；新版会维护已启用的启动项。
 
@@ -85,7 +96,7 @@ Codex 回复中的文件产物引用显示为可点击文件名；文件修改�
 你和桌宠的名字、问候语、互动台词、任务状态提示都可以修改。台词支持 `{用户名}`、`{桌宠名}`、`{特定称呼}`，右键输入框即可插入；特定称呼留空时沿用你的名字。
 
 - **调整大小和形状**：分别设置桌宠大小、文字大小和气泡大小，也可以指定气泡宽高比。
-- **选择颜色和材质**：外观可跟随系统或选择浅色、深色，强调色可以自定义；macOS 26 起支持液态玻璃，也能切回普通材质、调整背景不透明度并预览。
+- **选择颜色和材质**：外观可跟随系统或选择浅色、深色，强调色可以自定义；macOS 26 起支持液态玻璃，也能切回普通材质、调整背景不透明度并预览。macOS 14、15 使用普通材质，液态玻璃选项不可选。
 - **快速找到设置**：设置搜索覆盖具体选项、动作和台词，点击结果直接定位。历史与设置使用原生分栏窗口，绿灯按钮填满屏幕可用区域，再点一次恢复。
 
 <p align="center">
@@ -175,11 +186,12 @@ local-assets/
 
 ```sh
 ./scripts/build.sh arm64           # 构建 Apple Silicon App
+./scripts/build.sh x86_64          # 构建 Intel App
 ./scripts/run-dev.sh --build-only  # 仅编译
 ./scripts/run-dev.sh               # 开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码入口保留；因缺少符合要求的真机环境，Intel 适配与交付暂时搁置。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。构建版本取自 [VERSION](VERSION)，产物位于 `dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app`，架构为 `arm64` 或 `x86_64`。
 
 ## 来源与反馈
 
