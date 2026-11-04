@@ -1,12 +1,14 @@
 import AppKit
 
 enum ChatViewLayout {
-    static func modelHint() -> NSTextField {
-        let hint = NSTextField(labelWithString:"选择模型与推理强度：")
-        hint.font = .systemFont(ofSize:12); hint.textColor = .secondaryLabelColor
-        hint.hoverHelp = "选择会自动记忆，并同步到两个聊天入口。"
-        return hint
+    static func configureSendButton(_ button:ActionButton) {
+        button.image = NSImage(systemSymbolName:"arrow.up",accessibilityDescription:nil)
+        button.imagePosition = .imageLeading
+        button.extraHorizontalPadding = 24
+        button.configureFlexible(font:button.font ?? .systemFont(ofSize:13))
+        button.setAccessibilityLabel("发送")
     }
+
     static func pin(_ view: NSView, to parent: NSView, inset: CGFloat = 0, verticalInset: CGFloat? = nil) {
         view.translatesAutoresizingMaskIntoConstraints = false; parent.addSubview(view)
         NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo:parent.leadingAnchor,constant:inset),view.trailingAnchor.constraint(equalTo:parent.trailingAnchor,constant:-inset),view.topAnchor.constraint(equalTo:parent.topAnchor,constant:verticalInset ?? inset),view.bottomAnchor.constraint(equalTo:parent.bottomAnchor,constant:-(verticalInset ?? inset))])

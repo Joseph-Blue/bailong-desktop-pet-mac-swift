@@ -390,7 +390,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func exportCompatibilitySettings() {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "白龙桌宠Swift-配置兼容备份.json"
-        panel.beginSheetModal(for:window) { [weak self] response in
+        PanelPresentation.present(panel,relativeTo:window) { [weak self] response in
             guard response == .OK,let url = panel.url,let self else {return}
             do {
                 var values = [String:Any]()
@@ -404,7 +404,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func exportOriginalHistory() {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "白龙桌宠Swift-历史原文件.json"
-        panel.beginSheetModal(for:window) { [weak self] response in
+        PanelPresentation.present(panel,relativeTo:window) { [weak self] response in
             guard response == .OK,let url = panel.url,let self else {return}
             do {try self.onExportHistory?(url)} catch {showError("导出历史原文件失败",error)}
         }
@@ -412,11 +412,11 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func exportSettings() {
         window.makeFirstResponder(nil)
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = PetPreferences.productName+"设置.json"
-        panel.beginSheetModal(for:window) { [weak self] response in guard response == .OK, let url = panel.url, let self else {return}; do {try self.preferences.exportData().write(to:url,options:.atomic)} catch {showError("导出设置失败",error)} }
+        PanelPresentation.present(panel,relativeTo:window) { [weak self] response in guard response == .OK, let url = panel.url, let self else {return}; do {try self.preferences.exportData().write(to:url,options:.atomic)} catch {showError("导出设置失败",error)} }
     }
     private func importSettings() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
-        panel.beginSheetModal(for:window) { [weak self] response in
+        PanelPresentation.present(panel,relativeTo:window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else {return}
             do {try self.preferences.importData(Data(contentsOf:url),clipIDs:Set(self.catalog?.all.map(\.id) ?? [])); self.render()}
             catch {showError("导入设置失败",error)}

@@ -18,7 +18,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 
 - `joseph/dev` 跟踪 `origin/joseph/dev`，保留开发 README、完整 CHANGELOG 与历史索引；跟踪范围以 `.gitignore` 和 [开发分支维护](../../docs/开发分支.md) 为准。main 保留正式版，不自动合并、变基或推送。
 - 开发线不发布程序 Release 或应用版本标签。素材资源经用户授权可用独立 `dev-assets-*` Pre-release，显式设为非 Latest。提交、推送、跨分支合并和发布分别按当次授权执行。
-- VERSION 是应用与工具版本来源，使用 SemVer 和中文变更记录。文档整理本身不升版本；正式版汇总不删除开发线的历史记录。
+- VERSION 是应用与工具版本来源，使用 SemVer 和中文变更记录。文档整理本身不升版本；用户要求进入候选阶段时使用 `rc.1` 等预发布标识，同步 VERSION、README、AGENTS 与 CHANGELOG。候选版仍遵守开发分支的发布边界，汇总不删除开发线历史记录。
 - 素材、构建产物、用户数据、原始本机实施流水及本地 Tests 不进 Git。资源下载与制作方法维护在 [开发资源获取](../../docs/开发资源获取.md)，不将资源包混作程序发行包。
 - README 面向当前分支读者；现行设计写入 [来源与架构](../../docs/来源与架构.md)，未来计划写入 [todo](../../todo.md)。本 skill 保留维护入口，精确产品参数与完整交互规则引用 AGENTS，避免再次逐版本追加重复规则。
 
@@ -36,6 +36,8 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 | 外部会话与请求 | `Conversation/DesktopConversationSession.swift`、`Codex/DesktopHistoryReader.swift`、`Codex/DesktopSync.swift`、`Codex/RequestCoordinator.swift` |
 | 公开进展与审批 | `Codex/DesktopRuntimeProjection.swift`、`Codex/DesktopApprovalReader.swift`、`Codex/DesktopApproval.swift`、`Codex/DesktopQuestionReply.swift` |
 | 历史与输入窗 | `Conversation/History.swift`、`Conversation/HistorySearch.swift`、`UI/Chat/ChatUI.swift`、`UI/Chat/ChatComposer.swift`、`UI/Chat/TranscriptRenderer.swift` |
+| 输入显示与模型 | `UI/Chat/ChatComposerComponents.swift`、`UI/Chat/ChatViewLayout.swift`、`Codex/ModelSelection.swift` |
+| 窗口生命周期与辅助面板 | `App/InterfaceWindows.swift`、`UI/Shared/PanelPresentation.swift` |
 | 共用显示 | `UI/Shared/MarkdownText.swift`、`MessageTextView.swift`、`CodeBlockRendering.swift`、`ProgressTextEffects.swift`、`InlineStatusLayout.swift`、`CopyFeedback.swift`（后五者同目录） |
 | 文件产物与修改统计 | `UI/Shared/CodexFileCitation.swift`、`Conversation/FileEditSummary.swift`、`UI/Shared/FileEditRendering.swift`、`UI/Shared/FileEditPresentation.swift`、`UI/MessageFileLink.swift`、`UI/FinderFileReveal.swift` |
 | 额度 | `Conversation/QuotaCoordinator.swift`、`Codex/QuotaQuery.swift`、`Codex/QuotaResetCards.swift`、`UI/SubscriptionManagement.swift` |
@@ -52,7 +54,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - 气泡 `lineFragmentPadding` 为 0，输入框及历史保留自身边距。滚动条显隐不改变换行宽度，气泡比例或字号真实变化才重新排版；多行阅读与输入容器禁止横向偏移，单行系统编辑器保持原生行为。
 - 普通气泡打开、切卡及正文变化从顶部显示；历史进入会话或重新打开窗口时到最下方，同会话刷新保留阅读位置，搜索显式定位优先。配色刷新不视为进入会话，不用持续锁顶或自动追尾修复布局。
 - `MessageTextView` 用同一 TextKit 容器测量富文本，只替换变化尾部；未变化文本不重新排版。`TranscriptRenderer` 缓存包含全部显示内容，新增结构化字段须同步签名和搜索。
-- `ProgressTextEffects` 共用标题流水与概览跑马灯，盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，保留并置灰原偏好。
+- `ProgressTextEffects` 共用标题流水与概览跑马灯；任务列表执行中标题复用纯标题流水和列表已有刷新计时，结束恢复静态，不新增行级定时器。盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，保留并置灰原偏好。
 - `InlineStatusLayout` 共用文字基线、盲文与秒表定位；`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
 - 代码块使用原生 NSTextTableBlock，语言标签与拷贝按钮共用 `CodeBlockHeaderLayout`。拷贝与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
 
@@ -60,8 +62,10 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 
 - `ChatNavigation` 负责目标切换，`ChatDraftCache` 按入口和会话分别保留内存草稿；历史浏览目标、临时发送目标与运行任务不可共用一个选择变量。
 - `ChatInputState` 只提供显示状态；发送传递明确会话与入口，异步回执不得清空或关闭后来选择的会话。主按钮统一“发送”，停止任务独立且核对目标身份。
-- `ChatModelLoader` 每入口独立，并核对工作区请求身份；外部会话原设置只读。`AccentTabSelector` 共用关于页和输入窗的主题色原生分页。
-- 临时输入窗继续独立于消息卡片；窗口展示协调、Dock 关闭及误召唤待处理，勿把当前代码描述为已经修复。
+- `ChatModelLoader` 每入口独立，并核对工作区请求身份；外部会话由 `DesktopReply.Settings` 提供结构化只读模型数据，`ChatReadOnlyModelField` 共用展示。首次读取成功前禁用发送；失败保留草稿与真实原因，未加载会话不自动发送或用内置连接接管。
+- 临时输入使用原生分段导航，会话选择同行右对齐；关于页保留原生 NSTabView。`ChatComposerComponents` 只拥有显示与用户操作回调，工作区点击由控制器调用 `FinderFileReveal.openDirectory`。最近回复从已有助手正文生成纯文本摘要，hover 最多 200 字，不额外查询或改写历史。
+- 输入随草稿增高并封顶；发送按钮共用向上箭头及横向留白，完整发送／换行快捷键放在 hover，保留辅助功能说明。`ModelSelector` 展开时固定锚点宽度，关闭恢复；思考滑块松开提交，隐藏说明不占布局高度。
+- `InterfaceWindows` 登记尚未关闭的普通窗口，最小化仍保留 Dock 入口，最后一个关闭后收回；Dock 不召回已经关闭的窗口。输入窗独立于卡片，主气泡通过 `BubblePlacement` 避让，进展小气泡在编辑期间让位。源码已接入，运行验收状态查看 README 和本机实施记录。
 
 ## 两种会话与数据
 
@@ -86,6 +90,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - `SettingsForm` 统一控件、编辑回调和搜索锚点；设置页增删改名或移动时同步 `SettingsSearchEntry.all`，标题、分组和条件须对应真实控件。建立搜索索引不得创建页面或触发预览、存储扫描和登录项查询。
 - 临时输入、历史回复与问卷复用 `MessageEditor`／`MessageInputBox`，发送快捷键来自 `SendShortcut`，保留中文组字保护。NSBox 与焦点层为同级视图，建立共同父视图后再激活约束。
 - 危险确认无默认回车操作；普通按钮用强调色，危险与警告保留语义色。应用 hover 使用 `HoverHelp`，关闭按钮与卡片箭头不新增 tooltip，保留辅助功能名称。
+- 文件浏览／保存入口共用 `PanelPresentation`，以发起屏幕可用区域居中，首次显示完成布局后定位一次，保留独立拖动；调用方继续拥有文件选择及导入导出回调。`CenteredColorWell` 只在打开调色板时定位，颜色变化不重新居中。桌宠鼠标事件通过 AppKit 延迟并阻止默认窗口排序，明确打开设置／历史仍走原入口。
 - 模板使用 `{用户名}`／`{桌宠名}`／`{特定称呼}`，迁移仅处理指定模板字段，不替换名字字面值或历史。留空恢复与特定称呼占位规则见 AGENTS。
 
 ## 动画、额度与系统集成

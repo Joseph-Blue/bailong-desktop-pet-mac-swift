@@ -37,7 +37,7 @@ extension ChatController {
         ui.presentingFolderPicker = true
         let parent:NSWindow = entry == .composer ? ui.composer : ui.history
         if entry == .history && !parent.isVisible {ui.openHistory()}
-        panel.beginSheetModal(for:parent) { [weak self] response in
+        PanelPresentation.present(panel,relativeTo:parent) { [weak self] response in
             guard let self else {return}; self.ui.presentingFolderPicker = false
             guard response == .OK,let url = panel.url,self.running == nil else {return}
             if target.threadID == nil && target.turns.isEmpty {

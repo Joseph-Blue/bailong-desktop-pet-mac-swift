@@ -6,13 +6,12 @@ final class ComposerPanel:NSPanel {
 }
 
 // 临时窗口拥有自己的控件、显隐及鼠标监听；发送目标和会话草稿由 ChatInterface 协调。
-final class ChatComposer {
-    let composer = ComposerPanel(contentRect:NSRect(x:0,y:0,width:540,height:560),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+final class ChatComposer: NSObject {
+    let composer = ComposerPanel(contentRect:NSRect(x:0,y:0,width:540,height:420),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
     lazy var composerMotion = BubbleMotion(window:composer)
     var composerVisible:Bool {composerMotion.presented}
     let composerEditor = MessageEditor()
     let status = label(PetPreferences.shared.fixedText("主人，今天想让我帮什么忙呀？"))
-    let composerKeys = label("")
     private(set) var composerModel:ModelSelector!
     private(set) var composerButton:ActionButton!
     private let recovery = NSStackView()
@@ -23,22 +22,28 @@ final class ChatComposer {
     var presentingFolderPicker = false
     var isPetInteraction:(NSEvent) -> Bool = {_ in false}
     private var composerInput:MessageInputBox!
-    let composerInheritedSettings = label("正在读取 Codex 会话设置…")
+    let composerInheritedSettings = ChatReadOnlyModelField()
     private var composerModelRow:NSStackView!
-    private var composerFolder:ActionButton!, composerNew:ActionButton!
-    private var modes:ComposerTabs!
-    private let recentReply = label("")
+    private var composerNew:ActionButton!
+    private var folderAction = NSMenuItem()
+    private var showingNewMenu = false
+    private var contentStack:NSStackView!
+    private var inputHeight:NSLayoutConstraint!
+    private var modes:ChatModeControl!
+    private let recentReply = ChatReplyPreview()
     private let inputStatus = label("")
     private var openCodex:ActionButton!, retrySettings:ActionButton!
     private let conversationPicker = ConversationPicker()
-    private let workspace = NSTextField(labelWithString:"")
+    private let workspace = WorkspaceLinkButton()
     private var stopButton:ActionButton!, checkButton:ActionButton!
+    var onOpenWorkspace:(URL) -> Void = {_ in}
     var onMode:(ConversationKind) -> Void = {_ in}, onSelect:(String) -> Void = {_ in}
     var onStop:() -> Void = {}, onCheck:() -> Void = {}
     var onOpenCodex:() -> Void = {}, onRetrySettings:() -> Void = {}
     var onSubmit:() -> Void = {}, onFolder:() -> Void = {}, onNew:() -> Void = {}, onHistory:() -> Void = {}, onHide:() -> Void = {}
     init(models:ChatModelSettings) {
-        composer.level = NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1); composer.contentMinSize = NSSize(width:540,height:560)
+        super.init()
+        composer.level = NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1); composer.contentMinSize = NSSize(width:540,height:420)
         composer.isOpaque = false; composer.backgroundColor = .clear; composer.hasShadow = true
         composer.isMovable = false; composer.isMovableByWindowBackground = false
         composer.hidesOnDeactivate = false
@@ -53,63 +58,69 @@ final class ChatComposer {
         composerClose.heightAnchor.constraint(equalToConstant:24).isActive = true
         let header = NSStackView(views:[composerClose,status,NSView()]); header.spacing = 8; header.alignment = .centerY
         composerButton = ActionButton("发送") { [weak self] in guard let self else{return}; self.onSubmit() }
+        ChatViewLayout.configureSendButton(composerButton)
         composerButton.emphasize()
         // 快捷键由聚焦的 MessageEditor 处理，避免输入法选词误触默认按钮。
         composerButton.keyEquivalent = ""
-        composerFolder = ActionButton("选择…") { [weak self] in self?.onFolder() }
         let historyLink = ActionButton("查看记录") { [weak self] in self?.onHistory() }
-        composerNew = ActionButton("新对话") { [weak self] in self?.onNew() }
+        composerNew = ActionButton("新对话") { [weak self] in self?.showNewMenu() }
+        composerNew.image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); composerNew.imagePosition = .imageTrailing
         stopButton = ActionButton("停止任务") { [weak self] in self?.onStop() }
         checkButton = ActionButton("检查发送结果") { [weak self] in self?.onCheck() }
-        composerFooterButtons = [historyLink,composerNew,stopButton,checkButton,composerButton]
+        openCodex = ActionButton("在 Codex 中打开") { [weak self] in self?.onOpenCodex() }
+        openCodex.image = AppIcons.openAI; openCodex.imagePosition = .imageLeading
+        composerFooterButtons = [historyLink,composerNew,openCodex,stopButton,checkButton,composerButton]
         for button in composerFooterButtons {
             button.configureFlexible(font:.systemFont(ofSize:13))
         }
         composerButtonHeight = composerButton.heightAnchor.constraint(equalToConstant:28); composerButtonHeight?.isActive = true
-        let footer = NSStackView(views:[historyLink,composerNew,stopButton,checkButton,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
+        let footer = NSStackView(views:[historyLink,composerNew,openCodex,stopButton,checkButton,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
         // 跨控件约束必须在共同父视图建立后启用，否则 AppKit 会中断整个会话初始化。
         for button in composerFooterButtons where button !== composerButton {
             button.heightAnchor.constraint(equalTo:composerButton.heightAnchor).isActive = true
         }
         composerModel = ModelSelector(models)
-        let modelRow = NSStackView(views:[ChatViewLayout.modelHint(),composerModel,NSView()]); modelRow.spacing = 8; modelRow.alignment = .centerY
+        let modelRow = ChatMetadataRow("模型",content:composerModel)
         composerModelRow = modelRow
-        modes = ComposerTabs()
+        modes = ChatModeControl(labels:ConversationKind.allCases.map(\.title))
         modes.onSelect = { [weak self] index in
             guard let self,let mode = ConversationKind(rawValue:index) else {return}
             self.onMode(mode); self.composer.makeFirstResponder(self.composerEditor)
         }
         conversationPicker.onSelect = { [weak self] key in self?.onSelect(key) }
-        workspace.lineBreakMode = .byTruncatingMiddle; workspace.usesSingleLineMode = true
-        workspace.textColor = .secondaryLabelColor
+        workspace.onOpen = { [weak self] url in self?.onOpenWorkspace(url) }
         workspace.setContentHuggingPriority(.defaultLow,for:.horizontal)
-        composerFolder.setContentCompressionResistancePriority(.required,for:.horizontal)
-        openCodex = ActionButton("在 Codex 中打开") { [weak self] in self?.onOpenCodex() }
-        openCodex.image = AppIcons.openAI; openCodex.imagePosition = .imageLeading
         retrySettings = ActionButton("重新读取") { [weak self] in self?.onRetrySettings() }
-        let connectionRow = NSStackView(views:[composerInheritedSettings,retrySettings,openCodex]); connectionRow.spacing = 8; connectionRow.alignment = .centerY
+        let connectionRow = ChatMetadataRow("模型",content:composerInheritedSettings,accessory:retrySettings)
         composerInheritedSettings.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        recentReply.maximumNumberOfLines = 2; recentReply.lineBreakMode = .byTruncatingTail
-        recentReply.font = .systemFont(ofSize:12); recentReply.textColor = .secondaryLabelColor
-        recentReply.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         inputStatus.font = .systemFont(ofSize:11); inputStatus.textColor = .secondaryLabelColor
         inputStatus.maximumNumberOfLines = 2
         workspace.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        let targetRow = NSStackView(views:[label("会话"),conversationPicker]); targetRow.spacing = 8
-        let workspaceRow = NSStackView(views:[label("工作区"),workspace,composerFolder]); workspaceRow.spacing = 8
-        let body = NSStackView(views:[targetRow,workspaceRow,recentReply,composerInput,composerKeys,recovery,modelRow,connectionRow,inputStatus,footer]); body.orientation = .vertical; body.alignment = .leading; body.spacing = 8
-        modes.install(body)
-        let stack = NSStackView(views:[header,modes!]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
-        ChatViewLayout.pin(stack,to:c.body,inset:16)
-        [header,modes!].forEach {$0.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
-        [composerInput!,composerKeys,recovery,targetRow,workspaceRow,recentReply,modelRow,connectionRow,inputStatus,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
-        composerInheritedSettings.font = .systemFont(ofSize:11); composerInheritedSettings.textColor = .secondaryLabelColor
-        composerInheritedSettings.maximumNumberOfLines = 2
-        composerInput.heightAnchor.constraint(greaterThanOrEqualToConstant:120).isActive = true
+        let workspaceRow = ChatMetadataRow("工作区",content:workspace,expandsContent:true)
+        let targetCaption = NSTextField(labelWithString:"会话")
+        targetCaption.font = .systemFont(ofSize:12); targetCaption.textColor = .secondaryLabelColor
+        targetCaption.setContentCompressionResistancePriority(.required,for:.horizontal)
+        modes.setContentCompressionResistancePriority(.required,for:.horizontal)
+        conversationPicker.setContentHuggingPriority(.required,for:.horizontal)
+        conversationPicker.widthAnchor.constraint(greaterThanOrEqualToConstant:100).isActive = true
+        conversationPicker.widthAnchor.constraint(lessThanOrEqualToConstant:240).isActive = true
+        let modeRow = NSStackView(views:[modes!,NSView(),targetCaption,conversationPicker])
+        modeRow.alignment = .centerY; modeRow.distribution = .fill; modeRow.spacing = 8
+        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelRow,connectionRow,inputStatus,footer])
+        body.orientation = .vertical; body.alignment = .leading; body.spacing = 8
+        let stack = NSStackView(views:[header,modeRow,body]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
+        contentStack = stack
+        c.body.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:c.body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:c.body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:c.body.topAnchor,constant:16)])
+        [header,modeRow,body].forEach {$0.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
+        [composerInput!,recovery,workspaceRow,recentReply,modelRow,connectionRow,inputStatus,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
+        inputHeight = composerInput.heightAnchor.constraint(equalToConstant:140); inputHeight.isActive = true
+        composerEditor.onTextChange = { [weak self] in self?.updateLayout() }
         composerEditor.send = { [weak self] in guard let self else{return}; self.onSubmit() }
 
     }
     func showComposer() {
+        updateLayout()
         composerMotion.show(key:true)
         composer.makeFirstResponder(composerEditor)
         stopDismissMonitoring()
@@ -128,7 +139,7 @@ final class ChatComposer {
         guard composerVisible, !presentingFolderPicker, composer.attachedSheet == nil else{return}
         if isPetInteraction(event) {return}
         let point = NSEvent.mouseLocation
-        if composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) || conversationPicker.containsInteraction(at:point,window:event.window) {return}
+        if showingNewMenu || composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) || conversationPicker.containsInteraction(at:point,window:event.window) {return}
         hideComposer()
     }
     private func stopDismissMonitoring() {
@@ -137,7 +148,7 @@ final class ChatComposer {
         localDismissMonitor = nil; globalDismissMonitor = nil
     }
     deinit {stopDismissMonitoring()}
-    func clearFailure() {recovery.isHidden = true; composerInput.isHidden = false; composerButton.isHidden = false}
+    func clearFailure() {recovery.isHidden = true; composerInput.isHidden = false; composerButton.isHidden = false; updateLayout()}
     func showFailure(_ failure: AppFailure,busy:Bool, restore: @escaping () -> Void) {
         recovery.arrangedSubviews.forEach {recovery.removeArrangedSubview($0); $0.removeFromSuperview()}
         let title = label(failure.title,bold:true), message = label(failure.message)
@@ -157,77 +168,70 @@ final class ChatComposer {
             open.widthAnchor.constraint(equalTo:recovery.widthAnchor).isActive = true
         }
         composerInput.isHidden = true; recovery.isHidden = false; composerButton.isHidden = !busy
+        updateLayout()
+    }
+
+    private func showNewMenu() {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        let same = NSMenuItem(title:"在当前工作区新建",action:#selector(newHere),keyEquivalent:""); same.target = self
+        folderAction.target = self; folderAction.action = #selector(newElsewhere)
+        menu.addItem(same); menu.addItem(folderAction)
+        showingNewMenu = true
+        menu.popUp(positioning:nil,at:NSPoint(x:0,y:composerNew.bounds.maxY+4),in:composerNew)
+        showingNewMenu = false
+        menu.removeItem(folderAction)
+    }
+    @objc private func newHere() {onNew()}
+    @objc private func newElsewhere() {onFolder()}
+
+    func updateLayout() {
+        guard let content = composer.contentView else {return}
+        let buttons = composerFooterButtons.filter {!$0.isHidden}
+        let footerWidth = buttons.reduce(CGFloat(32+buttons.count*8)) {$0+$1.intrinsicContentSize.width}
+        let width = max(540,footerWidth,modes.intrinsicContentSize.width+196)
+        // 先确定正文宽度再测量换行；只有编辑区随草稿增长，元信息和操作区按内容排版。
+        if abs(content.bounds.width-width)>0.5 {composerMotion.resize(to:NSSize(width:width,height:composerMotion.frame.height))}
+        content.layoutSubtreeIfNeeded()
+        if let container = composerEditor.textContainer,let layout = composerEditor.layoutManager {
+            layout.ensureLayout(for:container)
+            let textHeight = layout.usedRect(for:container).height + composerEditor.textContainerInset.height*2+28
+            inputHeight.constant = min(260,max(140,textHeight.rounded(.up)))
+        }
+        let height = contentStack.fittingSize.height.rounded(.up)+32
+        let size = NSSize(width:width,height:height)
+        composer.contentMinSize = NSSize(width:width,height:min(height,420))
+        if composerMotion.frame.size != size {composerMotion.resize(to:size)}
     }
 
     func refresh(font:NSFont,state:ChatInputState,conversations:[Conversation]) {
         let external = state.kind == .project
         composerEditor.font = font; status.font = font
-        for button in composerFooterButtons + [openCodex!,retrySettings!] {button.configureFlexible(font:font)}
+        for button in composerFooterButtons + [retrySettings!] {button.configureFlexible(font:font)}
         composerButtonHeight?.constant = composerFooterButtons.map {$0.intrinsicContentSize.height}.max() ?? 28
         composerButton.isHidden = !recovery.isHidden; composerButton.emphasize()
         composerButton.title = "发送"
         composerButton.isEnabled = state.canSend(models:composerModel.settings)
         composerEditor.isEditable = state.canEdit
-        composerFolder.isEnabled = state.canEdit && !external; composerNew.isEnabled = state.runningTitle == nil && !state.readOnly
-        composerNew.isHidden = external
+        folderAction.isEnabled = state.canEdit && !external; composerNew.isEnabled = state.runningTitle == nil && !state.readOnly
+        composerNew.isHidden = external; openCodex.isHidden = !external
         composerModel.isEnabled = state.canEdit && !external; composerModelRow.isHidden = external
         modes.select(state.kind.rawValue)
         conversationPicker.title = state.conversation?.title ?? "选择会话…"
         conversationPicker.hoverHelp = state.conversation?.title
         conversationPicker.conversations = {conversations.filter {$0.kind == state.kind}}
         let path = state.conversation?.cwd ?? ""
-        let displayedPath = path.isEmpty ? "未选择工作区" : (path as NSString).abbreviatingWithTildeInPath
-        if workspace.stringValue != displayedPath {workspace.stringValue = displayedPath}
-        workspace.hoverHelp = state.conversation?.cwd
-        composerFolder.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择…" : "在其他工作区新建…"
-        composerFolder.isHidden = external
-        composerInheritedSettings.stringValue = state.modelNote ?? "正在读取 Codex 会话设置…"
-        composerInheritedSettings.hoverHelp = composerInheritedSettings.stringValue
+        workspace.update(path:path)
+        folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
+        composerInheritedSettings.update(settings:state.modelSettings,error:state.modelNote)
         composerInheritedSettings.superview?.isHidden = !external || state.conversation == nil
         retrySettings.isHidden = state.desktopReady || state.modelNote == nil
         retrySettings.isEnabled = !state.sending
         openCodex.isEnabled = state.conversation?.threadID != nil
         let reply = state.conversation?.turns.max(by:{$0.date < $1.date}).map { $0.final.isEmpty ? $0.messages : $0.final } ?? ""
-        let preview = String(reply.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ").prefix(180))
-        recentReply.stringValue = preview.isEmpty ? "" : "最近回复："+preview
-        recentReply.isHidden = preview.isEmpty
+        recentReply.update(markdown:reply)
         inputStatus.stringValue = state.note; inputStatus.hoverHelp = state.replyNote ?? state.note; inputStatus.isHidden = state.note.isEmpty
         stopButton.isHidden = !state.ownsRunningTask
         checkButton.isHidden = !state.unconfirmed
-        status.stringValue = "临时对话"
-    }
-}
-
-// 两个页面共用编辑控件；切换只移动显示容器，草稿仍由 ChatDraftCache 按目标保存。
-private final class ComposerTabs:NSTabView,NSTabViewDelegate {
-    var onSelect:(Int) -> Void = {_ in}
-    private var body:NSView?
-    private var bodyConstraints = [NSLayoutConstraint]()
-    private var updating = false
-    init() {
-        super.init(frame:.zero)
-        tabViewType = .topTabsBezelBorder; drawsBackground = false; font = .systemFont(ofSize:13)
-        for kind in ConversationKind.allCases {
-            let item = NSTabViewItem(identifier:kind.rawValue); item.label = kind.title; item.view = NSView()
-            addTabViewItem(item)
-        }
-        delegate = self
-    }
-    required init?(coder:NSCoder) {fatalError()}
-    func install(_ body:NSView) {self.body = body; attachBody()}
-    func select(_ index:Int) {
-        guard selectedTabViewItem !== tabViewItem(at:index) else {return}
-        updating = true; selectTabViewItem(at:index); updating = false
-    }
-    private func attachBody() {
-        guard let body,let page = selectedTabViewItem?.view,body.superview !== page else {return}
-        NSLayoutConstraint.deactivate(bodyConstraints); body.removeFromSuperview()
-        page.addSubview(body); body.translatesAutoresizingMaskIntoConstraints = false
-        bodyConstraints = [body.leadingAnchor.constraint(equalTo:page.leadingAnchor,constant:8),body.trailingAnchor.constraint(equalTo:page.trailingAnchor,constant:-8),body.topAnchor.constraint(equalTo:page.topAnchor,constant:8),body.bottomAnchor.constraint(equalTo:page.bottomAnchor,constant:-8)]
-        NSLayoutConstraint.activate(bodyConstraints)
-    }
-    func tabView(_ tabView:NSTabView,didSelect tabViewItem:NSTabViewItem?) {
-        attachBody()
-        if !updating,let tabViewItem {onSelect(indexOfTabViewItem(tabViewItem))}
+        status.stringValue = PetPreferences.shared.fixedText("主人，今天想让我帮什么忙呀？")
     }
 }

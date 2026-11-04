@@ -33,7 +33,6 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var historyInputHeight: NSLayoutConstraint!
     let list = HistoryTableView(), folder = label("")
     let historyStatus = label(PetPreferences.shared.fixedText("主人的叮嘱，我都记在这台电脑里啦"))
-    private let historyKeys = label("")
     let models: ChatModelSettings
     let composerModels = ChatModelSettings()
     private(set) var historyModel: ModelSelector!
@@ -48,6 +47,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let matchLabel = label("")
     private var previousMatch: ActionButton!, nextMatch: ActionButton!
     private var searching: Bool {!searchField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}
+    var onOpenWorkspace:(URL) -> Void = {_ in}
     var onGoCodex: () -> Void = {}
     var onComposerHistory:() -> Void = {}
     var onRetrySettings:(ChatEntry) -> Void = {_ in}
@@ -70,7 +70,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     func targetKey(_ entry:ChatEntry) -> String? {drafts.target(entry)}
     func modelSettings(_ entry:ChatEntry) -> ChatModelSettings {entry == .composer ? composerModels : models}
     private func editor(_ entry:ChatEntry) -> MessageEditor {entry == .composer ? composerEditor : historyEditor}
-    private let inheritedSettings = label("沿用 Codex 原会话的模型与权限")
+    private let inheritedSettings = ChatReadOnlyModelField()
     private var historyPlaceholder: String {PetPreferences.shared.fixedText("主人，我们接着聊吧…")}
     private var renderedTranscriptSignature = [String]()
     private var renderedConversation: String?
@@ -87,6 +87,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         for w in [composer as NSWindow,history] {w.isReleasedWhenClosed = false; w.delegate = self}
         history.contentMinSize = NSSize(width:760,height:600)
         composerView.onSubmit = { [weak self] in guard let self else {return}; self.submit(self.composerEditor) }
+        composerView.onOpenWorkspace = { [weak self] url in self?.onOpenWorkspace(url) }
         composerView.onFolder = { [weak self] in self?.onFolder(.composer) }
         composerView.onNew = { [weak self] in self?.onNew(.composer) }
         composerView.onMode = { [weak self] mode in self?.onMode(mode) }
@@ -137,6 +138,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             guard let self else{return}
             self.submit(self.historyEditor)
         }
+        ChatViewLayout.configureSendButton(historyButton)
         historyButton.emphasize(); historyButton.setContentHuggingPriority(.required,for:.horizontal)
         historyButton.setContentCompressionResistancePriority(.required,for:.horizontal)
         historyModel = ModelSelector(models)
@@ -145,8 +147,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyCheck = ActionButton("检查发送结果") { [weak self] in self?.checkTarget(.history) }
         historyRetrySettings = ActionButton("重新读取") { [weak self] in self?.onRetrySettings(.history) }
         let preferences = NSStackView(views:[historyModel,inheritedSettings,historyRetrySettings!,NSView(),historyStop,historyCheck,historyButton]); preferences.spacing = 12; preferences.alignment = .centerY
-        let inputArea = NSStackView(views:[drafting,preferences,historyKeys]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
-        for view in [drafting,preferences,historyKeys] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
+        let inputArea = NSStackView(views:[drafting,preferences]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
+        for view in [drafting,preferences] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
         folder.font = .systemFont(ofSize:11); folder.textColor = .secondaryLabelColor; folder.maximumNumberOfLines = 1; folder.lineBreakMode = .byTruncatingMiddle
         folder.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         historyStatus.font = .systemFont(ofSize:11); historyStatus.textColor = .secondaryLabelColor
@@ -173,7 +175,6 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyInputHeight = drafting.heightAnchor.constraint(equalToConstant:76); historyInputHeight.isActive = true
         historyEditor.onTextChange = { [weak self] in self?.resizeHistoryInput() }
         historyEditor.send = { [weak self] in guard let self else{return}; self.submit(self.historyEditor) }
-        for text in [composerView.composerKeys,historyKeys] {text.font = .systemFont(ofSize:11); text.textColor = .secondaryLabelColor}
         updateShortcuts()
         if !history.setFrameUsingName("BailongHistory") {
             if let screen = NSScreen.main {
@@ -195,10 +196,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             let hint = shortcut.hint
             let button = entry == .composer ? composerView.composerButton! : historyButton!
             button.title = "发送"; button.keyEquivalent = ""
-            button.hoverHelp = "发送："+shortcut.sendLabel
+            button.hoverHelp = hint
             button.isEnabled = state.canSend(models:modelSettings(entry))
-            if entry == .composer {composerView.composerKeys.stringValue = hint}
-            else {historyKeys.stringValue = hint.replacingOccurrences(of:"\n",with:"  ·  ")}
             editor(entry).setAccessibilityHelp(hint)
         }
     }
@@ -247,13 +246,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     @objc private func modelStateChanged() {
         updateShortcuts()
-        let selectorWidth = max(280,composerView.composerModel.intrinsicContentSize.width.rounded(.up))
-        let hintWidth = ("选择模型与推理强度：" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)+6
-        let footerWidth = composerView.composerFooterButtons.filter {!$0.isHidden}.reduce(CGFloat(32+4*8)) {$0+$1.intrinsicContentSize.width}
-        let composerWidth = max(540,selectorWidth+hintWidth+40,footerWidth)
-        composer.contentMinSize = NSSize(width:composerWidth,height:560)
-        if let content = composer.contentView, content.bounds.width < composerWidth {composerView.composerMotion.resize(to:NSSize(width:composerWidth,height:content.bounds.height))}
-        let detailWidth = max(520,historyModel.intrinsicContentSize.width.rounded(.up)+historyButton.intrinsicContentSize.width+64)
+        composerView.updateLayout()
+        let detailWidth = max(520,historyModel.layoutWidth+historyButton.intrinsicContentSize.width+64)
         historyDetailItem.minimumThickness = detailWidth
         let historyWidth = max(800,detailWidth+180)
         history.contentMinSize = NSSize(width:historyWidth,height:600)
@@ -391,10 +385,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             return left == right ? $0.offset > $1.offset : left > right
         }.map(\.element)
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
-        let inherited = historyState.modelNote ?? "正在读取 Codex 会话设置…"
-        inheritedSettings.stringValue = inherited; inheritedSettings.hoverHelp = inherited
-        inheritedSettings.lineBreakMode = .byTruncatingMiddle
-        inheritedSettings.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        inheritedSettings.update(settings:historyState.modelSettings,error:historyState.modelNote)
         refreshList()
         sourceLabel.stringValue = selected.kind.title
         folder.stringValue = "工作区："+selected.cwd; folder.hoverHelp = selected.cwd

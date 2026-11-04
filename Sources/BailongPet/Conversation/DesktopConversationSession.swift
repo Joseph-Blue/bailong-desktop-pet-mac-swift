@@ -7,6 +7,7 @@ final class DesktopConversationSession {
     private let canSend:() -> Bool, isClosing:() -> Bool
     var onChange:() -> Void = {}, onPersist:() -> Void = {}
     var onSubmitted:(String,String,ChatEntry) -> Void = {_,_,_ in}
+    private var desktopSettings = [String:DesktopReply.Settings]()
     private var desktopModelNotes = [String:String]()
     private var desktopModelChecked = [String:Date]()
     private var desktopModelRequests = [String:UUID]()
@@ -23,14 +24,17 @@ final class DesktopConversationSession {
     func sending(_ key:String) -> Bool {desktopSending[key] != nil}
     func unconfirmed(_ key:String) -> Bool {desktopUnconfirmed.contains(key)}
     func replyNote(_ key:String) -> String? {desktopReplyNotes[key]}
+    func modelSettings(_ key:String) -> DesktopReply.Settings? {desktopSettings[key]}
     func modelNote(_ key:String) -> String? {desktopModelNotes[key]}
     func canReply(_ key:String) -> Bool {settingsReady.contains(key)}
     func forget(_ key:String) {
+        desktopSettings.removeValue(forKey:key)
         settingsReady.remove(key)
         desktopUnconfirmed.remove(key); desktopReplyNotes.removeValue(forKey:key)
         desktopModelNotes.removeValue(forKey:key); desktopModelChecked.removeValue(forKey:key); desktopModelRequests.removeValue(forKey:key)
     }
     func clear() {
+        desktopSettings.removeAll()
         settingsReady.removeAll()
         desktopUnconfirmed.removeAll(); desktopReplyNotes.removeAll()
         desktopModelNotes.removeAll(); desktopModelChecked.removeAll(); desktopModelRequests.removeAll()
@@ -52,15 +56,17 @@ final class DesktopConversationSession {
         guard !isClosing(),let thread = conversation.threadID else {return}
         let key = conversation.key
         guard desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
-        if force {settingsReady.remove(key); desktopModelNotes.removeValue(forKey:key)}
+        if force {desktopSettings.removeValue(forKey:key); settingsReady.remove(key); desktopModelNotes.removeValue(forKey:key)}
         let request = UUID(); desktopModelRequests[key] = request; desktopModelChecked[key] = Date()
         DesktopReply.readSettings(thread:thread) { [weak self] result in
             guard let self,!self.isClosing(),self.desktopModelRequests[key] == request else {return}
             self.desktopModelRequests.removeValue(forKey:key)
             guard self.store.conversations.contains(where:{$0.key == key}) else {return}
             switch result {
-            case .success(let text): self.desktopModelNotes[key] = text; self.settingsReady.insert(key)
+            case .success(let settings):
+                self.desktopSettings[key] = settings; self.desktopModelNotes.removeValue(forKey:key); self.settingsReady.insert(key)
             case .failure(let error):
+                self.desktopSettings.removeValue(forKey:key)
                 self.settingsReady.remove(key)
                 self.desktopModelNotes[key] = error is DesktopReply.OwnerUnavailable ? error.localizedDescription : "读取会话设置失败："+error.localizedDescription
             }

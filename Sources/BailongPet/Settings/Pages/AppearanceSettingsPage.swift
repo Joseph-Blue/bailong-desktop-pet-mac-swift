@@ -50,7 +50,7 @@ final class AppearanceSettingsPage {
         }
         var themeRows = [form.choice("外观模式","appearanceMode",AppAppearance.choices),form.row("强调色",control:palette)]
         if preferences.string("accentStyle") == "custom" {
-            let well = NSColorWell(); well.color = AppAccent.color; well.widthAnchor.constraint(equalToConstant:70).isActive = true
+            let well = CenteredColorWell(); well.color = AppAccent.color; well.widthAnchor.constraint(equalToConstant:70).isActive = true
             form.attach(well) { [weak self] sender in guard let rgb = (sender as! NSColorWell).color.usingColorSpace(.sRGB) else {return}; self?.preferences.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],for:"accentRGB") }
             themeRows.append(form.row("自定义",control:well))
         }

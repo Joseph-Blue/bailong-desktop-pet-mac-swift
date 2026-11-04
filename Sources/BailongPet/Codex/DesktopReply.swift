@@ -22,18 +22,21 @@ enum DesktopReply {
         guard let target = owner["handledByClientId"] as? String else {throw OwnerUnavailable()}
         return (connection,target)
     }
-    static func readSettings(thread:String,completion:@escaping (Result<String,Error>) -> Void) {
+    struct Settings {
+        let model:String
+        let effort:String?
+        let effortFromHistory:Bool
+    }
+    static func readSettings(thread:String,completion:@escaping (Result<Settings,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async {
-            let result = Result<String,Error> {
+            let result = Result<Settings,Error> {
                 let (connection,target) = try connect(thread:thread)
                 let response = try connection.call("thread-follower-read-model-settings",params:["conversationId":thread],version:1,target:target)
                 guard let result = response["result"] as? [String:Any],let settings = result["settings"] as? [String:Any],
                       let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:"Codex 未提供当前会话的模型设置。")}
                 let liveEffort = settings["reasoningEffort"] as? String
                 let recordedEffort = liveEffort == nil ? try DesktopHistoryReader.recordedReasoningEffort(thread:thread,model:model) : nil
-                let effort = (liveEffort ?? recordedEffort).map(ChatModelSettings.effortName) ?? "未提供"
-                let source = recordedEffort == nil ? "只读" : "会话记录，只读"
-                return "\(model) · 思考：\(effort)（\(source)）"
+                return Settings(model:model,effort:liveEffort ?? recordedEffort,effortFromHistory:recordedEffort != nil)
             }
             DispatchQueue.main.async {completion(result)}
         }

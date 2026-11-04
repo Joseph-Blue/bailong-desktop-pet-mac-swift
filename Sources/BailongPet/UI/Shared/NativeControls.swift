@@ -36,6 +36,7 @@ final class ActionButton: NSButton {
     }
     private var prominent = false
     private var flexibleLayout = false
+    var extraHorizontalPadding:CGFloat = 0 {didSet {invalidateIntrinsicContentSize()}}
     var semanticColor:NSColor? {didSet {updateAccent()}}
     var keepsAccentWhenInactive = false {didSet {updateAccent()}}
     init(_ title: String, _ callback: @escaping () -> Void) {
@@ -58,7 +59,7 @@ final class ActionButton: NSButton {
         let font = font ?? .systemFont(ofSize:13), ratio = font.pointSize/13
         let text = imagePosition == .imageOnly ? NSSize.zero : (title as NSString).size(withAttributes:[.font:font])
         let gap:CGFloat = image != nil && text.width > 0 ? 6*ratio : 0
-        return NSSize(width:ceil(text.width+iconSide+gap+24*ratio),height:ceil(max(28*ratio,max(text.height,iconSide)+10*ratio)))
+        return NSSize(width:ceil(text.width+iconSide+gap+(24+extraHorizontalPadding)*ratio),height:ceil(max(28*ratio,max(text.height,iconSide)+10*ratio)))
     }
     func emphasize(_ enabled: Bool = true) {prominent = enabled; updateAccent()}
     @objc private func updateAccent() {

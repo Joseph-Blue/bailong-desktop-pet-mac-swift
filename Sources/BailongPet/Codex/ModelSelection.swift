@@ -129,23 +129,34 @@ final class ChatModelSettings {
 }
 
 // 两个聊天入口共享偏好；模型与可用思考档位均来自 app-server。
-final class ModelSelector: NSButton {
+final class ModelSelector: NSButton, NSPopoverDelegate {
     let settings: ChatModelSettings
     private let popover = NSPopover()
     private var controls: ModelSelectorContent!
+    private var anchorWidth:NSLayoutConstraint?
+    private var restingHugging:NSLayoutConstraint.Priority?
+    var layoutWidth:CGFloat {anchorWidth?.constant ?? min(320,intrinsicContentSize.width.rounded(.up))}
     init(_ settings: ChatModelSettings) {
         self.settings = settings; super.init(frame:.zero)
+        popover.delegate = self
         bezelStyle = .rounded; image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
         font = .systemFont(ofSize:12); target = self; action = #selector(openChoices)
-        setContentCompressionResistancePriority(.required,for:.horizontal)
-        widthAnchor.constraint(greaterThanOrEqualToConstant:280).isActive = true
+        setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        setContentHuggingPriority(.required,for:.horizontal)
+        (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
+        widthAnchor.constraint(lessThanOrEqualToConstant:320).isActive = true
         setAccessibilityLabel("选择模型与推理强度")
         NotificationCenter.default.addObserver(self,selector:#selector(updateTitle),name:ChatModelSettings.changed,object:settings)
         updateTitle()
     }
     required init?(coder:NSCoder) {fatalError()}
-    @objc private func updateTitle() {title = settings.title; hoverHelp = settings.currentModel?.displayName ?? "默认跟随 Codex 设置"}
+    @objc private func updateTitle() {title = settings.title; hoverHelp = settings.title}
     func closeChoices() {popover.performClose(nil)}
+    func popoverDidClose(_ notification:Notification) {
+        anchorWidth?.isActive = false; anchorWidth = nil
+        if let restingHugging {setContentHuggingPriority(restingHugging,for:.horizontal)}
+        restingHugging = nil; invalidateIntrinsicContentSize()
+    }
     func containsInteraction(at point: NSPoint, window: NSWindow?) -> Bool {
         guard popover.isShown else{return false}
         if let panel = popover.contentViewController?.view.window, panel.frame.contains(point) {return true}
@@ -154,9 +165,16 @@ final class ModelSelector: NSButton {
     }
     @objc private func openChoices() {
         if popover.isShown {popover.performClose(nil); return}
+        // 弹窗展开时固定锚点宽度，档位标题变化不推动弹窗。关闭后恢复内容定宽。
+        restingHugging = contentHuggingPriority(for:.horizontal)
+        setContentHuggingPriority(.defaultLow,for:.horizontal)
+        anchorWidth = widthAnchor.constraint(equalToConstant:bounds.width); anchorWidth?.isActive = true
         settings.onLoad(false)
         controls = ModelSelectorContent(settings)
-        controls.onResize = { [weak self] size in self?.popover.contentSize = size }
+        controls.onResize = { [weak self] size in
+            guard let self,self.popover.contentSize != size else {return}
+            self.popover.contentSize = size
+        }
         popover.contentViewController = controls; popover.behavior = .transient; popover.animates = false
         _ = controls.view; popover.contentSize = controls.preferredContentSize
         popover.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
@@ -184,7 +202,7 @@ final class ModelSelectorContent: NSViewController {
         picker.target = self; picker.action = #selector(modelChanged)
         effort.font = .systemFont(ofSize:14,weight:.semibold)
         slider.target = self; slider.action = #selector(effortChanged)
-        slider.allowsTickMarkValuesOnly = true; slider.isContinuous = true; slider.setAccessibilityLabel("推理强度")
+        slider.allowsTickMarkValuesOnly = true; slider.isContinuous = false; slider.setAccessibilityLabel("推理强度")
         for text in [explanation,defaultInfo,caution] {text.font = .systemFont(ofSize:12); text.isSelectable = false}
         explanation.textColor = .secondaryLabelColor; defaultInfo.textColor = AppAccent.color
         refresh.frame = NSRect(x:16,y:9,width:88,height:28); refresh.callback = { [weak self] in self?.settings.onLoad(true) }
@@ -227,11 +245,11 @@ final class ModelSelectorContent: NSViewController {
     }
     private func layoutControls() {
         var y: CGFloat = 49
-        // 提示区预留固定行高，警告换行、默认提示显隐不移动标题和模型控件。
-        for text in [caution,defaultInfo,explanation] {
+        // 隐藏说明不占空间，可见说明按实际换行高度排版。
+        for text in [caution,defaultInfo,explanation] where !text.isHidden {
             let font = text.font!
-            let lines:CGFloat = text === defaultInfo ? 1 : 2
-            let height = ((font.ascender-font.descender+font.leading)*lines).rounded(.up)+4
+            let rect = (text.stringValue as NSString).boundingRect(with:NSSize(width:428,height:CGFloat.greatestFiniteMagnitude),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font])
+            let height = max(font.ascender-font.descender+font.leading,rect.height).rounded(.up)+2
             text.frame = NSRect(x:16,y:y,width:428,height:height); y += height+8
         }
         if !slider.isHidden {
@@ -242,8 +260,8 @@ final class ModelSelectorContent: NSViewController {
                 mark.frame = NSRect(x:max(16,min(16+tick.midX-width/2,444-width)),y:y,width:width,height:18)
                 mark.isHidden = false
             }
+            y += 56
         } else {effortMarks.forEach {$0.isHidden = true}}
-        y += 60
         effort.frame = NSRect(x:16,y:y,width:428,height:22); y += 30
         picker.frame = NSRect(x:16,y:y,width:428,height:28); y += 40
         heading.frame = NSRect(x:16,y:y,width:428,height:22); y += 38

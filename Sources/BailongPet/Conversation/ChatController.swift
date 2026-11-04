@@ -91,9 +91,10 @@ final class ChatController {
         ui.onFolder = { [weak self] entry in self?.chooseFolder(entry:entry) }
         ui.onMode = { [weak self] mode in self?.selectComposerMode(mode) }
         ui.onComposerSelect = { [weak self] key in self?.selectConversation(key,entry:.composer) }
+        ui.onOpenWorkspace = {url in FinderFileReveal.openDirectory(url)}
         ui.onRevealFolder = { [weak self] in
             guard let self else{return}
-            if !NSWorkspace.shared.open(URL(fileURLWithPath:self.selected.cwd,isDirectory:true)) {showError("无法打开任务文件夹",PetFailure(message:"请确认目录仍然存在："+self.selected.cwd))}
+            FinderFileReveal.openDirectory(URL(fileURLWithPath:self.selected.cwd,isDirectory:true))
         }
         for entry in [ChatEntry.composer,.history] {
             ui.modelSettings(entry).onLoad = { [weak self] force in self?.loadModels(entry:entry,force:force) }
@@ -198,6 +199,7 @@ final class ChatController {
         if let conversation,conversation.external {
             state.sending = desktopSession.sending(conversation.key); state.unconfirmed = desktopSession.unconfirmed(conversation.key)
             state.replyMode = desktopSession.target(conversation)?.mode
+            state.modelSettings = desktopSession.modelSettings(conversation.key)
             state.modelNote = desktopSession.modelNote(conversation.key); state.replyNote = desktopSession.replyNote(conversation.key)
             state.desktopReady = desktopSession.canReply(conversation.key)
         }

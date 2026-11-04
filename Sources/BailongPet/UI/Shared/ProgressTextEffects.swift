@@ -6,16 +6,21 @@ enum ProgressTextEffects {
     static var enabled:Bool {PetPreferences.shared.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion}
     static let speed:CGFloat = 28
     static func heading(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double,frame:String) -> NSAttributedString {
-        let foreground = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:appearance))!
         let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:appearance))!
-        let value = NSMutableAttributedString(string:frame+" "+text,attributes:[.font:font,.foregroundColor:foreground])
-        value.addAttribute(.foregroundColor,value:accent,range:NSRange(location:0,length:(frame as NSString).length))
+        let value = NSMutableAttributedString(string:frame+" ",attributes:[.font:font,.foregroundColor:accent])
+        value.append(title(text,font:font,appearance:appearance,elapsed:elapsed))
+        return value
+    }
+    // 标题可独立扫光，盲文仍由所在视图单独绘制，不改变字宽或位置。
+    static func title(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double) -> NSAttributedString {
+        let foreground = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:appearance))!
+        let value = NSMutableAttributedString(string:text,attributes:[.font:font,.foregroundColor:foreground])
         guard enabled else {return value}
         let phase = elapsed.truncatingRemainder(dividingBy:4)
         let center = -0.25+1.5*(phase/1.2)
         let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
         let count = max(1,text.count-1)
-        var offset = (frame as NSString).length+1
+        var offset = 0
         for (index,character) in text.enumerated() {
             let length = (String(character) as NSString).length
             let distance = (Double(index)/Double(count)-center)/0.18

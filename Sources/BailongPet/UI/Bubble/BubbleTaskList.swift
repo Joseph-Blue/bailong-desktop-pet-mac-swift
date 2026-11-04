@@ -86,6 +86,7 @@ private final class BubbleTaskRow:NSButton {
     private let jump = NSImageView()
     private var hoverArea:NSTrackingArea?
     private var hovered = false
+    private var titleEffectStart = ProcessInfo.processInfo.systemUptime
     init(task:BubbleTaskSummary,scale:CGFloat) {
         self.task = task; self.scale = scale
         super.init(frame:.zero)
@@ -103,6 +104,7 @@ private final class BubbleTaskRow:NSButton {
         update(task)
     }
     func update(_ task:BubbleTaskSummary) {
+        if self.task.title != task.title || self.task.active != task.active {titleEffectStart = ProcessInfo.processInfo.systemUptime}
         self.task = task
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         activity.stringValue = task.activityLine ?? ""; activity.isHidden = task.activityLine == nil
@@ -112,7 +114,10 @@ private final class BubbleTaskRow:NSButton {
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
     }
-    func stopMotion() {activity.stop()}
+    func stopMotion() {activity.stop(); restoreTitle()}
+    private func restoreTitle() {
+        name.attributedStringValue = NSAttributedString(string:name.stringValue,attributes:[.font:name.font!,.foregroundColor:NSColor.labelColor])
+    }
     required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
     override func hitTest(_ point:NSPoint) -> NSView? {super.hitTest(point) == nil ? nil : self}
     override func updateTrackingAreas() {
@@ -133,6 +138,9 @@ private final class BubbleTaskRow:NSButton {
     }
     @objc private func openThread() {CodexConnection.openConversation(task.threadID)}
     func refresh(frame index:Int) {
+        if task.active && ProgressTextEffects.enabled && window?.isVisible == true && !isHiddenOrHasHiddenAncestor {
+            name.attributedStringValue = ProgressTextEffects.title(name.stringValue,font:name.font!,appearance:effectiveAppearance,elapsed:ProcessInfo.processInfo.systemUptime-titleEffectStart)
+        } else {restoreTitle()}
         spinner.isHidden = !task.active; stateIcon.isHidden = task.active
         if task.active {spinner.stringValue = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"][index]}
         spinner.textColor = AppAccent.color

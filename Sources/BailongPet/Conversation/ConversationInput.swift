@@ -38,6 +38,7 @@ struct ChatInputState {
     var ownsRunningTask = false
     var sending = false, unconfirmed = false, readOnly = false
     var replyMode:DesktopReply.Mode?
+    var modelSettings:DesktopReply.Settings?
     var modelNote:String?, replyNote:String?
     var desktopReady = false
     var canEdit:Bool {conversation != nil && runningTitle == nil && !sending && !readOnly}

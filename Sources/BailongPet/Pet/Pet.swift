@@ -25,6 +25,7 @@ final class SpriteView: NSView {
     weak var pet: PetController?
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
+    override func shouldDelayWindowOrdering(for event:NSEvent) -> Bool {true}
     override func draw(_ dirtyRect: NSRect) {
         guard let pet, let frame = pet.currentFrame else { return }
         NSGraphicsContext.saveGraphicsState()
@@ -34,10 +35,16 @@ final class SpriteView: NSView {
         NSGraphicsContext.restoreGraphicsState()
         pet.diagnostics?.record(frame.image)
     }
-    override func mouseDown(with event: NSEvent) { pet?.mouseDown(event) }
+    override func mouseDown(with event: NSEvent) {
+        NSApp.preventWindowOrdering()
+        pet?.mouseDown(event)
+    }
     override func mouseDragged(with event: NSEvent) { pet?.mouseDragged(event) }
     override func mouseUp(with event: NSEvent) { pet?.mouseUp(event) }
-    override func rightMouseDown(with event: NSEvent) { pet?.rightMouseDown(event) }
+    override func rightMouseDown(with event: NSEvent) {
+        NSApp.preventWindowOrdering()
+        pet?.rightMouseDown(event)
+    }
     override func rightMouseUp(with event: NSEvent) {}
 }
 
