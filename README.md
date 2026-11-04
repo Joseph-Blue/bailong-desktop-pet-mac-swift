@@ -1,10 +1,8 @@
-# 白龙桌宠Swift
+# 白龙桌宠Swift（MacOS 非官方原生移植版）
 
 **陪你工作，也把 Codex 的任务进展带到桌面。**
 
-基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 进行 Swift + AppKit 原生重写，独立维护。支持桌面互动、Codex 对话、任务气泡与本机历史管理。
-
-本项目作者：**Joseph Blue（约瑟Blue）**。
+基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 进行 Swift + AppKit 原生重写，适配 MacOS，独立维护。支持桌面互动、Codex 对话、任务气泡与本机历史管理。
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
@@ -14,7 +12,7 @@
 
 ## 下载与使用
 
-需要 **Apple Silicon Mac、macOS 14 或更新版本**。Codex 功能需要在本机安装并登录 Codex。
+需要 **Apple Silicon Mac、macOS 14 或更新版本，暂不支持 Intel Mac 机型**。Codex 功能需要在本机安装并登录 Codex。
 
 1. [下载 Apple Silicon 版（ZIP）](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) 并解压。
 2. 将 `白龙桌宠Swift.app` 放到你选择的固定目录，推荐拖入访达的“应用程序”，再从访达打开。
@@ -30,7 +28,7 @@ App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一
 
 ## 特色功能
 
-这里介绍 **0.7.1** 的功能，各版本的更新见 [变更记录](CHANGELOG.md)。截图可点击查看原图；两张聊天窗图为本轮更新，消息气泡图保留自 0.5.0，其余为 0.6.0。
+这里介绍 **0.7.1** 的功能，各版本的更新见 [变更记录](CHANGELOG.md)。
 
 ### 在桌面看进展，也能回看消息
 
@@ -187,4 +185,4 @@ local-assets/
 
 原作参考基线为 **v0.5.1 / b102e73**。动画、音效、图标与软件组件的来源见 [来源与架构](docs/来源与架构.md) 和设置中的“关于 → 开源项目、技术栈与致谢”。
 
-反馈问题请提供应用版本、macOS 版本和复现步骤；Codex 问题另附桌面端版本，并注明桌宠内置对话或 Codex 原会话。[提交 Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
+反馈问题请提供应用版本、macOS 版本和复现步骤；Codex 问题另附桌面端版本，并注明桌宠内置对话或 Codex 原会话（请勿提交隐私或敏感对话内容）。[提交 Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
