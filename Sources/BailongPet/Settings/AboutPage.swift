@@ -129,6 +129,7 @@ final class AboutPageController: NSViewController {
 
     private func aboutText() -> NSAttributedString {
         let text = NSMutableAttributedString(string:"")
+        paragraph("本项目作者：Joseph Blue（约瑟Blue）",to:text)
         paragraph("基于 jingh12312-rgb 的《GPT白龙娘动态桌宠》，进行非官方 macOS 移植及 Swift + AppKit 原生重写，独立维护。",to:text)
         paragraph("使用 Swift + AppKit 构建原生设置、历史对话与任务交互，透明动画由 Apple 系统框架播放。支持自定义台词、消息外观、720×720 原画、运行统计及本机历史管理。",to:text)
         link("本项目公开仓库 · GitHub",url:Self.repositoryURL.absoluteString,to:text)

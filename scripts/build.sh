@@ -44,6 +44,7 @@ cat > "$staging/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
 <key>BailongVersion</key><string>$version</string>
+<key>BailongAuthor</key><string>Joseph Blue</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
@@ -62,6 +63,7 @@ cat > "$helper/Contents/Info.plist" <<PLIST
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>com.bailongpet.appkit.follow-helper</string>
 <key>CFBundleName</key><string>白龙桌宠Swift跟随启动监测器</string>
+<key>BailongAuthor</key><string>Joseph Blue</string>
 <key>CFBundleExecutable</key><string>BailongFollow</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
