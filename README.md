@@ -4,7 +4,7 @@
 
 当前源码版本：**0.7.0-rc.1（候选版）**，基于正式版 **0.6.2** 继续开发。当前重点是稳定性、明确职责和共用组件，避免为两种会话重复修复同一个界面问题。
 
-基于 [jingh12312-rgb 的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC、AVFoundation 与 Core Image；界面支持液态玻璃和系统外观。
+基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC、AVFoundation 与 Core Image；界面支持液态玻璃和系统外观。
 
 本项目作者：**Joseph Blue（约瑟Blue）**。
 

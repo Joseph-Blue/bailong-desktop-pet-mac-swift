@@ -130,12 +130,12 @@ final class AboutPageController: NSViewController {
     private func aboutText() -> NSAttributedString {
         let text = NSMutableAttributedString(string:"")
         paragraph("本项目作者：Joseph Blue（约瑟Blue）",to:text)
-        paragraph("基于 jingh12312-rgb 的《GPT白龙娘动态桌宠》，进行非官方 macOS 移植及 Swift + AppKit 原生重写，独立维护。",to:text)
+        paragraph("基于 jingh12312-rgb（風-隐）的《GPT白龙娘动态桌宠》，进行非官方 macOS 移植及 Swift + AppKit 原生重写，独立维护。",to:text)
         paragraph("使用 Swift + AppKit 构建原生设置、历史对话与任务交互，透明动画由 Apple 系统框架播放。支持自定义台词、消息外观、720×720 原画、运行统计及本机历史管理。",to:text)
         link("本项目公开仓库 · GitHub",url:Self.repositoryURL.absoluteString,to:text)
         paragraph("对话功能连接本机 Codex，支持桌宠内发起任务与观察桌面端任务。更新入口位于设置的“更新”页及应用菜单，通过 GitHub 正式发布检查版本。",to:text)
         link("GitHub 发布与更新说明",url:UpdateChecker.releases.absoluteString,to:text)
-        link("原作：GPT白龙娘动态桌宠 · jingh12312-rgb",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
+        link("原作：GPT白龙娘动态桌宠 · jingh12312-rgb（風-隐）",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
         return text
     }
 
@@ -144,7 +144,7 @@ final class AboutPageController: NSViewController {
         paragraph("感谢原作者及以下项目。本页分别记录原作、素材和软件组件的来源；它们各自适用的许可并不相同。",to:text,color:.secondaryLabelColor)
 
         heading("原作 · GPT白龙娘动态桌宠",to:text)
-        paragraph("作者：jingh12312-rgb。行为与文案参考 v0.5.1 源码。原作 README 声明尚未指定开源许可证。",to:text)
+        paragraph("作者：jingh12312-rgb（風-隐）。行为与文案参考 v0.5.1 源码。原作 README 声明尚未指定开源许可证。",to:text)
         link("原作仓库与说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
 
         heading("角色动画与应用图标",to:text)
