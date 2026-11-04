@@ -11,6 +11,7 @@ final class Turn: Codable {
     var date = Date()
     var completedAt:Date? = nil
     var lastMessageAt:Date? = nil
+    var fileEdits:[FileEditSummary]? = nil
     var owned = true
     var finished = false
     var notices = [String:Double]()
@@ -21,6 +22,7 @@ final class Turn: Codable {
         t.sensitiveInputNotice = sensitiveInputNotice; t.sensitiveQuestionNotice = sensitiveQuestionNotice
         t.model = model; t.effort = effort; t.date = date; t.completedAt = completedAt; t.lastMessageAt = lastMessageAt; t.owned = owned
         t.finished = finished; t.notices = notices
+        t.fileEdits = fileEdits
         return t
     }
 }

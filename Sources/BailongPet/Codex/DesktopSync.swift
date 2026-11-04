@@ -18,10 +18,11 @@ struct PublicSnapshot {
     var hasSensitiveInput = false
     var hasSensitiveQuestion = false
     var agentMessages = [PublicAgentMessage]()
+    var fileEdits = [FileEditSummary]()
     var isLatest = true
     var resultText:String {GeneratedImageLink.appending(agentMessages.filter(\.isImage).map(\.text),to:final)}
     var key: String { actual+":"+turn }
-    var fingerprint: [String] { agentMessages.flatMap {[$0.id,$0.text]} + [status,messages,final,alert,step,error,approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
+    var fingerprint: [String] { fileEdits.flatMap(\.signature) + agentMessages.flatMap {[$0.id,$0.text]} + [status,messages,final,alert,step,error,approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
 }
 
 final class DesktopSync {
@@ -144,12 +145,13 @@ final class DesktopSync {
             if excluded.contains(value.logical) || excluded.contains(value.actual) {continue}
             let key = value.key, active = value.isLatest && activeStatuses.contains(value.status)
             if tracked[key] == nil && !active && (initial || value.started < born) {
-                // 补齐扫描范围内已有历史的图片入口，不把旧任务重新弹出或新增为历史。
+                // 补齐扫描范围内已有历史的图片入口与文件摘要，不把旧任务重新弹出或新增为历史。
                 if chat.store.recordsAutomatically,!chat.store.isReadOnly,
                    let conversation = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical}),
                    let turn = conversation.turns.first(where:{$0.id == value.turn}) {
                     let enriched = GeneratedImageLink.appending(value.agentMessages.filter(\.isImage).map(\.text),to:turn.messages)
                     if enriched != turn.messages {turn.messages = enriched; changed = true}
+                    if turn.fileEdits != value.fileEdits {turn.fileEdits = value.fileEdits; changed = true}
                 }
                 continue
             }
@@ -183,6 +185,7 @@ final class DesktopSync {
                     let time = previous == nil ? (value.completed ?? value.started) : now
                     turn.lastMessageAt = Date(timeIntervalSince1970:time)
                 }
+                turn.fileEdits = value.fileEdits
                 turn.status = value.status; turn.messages = value.messages; turn.final = value.final; turn.steps = value.attention?.isSensitive == true ? "" : value.alert.isEmpty ? value.step : value.alert; turn.error = value.error; changed = true
             }
             if different {
@@ -191,7 +194,7 @@ final class DesktopSync {
                 let incoming = previous == nil && value.started < born ? Array(messages.suffix(1)) : messages
                 for message in incoming where previous?.agentMessages.first(where:{$0.id == message.id})?.text != message.text {
                     chat.pet.say(chat.pet.preferences.statusLine("taskProgressTemplate"),body:message.text,kind:"task",thread:conversation.key,
-                        followsText:false,purpose:.progress,personalizeTitle:false,animateHeading:active,
+                        purpose:.progress,personalizeTitle:false,animateHeading:active,
                         timing:.init(start:Date(timeIntervalSince1970:value.started),key:key,finished:active ? nil : turn.completedAt,status:active ? nil : value.status),messageID:message.id)
                 }
             }
@@ -207,7 +210,7 @@ final class DesktopSync {
                     let questionIDs = value.attention?.questions.map(\.id).joined(separator:"\u{001f}") ?? ""
                     let signature = (value.attention?.kind.rawValue ?? "progress")+":"+value.approvalID+":"+questionIDs+":"+text
                     if (value.attention != nil || value.status.hasPrefix("waiting")) && !text.isEmpty && (turn.notices[signature] == nil || previous?.approval?.details != value.approval?.details || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key, followsText:false, purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key), question:.init(questions:value.attention?.questions ?? [],submit:value.attention?.kind == .answer && value.attention?.isSensitive == false && value.attention?.questions.allSatisfy({!$0.id.isEmpty}) == true ? { [weak self] answers,completion in
+                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key,  purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key), question:.init(questions:value.attention?.questions ?? [],submit:value.attention?.kind == .answer && value.attention?.isSensitive == false && value.attention?.questions.allSatisfy({!$0.id.isEmpty}) == true ? { [weak self] answers,completion in
                             self?.submitAnswers(value,answers:answers,completion:completion)
                         } : nil,skip:{ [weak self] ids in self?.skippedQuestionIDs.formUnion(ids) }),approval:value.approval.map(ApprovalPresentation.init))
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
@@ -215,9 +218,9 @@ final class DesktopSync {
                 }
             } else if ["completed","failed","interrupted"].contains(value.status) {
                 running.remove(key)
-                if !turn.finished {
-                    turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key, followsText:false, resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result")
+                if !turn.finished || (previous != nil && previous?.fileEdits != value.fileEdits) {
+                    if !turn.finished {turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)}
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits)
                 }
             }
         }

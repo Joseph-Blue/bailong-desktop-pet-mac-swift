@@ -36,6 +36,7 @@ final class ActionButton: NSButton {
     }
     private var prominent = false
     private var flexibleLayout = false
+    var extraHorizontalPadding:CGFloat = 0 {didSet {invalidateIntrinsicContentSize()}}
     var semanticColor:NSColor? {didSet {updateAccent()}}
     var keepsAccentWhenInactive = false {didSet {updateAccent()}}
     init(_ title: String, _ callback: @escaping () -> Void) {
@@ -58,7 +59,7 @@ final class ActionButton: NSButton {
         let font = font ?? .systemFont(ofSize:13), ratio = font.pointSize/13
         let text = imagePosition == .imageOnly ? NSSize.zero : (title as NSString).size(withAttributes:[.font:font])
         let gap:CGFloat = image != nil && text.width > 0 ? 6*ratio : 0
-        return NSSize(width:ceil(text.width+iconSide+gap+24*ratio),height:ceil(max(28*ratio,max(text.height,iconSide)+10*ratio)))
+        return NSSize(width:ceil(text.width+iconSide+gap+(24+extraHorizontalPadding)*ratio),height:ceil(max(28*ratio,max(text.height,iconSide)+10*ratio)))
     }
     func emphasize(_ enabled: Bool = true) {prominent = enabled; updateAccent()}
     @objc private func updateAccent() {
@@ -97,15 +98,14 @@ final class ActionButton: NSButton {
     }
     @objc func invokeCallback() { callback() }
 }
-final class BubbleCloseButton: NSButton {
-    var onClose: () -> Void = {}
+class HoverIconButton: NSButton {
     private var tracking: NSTrackingArea?
     private var hovering = false
-    init() {
+    init(symbol:String,label:String) {
         super.init(frame:.zero)
-        title = ""; image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")
+        title = ""; image = NSImage(systemSymbolName:symbol,accessibilityDescription:label)
         imagePosition = .imageOnly; isBordered = false; contentTintColor = .secondaryLabelColor
-        setAccessibilityLabel("关闭气泡"); target = self; action = #selector(closeBubble)
+        setAccessibilityLabel(label)
     }
     required init?(coder: NSCoder) {fatalError()}
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
@@ -123,6 +123,14 @@ final class BubbleCloseButton: NSButton {
         }
         super.draw(dirtyRect)
     }
+}
+final class BubbleCloseButton: HoverIconButton {
+    var onClose:() -> Void = {}
+    init() {
+        super.init(symbol:"xmark",label:"关闭气泡")
+        target = self; action = #selector(closeBubble)
+    }
+    required init?(coder:NSCoder) {fatalError()}
     @objc private func closeBubble() {onClose()}
 }
 final class TopDownView: NSView {override var isFlipped: Bool {true}}

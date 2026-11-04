@@ -57,24 +57,32 @@ final class HistoryConversationCell: NSTableCellView {
     private let titleLabel = FadingTitleField(frame:.zero)
     private let snippetLabel = NSTextField(wrappingLabelWithString:"")
     private let sourceIcon = NSImageView()
+    private let sourceLabel = NSTextField(labelWithString:"")
     private let titleText:String, snippetText:String?, query:String
     init(title: String, external: Bool = false, symbol:String? = nil, snippet:String? = nil, query:String = "") {
         titleText = title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); snippetText = snippet; self.query = query
         super.init(frame:.zero)
+        let kind:ConversationKind = external ? .project : .persona
+        sourceLabel.stringValue = kind.title; sourceLabel.font = .systemFont(ofSize:11)
         snippetLabel.maximumNumberOfLines = 2; snippetLabel.lineBreakMode = .byTruncatingTail
-        sourceIcon.image = NSImage(systemSymbolName:symbol ?? (external ? "arrow.down.doc" : "bubble.left"),accessibilityDescription:symbol == nil ? (external ? "Codex 同步记录" : "桌宠对话") : title)
+        sourceIcon.image = NSImage(systemSymbolName:symbol ?? kind.symbol,accessibilityDescription:symbol == nil ? kind.title : title)
         addSubview(sourceIcon); addSubview(titleLabel); textField = titleLabel; imageView = sourceIcon
         hoverHelp = [title,snippet].compactMap {$0}.joined(separator:"\n")
-        setAccessibilityLabel((symbol == nil ? (external ? "Codex 同步记录，" : "桌宠对话，") : "")+title+(snippet.map {"，"+$0} ?? ""))
+        setAccessibilityLabel((symbol == nil ? kind.title+"，" : "")+title+(snippet.map {"，"+$0} ?? ""))
         sourceIcon.translatesAutoresizingMaskIntoConstraints = false; titleLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             sourceIcon.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),sourceIcon.centerYAnchor.constraint(equalTo:titleLabel.centerYAnchor),sourceIcon.widthAnchor.constraint(equalToConstant:18),sourceIcon.heightAnchor.constraint(equalToConstant:18),
             titleLabel.leadingAnchor.constraint(equalTo:sourceIcon.trailingAnchor,constant:8),titleLabel.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-20)
         ])
+        if symbol == nil {
+            addSubview(sourceLabel); sourceLabel.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([titleLabel.topAnchor.constraint(equalTo:topAnchor,constant:7),sourceLabel.topAnchor.constraint(equalTo:titleLabel.bottomAnchor,constant:3),sourceLabel.leadingAnchor.constraint(equalTo:titleLabel.leadingAnchor),sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo:titleLabel.trailingAnchor)])
+        }
         if snippet != nil {
             addSubview(snippetLabel); snippetLabel.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([titleLabel.topAnchor.constraint(equalTo:topAnchor,constant:7),snippetLabel.topAnchor.constraint(equalTo:titleLabel.bottomAnchor,constant:3),snippetLabel.leadingAnchor.constraint(equalTo:titleLabel.leadingAnchor),snippetLabel.trailingAnchor.constraint(equalTo:titleLabel.trailingAnchor),snippetLabel.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor,constant:-6)])
-        } else {titleLabel.centerYAnchor.constraint(equalTo:centerYAnchor).isActive = true}
+            if symbol != nil {titleLabel.topAnchor.constraint(equalTo:topAnchor,constant:7).isActive = true}
+            NSLayoutConstraint.activate([snippetLabel.topAnchor.constraint(equalTo:symbol == nil ? sourceLabel.bottomAnchor : titleLabel.bottomAnchor,constant:3),snippetLabel.leadingAnchor.constraint(equalTo:titleLabel.leadingAnchor),snippetLabel.trailingAnchor.constraint(equalTo:titleLabel.trailingAnchor),snippetLabel.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor,constant:-6)])
+        } else if symbol != nil {titleLabel.centerYAnchor.constraint(equalTo:centerYAnchor).isActive = true}
         updateColors()
     }
     required init?(coder:NSCoder) {fatalError()}
@@ -93,6 +101,7 @@ final class HistoryConversationCell: NSTableCellView {
         titleLabel.attributedStringValue = styled(titleText,size:13,color:foreground)
         titleLabel.needsLayout = true
         snippetLabel.attributedStringValue = styled(snippetText ?? "",size:11,color:secondary)
+        sourceLabel.textColor = secondary
         sourceIcon.contentTintColor = selected ? .alternateSelectedControlTextColor : AppAccent.color
     }
 }

@@ -2,6 +2,13 @@ import AppKit
 
 // 只由用户点击文件链接触发。使用 Finder 自身字典，不控制 System Events 或请求辅助功能。
 enum FinderFileReveal {
+    // 目录入口沿用历史工具栏行为；不走文件定位脚本，不枚举访达窗口。
+    static func openDirectory(_ directory:URL) {
+        if !NSWorkspace.shared.open(directory) {
+            showError("无法打开任务文件夹",PetFailure(message:"请确认目录仍然存在："+directory.path))
+        }
+    }
+
     private static let queue = DispatchQueue(label:"白龙桌宠 访达定位",qos:.userInitiated)
     // 先取得窗口 ID 列表；直接 repeat ... in Finder windows 会把 item 引用交给 Finder，读到窗口内文件。
     static let script = """

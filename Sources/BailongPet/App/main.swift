@@ -111,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(settings)
         appMenu.addItem(.separator())
         let close = NSMenuItem(title:"关闭当前窗口",action:#selector(closeInterface),keyEquivalent:"q"); close.target = self; appMenu.addItem(close)
+        let closeWindow = NSMenuItem(title:"关闭窗口",action:#selector(closeInterface),keyEquivalent:"w"); closeWindow.target = self; appMenu.addItem(closeWindow)
         let quit = NSMenuItem(title:"退出"+PetPreferences.shared.appName,action:#selector(quitFromMenu),keyEquivalent:""); quit.target = self; quit.tag = 102; quit.image = NSImage(systemSymbolName:"rectangle.portrait.and.arrow.right",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular)); appMenu.addItem(quit)
         let editItem = NSMenuItem(title:"编辑",action:nil,keyEquivalent:""); let edit = NSMenu(title:"编辑"); editItem.submenu = edit; bar.addItem(editItem)
         for (title,action,key) in [("撤销","undo:","z"),("重做","redo:","Z"),("剪切","cut:","x"),("拷贝","copy:","c"),("粘贴","paste:","v"),("全选","selectAll:","a")] {
@@ -146,10 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else {NSApp.abortModal(); modal.orderOut(nil)}
             return
         }
-        let windows = NSApp.orderedWindows + NSApp.windows
-        let candidate = NSApp.keyWindow ?? NSApp.mainWindow ?? windows.first {
-            $0.canBecomeKey && ($0.isVisible || $0.isMiniaturized)
-        }
+        let candidate = [NSApp.keyWindow,NSApp.mainWindow].compactMap {$0}.first {$0.isVisible || $0.isMiniaturized}
+            ?? InterfaceWindows.shared.frontmost
         guard let window = candidate else {return}
         if let sheet = window.attachedSheet ?? (window.isSheet ? window : nil) {
             if let panel = sheet as? NSSavePanel {panel.cancel(nil)}
@@ -160,17 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func reveal() {pet?.reveal()}
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // Dock 召回先沿用当前窗口，不因设置窗口存在就切走历史／更新／统计。
-        if let current = NSApp.keyWindow,current.isVisible {return false}
-        if let visible = NSApp.orderedWindows.first(where:{$0.isVisible && !$0.isMiniaturized && $0.canBecomeKey}) {
-            visible.makeKeyAndOrderFront(nil)
-        }
-        else if let minimized = NSApp.windows.first(where: {$0.isMiniaturized && $0.canBecomeKey}) {
-            minimized.deminiaturize(nil); minimized.makeKeyAndOrderFront(nil)
-        }
-        else if pet?.preferences.bool("showDiagnostics") == true { pet?.showDiagnostics() }
-        else if RecoveryWindow.hasIssues {RecoveryWindow.revealAll()}
-        else { chat?.showHistory(nil) }
+        // 只召回尚未关闭的普通窗口，不因控制器或历史记录仍存在而打开窗口。
+        InterfaceWindows.shared.recall()
         return false
     }
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {

@@ -1,0 +1,342 @@
+import AppKit
+
+// 设置表单的控件、编辑回调及定位锚点；不拥有窗口导航、搜索或外部服务。
+final class SettingsForm:NSObject,NSTextFieldDelegate {
+    let content:NSStackView, preferences:PetPreferences
+    private unowned let window:NSWindow
+    private var actions = [SettingsAction]()
+    private var textActions = [ObjectIdentifier:(String)->Void]()
+    private var textEndActions = [ObjectIdentifier:(String)->Void]()
+    var identityPreview:NSTextField?
+    private let templateEditor = SettingsTemplateEditor()
+    private weak var automaticUpdateSwitch:NSSwitch?, diagnosticsSwitch:NSSwitch?
+    private var bufferControls = [NSControl]()
+    private weak var bufferRow:NSView?
+    private(set) var searchAnchors = [String:NSView]()
+    private var section:SettingsSection = .general
+    var petSymbol:() -> NSImage? = {nil}
+    var historyRecoveryReason:() -> String? = {nil}
+    init(content:NSStackView,preferences:PetPreferences,window:NSWindow) {
+        self.content = content; self.preferences = preferences; self.window = window
+        super.init()
+        templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
+    }
+    func reset(section:SettingsSection) {
+        self.section = section
+        searchAnchors.removeAll()
+        for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
+        actions.removeAll(); textActions.removeAll(); textEndActions.removeAll()
+        bufferControls.removeAll(); bufferRow = nil; identityPreview = nil
+    }
+    func fieldEditor(for client:Any?) -> Any? {
+        guard let field = client as? SettingsTemplateField else {return nil}
+        templateEditor.allowsTokens = field.allowsTokens; return templateEditor
+    }
+    func refreshAvailability() {
+        diagnosticsSwitch?.state = preferences.bool("showDiagnostics") ? .on : .off
+        automaticUpdateSwitch?.state = preferences.bool("automaticallyCheckUpdates") ? .on : .off
+        updateBufferAvailability()
+    }
+    func controlTextDidBeginEditing(_ notification:Notification) {
+        (notification.object as? SettingsTemplateField)?.refreshHighlight()
+    }
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else {return}
+        if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() {return}
+        textActions[ObjectIdentifier(field)]?(field.stringValue)
+        (field as? SettingsTemplateField)?.refreshHighlight()
+        identityPreview?.stringValue = preferences.statusLine("greetingTemplate")
+    }
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        textEndActions[ObjectIdentifier(field)]?(field.stringValue)
+        // 等原生 field editor 退出后，为未聚焦的输入框恢复相同高亮。
+        DispatchQueue.main.async { [weak field] in (field as? SettingsTemplateField)?.refreshHighlight() }
+    }
+    func attach(_ control: NSControl, _ callback: @escaping (NSControl)->Void) {
+        let action = SettingsAction(callback); actions.append(action); control.target = action; control.action = #selector(SettingsAction.invoke(_:))
+    }
+    func fill(_ view: NSView, in stack: NSStackView) {view.translatesAutoresizingMaskIntoConstraints = false; stack.addArrangedSubview(view); view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
+    func note(_ text: String) -> NSTextField {
+        let field = label(text)
+        field.font = .systemFont(ofSize:11); field.textColor = .secondaryLabelColor
+        field.identifier = NSUserInterfaceItemIdentifier("settings-explanation")
+        return field
+    }
+    func group(_ title: String, _ rows: [NSView], action:NSView? = nil) {
+        let section = NSStackView(); section.orientation = .vertical; section.alignment = .leading; section.spacing = 10
+        let heading = label(title,bold:true); heading.font = .systemFont(ofSize:13,weight:.semibold)
+        if let action {fill(alignedRow(leading:heading,control:action),in:section)} else {fill(heading,in:section)}
+        let surface = SettingsSectionBackground(), items = NSStackView()
+        items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
+        surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)])
+        for (index,row) in rows.enumerated() {
+            if index > 0 && row.identifier?.rawValue == "settings-explanation" {items.setCustomSpacing(4,after:rows[index-1])}
+            if index > 0 && row.identifier?.rawValue != "settings-explanation" {let line = NSBox(); line.boxType = .separator; fill(line,in:items)}
+            fill(row,in:items)
+        }
+        fill(surface,in:section); fill(section,in:content)
+        searchAnchors[title] = section
+        for row in rows {
+            if let key = row.identifier?.rawValue,key.hasPrefix("setting:") {
+                searchAnchors[title+"/"+key.dropFirst("setting:".count)] = row
+            }
+        }
+    }
+    func searchable(_ view:NSView,title:String) -> NSView {
+        view.identifier = .init("setting:"+title); return view
+    }
+    func row(_ title: String, detail: String? = nil, control: NSView) -> NSView {
+        let texts = NSStackView(); texts.orientation = .vertical; texts.alignment = .leading; texts.spacing = 4
+        fill(label(title),in:texts)
+        if let detail {let explanation = label(detail); explanation.font = .systemFont(ofSize:11); explanation.textColor = .secondaryLabelColor; fill(explanation,in:texts)}
+        return searchable(alignedRow(leading:texts,control:control),title:title)
+    }
+    func alignedRow(leading: NSView, control: NSView) -> NSView {
+        // 显式固定左右两端；多余宽度留给左侧说明，不拉长开关或按钮。
+        let row = NSView()
+        compactControl(control)
+        if let field = control as? NSTextField, !field.isEditable {field.alignment = .right}
+        for view in [leading,control] {view.translatesAutoresizingMaskIntoConstraints = false; row.addSubview(view)}
+        leading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        control.setContentHuggingPriority(.defaultHigh,for:.horizontal)
+        control.setContentCompressionResistancePriority(.defaultHigh,for:.horizontal)
+        let compactHeight = row.heightAnchor.constraint(equalToConstant:32); compactHeight.priority = .defaultLow
+        NSLayoutConstraint.activate([
+            leading.leadingAnchor.constraint(equalTo:row.leadingAnchor),
+            leading.trailingAnchor.constraint(equalTo:control.leadingAnchor,constant:-24),
+            leading.centerYAnchor.constraint(equalTo:row.centerYAnchor),
+            leading.topAnchor.constraint(greaterThanOrEqualTo:row.topAnchor),
+            leading.bottomAnchor.constraint(lessThanOrEqualTo:row.bottomAnchor),
+            control.trailingAnchor.constraint(equalTo:row.trailingAnchor),
+            control.centerYAnchor.constraint(equalTo:row.centerYAnchor),
+            control.topAnchor.constraint(greaterThanOrEqualTo:row.topAnchor),
+            control.bottomAnchor.constraint(lessThanOrEqualTo:row.bottomAnchor),
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant:32),compactHeight
+        ])
+        return row
+    }
+    private func compactControl(_ view: NSView) {
+        if let stack = view as? NSStackView {
+            // 普通 contentHugging 不控制 NSStackView 的 gravity 区域间距。
+            // fill 让末个控件贴住操作区尾端，内部间距和控件都保持自然宽度。
+            stack.distribution = .fill
+            stack.setHuggingPriority(.defaultHigh,for:.horizontal)
+            stack.edgeInsets = NSEdgeInsets(top:0,left:0,bottom:0,right:0)
+            for child in stack.arrangedSubviews {compactControl(child)}
+            // 操作组不承担整行的剩余空间；已有明确宽度的滑块组沿用该宽度。
+            if !stack.constraints.contains(where: {$0.isActive && $0.firstAttribute == .width && $0.secondItem == nil && $0.relation == .equal}) {
+                stack.widthAnchor.constraint(equalToConstant:stack.fittingSize.width.rounded(.up)).isActive = true
+            }
+        }
+    }
+    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true) -> NSView {
+        let control = AccentSwitch(); control.state = enabled && preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
+        if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
+        if key == "showDiagnostics" { diagnosticsSwitch = control }
+        if key == "automaticallyCheckUpdates" { automaticUpdateSwitch = control }
+        attach(control) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:key) }
+        return row(title,detail:detail,control:control)
+    }
+    func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
+        let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
+        if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
+        if identifier == "animationQuality" {
+            let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.tabStops = [NSTextTab(textAlignment:.left,location:64)]
+            for item in menu.itemArray {
+                item.attributedTitle = NSAttributedString(string:item.title,attributes:[.font:font,.paragraphStyle:paragraph])
+            }
+        }
+        menu.widthAnchor.constraint(equalToConstant:width).isActive = true; menu.setAccessibilityLabel(title)
+        attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
+        return row(title,detail:detail,control:menu)
+    }
+    func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil) -> NSView {
+        let width:CGFloat
+        if key == "sendShortcut" {
+            let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
+            width = max(260,(options.map {($0.1 as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)+40)
+        } else {width = ["singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190}
+        return popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail) { [weak self] value in
+            self?.preferences.set(value,for:key)
+            self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
+        }
+    }
+    func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, changed: @escaping (String)->Void) -> NSView {
+        let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
+        let field: NSTextField = section == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
+        let templateField = field as? SettingsTemplateField
+        templateField?.allowsTokens = allowsTokens
+        field.placeholderString = placeholder; field.delegate = self
+        templateField?.refreshHighlight(); field.setAccessibilityLabel(title)
+        let count = NSTextField(labelWithString:"")
+        count.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); count.alignment = .right
+        count.widthAnchor.constraint(equalToConstant:54).isActive = true
+        let clear = NSButton(image:NSImage(systemSymbolName:"xmark.circle.fill",accessibilityDescription:"清空"+title)!,target:nil,action:nil)
+        clear.isBordered = false; clear.contentTintColor = .secondaryLabelColor
+        clear.setAccessibilityLabel("清空"+title)
+        clear.widthAnchor.constraint(equalToConstant:20).isActive = true
+        clear.heightAnchor.constraint(equalToConstant:24).isActive = true
+        let updateCount: (String)->Void = {value in
+            let length = allowsTokens ? TemplateSyntax.count(value) : value.count
+            count.stringValue = "\(length)/\(limit)"
+            count.textColor = length >= limit ? .systemRed : .secondaryLabelColor
+            count.setAccessibilityLabel("已输入 \(length) 字，上限 \(limit) 字")
+            clear.isEnabled = !value.isEmpty
+        }
+        updateCount(value)
+        textActions[ObjectIdentifier(field)] = {text in
+            let bounded = allowsTokens ? TemplateSyntax.bounded(text,limit:limit) : String(text.prefix(limit))
+            if bounded != text {
+                if let editor = field.currentEditor() as? NSTextView {
+                    let selection = editor.selectedRange(); editor.string = bounded
+                    editor.setSelectedRange(NSRange(location:min(selection.location,(bounded as NSString).length),length:0))
+                }
+                field.stringValue = bounded
+            }
+            updateCount(bounded); changed(bounded)
+        }
+        if let emptyFallback {
+            textEndActions[ObjectIdentifier(field)] = { [weak self,weak field] text in
+                guard text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,let self,let field else {return}
+                field.stringValue = emptyFallback
+                self.textActions[ObjectIdentifier(field)]?(emptyFallback)
+                (field as? SettingsTemplateField)?.refreshHighlight()
+                self.identityPreview?.stringValue = self.preferences.statusLine("greetingTemplate")
+            }
+        }
+        attach(clear) { [weak self,weak field] _ in
+            guard let self,let field else {return}
+            self.window.makeFirstResponder(field)
+            let replacement = emptyFallback ?? ""
+            if let editor = field.currentEditor() as? NSTextView {
+                let all = NSRange(location:0,length:(editor.string as NSString).length)
+                if editor.shouldChangeText(in:all,replacementString:replacement) {
+                    editor.replaceCharacters(in:all,with:replacement); editor.didChangeText()
+                    editor.setSelectedRange(NSRange(location:0,length:(replacement as NSString).length))
+                }
+            } else {
+                field.stringValue = replacement; self.textActions[ObjectIdentifier(field)]?(replacement); (field as? SettingsTemplateField)?.refreshHighlight()
+            }
+        }
+        let controls = NSStackView(views:[field,clear,count]); controls.orientation = .horizontal; controls.spacing = 6; controls.alignment = .centerY; controls.distribution = .fill
+        field.setContentHuggingPriority(.defaultLow,for:.horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        if limit >= 120 {
+            // 台词标签在上，输入横向铺满；不再给短标签留出大半行空白。
+            field.usesSingleLineMode = false; field.maximumNumberOfLines = 0
+            field.cell?.wraps = true; field.cell?.isScrollable = false
+            field.heightAnchor.constraint(equalToConstant:52).isActive = true
+            let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = 8
+            fill(label(title),in:row); fill(controls,in:row)
+            return searchable(row,title:title)
+        }
+        field.widthAnchor.constraint(equalToConstant:240).isActive = true
+        let caption = identityLabel(title,token:tokenHint)
+        let leading = NSStackView(); leading.orientation = .horizontal; leading.alignment = .centerY; leading.spacing = 6
+        if let icon {
+            let image = NSImageView(image:icon); image.contentTintColor = .secondaryLabelColor
+            image.widthAnchor.constraint(equalToConstant:18).isActive = true; image.heightAnchor.constraint(equalToConstant:18).isActive = true
+            leading.addArrangedSubview(image)
+        }
+        leading.addArrangedSubview(caption)
+        return searchable(alignedRow(leading:leading,control:controls),title:title)
+    }
+    private func identityLabel(_ title:String,token:String?) -> NSTextField {
+        let caption = label(title)
+        if let token {
+            let value = NSMutableAttributedString(string:title+"  "+token,attributes:[.font:NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor])
+            SettingsTemplateTokens.ranges(in:value.string) {range,color in
+                value.addAttributes([.font:NSFont.systemFont(ofSize:11),.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],range:range)
+            }
+            caption.attributedStringValue = value
+        }
+        return caption
+    }
+    func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20) -> NSView {
+        let icon:NSImage?
+        switch key {
+        case "ownerName": icon = NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)
+        case "petName": icon = petSymbol()
+        case "customAddress": icon = NSImage(systemSymbolName:"bubble.left",accessibilityDescription:nil)
+        default: icon = nil
+        }
+        let token = ["ownerName":"{用户名}","petName":"{桌宠名}","customAddress":"{特定称呼}"][key]
+        let fallback = ["ownerName":"主人","petName":"白龙娘"][key]
+            ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
+        return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token) { [weak self] value in self?.preferences.set(value,for:key) }
+    }
+    func slider(_ title: String, _ key: String, range: ClosedRange<Double>, step: Double = 1, suffix: String, detail: String? = nil) -> NSView {
+        let slider = NSSlider(value:preferences.number(key),minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
+        slider.isContinuous = true; slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
+        if key == "petPercent" || key == "bubblePercent" {slider.numberOfTickMarks = Int((range.upperBound-range.lowerBound)/25)+1; slider.tickMarkPosition = .below}
+        slider.setAccessibilityLabel(title)
+        let number = NSTextField(string:""); number.alignment = .right; number.widthAnchor.constraint(equalToConstant:54).isActive = true; number.setAccessibilityLabel(title+suffix); (number.cell as? NSTextFieldCell)?.sendsActionOnEndEditing = true
+        let formatter = NumberFormatter(); formatter.minimum = NSNumber(value:range.lowerBound); formatter.maximum = NSNumber(value:range.upperBound); formatter.maximumFractionDigits = step < 1 ? 2 : 0; formatter.usesGroupingSeparator = false; number.formatter = formatter
+        func format(_ value: Double) {number.doubleValue = value}
+        format(slider.doubleValue)
+        attach(slider) { [weak self] sender in
+            let value = ((sender.doubleValue/step).rounded()*step); format(value); self?.preferences.set(value,for:key)
+        }
+        attach(number) { [weak self] sender in let value = max(range.lowerBound,min(range.upperBound,(sender.doubleValue/step).rounded()*step)); slider.doubleValue = value; format(value); self?.preferences.set(value,for:key) }
+        let unit = label(suffix); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
+        unit.widthAnchor.constraint(equalToConstant:22).isActive = true
+        let controls = NSStackView(views:[number,unit,slider]); controls.spacing = 8; controls.alignment = .centerY
+        controls.widthAnchor.constraint(equalToConstant:272).isActive = true
+        return row(title,detail:detail,control:controls)
+    }
+    func bufferFrames() -> NSView {
+        let slider = NSSlider(value: Double(preferences.animationBufferFrames), minValue: 6, maxValue: 240, target: nil, action: nil)
+        slider.isContinuous = false; slider.trackFillColor = AppAccent.color
+        slider.numberOfTickMarks = 7; slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false
+        slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        slider.setAccessibilityLabel("动画缓冲帧数")
+        let minimum = label("6 帧"), maximum = label("240 帧")
+        for label in [minimum, maximum] { label.font = .systemFont(ofSize: 10); label.textColor = .secondaryLabelColor }
+        let limits = NSView()
+        for label in [minimum, maximum] { limits.addSubview(label); label.translatesAutoresizingMaskIntoConstraints = false }
+        NSLayoutConstraint.activate([
+            limits.widthAnchor.constraint(equalToConstant: 180), limits.heightAnchor.constraint(equalToConstant: 14),
+            minimum.leadingAnchor.constraint(equalTo: limits.leadingAnchor), minimum.centerYAnchor.constraint(equalTo: limits.centerYAnchor),
+            maximum.trailingAnchor.constraint(equalTo: limits.trailingAnchor), maximum.centerYAnchor.constraint(equalTo: limits.centerYAnchor)
+        ])
+        let track = NSStackView(views: [slider, limits]); track.orientation = .vertical; track.spacing = 0
+        let number = NSTextField(string: String(preferences.animationBufferFrames))
+        number.alignment = .right; number.widthAnchor.constraint(equalToConstant: 54).isActive = true
+        number.setAccessibilityLabel("输入动画缓冲帧数"); number.delegate = self
+        // 不用 formatter 阻止退出非法输入；提交时统一回到默认值。
+        let commit: (String) -> Void = { [weak self] text in
+            guard let self else { return }
+            let parsed = Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            let value = parsed.flatMap { (6...240).contains($0) ? $0 : nil } ?? (PetPreferences.defaults["animationBufferFrames"] as! Int)
+            number.integerValue = value; slider.integerValue = value
+            if self.preferences.animationBufferFrames != value { self.preferences.set(value, for: "animationBufferFrames") }
+        }
+        textEndActions[ObjectIdentifier(number)] = commit
+        attach(number) { sender in commit(sender.stringValue) }
+        attach(slider) { sender in commit(String(Int(sender.doubleValue.rounded()))) }
+        let unit = label("帧"); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
+        unit.widthAnchor.constraint(equalToConstant:22).isActive = true
+        let controls = NSStackView(views: [number, unit, track]); controls.orientation = .horizontal
+        controls.widthAnchor.constraint(equalToConstant:272).isActive = true
+        controls.alignment = .centerY; controls.spacing = 8
+        let result = row("动画缓冲帧数", control: controls)
+        bufferControls = [slider, number]; bufferRow = result; updateBufferAvailability()
+        return result
+    }
+    func time(_ title: String, _ key: String) -> NSView {
+        let picker = NSDatePicker(); picker.datePickerStyle = .textFieldAndStepper; picker.datePickerElements = [.hourMinute]; picker.locale = Locale(identifier:"zh_CN")
+        let minutes = Int(preferences.number(key)); picker.dateValue = Calendar.current.date(from:DateComponents(year:2026,month:1,day:1,hour:minutes/60,minute:minutes%60))!
+        picker.setAccessibilityLabel(title)
+        attach(picker) { [weak self] sender in let c = Calendar.current.dateComponents([.hour,.minute],from:(sender as! NSDatePicker).dateValue); self?.preferences.set((c.hour ?? 0)*60+(c.minute ?? 0),for:key) }
+        return row(title,control:picker)
+    }
+    func updateBufferAvailability() {
+        let enabled = !preferences.bool("preloadWholeAnimation")
+        for control in bufferControls { control.isEnabled = enabled }
+        bufferRow?.alphaValue = enabled ? 1 : 0.45
+    }
+}

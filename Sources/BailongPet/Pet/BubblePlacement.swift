@@ -5,7 +5,7 @@ import CoreGraphics
 enum BubblePlacement {
     enum Side:CaseIterable {case left,right,above,below}
     struct Result {let frame:CGRect; let side:Side}
-    static func resolve(size:CGSize,pet:CGRect,screen:CGRect,preferred:[Side],previous:Side?) -> Result {
+    static func resolve(size:CGSize,pet:CGRect,screen:CGRect,preferred:[Side],previous:Side?,avoiding:[CGRect] = []) -> Result {
         let area = screen.insetBy(dx:8,dy:8)
         let size = CGSize(width:min(size.width,area.width),height:min(size.height,area.height))
         let gap:CGFloat = 10
@@ -25,7 +25,10 @@ enum BubblePlacement {
             origin.x = max(area.minX,min(origin.x,area.maxX-size.width))
             origin.y = max(area.minY,min(origin.y,area.maxY-size.height))
             let frame = CGRect(origin:origin,size:size), intersection = frame.intersection(avoid)
-            let overlap = intersection.isNull ? 0 : intersection.width*intersection.height
+            let overlap = (intersection.isNull ? 0 : intersection.width*intersection.height) + avoiding.reduce(CGFloat(0)) {
+                let intersection = frame.intersection($1.insetBy(dx:-4,dy:-4))
+                return $0 + (intersection.isNull ? 0 : intersection.width*intersection.height)
+            }
             let result = Result(frame:frame,side:side)
             if overlap == 0 {return result}
             if overlap < bestOverlap {best = result; bestOverlap = overlap}

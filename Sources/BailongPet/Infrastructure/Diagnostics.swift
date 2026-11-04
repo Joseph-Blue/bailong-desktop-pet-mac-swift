@@ -155,9 +155,10 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let container = NSView(); window.contentView = container
         container.addSubview(viewport); viewport.translatesAutoresizingMaskIntoConstraints = false
         let closeButton = ActionButton("关闭") { [weak self] in self?.window.performClose(nil) }
-        let copyButton = ActionButton("拷贝信息") { [weak self] in self?.copyInformation() }
+        let copyButton = ActionButton("拷贝信息") {}
         copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "拷贝")
         copyButton.imagePosition = .imageLeading; copyButton.emphasize()
+        CopyFeedback.attach(to:copyButton) { [weak self] in self?.copyInformation() }
         let actions = NSStackView(views: [closeButton, copyButton]); actions.orientation = .horizontal; actions.spacing = 8
         container.addSubview(actions); actions.translatesAutoresizingMaskIntoConstraints = false
         let pinIcon = NSImageView(image: NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "置顶")!)
@@ -220,7 +221,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         pet?.preferences.set(pinSwitch.state == .on, for: "diagnosticsPinned")
     }
     func show(takeFocus: Bool = true) {
-        NSApp.setActivationPolicy(.regular)
+        InterfaceWindows.shared.opened(window)
         if timer == nil {
             sampledAt = ProcessInfo.processInfo.systemUptime; frames = PlaybackStatistics(time: sampledAt)
             previous = ProcessStatistics.read(); swapinRate = nil; graph.values.removeAll(); graph.needsDisplay = true
@@ -239,7 +240,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     }
     func stop() {
         timer?.invalidate(); timer = nil; previousGPU = nil
-        window.orderOut(nil); NSApp.removeWindowsItem(window)
+        window.orderOut(nil); InterfaceWindows.shared.closed(window)
     }
     func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool { false }
     func windowDidEndLiveResize(_ notification: Notification) { fitToContent() }
@@ -341,11 +342,10 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         connections.stringValue = "桌面端  \(desktopText)\n只读同步  \(pet.syncDiagnostics())\nCLI  \(pet.cliDiagnostics())"
         fitToContent()
     }
-    private func copyInformation() {
+    private func copyInformation() -> String {
         let text = ([window.title, "FPS \(fpsValue.stringValue) · HI \(highValue.stringValue) · LO \(lowValue.stringValue)",
                      playback.stringValue, resources.stringValue, identity.stringValue, connections.stringValue]).joined(separator: "\n\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        return text
     }
     deinit { timer?.invalidate(); NotificationCenter.default.removeObserver(self) }
 }

@@ -25,6 +25,7 @@ final class SpriteView: NSView {
     weak var pet: PetController?
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
+    override func shouldDelayWindowOrdering(for event:NSEvent) -> Bool {true}
     override func draw(_ dirtyRect: NSRect) {
         guard let pet, let frame = pet.currentFrame else { return }
         NSGraphicsContext.saveGraphicsState()
@@ -34,10 +35,16 @@ final class SpriteView: NSView {
         NSGraphicsContext.restoreGraphicsState()
         pet.diagnostics?.record(frame.image)
     }
-    override func mouseDown(with event: NSEvent) { pet?.mouseDown(event) }
+    override func mouseDown(with event: NSEvent) {
+        NSApp.preventWindowOrdering()
+        pet?.mouseDown(event)
+    }
     override func mouseDragged(with event: NSEvent) { pet?.mouseDragged(event) }
     override func mouseUp(with event: NSEvent) { pet?.mouseUp(event) }
-    override func rightMouseDown(with event: NSEvent) { pet?.rightMouseDown(event) }
+    override func rightMouseDown(with event: NSEvent) {
+        NSApp.preventWindowOrdering()
+        pet?.rightMouseDown(event)
+    }
     override func rightMouseUp(with event: NSEvent) {}
 }
 
@@ -90,6 +97,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var manualHidden = false, fullscreenHidden = false, sleeping = false
     var menuOpen = false, settingsOpen = false
     var composerVisible = false {didSet {if composerVisible {progressBubble.hide()}}}
+    var composerFrame:() -> CGRect? = {nil}
     private var greetingPending = true
     var pauseTime: Double?
     var press: CGPoint?, pressOrigin = CGPoint.zero
@@ -119,7 +127,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var top: Double { NSScreen.screens[0].frame.maxY }
     var position: CGPoint { CGPoint(x: window.frame.minX, y: top - window.frame.maxY) }
     func area(_ screen: NSScreen) -> CGRect { let r = screen.visibleFrame; return CGRect(x: r.minX, y: top - r.maxY, width: r.width, height: r.height) }
-    func move(_ p: CGPoint) { window.setFrameOrigin(CGPoint(x: p.x, y: top - p.y - size)); placeBubble(); onGeometry() }
+    func move(_ p: CGPoint) { window.setFrameOrigin(CGPoint(x: p.x, y: top - p.y - size)); placeBubble() }
     func constrained(_ p: CGPoint, screen: NSScreen) -> CGPoint {
         let a = area(screen); return CGPoint(x: max(a.minX,min(p.x,a.maxX-size)), y: max(a.minY,min(p.y,a.maxY-size)))
     }
@@ -310,7 +318,7 @@ final class PetController: NSObject, NSMenuDelegate {
             updateMovement(at:(now-began)*playbackRate)
         }
         if wasDockAnimating {
-            view.needsDisplay = true; placeBubble(); onGeometry()
+            view.needsDisplay = true; placeBubble()
         }
     }
     private func updateMovement(at elapsed: Double) {
@@ -416,7 +424,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, followsText: Bool = true, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = []) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -434,8 +442,8 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.onCardLayout = { [weak self] in self?.placeBubble() }
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
-                followsText:followsText,resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,showsTaskOverview:taskOverview),select:selectCard)
+                resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview),select:selectCard)
         }
         placeBubble()
     }
@@ -458,7 +466,10 @@ final class PetController: NSObject, NSMenuDelegate {
         progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing); placeBubble()
     }
     func placeBubble() {
-        if bubble.visible {bubble.place(near:visiblePetFrame,screen:screen,dock:dock)}
+        // 输入位置先确定；后台到达的消息主动避让，不移动正在编辑的窗口。
+        onGeometry()
+        let obstacles = composerVisible ? [composerFrame()].compactMap {$0} : []
+        if bubble.visible {bubble.place(near:visiblePetFrame,screen:screen,dock:dock,avoiding:obstacles)}
         if progressBubble.visible {
             if bubble.blocksProgressToast || composerVisible {progressBubble.hide(); return}
             progressBubble.place(near:visiblePetFrame,screen:screen,dock:dock)
@@ -585,51 +596,7 @@ final class PetController: NSObject, NSMenuDelegate {
         tracking.invalidate()
         if doubleClicked {performGesture(preferences.string("rightDoubleClickAction"))}
     }
-    func makeMenu() -> NSMenu {
-        let menu = NSMenu(); menu.delegate = self
-        func submenu(_ title:String,symbol:String) -> NSMenu {
-            let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
-            item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
-            item.image?.isTemplate = true
-            let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
-        }
-        menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.onComposer() })
-        menu.addItem(MenuAction("历史会话",symbol:"book.closed") { [weak self] in self?.onHistory(nil) })
-        menu.addItem(MenuAction("查询额度",symbol:"gauge.with.dots.needle.50percent") { [weak self] in self?.soundOnce(); self?.onQuota() })
-        let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
-        codex.image = AppIcons.openAI?.copy() as? NSImage
-        codex.image?.size = NSSize(width:16,height:16)
-        menu.addItem(codex)
-        menu.addItem(.separator())
-        menu.addItem(MenuAction("随机动画",symbol:"shuffle") { [weak self] in self?.randomAnimation() })
-        let animations = submenu("播放动作",symbol:"play.rectangle")
-        for (name,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations)] {
-            let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
-            for clip in clips {group.addItem(MenuAction(clip.title) { [weak self] in self?.preview(clip) })}
-            item.submenu = group; animations.addItem(item)
-        }
-        let switches = submenu("快捷开关",symbol:"switch.2")
-        switches.addItem(MenuAction("自主移动",checked:autoMove) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoMove,for:"autoMove") })
-        switches.addItem(MenuAction("播放音效",checked:soundEnabled) { [weak self] in guard let self else{return}; self.preferences.set(!self.soundEnabled,for:"soundEnabled") })
-        switches.addItem(MenuAction("任务气泡提醒",checked:taskBubbles) { [weak self] in guard let self else{return}; self.preferences.set(!self.taskBubbles,for:"taskBubbles") })
-        switches.addItem(MenuAction("全屏时自动隐藏",checked:autoFullscreen) { [weak self] in guard let self else{return}; self.preferences.set(!self.autoFullscreen,for:"autoFullscreen") })
-        switches.addItem(.separator())
-        switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak self] in self?.showSettings(section:.general) })
-        menu.addItem(.separator())
-        menu.addItem(MenuAction("更改桌宠、气泡与文字大小…",symbol:"textformat.size") { [weak self] in self?.showSettings(section:.appearance) })
-        menu.addItem(MenuAction("更改桌宠称呼和台词…",symbol:"person.text.rectangle") { [weak self] in self?.showSettings(section:.identity) })
-        menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.showSettings() })
-        let tools = submenu("工具与帮助",symbol:"questionmark.circle")
-        tools.addItem(MenuAction("任务同步状态…",symbol:"arrow.triangle.2.circlepath") { [weak self] in guard let self else{return}; let a = NSAlert(); a.messageText = "Codex 任务同步状态"; a.informativeText = self.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:"任务同步"); a.addButton(withTitle:"知道了"); a.applyAccent(); a.runModal() })
-        tools.addItem(MenuAction("性能统计…",symbol:"chart.xyaxis.line") { [weak self] in self?.showDiagnostics() })
-        tools.addItem(.separator())
-        tools.addItem(MenuAction("检查更新…",symbol:"arrow.down.circle") {UpdateWindow.show()})
-        tools.addItem(MenuAction("关于"+preferences.appName+"…",symbol:"info.circle") { [weak self] in self?.showSettings(section:.about) })
-        menu.addItem(.separator())
-        menu.addItem(MenuAction("退出"+preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak self] in self?.onQuit() })
-        menu.showProvidedImages()
-        return menu
-    }
+    func makeMenu() -> NSMenu {PetMenu.make(for:self,random:{ [weak self] in self?.randomAnimation() })}
     func savePosition() {
         guard preferences.bool("rememberPosition") else {return}
         defaults.set(window.frame.minX,forKey:"x"); defaults.set(window.frame.minY,forKey:"y")
@@ -690,7 +657,6 @@ final class PetController: NSObject, NSMenuDelegate {
         if keys.contains("accentStyle") || keys.contains("accentRGB") {NotificationCenter.default.post(name:AppAccent.didChange,object:nil)}
         if !preferences.allows(bubble.purpose) {bubble.hide()}; if !preferences.allows(.progress) {progressBubble.hide()}
         if !Set(keys).isDisjoint(with:["bubbleCardLimit","recentTaskCount","showTaskOverview"]) {bubble.refreshCardPreferences()}
-        if keys.contains("typingEffect") && !preferences.bool("typingEffect") {bubble.finishTyping()}
         if !Set(keys).isDisjoint(with:["interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime"]) {bubble.refreshDuration()}
         interaction(); checkDesktop(); refreshMenu(); onPreferencesChanged()
     }

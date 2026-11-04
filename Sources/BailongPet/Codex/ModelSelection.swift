@@ -9,14 +9,28 @@ struct ChatModel: Decodable {
 final class ChatModelSettings {
     static let changed = Notification.Name("BailongChatModelChanged")
     private let defaults: UserDefaults
-    init(defaults: UserDefaults = SettingsStorage.defaults) {self.defaults = defaults}
+    init(defaults: UserDefaults = SettingsStorage.defaults) {
+        self.defaults = defaults
+        selectedModel = defaults.string(forKey:"petChatModel"); selectedEffort = defaults.string(forKey:"petChatEffort")
+    }
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
     private(set) var loading = false
     private(set) var error: String?
     var onLoad: (Bool) -> Void = {_ in}
-    var selectedModel: String? {defaults.string(forKey:"petChatModel")}
-    var selectedEffort: String? {defaults.string(forKey:"petChatEffort")}
+    private(set) var selectedModel:String?, selectedEffort:String?
+    private var selectionKey:String?
+    private var selections = [String:(model:String?,effort:String?)]()
+    func activate(_ key:String) {
+        guard selectionKey != key else {return}
+        if let selectionKey {selections[selectionKey] = (selectedModel,selectedEffort)}
+        selectionKey = key
+        let choice = selections[key] ?? (defaults.string(forKey:"petChatModel"),defaults.string(forKey:"petChatEffort"))
+        selectedModel = choice.0; selectedEffort = choice.1
+        notify()
+    }
+    func clearSelections() {selections.removeAll(); selectionKey = nil}
+    func forget(_ key:String) {selections.removeValue(forKey:key)}
     var currentModelID: String? {selectedModel ?? configuredModel ?? models.first(where:{$0.isDefault})?.model}
     var currentModel: ChatModel? {models.first(where:{$0.model == currentModelID})}
     var supportedEfforts: [ChatModel.Effort] {currentModel?.supportedReasoningEfforts ?? []}
@@ -32,7 +46,6 @@ final class ChatModelSettings {
         ["none":"无","minimal":"极低","low":"轻度","medium":"中","high":"高","xhigh":"极高","max":"Max","ultra":"Ultra","persistent":"持续"][raw] ?? raw
     }
     var effortTitle: String {currentEffort.map(Self.effortName) ?? "不可调"}
-    var showsAstraRedWarning: Bool {currentModelID == "gpt-6-astra" && (currentEffort == "max" || currentEffort == "ultra")}
     var effortExplanation: String {
         guard let effort = currentEffort else {return "跟随 Codex 的模型与推理强度设置。"}
         let descriptions = ["none":"直接作答，不额外展开推理。", "minimal":"尽量减少思考，适合简单任务。",
@@ -42,7 +55,6 @@ final class ChatModelSettings {
         return descriptions[effort] ?? "使用当前模型提供的「\(Self.effortName(effort))」推理强度。"
     }
     var caution: String? {
-        if showsAstraRedWarning {return "⚠️ 穷玩车，富玩表，顶富就玩 Astra 快跑。如果不是顶富，请更换模型及推理强度！"}
         if currentModelID == "gpt-6-astra" {return "⚠️ 发送消息后会使用 Astra 模型，注意额度消耗！"}
         return nil
     }
@@ -62,11 +74,13 @@ final class ChatModelSettings {
     func chooseLunaMinimum() {
         guard let (model,effort) = lunaMinimum else {return}
         defaults.set(model,forKey:"petChatModel")
-        defaults.set(effort,forKey:"petChatEffort"); notify()
+        selectedModel = model; selectedEffort = effort
+        defaults.set(effort,forKey:"petChatEffort")
     }
     func syncWithCodex() {
         defaults.removeObject(forKey:"petChatModel")
         defaults.removeObject(forKey:"petChatEffort")
+        selectedModel = nil; selectedEffort = nil
         notify(); onLoad(true)
     }
     var title: String {
@@ -78,20 +92,24 @@ final class ChatModelSettings {
         self.models = models.filter {!$0.hidden}; self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
         if let effort = selectedEffort, !supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
             defaults.removeObject(forKey:"petChatEffort")
+            selectedEffort = nil
         }
         loading = false; error = nil; notify()
     }
     func failed(_ error: Error) {loading = false; self.error = error.localizedDescription; notify()}
     func chooseModel(_ model: String?) {
         defaults.set(model,forKey:"petChatModel")
+        selectedModel = model
         if let effort = selectedEffort, currentModel?.supportedReasoningEfforts.contains(where:{$0.reasoningEffort == effort}) != true {
             defaults.removeObject(forKey:"petChatEffort")
+            selectedEffort = nil
         }
         notify()
     }
     func chooseEffort(_ effort: String?) {
         guard effort == nil || supportedEfforts.contains(where:{$0.reasoningEffort == effort}) else{return}
         defaults.set(effort,forKey:"petChatEffort"); notify()
+        selectedEffort = effort; notify()
     }
     func parameters() throws -> [String:Any] {
         if let selectedModel, !models.contains(where:{$0.model == selectedModel}) {
@@ -111,23 +129,34 @@ final class ChatModelSettings {
 }
 
 // 两个聊天入口共享偏好；模型与可用思考档位均来自 app-server。
-final class ModelSelector: NSButton {
+final class ModelSelector: NSButton, NSPopoverDelegate {
     let settings: ChatModelSettings
     private let popover = NSPopover()
     private var controls: ModelSelectorContent!
+    private var anchorWidth:NSLayoutConstraint?
+    private var restingHugging:NSLayoutConstraint.Priority?
+    var layoutWidth:CGFloat {anchorWidth?.constant ?? min(320,intrinsicContentSize.width.rounded(.up))}
     init(_ settings: ChatModelSettings) {
         self.settings = settings; super.init(frame:.zero)
+        popover.delegate = self
         bezelStyle = .rounded; image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
         font = .systemFont(ofSize:12); target = self; action = #selector(openChoices)
-        setContentCompressionResistancePriority(.required,for:.horizontal)
-        widthAnchor.constraint(greaterThanOrEqualToConstant:280).isActive = true
+        setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        setContentHuggingPriority(.required,for:.horizontal)
+        (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
+        widthAnchor.constraint(lessThanOrEqualToConstant:320).isActive = true
         setAccessibilityLabel("选择模型与推理强度")
         NotificationCenter.default.addObserver(self,selector:#selector(updateTitle),name:ChatModelSettings.changed,object:settings)
         updateTitle()
     }
     required init?(coder:NSCoder) {fatalError()}
-    @objc private func updateTitle() {title = settings.title; hoverHelp = settings.currentModel?.displayName ?? "默认跟随 Codex 设置"}
+    @objc private func updateTitle() {title = settings.title; hoverHelp = settings.title}
     func closeChoices() {popover.performClose(nil)}
+    func popoverDidClose(_ notification:Notification) {
+        anchorWidth?.isActive = false; anchorWidth = nil
+        if let restingHugging {setContentHuggingPriority(restingHugging,for:.horizontal)}
+        restingHugging = nil; invalidateIntrinsicContentSize()
+    }
     func containsInteraction(at point: NSPoint, window: NSWindow?) -> Bool {
         guard popover.isShown else{return false}
         if let panel = popover.contentViewController?.view.window, panel.frame.contains(point) {return true}
@@ -136,9 +165,16 @@ final class ModelSelector: NSButton {
     }
     @objc private func openChoices() {
         if popover.isShown {popover.performClose(nil); return}
+        // 弹窗展开时固定锚点宽度，档位标题变化不推动弹窗。关闭后恢复内容定宽。
+        restingHugging = contentHuggingPriority(for:.horizontal)
+        setContentHuggingPriority(.defaultLow,for:.horizontal)
+        anchorWidth = widthAnchor.constraint(equalToConstant:bounds.width); anchorWidth?.isActive = true
         settings.onLoad(false)
         controls = ModelSelectorContent(settings)
-        controls.onResize = { [weak self] size in self?.popover.contentSize = size }
+        controls.onResize = { [weak self] size in
+            guard let self,self.popover.contentSize != size else {return}
+            self.popover.contentSize = size
+        }
         popover.contentViewController = controls; popover.behavior = .transient; popover.animates = false
         _ = controls.view; popover.contentSize = controls.preferredContentSize
         popover.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
@@ -166,7 +202,7 @@ final class ModelSelectorContent: NSViewController {
         picker.target = self; picker.action = #selector(modelChanged)
         effort.font = .systemFont(ofSize:14,weight:.semibold)
         slider.target = self; slider.action = #selector(effortChanged)
-        slider.allowsTickMarkValuesOnly = true; slider.isContinuous = true; slider.setAccessibilityLabel("推理强度")
+        slider.allowsTickMarkValuesOnly = true; slider.isContinuous = false; slider.setAccessibilityLabel("推理强度")
         for text in [explanation,defaultInfo,caution] {text.font = .systemFont(ofSize:12); text.isSelectable = false}
         explanation.textColor = .secondaryLabelColor; defaultInfo.textColor = AppAccent.color
         refresh.frame = NSRect(x:16,y:9,width:88,height:28); refresh.callback = { [weak self] in self?.settings.onLoad(true) }
@@ -200,7 +236,7 @@ final class ModelSelectorContent: NSViewController {
         defaultInfo.isHidden = settings.loading || settings.error != nil || settings.selectedEffort != nil || options.isEmpty
         caution.stringValue = settings.caution ?? ""
         caution.isHidden = settings.loading || settings.error != nil || settings.caution == nil
-        caution.textColor = settings.showsAstraRedWarning ? .systemRed : .systemOrange
+        caution.textColor = .systemOrange
         explanation.hoverHelp = settings.error
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading
         luna.isEnabled = !settings.loading && settings.lunaMinimum != nil
@@ -209,9 +245,11 @@ final class ModelSelectorContent: NSViewController {
     }
     private func layoutControls() {
         var y: CGFloat = 49
-        // 从底部向上排，阅读顺序为灰色说明、蓝色默认提示、红/橙彩蛋。
+        // 隐藏说明不占空间，可见说明按实际换行高度排版。
         for text in [caution,defaultInfo,explanation] where !text.isHidden {
-            let height = max(20,(text.stringValue as NSString).boundingRect(with:NSSize(width:428,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:text.font!]).height.rounded(.up)+4)
+            let font = text.font!
+            let rect = (text.stringValue as NSString).boundingRect(with:NSSize(width:428,height:CGFloat.greatestFiniteMagnitude),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font])
+            let height = max(font.ascender-font.descender+font.leading,rect.height).rounded(.up)+2
             text.frame = NSRect(x:16,y:y,width:428,height:height); y += height+8
         }
         if !slider.isHidden {
@@ -222,7 +260,7 @@ final class ModelSelectorContent: NSViewController {
                 mark.frame = NSRect(x:max(16,min(16+tick.midX-width/2,444-width)),y:y,width:width,height:18)
                 mark.isHidden = false
             }
-            y += 60
+            y += 56
         } else {effortMarks.forEach {$0.isHidden = true}}
         effort.frame = NSRect(x:16,y:y,width:428,height:22); y += 30
         picker.frame = NSRect(x:16,y:y,width:428,height:28); y += 40

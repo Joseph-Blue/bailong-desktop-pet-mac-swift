@@ -22,7 +22,7 @@ enum HistorySearch {
     static func snippet(_ conversation:Conversation, query:String) -> String? {
         guard !query.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {return nil}
         for turn in conversation.turns {
-            for (name,text) in [("你",turn.input),("思考摘要",turn.summary),("执行记录",turn.steps),("回复",turn.messages),("回复",turn.final)] {
+            for (name,text) in [("你",turn.input),("思考摘要",turn.summary),("执行记录",turn.steps),("回复",turn.messages),("回复",turn.final),("文件",(turn.fileEdits ?? []).map(\.path).joined(separator:"\n"))] {
                 if let match = ranges(in:text,query:query).first {return name+" · "+excerpt(text,around:match)}
             }
         }
@@ -34,7 +34,7 @@ enum HistorySearch {
         return conversations.filter { conversation in
             if !ranges(in:conversation.title,query:query).isEmpty {return true}
             return conversation.turns.contains { turn in
-                [turn.input,turn.messages,turn.final,turn.summary,turn.steps].contains {!ranges(in:$0,query:query).isEmpty}
+                ([turn.input,turn.messages,turn.final,turn.summary,turn.steps] + (turn.fileEdits ?? []).map(\.path)).contains {!ranges(in:$0,query:query).isEmpty}
             }
         }
     }

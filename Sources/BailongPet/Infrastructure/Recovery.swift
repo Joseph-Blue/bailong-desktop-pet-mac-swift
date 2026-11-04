@@ -117,12 +117,9 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         report.setAccessibilityLabel("可拷贝的错误报告")
         let scroll = GutterScrollView(); scroll.documentView = report; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.drawsBackground = true; scroll.backgroundColor = .textBackgroundColor; scroll.borderType = .noBorder
-        copy = ActionButton("拷贝报告") { [weak self] in
-            guard let self else {return}
-            NSPasteboard.general.clearContents()
-            if NSPasteboard.general.setString(self.report.string,forType:.string) {self.copy.title = "已拷贝"}
-        }
+        copy = ActionButton("拷贝报告") {}
         copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil); copy.imagePosition = .imageLeading
+        CopyFeedback.attach(to:copy) { [weak self] in self?.report.string }
         let issue = ActionButton("反馈 Issue…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
         issue.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil); issue.imagePosition = .imageLeading
         issue.hoverHelp = "打开项目仓库的新建 Issue 页面"
@@ -163,7 +160,7 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in self?.recoveryAction() }
     }
     private func present(takeFocus:Bool) {
-        NSApp.setActivationPolicy(.regular)
+        InterfaceWindows.shared.opened(window)
         NSApp.addWindowsItem(window,title:window.title,filename:false)
         if takeFocus {
             if window.isMiniaturized {window.deminiaturize(nil)}

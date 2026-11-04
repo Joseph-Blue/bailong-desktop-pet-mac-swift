@@ -8,27 +8,35 @@ enum DesktopReply {
         if ["completed","failed","interrupted","cancelled","canceled"].contains(status) {return .start}
         return nil
     }
-    private static func connect(thread:String) throws -> (DesktopSocket,String) {
-        let connection = try DesktopSocket(timeoutSeconds:30)
+    struct OwnerUnavailable:LocalizedError {
+        var errorDescription:String? {"Codex 尚未加载这条会话，请在 Codex 中打开。"}
+    }
+    private static func connect(thread:String,timeout:Int = 8) throws -> (DesktopSocket,String) {
+        let connection = try DesktopSocket(timeoutSeconds:timeout)
         let initialized = try connection.call("initialize",params:["clientType":"bailong-pet"],version:0)
         guard let client = (initialized["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:"Codex 未返回本机连接标识。")}
         connection.clientID = client
-        let owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1)
-        guard let target = owner["handledByClientId"] as? String else {throw PetFailure(message:"请先在 Codex 打开这条会话，再发送回复。")}
+        let owner:[String:Any]
+        do {owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1)}
+        catch let error as DesktopSocket.RequestFailure where error.code == "no-client-found" {throw OwnerUnavailable()}
+        guard let target = owner["handledByClientId"] as? String else {throw OwnerUnavailable()}
         return (connection,target)
     }
-    static func readSettings(thread:String,completion:@escaping (Result<String,Error>) -> Void) {
+    struct Settings {
+        let model:String
+        let effort:String?
+        let effortFromHistory:Bool
+    }
+    static func readSettings(thread:String,completion:@escaping (Result<Settings,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async {
-            let result = Result<String,Error> {
+            let result = Result<Settings,Error> {
                 let (connection,target) = try connect(thread:thread)
                 let response = try connection.call("thread-follower-read-model-settings",params:["conversationId":thread],version:1,target:target)
                 guard let result = response["result"] as? [String:Any],let settings = result["settings"] as? [String:Any],
                       let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:"Codex 未提供当前会话的模型设置。")}
                 let liveEffort = settings["reasoningEffort"] as? String
                 let recordedEffort = liveEffort == nil ? try DesktopHistoryReader.recordedReasoningEffort(thread:thread,model:model) : nil
-                let effort = (liveEffort ?? recordedEffort).map(ChatModelSettings.effortName) ?? "未提供"
-                let source = recordedEffort == nil ? "只读" : "会话记录，只读"
-                return "Codex：\(model) · 思考：\(effort)（\(source)）"
+                return Settings(model:model,effort:liveEffort ?? recordedEffort,effortFromHistory:recordedEffort != nil)
             }
             DispatchQueue.main.async {completion(result)}
         }
@@ -44,7 +52,7 @@ enum DesktopReply {
     static func submit(thread:String,previousTurn:String,cwd:String,text:String,mode:Mode,completion:@escaping (Result<Receipt,Error>) -> Void) {
         DispatchQueue.global(qos:.userInitiated).async {
             let result = Result<Receipt,Error> {
-                let (connection,target) = try connect(thread:thread)
+                let (connection,target) = try connect(thread:thread,timeout:30)
                 // 紧接发送前重新检查数据库，仅投影身份与状态，不读取对话或凭证。
                 try DesktopHistoryReader.requireReplyConversation(thread,previousTurn:previousTurn,steering:mode == .steer)
                 let messageID = UUID().uuidString

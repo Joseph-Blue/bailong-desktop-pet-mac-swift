@@ -17,7 +17,14 @@ enum MarkdownText {
     static func render(_ source: String, font: NSFont = .systemFont(ofSize:14), color: NSColor = .labelColor,
                        lineSpacing: CGFloat = 4, paragraphSpacing: CGFloat = 12) -> NSAttributedString {
         // 生成中的 Markdown 可能尚未闭合，此时保留可解析内容或原文。
-        let parsed = (try? AttributedString(markdown:source,options:.init(interpretedSyntax:.full,failurePolicy:.returnPartiallyParsedIfPossible))) ?? AttributedString(source)
+        let hasFileCitation = source.contains(CodexFileCitation.marker)
+        var parsed = (try? AttributedString(markdown:source,options:.init(interpretedSyntax:.full,failurePolicy:.returnPartiallyParsedIfPossible,appliesSourcePositionAttributes:hasFileCitation))) ?? AttributedString(source)
+        if hasFileCitation {
+            let displaySource = CodexFileCitation.markdown(source,parsed:parsed)
+            if displaySource != source {
+                parsed = (try? AttributedString(markdown:displaySource,options:.init(interpretedSyntax:.full,failurePolicy:.returnPartiallyParsedIfPossible))) ?? AttributedString(displaySource)
+            }
+        }
         var fragments = [Fragment](), tables = [Int:TableContent](), codeBlocks = [Int:(language:String,text:String)]()
         var previousItem: Int?
         for run in parsed.runs {
