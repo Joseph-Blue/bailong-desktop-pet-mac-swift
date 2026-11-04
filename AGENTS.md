@@ -209,4 +209,4 @@
 
 - 浏览与保存窗口通过 PanelPresentation 独立原生模态展示，按发起窗口所在屏幕可用区域居中，可独立拖动；首次显示完成布局后仅定位一次。自定义颜色使用 CenteredColorWell，在打开系统调色板时共用定位，不随颜色变化重复居中。SpriteView 左右键按下阻止默认窗口排序，桌宠互动不隐式召回其他窗口；明确打开窗口的行为保留。
 
-- 气泡及临时输入窗由 BubbleBackgroundView 根图层统一以 14pt 圆角裁切，普通背景重绘先清透明区域；玻璃与普通材质共用圆角边界，避免窗口四角直角白边。
+- 临时聊天窗在 ChatComposer 中为背景根图层启用透明底色及圆角裁切，半径复用 BubbleBackgroundView.cornerRadius（14pt）；消息气泡保持原有背景绘制。

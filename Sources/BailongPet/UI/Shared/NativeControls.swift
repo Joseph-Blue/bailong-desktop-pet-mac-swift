@@ -156,15 +156,13 @@ private final class BubbleBackingView: NSView {
     var opacity: CGFloat = 1 {didSet {needsDisplay = true}}
     override var isOpaque: Bool {false}
     override func draw(_ dirtyRect: NSRect) {
-        // 透明区域也要重绘，避免尺寸或材质变化后留下旧背景。
-        NSColor.clear.setFill(); dirtyRect.fill(using:.copy)
         NSColor.windowBackgroundColor.withAlphaComponent(opacity).setFill()
         NSBezierPath(roundedRect:bounds,xRadius:BubbleBackgroundView.cornerRadius,yRadius:BubbleBackgroundView.cornerRadius).fill()
     }
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }
 final class BubbleBackgroundView: NSView {
-    fileprivate static let cornerRadius:CGFloat = 14
+    static let cornerRadius:CGFloat = 14
     let body = NSView()
     private let ordinary = BubbleBackingView(), glassBacking = BubbleBackingView()
     private var glass: NSView?
@@ -174,11 +172,6 @@ final class BubbleBackgroundView: NSView {
     init(preferences: PetPreferences = .shared) {
         self.preferences = preferences
         super.init(frame:.zero)
-        // 窗口的最终合成结果统一裁成圆角，材质和正文不向四角溢出。
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.cornerRadius = Self.cornerRadius
-        layer?.masksToBounds = true
         // 正文永远在固定根视图内；玻璃和普通背景在其下独立过渡。
         addSubview(ordinary); addSubview(body)
         for view in [ordinary,body] {view.autoresizingMask = [.width,.height]}
