@@ -12,6 +12,8 @@ final class BubbleMotion: NSObject {
     private var resizeFrom: NSSize?
     private(set) var frame: NSRect
     private(set) var presented = false
+    var onHidden:(() -> Void)?
+    private var pendingHide = false
     var onResize: ((NSSize) -> Void)? {didSet {if let window {onResize?(window.frame.size)}}}
     private var enabled: Bool {preferences.bool("bubbleMotion")}
     private var reduced: Bool {NSWorkspace.shared.accessibilityDisplayShouldReduceMotion}
@@ -24,6 +26,7 @@ final class BubbleMotion: NSObject {
     }
     func show(key: Bool = false) {
         guard let window else {return}
+        pendingHide = false
         if !presented {
             let wasVisible = window.isVisible
             presented = true; window.ignoresMouseEvents = false
@@ -39,6 +42,7 @@ final class BubbleMotion: NSObject {
     func hide() {
         guard presented, let window else {return}
         presented = false; window.ignoresMouseEvents = true
+        pendingHide = true
         alphaFrom = window.alphaValue; alphaTo = 0; slide = 0
         fadeStart = ProcessInfo.processInfo.systemUptime; fadeDuration = enabled ? 0.12 : 0
         resizeFrom = nil
@@ -84,6 +88,10 @@ final class BubbleMotion: NSObject {
         if sizeChanged {onResize?(displayed.size)}
         if f >= 1 && !presented {window.orderOut(nil); window.alphaValue = 1; window.ignoresMouseEvents = false}
         if f >= 1 && resizeFrom == nil {timer?.invalidate(); timer = nil}
+        if f >= 1 && !presented && pendingHide {
+            pendingHide = false
+            onHidden?()
+        }
     }
     private func startTimerIfNeeded() {
         guard timer == nil, progress(since:fadeStart,duration:fadeDuration) < 1 || resizeFrom != nil else {return}

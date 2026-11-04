@@ -56,7 +56,7 @@ final class ChatReadOnlyModelField: NSTextField {
 }
 
 final class ChatReplyPreview: NSTextField {
-    private var source:String?
+    private var sourceID:String?
     init() {
         super.init(frame:.zero)
         isEditable = false; isSelectable = false; isBezeled = false; drawsBackground = false
@@ -65,8 +65,11 @@ final class ChatReplyPreview: NSTextField {
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     }
     required init?(coder:NSCoder) {fatalError()}
-    func update(markdown:String) {
-        guard source != markdown else {return}; source = markdown
+    func update(turn:Turn?) {
+        let identity = turn?.bodyReference.id ?? ""
+        guard sourceID != identity else {return}; sourceID = identity
+        let body = turn?.bodyReference.value()
+        let markdown = body.map {$0.final.isEmpty ? $0.messages : $0.final} ?? ""
         // 复用现有 Markdown 解析，仅生成显示摘要；历史仍保存原文。
         let plain = MarkdownText.render(markdown,font:font!).string.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         let excerpt = String(plain.prefix(180))+(plain.count > 180 ? "…" : "")

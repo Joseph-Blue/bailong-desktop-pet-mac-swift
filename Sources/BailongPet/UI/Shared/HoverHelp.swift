@@ -119,6 +119,7 @@ private final class HoverHelpPresenter {
         } completionHandler: { [weak self] in
             guard let self,self.generation == serial else {return}
             self.panel.orderOut(nil)
+            self.text.stringValue = ""
         }
     }
 }

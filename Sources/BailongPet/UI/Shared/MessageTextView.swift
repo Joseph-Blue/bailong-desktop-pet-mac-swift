@@ -2,7 +2,8 @@ import AppKit
 
 // 消息只呈现已收到的正文快照；内容更新、几何测量和阅读位置分别处理。
 final class MessageTextView: AppTextView {
-    private let fileEditPresentation = FileEditPresentation()
+    // NSTextView 的便利初始化会再次进入指定初始化；按首次使用创建，避免覆盖已分配的 Swift 存储。
+    private lazy var fileEditPresentation = FileEditPresentation()
     var onContentLayoutChange:(() -> Void)?
     private var measuredWidth:CGFloat = -1
     private var measuredHeight:CGFloat = 0
@@ -48,6 +49,20 @@ final class MessageTextView: AppTextView {
         // 链接自身的属性决定颜色，允许文件目录与文件名区分；普通 Markdown 仍使用强调色。
         linkTextAttributes = [.cursor:NSCursor.pointingHand]
         return applyContent(fileEditPresentation.content(value),reset:reset)
+    }
+    func releaseRenderedContent() {
+        setContent(NSAttributedString(),reset:true)
+        for toolbar in codeToolbars.values {toolbar.removeFromSuperview()}
+        codeToolbars.removeAll()
+        // 清空正文不足以回收长文本的字形容量；保留容器和视图，替换只属于显示层的排版器。
+        let manager = NSLayoutManager()
+        if let previous = layoutManager {
+            manager.usesFontLeading = previous.usesFontLeading
+            manager.allowsNonContiguousLayout = previous.allowsNonContiguousLayout
+        }
+        textContainer?.replaceLayoutManager(manager)
+        measuredWidth = -1; measuredHeight = 0; codeLayoutWidth = -1
+        invalidateCodeLayout()
     }
     func revealFileEdits(matching query:String) {
         if let value = fileEditPresentation.revealMatches(query) {applyDisclosure(value)}

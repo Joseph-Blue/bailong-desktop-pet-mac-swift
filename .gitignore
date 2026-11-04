@@ -31,3 +31,7 @@
 
 # 本地待办
 /todo.md
+
+# 本机编辑器与开发资源包使用说明
+/.vscode/
+/DEV-ASSETS.md

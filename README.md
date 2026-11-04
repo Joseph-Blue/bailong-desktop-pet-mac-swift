@@ -6,9 +6,9 @@
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
-**当前源码：0.7.1。** 已发布版本与安装包见 [正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)。
+**当前源码：0.7.2。** 已发布版本与安装包见 [正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)。
 
-0.7.1 新增文件产物链接与可折叠修改摘要，区分桌宠人设对话和 Codex 项目对话，并改进消息阅读、输入布局与窗口召回。
+0.7.2 集中优化运行内存：历史按需读取、长对话分页，关闭气泡和窗口后释放显示资源，并减少实时观察和工具消息的额外占用。
 
 ## 下载与使用
 
@@ -24,11 +24,11 @@ App 使用本地签名。若 macOS 提示无法验证开发者，尝试打开一
 
 退出旧桌宠，再打开新版。新版保留设置与历史，升级历史格式前会备份原文件。更新版本或移动 App 后，先手动打开新版，已启用的登录启动与随 Codex 启动会自动维护注册信息；状态可在“设置 → 通用”查看。
 
-历史和任务文件位于 `~/Library/Application Support/BailongPetAppKit`。历史备份为 `conversations-before-schema2-<时间戳>.json`；若切回 0.2.1，使用升级前的备份。
+历史和任务文件位于 `~/Library/Application Support/BailongPetAppKit`。早期历史备份为 `conversations-before-schema2-<时间戳>.json`；若切回 0.2.1，使用升级前的备份。0.7.2 起使用 `history.sqlite` 保存历史，首次迁移后保留原 `conversations.json` 文件。
 
 ## 特色功能
 
-这里介绍 **0.7.1** 的功能，各版本的更新见 [变更记录](CHANGELOG.md)。
+这里介绍 **0.7.2** 的功能，各版本的更新见 [变更记录](CHANGELOG.md)。
 
 ### 在桌面看进展，也能回看消息
 
@@ -64,7 +64,7 @@ Codex 工作时，桌宠会显示回复和需要你处理的提醒。单击桌�
 
 ### 找回聊过的内容
 
-历史窗口集中保存桌宠中的对话和同步到本机的 Codex 会话。可以搜索正文、跳到匹配位置，也可以直接在右侧接着回复。
+历史窗口集中保存桌宠中的对话和同步到本机的 Codex 会话。可以搜索正文、跳到匹配位置，也可以直接在右侧接着回复。长历史每页显示 20 轮对话，搜索会定位到命中的页面。
 
 会话标题支持右键重命名、重新同步 Codex 标题或删除记录。删除的是桌宠保存的那份记录，不会删除 Codex 原会话；关闭历史记录后，已有内容保留，关闭期间不再记录。
 
@@ -113,7 +113,7 @@ Codex 回复中的文件产物引用显示为可点击文件名；文件修改�
 ### 动画播放和日常维护
 
 - **原画与性能可调**：默认 720×720，另有 512、384、256 三档；可以调整帧率和缓冲。动画默认边读取边播放，保留 24 帧缓冲，切换动作后释放旧缓冲。
-- **安装包约 112 MiB**：0.7.1 的 Apple Silicon ZIP 为 112.48 MiB。动画使用透明 HEVC，由系统 AVFoundation 播放，不再随包附带 FFmpeg。
+- **安装包约 112 MiB**：0.7.2 的 Apple Silicon ZIP 为 112.51 MiB。动画使用透明 HEVC，由系统 AVFoundation 播放，不再随包附带 FFmpeg。
 - **按需查看性能**：独立窗口显示 FPS、CPU、GPU、运行内存 (RAM) 和动画缓冲，关闭后停止统计。
 - **按需启动和检查更新**：可设为登录启动或随 Codex 启动；更新页可以检查正式版本并打开下载页，启动自动检查默认关闭。
 - **集中管理本机数据和权限**：设置中提供访达授权、文件权限、登录项入口，以及本应用的数据和缓存清理。历史格式升级前会备份原文件。

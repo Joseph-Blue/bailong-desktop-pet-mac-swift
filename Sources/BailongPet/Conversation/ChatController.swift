@@ -46,10 +46,18 @@ final class ChatController {
         let visible = (ui.history.isVisible ? [selected] : []) + (ui.composerVisible ? [composerSelection].compactMap {$0} : [])
         desktopSession.refreshSettings(visible)
     }
+    private func reportHistoryReadFailure(_ error:Error) {
+        RecoveryWindow.show(id:"history-read",report:RecoveryReport(title:"历史正文未能读取",message:"历史写入已停止。可以导出原文件或重新读取。",module:"历史记录",operation:"按需读取正文",error:error),actionTitle:"重新读取") { [weak self] in
+            guard let self else {return}
+            do {try self.reloadHistory(); RecoveryWindow.resolve("history-read")}
+            catch {self.reportHistoryReadFailure(error)}
+        }
+    }
     func reloadHistory() throws {
         guard running == nil && !desktopSession.hasPendingSend else {throw PetFailure(message:"请等待当前任务和发送完成后重新读取历史。")}
         let key = selected.key, composerKey = composerSelection?.key
         try store.reload(recording:pet.preferences.bool("recordHistory"))
+        ui.invalidateHistoryDisplay()
         selected = store.conversations.first(where:{$0.key == key}) ?? store.conversations.last ?? store.create(cwd:LocalStorage.workspace.path)
         composerSelection = allConversations.first {$0.key == composerKey}
         refresh(); loadVisibleModels()
@@ -74,9 +82,16 @@ final class ChatController {
         composerSelection = selected; recentComposerTargets[.persona] = selected.key
         pet.settings.historyRecoveryReason = { [weak self] in self?.store.readOnlyReason }
         pet.settings.onReloadHistory = { [weak self] in try self?.reloadHistory() }
+        pet.settings.historyExportExtension = { [weak self] in self?.store.exportExtension ?? "json" }
+        ui.onReleaseHistory = { [weak self] in self?.store.clearBodyCache() }
         pet.settings.onExportHistory = { [weak self] url in try self?.store.exportOriginal(to:url) }
         store.onError = { [weak self] error in
             guard let self else{return}
+            if self.store.isReadOnly {
+                self.refresh()
+                self.reportHistoryReadFailure(error)
+                return
+            }
             self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史保存失败，请检查磁盘空间。"; self.ui.status.isHidden = false
             guard !self.closing else {return}
             RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"原文件保留。新记录暂留运行内存 (RAM)，尚未写入磁盘；退出会丢失尚未保存的新记录。处理磁盘空间或写入权限后，可重新保存。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
@@ -383,6 +398,7 @@ final class ChatController {
                 pet.placeBubble()
             }
         } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [])}
+        messagesState = TaskMessageAccumulator()
         if closing {finishShutdown()}
     }
     func stop() {

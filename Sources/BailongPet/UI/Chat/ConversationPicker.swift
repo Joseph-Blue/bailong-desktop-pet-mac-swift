@@ -1,6 +1,6 @@
 import AppKit
 
-final class ConversationPicker:NSButton {
+final class ConversationPicker:NSButton,NSPopoverDelegate {
     var conversations:() -> [Conversation] = {[]}
     var onSelect:(String) -> Void = {_ in}
     private let popover = NSPopover()
@@ -9,12 +9,14 @@ final class ConversationPicker:NSButton {
         title = "选择会话…"; bezelStyle = .rounded
         image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
         target = self; action = #selector(open)
+        popover.delegate = self
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         setAccessibilityLabel("选择目标会话")
     }
     required init?(coder:NSCoder) {fatalError()}
     func close() {popover.performClose(nil)}
+    func popoverDidClose(_ notification:Notification) {popover.contentViewController = nil}
     func containsInteraction(at point:NSPoint,window:NSWindow?) -> Bool {
         guard popover.isShown,let panel = popover.contentViewController?.view.window else {return false}
         return panel === window || panel.frame.contains(point)
