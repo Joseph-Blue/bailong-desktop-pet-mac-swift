@@ -67,10 +67,11 @@ local-assets/
 ```sh
 ./scripts/run-dev.sh --build-only  # 仅编译
 ./scripts/build.sh arm64           # 构建 Apple Silicon App
+./scripts/build.sh x86_64          # 按需构建 Intel App
 ./scripts/run-dev.sh               # 编译并开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/arm64/白龙桌宠Swift.app`。Intel 源码入口保留；因缺少符合要求的真机环境，适配与验证暂时搁置。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app`。正式版 0.7.2 已提供 Intel 社区测试包；Intel Mac 实机验收尚未完成，开发构建默认只选择 Apple Silicon。
 
 三个入口会显示版本、目标架构、当前阶段和耗时。交互终端显示盲文转圈，重定向日志时使用普通阶段文本；原始诊断在阶段结束时输出，失败保留退出码。产物目录提供 `file://` 链接，在终端按住 ⌘ 单击可打开访达目录。
 

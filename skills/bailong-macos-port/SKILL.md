@@ -55,7 +55,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - 气泡 `lineFragmentPadding` 为 0，输入框及历史保留自身边距。滚动条显隐不改变换行宽度，气泡比例或字号真实变化才重新排版；多行阅读与输入容器禁止横向偏移，单行系统编辑器保持原生行为。
 - 普通气泡打开、切卡及正文变化从顶部显示；历史进入会话或重新打开窗口时到最下方，同会话刷新保留阅读位置，搜索显式定位优先。配色刷新不视为进入会话，不用持续锁顶或自动追尾修复布局。
 - `MessageTextView` 用同一 TextKit 容器测量富文本，只替换变化尾部；未变化文本不重新排版。`TranscriptRenderer` 缓存包含全部显示内容，新增结构化字段须同步签名和搜索。
-- `ProgressTextEffects` 共用标题流水与概览跑马灯；任务列表执行中标题复用纯标题流水和列表已有刷新计时，结束恢复静态，不新增行级定时器。盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，保留并置灰原偏好。
+- `ProgressTextEffects` 共用标题流水与概览跑马灯；任务列表执行中标题复用纯标题流水和列表已有刷新计时，结束恢复静态，不新增行级定时器。盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，旧偏好仅保留兼容，不显示控件或搜索条目。
 - `InlineStatusLayout` 共用文字基线、盲文与秒表定位；`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
 - 代码块使用原生 NSTextTableBlock，语言标签与拷贝按钮共用 `CodeBlockHeaderLayout`。拷贝与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
 
@@ -82,7 +82,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - Markdown 链接、图片入口、imageGeneration 的公开 savedPath、产物引用及文件修改摘要共用 `MessageTextView → MessageFileLink → FinderFileReveal`。相对路径取所属会话 cwd，仅点击时检查文件；非本机链接交给系统，`sandbox:` 保留下载提示。
 - 文件点击复用访达目标目录窗口、取消该窗口最小化并选中文件；没有对应窗口才创建。固定脚本通过参数接收路径，不恢复全部窗口，`.app` 只定位不运行，不新增无关 App 权限。
 - `FileEditSummary` 共用内外来源的 completed fileChange：内置按 item ID 替换，轮次内同路径合并；add／delete 按完整文本行数，update 按 diff hunk 统计。数值是本轮完成修改的累计量，不是最终 Git 净差异；缺少 diff 仅显示路径。
-- `FileEditRendering` 在气泡和历史中共用原生摘要，标题下显示总计，默认 3 项并支持展开／收起。`FileEditPresentation` 只管理显示层展开状态，同身份更新保留，离开当前正文清理；搜索展开隐藏匹配项。复用 TextKit 与原滚动容器，不添加撤销或 diff 操作。摘要存入可选 `Turn.fileEdits`，不保存原始 diff、不拼进助手正文；快照、搜索和缓存签名同步维护。外部文件汇总读取完整轮次，不受近期消息数量限制。
+- `FileEditRendering` 在气泡和历史中共用原生摘要，标题右侧同排显示总计，默认 3 项并支持展开／收起。`FileEditPresentation` 只管理显示层展开状态，同身份更新保留，离开当前正文清理；搜索展开隐藏匹配项。复用 TextKit 与原滚动容器，不添加撤销或 diff 操作。摘要存入可选 `Turn.fileEdits`，不保存原始 diff、不拼进助手正文；快照、搜索和缓存签名同步维护。外部文件汇总读取完整轮次，不受近期消息数量限制。
 
 ## 原生界面与设置
 
@@ -112,4 +112,4 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 ./scripts/build.sh arm64           # Apple Silicon App 与跟随助手
 ```
 
-按用户当次范围选择命令；文档修改不触发应用构建。Intel 缺少合适真机，保留源码入口，不追加构建。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。
+按用户当次范围选择命令；文档修改不触发应用构建。默认只构建 Apple Silicon。0.7.2 已提供 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。
