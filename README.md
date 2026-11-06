@@ -2,7 +2,7 @@
 
 **这是 `joseph/dev` 开发分支，面向开发者，不属于普通用户的安装说明，也不提供开发版 Release 程序下载。** 普通用户请前往 [main 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-当前源码版本：**0.7.3-rc.1（开发分支候选版）**，汇总相较正式版 **0.7.2** 的本轮改动，进入候选验收阶段。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
+当前源码版本：**0.7.3-rc.1（开发分支候选版）**，本轮保留功能已整理为 main 的正式版 **0.7.3**，开发线保留 RC1 基线与完整迭代记录。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
 
 基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC、AVFoundation 与 Core Image；界面支持液态玻璃和系统外观。
 
@@ -71,7 +71,7 @@ local-assets/
 ./scripts/run-dev.sh               # 编译并开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app`。正式版 0.7.2 已提供 Intel 社区测试包；Intel Mac 实机验收尚未完成，开发构建默认只选择 Apple Silicon。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app`。正式版 0.7.3 提供 Apple Silicon 包与 Intel 社区测试包；Intel Mac 实机验收尚未完成，开发构建默认只选择 Apple Silicon。
 
 三个入口会显示版本、目标架构、当前阶段和耗时。交互终端显示盲文转圈，重定向日志时使用普通阶段文本；原始诊断在阶段结束时输出，失败保留退出码。产物目录提供 `file://` 链接，在终端按住 ⌘ 单击可打开访达目录。
 

@@ -112,4 +112,4 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 ./scripts/build.sh arm64           # Apple Silicon App 与跟随助手
 ```
 
-按用户当次范围选择命令；文档修改不触发应用构建。默认只构建 Apple Silicon。0.7.2 已提供 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。
+按用户当次范围选择命令；文档修改不触发应用构建。默认只构建 Apple Silicon。0.7.3 提供 Apple Silicon 包与 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。
