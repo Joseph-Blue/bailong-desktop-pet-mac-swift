@@ -30,7 +30,7 @@ final class AppearanceSettingsPage {
     }
     func render() {
         form.group("大小",[form.slider("桌宠大小","petPercent",range:50...200,suffix:"%"),form.slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),form.slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt")])
-        form.group("气泡形状",[form.toggle("自定义宽高比","bubbleAspectEnabled",detail:"关闭时按内容自动排版。开启后应用于消息与进展气泡，正文超出时滚动；屏幕边界和操作按钮保留所需空间。问卷手动拉伸优先，额度按内容排版。"),form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1")])
+        form.group("气泡形状",[form.toggle("自定义宽高比","bubbleAspectEnabled"),form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1",requires:["bubbleAspectEnabled"])])
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
             let dot = AccentSwatch(key:key,name:name)

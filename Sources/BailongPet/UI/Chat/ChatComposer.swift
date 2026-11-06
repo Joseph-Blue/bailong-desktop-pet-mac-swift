@@ -42,6 +42,7 @@ final class ChatComposer: NSObject {
     var onStop:() -> Void = {}, onCheck:() -> Void = {}
     var onOpenCodex:() -> Void = {}, onRetrySettings:() -> Void = {}
     var onSubmit:() -> Void = {}, onFolder:() -> Void = {}, onNew:() -> Void = {}, onHistory:() -> Void = {}, onHide:() -> Void = {}
+    var onNewDefault:() -> Void = {}
     init(models:ChatModelSettings) {
         super.init()
         composer.level = NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1); composer.contentMinSize = NSSize(width:540,height:420)
@@ -192,15 +193,17 @@ final class ChatComposer: NSObject {
 
     private func showNewMenu() {
         let menu = NSMenu(); menu.autoenablesItems = false
+        let defaultItem = NSMenuItem(title:"在默认工作区新建",action:#selector(newDefault),keyEquivalent:""); defaultItem.target = self
         let same = NSMenuItem(title:"在当前工作区新建",action:#selector(newHere),keyEquivalent:""); same.target = self
         folderAction.target = self; folderAction.action = #selector(newElsewhere)
-        menu.addItem(same); menu.addItem(folderAction)
+        menu.addItem(defaultItem); menu.addItem(same); menu.addItem(folderAction)
         showingNewMenu = true
         menu.popUp(positioning:nil,at:NSPoint(x:0,y:composerNew.bounds.maxY+4),in:composerNew)
         showingNewMenu = false
         menu.removeItem(folderAction)
     }
     @objc private func newHere() {onNew()}
+    @objc private func newDefault() {onNewDefault()}
     @objc private func newElsewhere() {onFolder()}
 
     func updateLayout() {

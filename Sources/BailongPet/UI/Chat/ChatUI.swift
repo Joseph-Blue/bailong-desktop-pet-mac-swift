@@ -58,6 +58,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var selected: String?
     var onSelect: (String) -> Void = { _ in }, onSubmit: (String,String,ChatEntry) -> Void = { _,_,_ in }
     var onStop:(String) -> Void = {_ in}, onNew:(ChatEntry) -> Void = {_ in}, onFolder:(ChatEntry) -> Void = {_ in}
+    var onNewDefault:(ChatEntry) -> Void = {_ in}
     var onComposerSelect:(String) -> Void = {_ in}, onMode:(ConversationKind) -> Void = {_ in}
     var onReleaseHistory:() -> Void = {}
     var onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
@@ -97,6 +98,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         composerView.onOpenWorkspace = { [weak self] url in self?.onOpenWorkspace(url) }
         composerView.onFolder = { [weak self] in self?.onFolder(.composer) }
         composerView.onNew = { [weak self] in self?.onNew(.composer) }
+        composerView.onNewDefault = { [weak self] in self?.onNewDefault(.composer) }
         composerView.onMode = { [weak self] mode in self?.onMode(mode) }
         composerView.onSelect = { [weak self] key in self?.onComposerSelect(key) }
         composerView.onStop = { [weak self] in self?.stopTarget(.composer) }

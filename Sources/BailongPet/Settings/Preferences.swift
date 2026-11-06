@@ -16,7 +16,8 @@ enum SettingsSection: Int, CaseIterable {
         case .activity: return ["singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
         case .messages: return ["approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
-        case .advanced, .about: return []
+        case .advanced: return ["defaultWorkspace"]
+        case .about: return []
         case .updates: return ["automaticallyCheckUpdates"]
         case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit"]
         }
@@ -65,7 +66,7 @@ final class PetPreferences {
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,
-        "automaticallyCheckUpdates":false,
+        "automaticallyCheckUpdates":false,"defaultWorkspace":"",
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
@@ -129,6 +130,10 @@ final class PetPreferences {
     func number(_ key: String) -> Double {(value(key) as? NSNumber)?.doubleValue ?? 0}
     func string(_ key: String) -> String {value(key) as? String ?? ""}
     var animationBufferFrames: Int { Int(number("animationBufferFrames")) }
+    var defaultWorkspace:URL {
+        let path = string("defaultWorkspace")
+        return path.isEmpty ? LocalStorage.workspace : URL(fileURLWithPath:path,isDirectory:true).standardizedFileURL
+    }
     var animationResolution: Int { Int(string("animationQuality"))! }
     func animationFPS(native: Double) -> Double { string("animationFPSLimit") == "full" ? native : min(native,Double(string("animationFPSLimit"))!) }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
@@ -252,6 +257,7 @@ final class PetPreferences {
         notify(Array(Self.defaults.keys))
     }
     private static func valid(_ value: Any, key: String, baseline: Any, clipIDs: Set<String>) -> Bool {
+        if key == "defaultWorkspace",let path = value as? String {return path.isEmpty || (path.hasPrefix("/") && !path.contains("\0") && path.utf8.count <= 4096)}
         if key == "animationWeights", let map = value as? [String:NSNumber] {
             return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0,1,3,4,6].contains($0.value.doubleValue) && ($0.key != "idle" || $0.value.intValue > 0)}
         }

@@ -15,6 +15,7 @@ final class ChatController {
     var unstartedConversations = [Conversation]()
     var allConversations:[Conversation] {store.conversations+unstartedConversations}
     var running: (Conversation,Turn)?
+    private var clearingWorkspace = false
     var cancelled = false, closing = false
     private var messagesState = TaskMessageAccumulator()
     var currentActivity:TaskActivity? {messagesState.currentActivity}
@@ -58,11 +59,12 @@ final class ChatController {
         let key = selected.key, composerKey = composerSelection?.key
         try store.reload(recording:pet.preferences.bool("recordHistory"))
         ui.invalidateHistoryDisplay()
-        selected = store.conversations.first(where:{$0.key == key}) ?? store.conversations.last ?? store.create(cwd:LocalStorage.workspace.path)
+        selected = store.conversations.first(where:{$0.key == key}) ?? store.conversations.last ?? store.create(cwd:pet.preferences.defaultWorkspace.path)
         composerSelection = allConversations.first {$0.key == composerKey}
         refresh(); loadVisibleModels()
     }
     func clearLocalData() throws {
+        guard !clearingWorkspace else {throw PetFailure(message:"请等待工作区清理完成。")}
         guard running == nil && !desktopSession.hasPendingSend else {throw PetFailure(message:"请先结束当前任务或等待消息发送完成，再清空数据。")}
         saveTimer?.invalidate(); saveTimer = nil
         try store.clear()
@@ -74,14 +76,32 @@ final class ChatController {
         pet.preferences.reset(Array(PetPreferences.defaults.keys))
         persist()
     }
+    func clearBuiltInWorkspace(completion:@escaping (Result<Void,Error>) -> Void) {
+        guard !clearingWorkspace else {completion(.failure(PetFailure(message:"工作区正在清理，请等待完成。"))); return}
+        guard running == nil,pet.activeTasks.isEmpty,!desktopSession.hasPendingSend else {
+            completion(.failure(PetFailure(message:"请先结束执行中的任务并等待消息发送完成，再清理内置工作区。"))); return
+        }
+        clearingWorkspace = true
+        DispatchQueue.global(qos:.utility).async { [weak self] in
+            let result = Result {try LocalStorage.clearBuiltInWorkspace()}
+            DispatchQueue.main.async {
+                self?.clearingWorkspace = false
+                completion(result)
+            }
+        }
+    }
     init(pet: PetController) throws {
         self.pet = pet; store = try HistoryStore(recording:pet.preferences.bool("recordHistory"))
         let workspace = Paths.data.appendingPathComponent("Workspace")
         try FileManager.default.createDirectory(at:workspace,withIntermediateDirectories:true)
-        selected = store.conversations.last(where:{!$0.external}) ?? store.create(cwd:workspace.path)
+        selected = store.conversations.last(where:{!$0.external}) ?? store.create(cwd:pet.preferences.defaultWorkspace.path)
         composerSelection = selected; recentComposerTargets[.persona] = selected.key
         pet.settings.historyRecoveryReason = { [weak self] in self?.store.readOnlyReason }
         pet.settings.onReloadHistory = { [weak self] in try self?.reloadHistory() }
+        pet.settings.onClearDefaultWorkspace = { [weak self] completion in
+            guard let self else {completion(.failure(PetFailure(message:"会话管理已关闭。"))); return}
+            self.clearBuiltInWorkspace(completion:completion)
+        }
         pet.settings.historyExportExtension = { [weak self] in self?.store.exportExtension ?? "json" }
         ui.onReleaseHistory = { [weak self] in self?.store.clearBodyCache() }
         pet.settings.onExportHistory = { [weak self] url in try self?.store.exportOriginal(to:url) }
@@ -103,6 +123,7 @@ final class ChatController {
         ui.onSubmit = { [weak self] key,text,entry in self?.submit(text,to:key,entry:entry) }
         ui.onStop = { [weak self] key in if self?.running?.0.key == key {self?.stop()} }
         ui.onNew = { [weak self] entry in self?.newConversation(entry:entry) }
+        ui.onNewDefault = { [weak self] entry in self?.newDefaultConversation(entry:entry) }
         ui.onFolder = { [weak self] entry in self?.chooseFolder(entry:entry) }
         ui.onMode = { [weak self] mode in self?.selectComposerMode(mode) }
         ui.onComposerSelect = { [weak self] key in self?.selectConversation(key,entry:.composer) }
@@ -263,7 +284,7 @@ final class ChatController {
             pet.bubble.discardCards(conversation:key)
             unstartedConversations.removeAll {$0.key == key}
             recentComposerTargets = recentComposerTargets.filter {$0.value != key}
-            if selected === conversation {selected = store.conversations.last ?? store.create(cwd:LocalStorage.workspace.path)}
+            if selected === conversation {selected = store.conversations.last ?? store.create(cwd:pet.preferences.defaultWorkspace.path)}
             if composerSelection === conversation {composerSelection = nil; selectComposerMode(composerKind)}
             refresh()
         } catch {showError("记录删除失败",error)}
@@ -285,6 +306,7 @@ final class ChatController {
     }
 
     func submit(_ text:String,to key:String,entry:ChatEntry) {
+        guard !clearingWorkspace else {showError("工作区正在清理",PetFailure(message:"清理完成后再发送，输入内容已保留。")); return}
         guard !store.isReadOnly else {pet.showSettings(section:.advanced); return}
         guard let c = allConversations.first(where:{$0.key == key}),ui.targetKey(entry) == key else {return}
         let closeComposer = entry == .composer
