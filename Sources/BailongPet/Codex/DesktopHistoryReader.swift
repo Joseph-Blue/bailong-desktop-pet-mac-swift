@@ -29,6 +29,12 @@ final class ReadDatabase {
     }
 }
 enum DesktopHistoryReader {
+    // 会话存在性与显示名称无关；内置对话的 name 可以尚未生成。
+    static func containsThread(_ id:String) throws -> Bool {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
+        let state = try ReadDatabase(root+"/state_5.sqlite")
+        return try !state.rows("SELECT id FROM threads WHERE id=? LIMIT 1",[id]).isEmpty
+    }
     static func recordedReasoningEffort(thread:String,model:String) throws -> String? {
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
         let state = try ReadDatabase(root+"/state_5.sqlite")

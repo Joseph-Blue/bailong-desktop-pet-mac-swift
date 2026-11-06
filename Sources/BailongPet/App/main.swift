@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         TextContextMenu.install()
         AppAppearance.apply()
         if let icon = AppIcons.application {NSApp.applicationIconImage = icon}
+        guard RosettaNotice.confirmLaunch() else {quitFromMenu(); return}
         NSWorkspace.shared.notificationCenter.addObserver(self,selector:#selector(systemWillTerminate),name:NSWorkspace.willPowerOffNotification,object:nil)
         installTerminationSignals()
         installMenuBar()
@@ -157,9 +158,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else if window.styleMask.contains(.closable) {window.performClose(nil)}
         else if window.canBecomeKey {window.close()}
     }
-    @objc func reveal() {pet?.reveal()}
+    @objc func reveal() {
+        if NSApp.isHidden {NSApp.unhideWithoutActivation()}
+        pet?.revealFromReopen()
+    }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // 只召回尚未关闭的普通窗口，不因控制器或历史记录仍存在而打开窗口。
+        reveal()
+        // 保留已有普通窗口召回，不重新打开已关闭的设置或历史。
         InterfaceWindows.shared.recall()
         return false
     }

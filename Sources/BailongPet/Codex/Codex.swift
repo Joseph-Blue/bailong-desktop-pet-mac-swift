@@ -58,10 +58,10 @@ final class CodexConnection {
     static func openConversation(_ id:String?) {
         guard let id,let url = threadURL(id) else {openDesktop(); return}
         navigationQueue.async {
-            let lookup = Result {try DesktopHistoryReader.readTitles([id])}
+            let lookup = Result {try DesktopHistoryReader.containsThread(id)}
             DispatchQueue.main.async {
                 switch lookup {
-                case .success(let titles) where titles[id] != nil:
+                case .success(true):
                     if !NSWorkspace.shared.open(url) {openDesktop()}
                 default:
                     // 会话已删除或本机索引不可读时，只打开桌面端。

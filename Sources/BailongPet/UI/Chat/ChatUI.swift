@@ -78,7 +78,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var pageConversation:String?, pageQuery:String?
     private var renderedPageStart:Int?
     private let pageLabel = label("")
-    private var previousPage:ActionButton!, nextPage:ActionButton!
+    private var pageNavigation:NSSegmentedControl!
     private var renderedConversation: String?
     private let transcriptRenderer = TranscriptRenderer()
     var busy = false
@@ -149,7 +149,6 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyButton.emphasize(); historyButton.setContentHuggingPriority(.required,for:.horizontal)
         historyButton.setContentCompressionResistancePriority(.required,for:.horizontal)
         historyModel = ModelSelector(models)
-        inheritedSettings.font = .systemFont(ofSize:11); inheritedSettings.textColor = .secondaryLabelColor
         historyStop = ActionButton("停止任务") { [weak self] in self?.stopTarget(.history) }
         historyCheck = ActionButton("检查发送结果") { [weak self] in self?.checkTarget(.history) }
         historyRetrySettings = ActionButton("重新读取") { [weak self] in self?.onRetrySettings(.history) }
@@ -171,10 +170,14 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let targetMetadata = NSStackView(views:[sourceLabel,folder]); targetMetadata.orientation = .vertical; targetMetadata.alignment = .leading; targetMetadata.spacing = 3
         let metadata = NSStackView(views:[targetMetadata,NSView(),historyStatus,matchLabel,previousMatch!,nextMatch!]); metadata.spacing = 8; metadata.alignment = .centerY
         [matchLabel,previousMatch!,nextMatch!].forEach {$0.isHidden = true}
-        previousPage = ActionButton("较早记录") { [weak self] in self?.moveHistoryPage(-1) }
-        nextPage = ActionButton("较新记录") { [weak self] in self?.moveHistoryPage(1) }
-        pageLabel.font = .systemFont(ofSize:11); pageLabel.textColor = .secondaryLabelColor
-        let pages = NSStackView(views:[previousPage!,NSView(),pageLabel,NSView(),nextPage!]); pages.spacing = 8
+        pageNavigation = NSSegmentedControl(images:[NSImage(systemSymbolName:"chevron.left",accessibilityDescription:"较早记录")!,NSImage(systemSymbolName:"chevron.right",accessibilityDescription:"较新记录")!],trackingMode:.momentary,target:self,action:#selector(changeHistoryPage(_:)))
+        pageNavigation.controlSize = .small
+        for index in 0...1 {pageNavigation.setWidth(28,forSegment:index)}
+        pageNavigation.setToolTip("查看较早的 20 轮记录",forSegment:0)
+        pageNavigation.setToolTip("查看较新的 20 轮记录",forSegment:1)
+        pageNavigation.setAccessibilityLabel("历史记录翻页")
+        pageLabel.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); pageLabel.textColor = .secondaryLabelColor
+        let pages = NSStackView(views:[pageLabel,NSView(),pageNavigation!]); pages.spacing = 8; pages.alignment = .centerY; pages.distribution = .fill
         let separator = NSBox(); separator.boxType = .separator
         for view in [metadata,pages,reading,separator,inputArea] {view.translatesAutoresizingMaskIntoConstraints = false; right.addSubview(view)}
         NSLayoutConstraint.activate([
@@ -410,6 +413,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyInput.fillColor = .textBackgroundColor
         historyEditor.placeholder = selected.external ? "发送到这条 Codex 项目对话…" : historyPlaceholder
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
+        historyModel.font = messageFont; inheritedSettings.font = messageFont
         historyEditor.font = messageFont
         composerView.refresh(font:messageFont,state:composerState,conversations:self.conversations)
         historyButton.emphasize()
@@ -436,8 +440,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let range = historyPage.range(count:selected.turns.count)
         let turns = Array(selected.turns[range])
         let pageChanged = renderedPageStart != range.lowerBound
-        previousPage.isEnabled = range.lowerBound > 0; nextPage.isEnabled = range.upperBound < selected.turns.count
-        pageLabel.stringValue = turns.isEmpty ? "暂无记录" : "第 \(range.lowerBound+1)–\(range.upperBound) 轮 · 共 \(selected.turns.count) 轮"
+        pageNavigation.setEnabled(range.lowerBound > 0,forSegment:0)
+        pageNavigation.setEnabled(range.upperBound < selected.turns.count,forSegment:1)
+        pageNavigation.isHidden = selected.turns.count <= HistoryPageWindow.size
+        pageLabel.stringValue = turns.isEmpty ? "暂无记录" : pageNavigation.isHidden ? "共 \(selected.turns.count) 轮记录" : "第 \(range.lowerBound+1)–\(range.upperBound) 轮 · 共 \(selected.turns.count) 轮"
         let signature = transcriptRenderer.style(selected) + turns.flatMap {[ $0.key ] + transcriptRenderer.turnSignature($0)}
         let contentChanged = selectionChanged || pageChanged || signature != renderedTranscriptSignature
         if contentChanged {
@@ -483,6 +489,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     func invalidateHistoryDisplay() {
         transcriptRenderer.invalidate(); renderedTranscriptSignature.removeAll()
         renderedConversation = nil; searchDataSignature.removeAll()
+    }
+    @objc private func changeHistoryPage(_ sender:NSSegmentedControl) {
+        guard sender.selectedSegment >= 0 else {return}
+        moveHistoryPage(sender.selectedSegment == 0 ? -1 : 1)
     }
     private func moveHistoryPage(_ direction:Int) {
         guard let current = conversations.first(where:{$0.key == selected}) else {return}

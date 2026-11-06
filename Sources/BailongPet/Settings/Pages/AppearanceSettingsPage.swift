@@ -48,22 +48,15 @@ final class AppearanceSettingsPage {
             caption.widthAnchor.constraint(equalTo:column.widthAnchor).isActive = true
             palette.addArrangedSubview(column); accentButtons.append(dot); accentNames.append(caption)
         }
-        var themeRows = [form.choice("外观模式","appearanceMode",AppAppearance.choices),form.row("强调色",control:palette)]
+        var themeRows = [form.segmented("外观模式","appearanceMode",AppAppearance.choices,symbols:["system":"circle.lefthalf.filled","light":"sun.max","dark":"moon"]),form.row("强调色",control:palette)]
         if preferences.string("accentStyle") == "custom" {
             let well = CenteredColorWell(); well.color = AppAccent.color; well.widthAnchor.constraint(equalToConstant:70).isActive = true
             form.attach(well) { [weak self] sender in guard let rgb = (sender as! NSColorWell).color.usingColorSpace(.sRGB) else {return}; self?.preferences.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],for:"accentRGB") }
             themeRows.append(form.row("自定义",control:well))
         }
         form.group("主题",themeRows)
-        let radios = NSStackView(); radios.orientation = .vertical; radios.alignment = .leading; radios.spacing = 8
-        for (key,name) in [("glass","液态玻璃材质"),("plain","普通材质")] {
-            let button = AccentChoiceButton(title:name,type:.radio)
-            button.state = (preferences.usesGlass ? "glass" : "plain") == key ? .on : .off
-            button.isEnabled = PetPreferences.glassAvailable
-            form.attach(button) { [weak self] _ in self?.preferences.set(key,for:"bubbleMaterial"); self?.reload(); self?.showPreview() }
-            radios.addArrangedSubview(button)
-        }
-        var materialRows = [form.row("消息窗口材质",detail:"macOS 26 起支持液态玻璃材质。",control:radios)]
+        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:"macOS 26 起支持液态玻璃材质。") { [weak self] in self?.reload(); self?.showPreview() }
+        var materialRows = [material]
         if preferences.usesGlass {
             let follow = AccentSwitch(); follow.state = preferences.bool("glassFollowsSystem") ? .on : .off; glassFollowSwitch = follow
             follow.setAccessibilityLabel("液态玻璃跟随系统设定")

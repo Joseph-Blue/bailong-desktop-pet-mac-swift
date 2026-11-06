@@ -1,7 +1,7 @@
 import AppKit
 
 // 消息只呈现已收到的正文快照；内容更新、几何测量和阅读位置分别处理。
-final class MessageTextView: AppTextView {
+final class MessageTextView: LinkTextView {
     // NSTextView 的便利初始化会再次进入指定初始化；按首次使用创建，避免覆盖已分配的 Swift 存储。
     private lazy var fileEditPresentation = FileEditPresentation()
     var onContentLayoutChange:(() -> Void)?
@@ -20,7 +20,7 @@ final class MessageTextView: AppTextView {
         storage.enumerateAttribute(.codeBlockHeader,in:NSRange(location:0,length:storage.length)) {value,range,_ in
             guard let content = value as? CodeBlockContent,
                   let paragraph = storage.attribute(.paragraphStyle,at:range.location,effectiveRange:nil) as? NSParagraphStyle,
-                  let block = paragraph.textBlocks.first else {return}
+                  !paragraph.textBlocks.isEmpty else {return}
             seen.insert(range.location)
             let toolbar = codeToolbars[range.location] ?? CodeBlockToolbar(content)
             toolbar.content = content
@@ -28,9 +28,9 @@ final class MessageTextView: AppTextView {
             manager.ensureLayout(forCharacterRange:range)
             let glyphs = manager.glyphRange(forCharacterRange:range,actualCharacterRange:nil)
             let line = manager.lineFragmentRect(forGlyphAt:glyphs.location,effectiveRange:nil)
-            let blockBounds = manager.boundsRect(for:block,at:glyphs.location,effectiveRange:nil)
             let side = content.headerHeight
-            toolbar.frame = NSRect(x:blockBounds.maxX-CodeBlockHeaderLayout.padding+textContainerOrigin.x-side,
+            // 原生表格的 boundsRect 在绘制前可为空；标题行片段已经包含单元格内边距。
+            toolbar.frame = NSRect(x:line.maxX+textContainerOrigin.x-side,
                 y:line.midY+textContainerOrigin.y-side/2,width:side,height:side)
         }
         for key in Array(codeToolbars.keys) where !seen.contains(key) {codeToolbars.removeValue(forKey:key)?.removeFromSuperview()}
@@ -46,12 +46,13 @@ final class MessageTextView: AppTextView {
         super.clicked(onLink:link,at:charIndex)
     }
     @discardableResult func setContent(_ value:NSAttributedString,reset:Bool = false) -> Bool {
-        // 链接自身的属性决定颜色，允许文件目录与文件名区分；普通 Markdown 仍使用强调色。
-        linkTextAttributes = [.cursor:NSCursor.pointingHand]
+        linkTextAttributes = LinkAppearance.attributes
         return applyContent(fileEditPresentation.content(value),reset:reset)
     }
     func releaseRenderedContent() {
         setContent(NSAttributedString(),reset:true)
+        // NSTextView 清空后仍保留插入点属性；不能让它继续引用表格和完整文件列表。
+        typingAttributes = [.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor]
         for toolbar in codeToolbars.values {toolbar.removeFromSuperview()}
         codeToolbars.removeAll()
         // 清空正文不足以回收长文本的字形容量；保留容器和视图，替换只属于显示层的排版器。

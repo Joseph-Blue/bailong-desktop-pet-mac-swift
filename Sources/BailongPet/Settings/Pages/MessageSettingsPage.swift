@@ -11,7 +11,7 @@ enum MessageSettingsPage {
             form.toggle("任务气泡提醒","taskBubbles"),form.toggle("任务进展","progressBubbles"),form.toggle("最终回复","resultBubbles"),form.toggle("互动台词","interactionBubbles"),
             form.toggle("显示思考过程","showThinkingProgress",detail:"在任务概览和进展小气泡中显示公开思考摘要，不计入气泡记录。"),
             form.toggle("显示工具调用","showToolProgress",detail:"在任务概览和进展小气泡中显示工具名称、操作和执行状态，不计入气泡记录。"),
-            form.toggle("自动显示进展小气泡","progressToastEnabled",detail:"默认关闭。开启后，思考摘要或工具状态变化时自动弹出，优先放在桌宠上方；不打断审批、问卷和输入。"),
+            form.toggle("自动显示进展小气泡","progressToastEnabled",detail:"默认开启，停留 2 秒。思考摘要或工具状态变化时自动弹出，优先放在桌宠上方；不打断审批、问卷和输入。"),
             form.note("需要处理的审批、补充输入与任务失败仍保留通知入口。关闭气泡不会停止任务或删除历史。")])
         form.group("气泡卡片与任务概览",[
             form.slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条",detail:"默认 20 条，可设为 5～100 条，仅保留在本次运行的运行内存 (RAM) 中。普通对白不计入，任务概览只占一条；正在阅读和待处理卡片保留，不删除历史对话。"),

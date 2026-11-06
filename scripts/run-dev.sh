@@ -1,12 +1,14 @@
 #!/bin/zsh
 set -eu
 cd "${0:A:h:h}"
+source scripts/terminal-ui.sh
 
 if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != "--build-only" ]]; }; then
     print -u2 "用法：$0 [--build-only]"
     exit 2
 fi
 
+bailong_header "开发程序 · 不打包 .app" "arm64"
 source scripts/swift-sources.sh
 binary=".build/dev/BailongPetDev"
 mkdir -p .build/dev .build/module-cache
@@ -19,7 +21,8 @@ for source in $swift_sources VERSION scripts/swift-sources.sh "${0:A}"; do
 done
 
 if (( rebuild )); then
-    print "正在编译开发版（不打包 .app）…"
+    bailong_phase_begin "1/1" "编译开发程序"
+    {
     version="$(<VERSION)"
     # 将应用身份与系统语言设置嵌入可执行文件，直接运行也使用原生框架本地化。
     cat > .build/dev/Info.plist <<PLIST
@@ -43,12 +46,21 @@ PLIST
         -o "$binary.next"
     mv "$binary.next" "$binary"
     print -r -- "$source_manifest" > .build/dev/sources.txt
+    } > "$bailong_phase_log" 2>&1
+    bailong_phase_end
 else
     print "源码未变化，复用上次编译结果。"
 fi
 
-[[ "${1:-}" != "--build-only" ]] || exit 0
+print -r -- "开发程序：$PWD/$binary"
+bailong_directory "开发产物目录" "${binary:h}"
+if [[ "${1:-}" == "--build-only" ]]; then
+    print "编译准备完成 · 总用时 $((SECONDS-bailong_started)) 秒"
+    print "下一步：双击 run-dev.command 开发运行。"
+    exit 0
+fi
 [[ -f "local-assets/native-hevc/catalog/素材清单.json" ]] || { print -u2 "请先按 README 准备 local-assets/native-hevc/catalog 原生素材。"; exit 1; }
-print "前台运行中，按 Ctrl+C 退出。若已有桌宠在运行，请先从其菜单退出。"
+print "沿用本机现有桌宠设置和历史。若已有桌宠在运行，请先从其菜单退出。"
+print "即将前台运行：请保持终端打开，按 Ctrl+C 停止。"
 export BAILONG_DEV_RUN=1
 exec "$binary"

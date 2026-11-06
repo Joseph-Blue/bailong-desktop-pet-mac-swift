@@ -67,11 +67,11 @@ enum MarkdownText {
             var attributes: [NSAttributedString.Key:Any] = [.font:runFont,.foregroundColor:quote ? NSColor.secondaryLabelColor : color,.paragraphStyle:paragraph]
             if code {attributes[.backgroundColor] = NSColor.quaternaryLabelColor}
             if inline.contains(.strikethrough) {attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue}
-            if let link = run.link {attributes[.link] = link; attributes[.foregroundColor] = AppAccent.color}
+            if let link = run.link {attributes.merge(LinkAppearance.attributes(for:link)) {_,link in link}}
             var value = String(parsed[run.range].characters)
             if let image = run.imageURL {
                 // 保留图片入口，不再丢弃 Markdown 图片地址；不把远程图片下载到本机。
-                attributes[.link] = image; attributes[.foregroundColor] = AppAccent.color
+                attributes.merge(LinkAppearance.attributes(for:image)) {_,link in link}
                 let description = value.replacingOccurrences(of:"\u{FFFC}",with:"").trimmingCharacters(in:.whitespacesAndNewlines)
                 let name = image.lastPathComponent.isEmpty ? "查看图片" : image.lastPathComponent
                 value = "图片：" + (description.isEmpty ? name : description)

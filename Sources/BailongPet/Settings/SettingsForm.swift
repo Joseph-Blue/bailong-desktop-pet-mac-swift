@@ -165,6 +165,20 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
     }
+    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,changed:(() -> Void)? = nil) -> NSView {
+        let control = NSSegmentedControl(labels:options.map(\.1),trackingMode:.selectOne,target:nil,action:nil)
+        control.selectedSegment = options.firstIndex {$0.0 == (value ?? preferences.string(key))} ?? 0
+        control.isEnabled = enabled; control.identifier = .init(key); control.setAccessibilityLabel(title)
+        for (index,option) in options.enumerated() {
+            if let symbol = symbols[option.0] {control.setImage(NSImage(systemSymbolName:symbol,accessibilityDescription:nil),forSegment:index)}
+        }
+        attach(control) { [weak self] sender in
+            let index = (sender as! NSSegmentedControl).selectedSegment
+            guard options.indices.contains(index) else {return}
+            self?.preferences.set(options[index].0,for:key); changed?()
+        }
+        return row(title,detail:detail,control:control)
+    }
     func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
         let field: NSTextField = section == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
