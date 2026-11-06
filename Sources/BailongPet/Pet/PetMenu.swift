@@ -2,8 +2,20 @@ import AppKit
 
 // 菜单只装配现有动作，不拥有动画、手势或任务状态。
 enum PetMenu {
-    static func make(for pet:PetController,random:@escaping () -> Void) -> NSMenu {
+    static func make(for pet:PetController,includeVisibility:Bool = false,random:@escaping () -> Void) -> NSMenu {
         let menu = NSMenu(); menu.delegate = pet
+        if includeVisibility {
+            let visibility = MenuAction("") { [weak pet] in
+                guard let pet else {return}
+                if pet.hidden || NSApp.isHidden {
+                    if NSApp.isHidden {NSApp.unhideWithoutActivation()}
+                    pet.revealFromReopen()
+                } else {pet.manualHidden = true; pet.applyVisibility()}
+            }
+            visibility.identifier = .init("petVisibility")
+            menu.addItem(visibility); menu.addItem(.separator())
+            refreshVisibility(in:menu,pet:pet)
+        }
         func submenu(_ title:String,symbol:String) -> NSMenu {
             let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
             item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
@@ -46,5 +58,12 @@ enum PetMenu {
         menu.addItem(MenuAction("退出"+pet.preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak pet] in pet?.onQuit() })
         menu.showProvidedImages()
         return menu
+    }
+    static func refreshVisibility(in menu:NSMenu,pet:PetController) {
+        guard let item = menu.items.first,item.identifier?.rawValue == "petVisibility" else {return}
+        let show = pet.hidden || NSApp.isHidden
+        item.title = show ? "显示桌宠" : "隐藏桌宠"
+        item.image = NSImage(systemSymbolName:show ? "eye" : "eye.slash",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
+        item.image?.isTemplate = true
     }
 }

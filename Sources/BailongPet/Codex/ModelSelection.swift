@@ -54,10 +54,6 @@ final class ChatModelSettings {
             "max":"投入更多推理，适合难度较高的任务。", "ultra":"使用最高档推理投入，适合需要深入分析的任务。"]
         return descriptions[effort] ?? "使用当前模型提供的「\(Self.effortName(effort))」推理强度。"
     }
-    var caution: String? {
-        if currentModelID == "gpt-6-astra" {return "⚠️ 发送消息后会使用 Astra 模型，注意额度消耗！"}
-        return nil
-    }
     var defaultTitle: String {
         let id = configuredModel ?? models.first(where:{$0.isDefault})?.model
         let name = models.first(where:{$0.model == id})?.displayName ?? id ?? "未获取模型"
@@ -76,6 +72,7 @@ final class ChatModelSettings {
         defaults.set(model,forKey:"petChatModel")
         selectedModel = model; selectedEffort = effort
         defaults.set(effort,forKey:"petChatEffort")
+        notify()
     }
     func syncWithCodex() {
         defaults.removeObject(forKey:"petChatModel")
@@ -108,7 +105,7 @@ final class ChatModelSettings {
     }
     func chooseEffort(_ effort: String?) {
         guard effort == nil || supportedEfforts.contains(where:{$0.reasoningEffort == effort}) else{return}
-        defaults.set(effort,forKey:"petChatEffort"); notify()
+        defaults.set(effort,forKey:"petChatEffort")
         selectedEffort = effort; notify()
     }
     func parameters() throws -> [String:Any] {
@@ -129,7 +126,7 @@ final class ChatModelSettings {
 }
 
 // 两个聊天入口共享偏好；模型与可用思考档位均来自 app-server。
-final class ModelSelector: NSButton, NSPopoverDelegate {
+final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     let settings: ChatModelSettings
     private let popover = NSPopover()
     private var controls: ModelSelectorContent!
@@ -139,23 +136,23 @@ final class ModelSelector: NSButton, NSPopoverDelegate {
     init(_ settings: ChatModelSettings) {
         self.settings = settings; super.init(frame:.zero)
         popover.delegate = self
-        bezelStyle = .rounded; image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
-        font = .systemFont(ofSize:12); target = self; action = #selector(openChoices)
-        setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        setContentHuggingPriority(.required,for:.horizontal)
-        (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
-        widthAnchor.constraint(lessThanOrEqualToConstant:320).isActive = true
+        image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
+        target = self; action = #selector(openChoices)
         setAccessibilityLabel("选择模型与推理强度")
         NotificationCenter.default.addObserver(self,selector:#selector(updateTitle),name:ChatModelSettings.changed,object:settings)
         updateTitle()
     }
     required init?(coder:NSCoder) {fatalError()}
-    @objc private func updateTitle() {title = settings.title; hoverHelp = settings.title}
+    @objc private func updateTitle() {
+        title = ModelPresentation.summary(model:settings.currentModelID ?? "未获取模型",displayName:settings.currentModel?.displayName,effort:settings.effortTitle)
+        hoverHelp = settings.title
+    }
     func closeChoices() {popover.performClose(nil)}
     func popoverDidClose(_ notification:Notification) {
         anchorWidth?.isActive = false; anchorWidth = nil
         if let restingHugging {setContentHuggingPriority(restingHugging,for:.horizontal)}
         restingHugging = nil; invalidateIntrinsicContentSize()
+        popover.contentViewController = nil; controls = nil
     }
     func containsInteraction(at point: NSPoint, window: NSWindow?) -> Bool {
         guard popover.isShown else{return false}
@@ -170,7 +167,9 @@ final class ModelSelector: NSButton, NSPopoverDelegate {
         setContentHuggingPriority(.defaultLow,for:.horizontal)
         anchorWidth = widthAnchor.constraint(equalToConstant:bounds.width); anchorWidth?.isActive = true
         settings.onLoad(false)
-        controls = ModelSelectorContent(settings)
+        let available = window?.screen?.visibleFrame.size ?? NSSize(width:1024,height:768)
+        controls = ModelSelectorContent(settings,fontSize:font?.pointSize ?? 13,
+            maximumSize:NSSize(width:max(1,available.width-48),height:max(1,available.height-80)))
         controls.onResize = { [weak self] size in
             guard let self,self.popover.contentSize != size else {return}
             self.popover.contentSize = size
@@ -187,28 +186,34 @@ final class ModelSelectorContent: NSViewController {
     private let picker = NSPopUpButton(frame:.zero,pullsDown:false)
     private let effort = NSTextField(labelWithString:"")
     private let explanation = NSTextField(wrappingLabelWithString:"")
-    private let defaultInfo = NSTextField(wrappingLabelWithString:"ℹ️ 使用当前模型的默认思考等级。")
-    private let caution = NSTextField(wrappingLabelWithString:"")
     private let slider = NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil)
     private let sync = ActionButton("与 Codex 同步") {}
     private let luna = ActionButton("设置为 5.6-Luna 最低") {}
     private let refresh = ActionButton("刷新模型") {}
     private var options = [ChatModel.Effort]()
     private var effortMarks = [NSTextField]()
-    init(_ settings: ChatModelSettings) {self.settings = settings; super.init(nibName:nil,bundle:nil)}
+    private let scroll = GutterScrollView(), body = TopDownView()
+    private let scale:CGFloat, maximumSize:NSSize
+    init(_ settings: ChatModelSettings,fontSize:CGFloat = 13,maximumSize:NSSize = NSSize(width:900,height:700)) {
+        self.settings = settings; scale = fontSize/13; self.maximumSize = maximumSize
+        super.init(nibName:nil,bundle:nil)
+    }
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
-        view = NSView(frame:NSRect(x:0,y:0,width:460,height:280))
+        view = scroll; scroll.hasVerticalScroller = true; scroll.documentView = body
         picker.target = self; picker.action = #selector(modelChanged)
-        effort.font = .systemFont(ofSize:14,weight:.semibold)
+        heading.font = .systemFont(ofSize:13*scale,weight:.semibold)
+        picker.font = .systemFont(ofSize:13*scale)
+        effort.font = .systemFont(ofSize:14*scale,weight:.semibold)
         slider.target = self; slider.action = #selector(effortChanged)
         slider.allowsTickMarkValuesOnly = true; slider.isContinuous = false; slider.setAccessibilityLabel("推理强度")
-        for text in [explanation,defaultInfo,caution] {text.font = .systemFont(ofSize:12); text.isSelectable = false}
-        explanation.textColor = .secondaryLabelColor; defaultInfo.textColor = AppAccent.color
+        for text in [explanation] {text.font = .systemFont(ofSize:12*scale); text.isSelectable = false}
+        explanation.textColor = .secondaryLabelColor
         refresh.frame = NSRect(x:16,y:9,width:88,height:28); refresh.callback = { [weak self] in self?.settings.onLoad(true) }
         luna.frame = NSRect(x:112,y:9,width:176,height:28); luna.callback = { [weak self] in self?.settings.chooseLunaMinimum() }
         sync.frame = NSRect(x:304,y:9,width:140,height:28); sync.emphasize(); sync.callback = { [weak self] in self?.settings.syncWithCodex() }
-        [heading,picker,effort,slider,explanation,defaultInfo,caution,refresh,luna,sync].forEach {view.addSubview($0)}
+        for button in [refresh,luna,sync] {button.configureFlexible(font:.systemFont(ofSize:13*scale))}
+        [heading,picker,effort,slider,explanation,refresh,luna,sync].forEach {body.addSubview($0)}
         NotificationCenter.default.addObserver(self,selector:#selector(refreshControls),name:ChatModelSettings.changed,object:settings)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshControls),name:AppAccent.didChange,object:nil)
         refreshControls()
@@ -226,17 +231,13 @@ final class ModelSelectorContent: NSViewController {
         effortMarks.forEach {$0.removeFromSuperview()}
         effortMarks = options.map {option in
             let mark = NSTextField(labelWithString:ChatModelSettings.effortName(option.reasoningEffort))
-            mark.font = .systemFont(ofSize:11); mark.alignment = .center
+            mark.font = .systemFont(ofSize:11*scale); mark.alignment = .center
             mark.textColor = option.reasoningEffort == settings.currentEffort ? AppAccent.color : .secondaryLabelColor
-            view.addSubview(mark); return mark
+            body.addSubview(mark); return mark
         }
         effort.stringValue = "推理强度 · "+settings.effortTitle
-        effort.textColor = AppAccent.color; defaultInfo.textColor = AppAccent.color
+        effort.textColor = AppAccent.color
         explanation.stringValue = settings.loading ? "正在读取可用模型…" : settings.error != nil ? "模型列表暂不可用，请点击刷新模型重试。" : options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation
-        defaultInfo.isHidden = settings.loading || settings.error != nil || settings.selectedEffort != nil || options.isEmpty
-        caution.stringValue = settings.caution ?? ""
-        caution.isHidden = settings.loading || settings.error != nil || settings.caution == nil
-        caution.textColor = .systemOrange
         explanation.hoverHelp = settings.error
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading
         luna.isEnabled = !settings.loading && settings.lunaMinimum != nil
@@ -244,28 +245,49 @@ final class ModelSelectorContent: NSViewController {
         layoutControls()
     }
     private func layoutControls() {
-        var y: CGFloat = 49
-        // 隐藏说明不占空间，可见说明按实际换行高度排版。
-        for text in [caution,defaultInfo,explanation] where !text.isHidden {
-            let font = text.font!
-            let rect = (text.stringValue as NSString).boundingRect(with:NSSize(width:428,height:CGFloat.greatestFiniteMagnitude),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font])
-            let height = max(font.ascender-font.descender+font.leading,rect.height).rounded(.up)+2
-            text.frame = NSRect(x:16,y:y,width:428,height:height); y += height+8
+        let margin = 16*scale, gap = 8*scale
+        let buttons = [refresh,luna,sync]
+        let footerWidth = buttons.reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+2*gap
+        let menuWidth = picker.itemTitles.map {($0 as NSString).size(withAttributes:[.font:picker.font!]).width}.max() ?? 0
+        let width = min(maximumSize.width,max(460*scale,menuWidth+60*scale,footerWidth+2*margin)+GutterScrollView.gutter)
+        let documentWidth = GutterScrollView.documentWidth(for:width), contentWidth = max(1,documentWidth-2*margin)
+        var y = margin
+        func place(_ control:NSView,_ height:CGFloat,_ spacing:CGFloat) {
+            control.frame = NSRect(x:margin,y:y,width:contentWidth,height:height); y += height+spacing
         }
+        // 从顶部布局，不依赖弹窗上一次高度；只按当前可见内容计算新尺寸。
+        place(heading,22*scale,gap)
+        place(picker,28*scale,12*scale)
+        place(effort,22*scale,gap)
         if !slider.isHidden {
-            slider.frame = NSRect(x:16,y:y+20,width:428,height:32)
+            slider.frame = NSRect(x:margin,y:y,width:contentWidth,height:32*scale)
             for (index,mark) in effortMarks.enumerated() {
                 let tick = slider.rectOfTickMark(at:index)
-                let width = max(32,mark.fittingSize.width+8)
-                mark.frame = NSRect(x:max(16,min(16+tick.midX-width/2,444-width)),y:y,width:width,height:18)
+                let width = max(32*scale,mark.fittingSize.width+8*scale)
+                mark.frame = NSRect(x:max(margin,min(margin+tick.midX-width/2,documentWidth-margin-width)),y:y+32*scale,width:width,height:18*scale)
                 mark.isHidden = false
             }
-            y += 56
+            y += 56*scale
         } else {effortMarks.forEach {$0.isHidden = true}}
-        effort.frame = NSRect(x:16,y:y,width:428,height:22); y += 30
-        picker.frame = NSRect(x:16,y:y,width:428,height:28); y += 40
-        heading.frame = NSRect(x:16,y:y,width:428,height:22); y += 38
-        let size = NSSize(width:460,height:y)
+        for text in [explanation] where !text.isHidden {
+            let height = text.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:contentWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up)
+            place(text,max(18*scale,height),gap)
+        }
+        let buttonHeight = buttons.map {$0.intrinsicContentSize.height}.max() ?? 28*scale
+        if footerWidth <= contentWidth {
+            var x = margin
+            for (index,button) in buttons.enumerated() {
+                let w = button.intrinsicContentSize.width
+                if index == buttons.count-1 {x = documentWidth-margin-w}
+                button.frame = NSRect(x:x,y:y,width:w,height:buttonHeight); x += w+gap
+            }
+            y += buttonHeight+margin
+        } else {
+            for button in buttons {place(button,buttonHeight,gap)}
+            y += margin-gap
+        }
+        body.setFrameSize(NSSize(width:documentWidth,height:y))
+        let size = NSSize(width:width,height:min(y,maximumSize.height))
         view.setFrameSize(size); preferredContentSize = size; onResize(size)
     }
     @objc private func modelChanged() {settings.chooseModel(picker.selectedItem?.representedObject as? String)}

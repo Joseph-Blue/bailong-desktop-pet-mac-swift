@@ -53,21 +53,23 @@ struct SettingsSearchEntry {
         add(.messages,"历史记录",["记录历史"],"聊天 保存 同步")
         add(.messages,"气泡窗审批",["气泡窗审批按钮顺序"],"批准 允许这一次 允许本轮 拒绝 左拒绝 右允许 左允许 右拒绝 左右 位置 红叉 绿对钩")
         add(.messages,"气泡卡片与任务概览",["气泡卡片保留数量","互动气泡显示任务概览","近期结束任务数量"],"消息 历史 上一条 下一条 正在执行 最近 完成")
-        add(.messages,"显示哪些消息",["显示思考过程","显示工具调用"],"思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关")
-        add(.messages,"显示哪些消息",["自动显示进展小气泡"],"默认关闭 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关")
+        add(.messages,"显示哪些消息",["显示思考摘要","显示工具调用"],"显示思考过程 思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关")
+        add(.messages,"任务气泡",["思考与工具进展小气泡"],"自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关")
         add(.messages,"输入快捷键",["发送与换行"],"回车 Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 备选1 备选2 默认 发送 换行 快捷回复 插话 问卷")
-        add(.messages,"显示哪些消息",["任务气泡提醒","任务进展","最终回复","互动台词"],"通知 显示 开关")
-        add(.messages,"停留时间",["互动台词","任务进展","最终回复","额度信息","长回复自动延长阅读时间","鼠标移入时暂停倒计时","文字显示完毕后开始计时"],"气泡 自动关闭 秒 时长 悬停")
-        add(.messages,"停留时间",["进展小气泡停留时间"],"思考 工具调用 短气泡 小窗口 自动关闭 持续 时间 秒 时长 2s 2秒")
-        add(.messages,"显示与声音",["逐步显示文字","播放音效","最终回复时长"],"打字机 声音 预览")
-        add(.messages,"安静陪伴",["安静陪伴模式","启用专注时段","开始时间","结束时间"],"免打扰 时间 夜间 静音")
+        add(.messages,"任务气泡",["显示任务气泡","任务消息","最终回复"],"任务气泡提醒 任务进展 通知 显示 开关")
+        add(.messages,"显示哪些消息",["互动台词"],"通知 显示 开关")
+        add(.messages,"停留时间",["互动台词","任务消息","最终回复","额度信息","长回复自动延长阅读时间","鼠标移入时暂停倒计时","预览最终回复气泡"],"气泡 自动关闭 秒 时长 悬停 预览 任务进展")
+        add(.messages,"停留时间",["思考与工具进展小气泡"],"进展小气泡停留时间 思考 工具调用 短气泡 小窗口 自动关闭 持续 时间 秒 时长 2s 2秒")
+        add(.messages,"声音",["播放音效"],"声音")
+        add(.messages,"安静陪伴",["立即开启安静陪伴","定时开启安静陪伴","开始时间","结束时间"],"安静陪伴模式 启用专注时段 免打扰 时间 夜间 静音")
         add(.appearance,"大小",["桌宠大小","气泡大小","消息文字大小"],"缩放 字号 字体")
         add(.appearance,"气泡形状",["自定义宽高比","宽 : 高"],"气泡 长宽比 宽高比 比例 宽度 高度 形状 排版")
-        add(.appearance,"主题",["外观模式","强调色","自定义"],"主题 颜色 浅色 深色 跟随系统")
-        add(.appearance,"消息窗口",["消息窗口材质","液态玻璃跟随系统设定","玻璃不透明度","动态效果","气泡效果"],"玻璃 透明 磨砂 背景 动画 预览")
+        add(.appearance,"主题",["外观模式","强调色","自定义"],"主题 颜色 浅色 深色 跟随系统 分段选择")
+        add(.appearance,"消息窗口",["消息窗口材质","液态玻璃跟随系统设定","玻璃不透明度","动态效果","气泡效果"],"液态玻璃 普通材质 分段选择 玻璃 透明 磨砂 背景 动画 预览")
         add(.advanced,"设置文件",["导出设置","导入设置"],"备份 恢复")
-        add(.advanced,"本应用所占本机存储",["本应用所占本机数据","默认任务文件夹","磁盘缓存","清空本应用的本机数据","清空磁盘缓存","数据目录"],"存储 磁盘 空间 清理 删除 访达 Finder 清空本机数据 清空数据")
-        add(.developer,"动画",["画质","素材帧率上限","动画缓冲帧数","整段动画预加载"],"性能 内存 RAM 720 512 384 256 FPS 分辨率 缓冲")
+        add(.advanced,"桌宠对话默认工作区",["默认工作区","恢复内置工作区","清理内置工作区"],"人设 新对话 默认目录 文件夹 Workspace 选择 访达 Finder 废纸篓 清理默认工作区")
+        add(.advanced,"本应用所占本机存储",["本应用所占本机数据","内置任务文件夹","磁盘缓存","清空本应用的本机数据","清空磁盘缓存","数据目录"],"存储 磁盘 空间 清理 删除 访达 Finder 默认任务文件夹 清空本机数据 清空数据")
+        add(.developer,"动画",["画质","素材帧率上限","动画缓冲帧数","整段动画预加载"],"性能 内存 RAM 720 512 384 256 FPS 分辨率 缓冲 卡顿 6帧 24帧 0.25秒")
         add(.developer,"应用统计",["开启应用性能信息统计浮窗"],"CPU GPU 内存 RAM Swap 性能监视器")
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
@@ -80,6 +82,28 @@ struct SettingsSearchEntry {
                 entries[index].condition = "选择自定义强调色后显示"
             } else if entries[index].section == .appearance && entries[index].title == "宽 : 高" {
                 entries[index].condition = "开启自定义宽高比后生效"
+            } else if entries[index].section == .activity && entries[index].title == "活动范围" {
+                entries[index].condition = "开启自主移动后可调整"
+            } else if entries[index].section == .messages {
+                switch (entries[index].group,entries[index].title) {
+                case (_,"开始时间"),(_,"结束时间"):
+                    entries[index].condition = "开启定时安静陪伴后可调整"
+                case (_,"近期结束任务数量"):
+                    entries[index].condition = "开启任务概览后可调整"
+                case ("任务气泡","任务消息"),("任务气泡","最终回复"):
+                    entries[index].condition = "开启显示任务气泡后可调整"
+                case ("任务气泡","思考与工具进展小气泡"):
+                    entries[index].condition = "开启显示任务气泡和任务消息后可调整"
+                case ("停留时间","任务消息"):
+                    entries[index].condition = "开启显示任务气泡和任务消息后可调整"
+                case ("停留时间","最终回复"),("停留时间","长回复自动延长阅读时间"):
+                    entries[index].condition = "开启显示任务气泡和最终回复后可调整"
+                case ("停留时间","思考与工具进展小气泡"):
+                    entries[index].condition = "开启显示任务气泡、任务消息和进展小气泡后可调整"
+                case ("停留时间","互动台词"):
+                    entries[index].condition = "开启互动台词后可调整"
+                default: break
+                }
             }
         }
         if let catalog {
@@ -87,10 +111,6 @@ struct SettingsSearchEntry {
             for (group,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations),("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation])] {
                 add(.activity,group,clips.map(\.title),"动画 播放速度 倍速 频率 偏爱 预览")
             }
-        }
-        for index in entries.indices where ["逐步显示文字","文字显示完毕后开始计时"].contains(entries[index].title) {
-            entries[index].condition = "暂时停用；正文即时显示"
-            entries[index].keywords += " 暂停 停用 流水 重构"
         }
         return entries
     }

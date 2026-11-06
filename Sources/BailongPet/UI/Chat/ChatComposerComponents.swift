@@ -32,25 +32,25 @@ final class ChatMetadataRow: NSStackView {
 }
 
 // 临时输入与历史共用只读显示，不拥有连接、设置缓存或模型写入。
-final class ChatReadOnlyModelField: NSTextField {
+final class ChatReadOnlyModelField: ModelSummaryButton {
     init() {
         super.init(frame:.zero)
-        isEditable = false; isSelectable = false; isBezeled = false; drawsBackground = false
-        font = .systemFont(ofSize:12); textColor = .secondaryLabelColor
-        maximumNumberOfLines = 2; lineBreakMode = .byTruncatingTail
-        setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        isEnabled = false
+        image = NSImage(systemSymbolName:"lock",accessibilityDescription:"只读"); imagePosition = .imageTrailing
+        setAccessibilityRole(.staticText)
     }
     required init?(coder:NSCoder) {fatalError()}
     func update(settings:DesktopReply.Settings?,error:String?) {
         if let settings {
             let effort = settings.effort.map(ChatModelSettings.effortName) ?? "未提供"
-            stringValue = settings.model+" · "+effort+" · 只读"
+            title = ModelPresentation.summary(model:settings.model,effort:effort)+" · 只读"
             let source = settings.effortFromHistory ? "思考等级来自会话记录。" : ""
             hoverHelp = "沿用 Codex 原会话设置，当前只读。"+source+"\n模型："+settings.model+"\n思考等级："+effort
         } else {
-            stringValue = error ?? "正在读取 Codex 会话设置…"; hoverHelp = stringValue
+            title = error ?? "正在读取 Codex 会话设置…"; hoverHelp = title
         }
         setAccessibilityLabel("Codex 模型与思考等级，只读")
+        setAccessibilityValue(title)
         setAccessibilityHelp(hoverHelp)
     }
 }
@@ -96,15 +96,19 @@ final class WorkspaceLinkButton: NSButton {
     }
     required init?(coder:NSCoder) {fatalError()}
     func update(path:String) {
-        guard displayedPath != path else {return}; displayedPath = path
+        let color = path.isEmpty ? NSColor.secondaryLabelColor : AppAccent.color
+        guard displayedPath != path || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color else {return}
+        displayedPath = path
         directory = path.isEmpty ? nil : URL(fileURLWithPath:path,isDirectory:true)
         isEnabled = directory != nil
         let text = path.isEmpty ? "未选择工作区" : (path as NSString).abbreviatingWithTildeInPath
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingMiddle
-        attributedTitle = NSAttributedString(string:text,attributes:[.font:font!, .foregroundColor:isEnabled ? NSColor.linkColor : NSColor.secondaryLabelColor, .underlineStyle:isEnabled ? NSUnderlineStyle.single.rawValue : 0,.paragraphStyle:paragraph])
+        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph]
+        if isEnabled {attributes.merge(LinkAppearance.attributes) {_,link in link}}
+        attributedTitle = NSAttributedString(string:text,attributes:attributes)
         hoverHelp = path.isEmpty ? nil : path
         setAccessibilityValue(path)
     }
     @objc private func openDirectory() {if let directory {onOpen(directory)}}
-    override func resetCursorRects() {super.resetCursorRects(); if isEnabled {addCursorRect(bounds,cursor:.pointingHand)}}
+    override func resetCursorRects() {super.resetCursorRects(); if isEnabled {LinkAppearance.addCursorRect(bounds,to:self)}}
 }

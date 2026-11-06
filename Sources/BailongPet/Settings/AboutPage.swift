@@ -80,7 +80,7 @@ final class AboutPageController: NSViewController {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
-        let text = AppTextView(frame:NSRect(x:0,y:0,width:560,height:360))
+        let text = LinkTextView(frame:NSRect(x:0,y:0,width:560,height:360))
         text.isEditable = false
         text.isSelectable = false
         // 说明文字不允许选中；链接通过点击手势打开，不依赖 NSTextView 的选择行为。
@@ -122,7 +122,7 @@ final class AboutPageController: NSViewController {
 
     @objc private func updateAccent() {
         for text in textViews {
-            text.linkTextAttributes = [.foregroundColor:AppAccent.color,.underlineStyle:NSUnderlineStyle.single.rawValue]
+            text.linkTextAttributes = LinkAppearance.attributes
             text.needsDisplay = true
         }
     }
@@ -180,6 +180,6 @@ final class AboutPageController: NSViewController {
     private func link(_ title: String,url: String,to text: NSMutableAttributedString) {
         let start = text.length
         paragraph(title,to:text)
-        text.addAttribute(.link,value:URL(string:url)!,range:NSRange(location:start,length:(title as NSString).length))
+        text.addAttributes(LinkAppearance.attributes(for:URL(string:url)!),range:NSRange(location:start,length:(title as NSString).length))
     }
 }

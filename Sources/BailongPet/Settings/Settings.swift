@@ -17,6 +17,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private lazy var activityPage = ActivitySettingsPage(form:form,catalog:catalog,
         reload:{ [weak self] in self?.render() },onPreview:{ [weak self] in self?.onPreview($0) })
     private let aboutPage = AboutPageController()
+    private lazy var workspacePage = WorkspaceSettingsPage(form:form,window:window,reload:{ [weak self] in self?.render() },clear:{ [weak self] completion in
+        guard let action = self?.onClearDefaultWorkspace else {completion(.failure(PetFailure(message:"会话管理尚未就绪，无法清理工作区。"))); return}
+        action(completion)
+    })
     private let splitController = NSSplitViewController()
     private let sidebar = NSTableView(), scroll = NSScrollView(), content = NSStackView()
     private let resetButton = SettingsFooterButton(title:"恢复本页设置为默认值",target:nil,action:nil)
@@ -36,6 +40,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onMessagePreview: (MessagePurpose) -> Void = { _ in }
     var onPreviewDetails: () -> Void = {}
     var onClearLocalData: (() throws -> Void)?
+    var onClearDefaultWorkspace: ((@escaping (Result<Void,Error>) -> Void) -> Void)?
     var historyRecoveryReason:() -> String? = {nil}
     var onReloadHistory:(() throws -> Void)?
     var onExportHistory:((URL) throws -> Void)?
@@ -267,7 +272,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             form.group("动画", [form.choice("画质", "animationQuality", [("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")]),
                 form.choice("素材帧率上限", "animationFPSLimit", [("full", "满帧 (≥ 24 FPS)"), ("20", "20 FPS"), ("15", "15 FPS")]),
                 form.bufferFrames(),
-                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "不推荐，会显著增加运行内存 (RAM) 占用。")])
+                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "不推荐开启。播放前提前加载完整动画，但会大幅增加运行内存 (RAM) 占用。")])
             form.group("应用统计", [form.toggle("开启应用性能信息统计浮窗", "showDiagnostics")])
         }
         scroll.contentView.scroll(to:.zero)
@@ -309,8 +314,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         updateTimeLabel?.stringValue = UpdateChecker.shared.lastCheckText
     }
     private func updates() {
+        let checkUpdate = ActionButton("检查更新…") {UpdateWindow.show()}; checkUpdate.emphasize()
         form.group("版本",[form.row("当前版本",control:label(Paths.version)),
-            form.row("检查正式版本",control:ActionButton("检查更新…") {UpdateWindow.show()}),
+            form.row("检查正式版本",control:checkUpdate),
             form.row("公开仓库",control:ActionButton("GitHub 发布页") {
                 if !NSWorkspace.shared.open(UpdateChecker.releases) {showError("无法打开发布页",PetFailure(message:UpdateChecker.releases.absoluteString))}
             })])
@@ -318,9 +324,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let status = form.note(UpdateChecker.shared.recordText), time = label(UpdateChecker.shared.lastCheckText)
         updateStatusLabel = status; updateTimeLabel = time
         form.group("检查记录",[form.row("上次检查时间",control:time),status])
-        form.group("安装",[form.note("从 GitHub 下载新版，退出桌宠后替换 App。设置和聊天记录保留。")])
     }
     private func advanced() {
+        workspacePage.render()
         if let reason = historyRecoveryReason() {
             form.group("历史恢复",[form.note(reason),
                 form.row("导出历史原文件",control:ActionButton("导出…") { [weak self] in self?.exportOriginalHistory() }),
@@ -329,7 +335,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                     do {try self.onReloadHistory?(); self.render()} catch {showError("历史仍为只读",error)}
                 })])
         }
-        form.group("设置文件",[form.row("导出设置",detail:"只包含本页设置，不含会话、凭证或模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),form.row("导入设置",detail:"导入前检查全部字段；登录启动项不随设置文件改变。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })])
+        form.group("设置文件",[form.row("导出设置",detail:"导出应用设置，不含聊天记录和模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),form.row("导入设置",detail:"导入前检查全部字段；登录启动项不随设置文件改变。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })])
         let data = label("正在统计…"), work = label("正在统计…"), cache = label("正在统计…")
         let total = label("正在统计本应用磁盘存储…")
         total.font = .systemFont(ofSize:11); total.textColor = .secondaryLabelColor
@@ -339,8 +345,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         for button in [dataButton,cacheButton] {button.bezelStyle = .rounded; button.hasDestructiveAction = true}
         form.group("本应用所占本机存储",[total,
             form.row("本应用所占本机数据",detail:"聊天记录、同步副本和应用设置",control:data),
-            form.row("默认任务文件夹",detail:"任务创建的文件，清空数据时保留。",control:work),
-            form.row("磁盘缓存",detail:"不含动画帧缓冲的运行内存 (RAM)。",control:cache),
+            form.row("内置任务文件夹",control:work),
+            form.row("磁盘缓存",control:cache),
             form.row("清空本应用的本机数据",control:dataButton),form.row("清空磁盘缓存",control:cacheButton),
             form.row("数据目录",detail:Paths.data.path,control:ActionButton("在访达中显示") {if !NSWorkspace.shared.open(Paths.data) {showError("无法打开数据目录",PetFailure(message:Paths.data.path))}})],
             action:ActionButton("刷新") { [weak self] in self?.render() })

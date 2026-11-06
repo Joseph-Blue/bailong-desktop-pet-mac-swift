@@ -40,4 +40,13 @@ enum LocalStorage {
         if FileManager.default.fileExists(atPath:cache.path) {try FileManager.default.removeItem(at:cache)}
         URLCache.shared.removeAllCachedResponses()
     }
+    static func clearBuiltInWorkspace(moveToTrash:(URL) throws -> Void = {try FileManager.default.trashItem(at:$0,resultingItemURL:nil)}) throws {
+        let manager = FileManager.default, directory = workspace
+        guard manager.fileExists(atPath:directory.path) else {return}
+        let values = try directory.resourceValues(forKeys:[.isDirectoryKey,.isSymbolicLinkKey])
+        guard values.isDirectory == true,values.isSymbolicLink != true else {throw PetFailure(message:"内置 Workspace 已被替换，未执行清理。")}
+        for child in try manager.contentsOfDirectory(at:directory,includingPropertiesForKeys:nil) {
+            try moveToTrash(child)
+        }
+    }
 }

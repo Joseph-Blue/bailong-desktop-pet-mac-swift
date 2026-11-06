@@ -30,7 +30,7 @@ final class AppearanceSettingsPage {
     }
     func render() {
         form.group("大小",[form.slider("桌宠大小","petPercent",range:50...200,suffix:"%"),form.slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),form.slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt")])
-        form.group("气泡形状",[form.toggle("自定义宽高比","bubbleAspectEnabled",detail:"关闭时按内容自动排版。开启后应用于消息与进展气泡，正文超出时滚动；屏幕边界和操作按钮保留所需空间。问卷手动拉伸优先，额度按内容排版。"),form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1")])
+        form.group("气泡形状",[form.toggle("自定义宽高比","bubbleAspectEnabled"),form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1",requires:["bubbleAspectEnabled"])])
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
             let dot = AccentSwatch(key:key,name:name)
@@ -48,22 +48,15 @@ final class AppearanceSettingsPage {
             caption.widthAnchor.constraint(equalTo:column.widthAnchor).isActive = true
             palette.addArrangedSubview(column); accentButtons.append(dot); accentNames.append(caption)
         }
-        var themeRows = [form.choice("外观模式","appearanceMode",AppAppearance.choices),form.row("强调色",control:palette)]
+        var themeRows = [form.segmented("外观模式","appearanceMode",AppAppearance.choices,symbols:["system":"circle.lefthalf.filled","light":"sun.max","dark":"moon"]),form.row("强调色",control:palette)]
         if preferences.string("accentStyle") == "custom" {
             let well = CenteredColorWell(); well.color = AppAccent.color; well.widthAnchor.constraint(equalToConstant:70).isActive = true
             form.attach(well) { [weak self] sender in guard let rgb = (sender as! NSColorWell).color.usingColorSpace(.sRGB) else {return}; self?.preferences.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],for:"accentRGB") }
             themeRows.append(form.row("自定义",control:well))
         }
         form.group("主题",themeRows)
-        let radios = NSStackView(); radios.orientation = .vertical; radios.alignment = .leading; radios.spacing = 8
-        for (key,name) in [("glass","液态玻璃材质"),("plain","普通材质")] {
-            let button = AccentChoiceButton(title:name,type:.radio)
-            button.state = (preferences.usesGlass ? "glass" : "plain") == key ? .on : .off
-            button.isEnabled = PetPreferences.glassAvailable
-            form.attach(button) { [weak self] _ in self?.preferences.set(key,for:"bubbleMaterial"); self?.reload(); self?.showPreview() }
-            radios.addArrangedSubview(button)
-        }
-        var materialRows = [form.row("消息窗口材质",detail:"macOS 26 起支持液态玻璃材质。",control:radios)]
+        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:"macOS 26 起支持液态玻璃材质。") { [weak self] in self?.reload(); self?.showPreview() }
+        var materialRows = [material]
         if preferences.usesGlass {
             let follow = AccentSwitch(); follow.state = preferences.bool("glassFollowsSystem") ? .on : .off; glassFollowSwitch = follow
             follow.setAccessibilityLabel("液态玻璃跟随系统设定")

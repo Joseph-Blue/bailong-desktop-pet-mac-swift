@@ -42,6 +42,7 @@ final class ChatComposer: NSObject {
     var onStop:() -> Void = {}, onCheck:() -> Void = {}
     var onOpenCodex:() -> Void = {}, onRetrySettings:() -> Void = {}
     var onSubmit:() -> Void = {}, onFolder:() -> Void = {}, onNew:() -> Void = {}, onHistory:() -> Void = {}, onHide:() -> Void = {}
+    var onNewDefault:() -> Void = {}
     init(models:ChatModelSettings) {
         super.init()
         composer.level = NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1); composer.contentMinSize = NSSize(width:540,height:420)
@@ -74,12 +75,12 @@ final class ChatComposer: NSObject {
         checkButton = ActionButton("检查发送结果") { [weak self] in self?.onCheck() }
         openCodex = ActionButton("在 Codex 中打开") { [weak self] in self?.onOpenCodex() }
         openCodex.image = AppIcons.openAI; openCodex.imagePosition = .imageLeading
-        composerFooterButtons = [historyLink,composerNew,openCodex,stopButton,checkButton,composerButton]
+        composerFooterButtons = [historyLink,openCodex,composerNew,stopButton,checkButton,composerButton]
         for button in composerFooterButtons {
             button.configureFlexible(font:.systemFont(ofSize:13))
         }
         composerButtonHeight = composerButton.heightAnchor.constraint(equalToConstant:28); composerButtonHeight?.isActive = true
-        let footer = NSStackView(views:[historyLink,composerNew,openCodex,stopButton,checkButton,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
+        let footer = NSStackView(views:[historyLink,openCodex,composerNew,stopButton,checkButton,NSView(),composerButton]); footer.distribution = .fill; footer.spacing = 8; footer.alignment = .centerY
         // 跨控件约束必须在共同父视图建立后启用，否则 AppKit 会中断整个会话初始化。
         for button in composerFooterButtons where button !== composerButton {
             button.heightAnchor.constraint(equalTo:composerButton.heightAnchor).isActive = true
@@ -99,7 +100,11 @@ final class ChatComposer: NSObject {
         let connectionRow = ChatMetadataRow("模型",content:composerInheritedSettings,accessory:retrySettings)
         composerInheritedSettings.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         inputStatus.font = .systemFont(ofSize:11); inputStatus.textColor = .secondaryLabelColor
-        inputStatus.maximumNumberOfLines = 2
+        inputStatus.maximumNumberOfLines = 2; inputStatus.alignment = .right
+        inputStatus.setContentHuggingPriority(.required,for:.horizontal)
+        let modelFields = NSStackView(views:[modelRow,connectionRow]); modelFields.orientation = .vertical; modelFields.alignment = .leading; modelFields.spacing = 0
+        for row in [modelRow,connectionRow] {row.widthAnchor.constraint(equalTo:modelFields.widthAnchor).isActive = true}
+        let modelStatusRow = NSStackView(views:[modelFields,inputStatus]); modelStatusRow.distribution = .fill; modelStatusRow.alignment = .centerY; modelStatusRow.spacing = 12
         workspace.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let workspaceRow = ChatMetadataRow("工作区",content:workspace,expandsContent:true)
         let targetCaption = NSTextField(labelWithString:"会话")
@@ -111,14 +116,14 @@ final class ChatComposer: NSObject {
         conversationPicker.widthAnchor.constraint(lessThanOrEqualToConstant:240).isActive = true
         let modeRow = NSStackView(views:[modes!,NSView(),targetCaption,conversationPicker])
         modeRow.alignment = .centerY; modeRow.distribution = .fill; modeRow.spacing = 8
-        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelRow,connectionRow,inputStatus,footer])
+        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelStatusRow,footer])
         body.orientation = .vertical; body.alignment = .leading; body.spacing = 8
         let stack = NSStackView(views:[header,modeRow,body]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         contentStack = stack
         c.body.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:c.body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:c.body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:c.body.topAnchor,constant:16)])
         [header,modeRow,body].forEach {$0.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
-        [composerInput!,recovery,workspaceRow,recentReply,modelRow,connectionRow,inputStatus,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
+        [composerInput!,recovery,workspaceRow,recentReply,modelStatusRow,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
         inputHeight = composerInput.heightAnchor.constraint(equalToConstant:140); inputHeight.isActive = true
         composerEditor.onTextChange = { [weak self] in self?.updateLayout() }
         composerEditor.send = { [weak self] in guard let self else{return}; self.onSubmit() }
@@ -188,15 +193,17 @@ final class ChatComposer: NSObject {
 
     private func showNewMenu() {
         let menu = NSMenu(); menu.autoenablesItems = false
+        let defaultItem = NSMenuItem(title:"在默认工作区新建",action:#selector(newDefault),keyEquivalent:""); defaultItem.target = self
         let same = NSMenuItem(title:"在当前工作区新建",action:#selector(newHere),keyEquivalent:""); same.target = self
         folderAction.target = self; folderAction.action = #selector(newElsewhere)
-        menu.addItem(same); menu.addItem(folderAction)
+        menu.addItem(defaultItem); menu.addItem(same); menu.addItem(folderAction)
         showingNewMenu = true
         menu.popUp(positioning:nil,at:NSPoint(x:0,y:composerNew.bounds.maxY+4),in:composerNew)
         showingNewMenu = false
         menu.removeItem(folderAction)
     }
     @objc private func newHere() {onNew()}
+    @objc private func newDefault() {onNewDefault()}
     @objc private func newElsewhere() {onFolder()}
 
     func updateLayout() {
@@ -221,6 +228,7 @@ final class ChatComposer: NSObject {
     func refresh(font:NSFont,state:ChatInputState,conversations:[Conversation]) {
         let external = state.kind == .project
         composerEditor.font = font; status.font = font
+        composerModel.font = font; composerInheritedSettings.font = font
         for button in composerFooterButtons + [retrySettings!] {button.configureFlexible(font:font)}
         composerButtonHeight?.constant = composerFooterButtons.map {$0.intrinsicContentSize.height}.max() ?? 28
         composerButton.isHidden = !recovery.isHidden; composerButton.emphasize()
@@ -228,7 +236,7 @@ final class ChatComposer: NSObject {
         composerButton.isEnabled = state.canSend(models:composerModel.settings)
         composerEditor.isEditable = state.canEdit
         folderAction.isEnabled = state.canEdit && !external; composerNew.isEnabled = state.runningTitle == nil && !state.readOnly
-        composerNew.isHidden = external; openCodex.isHidden = !external
+        composerNew.isHidden = external; openCodex.isHidden = false
         composerModel.isEnabled = state.canEdit && !external; composerModelRow.isHidden = external
         modes.select(state.kind.rawValue)
         conversationPicker.title = state.conversation?.title ?? "选择会话…"

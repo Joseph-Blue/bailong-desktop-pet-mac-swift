@@ -514,6 +514,7 @@ final class PetController: NSObject, NSMenuDelegate {
         else if activeTasks.isEmpty { idle() }
     }
     var fullCandidate = false, fullCandidateSince = 0.0
+    private var fullscreenRevealOverride = false
     func checkDesktop() {
         let quiet = preferences.isQuiet()
         if quiet != wasQuiet {wasQuiet = quiet; interaction(); if quiet && motion != nil {idle()}; if !preferences.allows(bubble.purpose) {bubble.hide()}; if !preferences.allows(.progress) {progressBubble.hide()}}
@@ -529,6 +530,9 @@ final class PetController: NSObject, NSMenuDelegate {
                 }
             }
         }
+        // 明确重新打开应用时先召回；退出当前全屏环境后恢复自动隐藏。
+        if !full {fullscreenRevealOverride = false}
+        full = full && !fullscreenRevealOverride
         if full != fullCandidate { fullCandidate = full; fullCandidateSince = now }
         if fullscreenHidden != full && now-fullCandidateSince >= (full ? 0.25 : 0.75) { fullscreenHidden = full; applyVisibility() }
     }
@@ -546,6 +550,16 @@ final class PetController: NSObject, NSMenuDelegate {
         if let greeting = catalog.variants.first(where:{$0.id == "01"}) {play(greeting,"interaction")}
     }
     func reveal() { manualHidden = false; keepOnScreen(); applyVisibility() }
+    func revealFromReopen() {
+        fullscreenRevealOverride = true
+        fullscreenHidden = false; fullCandidate = false; fullCandidateSince = now
+        reveal(); undock()
+        // 系统隐藏不改变 WindowFade 的 shown 状态，显式召回仍需重新前置原窗口。
+        if !hidden {
+            if animation != nil {window.orderFrontRegardless()}
+            else {startup?.orderFrontRegardless()}
+        }
+    }
     private func randomAnimation(taskOverview:Bool = false) {
         if let clip = preferences.choose(catalog.variants+catalog.work,previous:current.id) {preview(clip,taskOverview:taskOverview)}
     }
@@ -660,8 +674,8 @@ final class PetController: NSObject, NSMenuDelegate {
         if !Set(keys).isDisjoint(with:["interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime"]) {bubble.refreshDuration()}
         interaction(); checkDesktop(); refreshMenu(); onPreferencesChanged()
     }
-    func refreshMenu() { status.menu = makeMenu() }
-    func menuWillOpen(_ menu: NSMenu) { dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
+    func refreshMenu() { status.menu = PetMenu.make(for:self,includeVisibility:true,random:{ [weak self] in self?.randomAnimation() }) }
+    func menuWillOpen(_ menu: NSMenu) { PetMenu.refreshVisibility(in:menu,pet:self); dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
     deinit {motionDisplayLink?.invalidate()}
     func close() {

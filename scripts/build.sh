@@ -1,6 +1,7 @@
 #!/bin/zsh
 set -eu
 cd "${0:A:h:h}"
+source scripts/terminal-ui.sh
 if (( $# > 1 )); then
     print -u2 "用法：$0 [arm64|x86_64]"; exit 2
 fi
@@ -10,20 +11,28 @@ case "$target_arch" in
     arm64|x86_64) ;;
     *) print -u2 "不支持的架构：$target_arch"; exit 2 ;;
 esac
+bailong_header "构建应用包 · 仅构建当前目标架构" "$target_arch"
+print "完成后替换本版本、本架构的构建产物，不自动安装到 /Applications。"
 assets="local-assets/native-hevc/catalog"
-[[ -f "$assets/素材清单.json" ]] || { print -u2 "请先按 README 准备 local-assets/native-hevc/catalog 原生素材。"; exit 1; }
+[[ -f "$assets/素材清单.json" ]] || { print -u2 "缺少原生素材清单。请按 docs/开发资源获取.md 准备 local-assets/native-hevc/catalog。"; exit 1; }
 version="$(<VERSION)"
 output="dist/native-hevc/$version/$target_arch"
 mkdir -p ".build/$target_arch" .build/module-cache "$output"
+bailong_phase_begin "1/4" "编译主程序"
 xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache $swift_sources \
-    -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3
+    -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 > "$bailong_phase_log" 2>&1
+bailong_phase_end
+bailong_phase_begin "2/4" "编译跟随助手"
 xcrun swiftc -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache Sources/BailongPet/Infrastructure/FollowMonitor.swift Tools/FollowHelper/main.swift \
-    -framework AppKit -o ".build/$target_arch/BailongFollow"
+    -framework AppKit -o ".build/$target_arch/BailongFollow" > "$bailong_phase_log" 2>&1
+bailong_phase_end
 
 app="$output/白龙桌宠Swift.app"
 staging="$(mktemp -d "$output/.pet-XXXXXX")"
+bailong_phase_begin "3/4" "组装应用与资源"
+{
 mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources/outputs/白龙桌宠素材"
 cp ".build/$target_arch/BailongPet" "$staging/Contents/MacOS/BailongPet"
 cp "$assets/素材清单.json" "$staging/Contents/Resources/outputs/白龙桌宠素材/"
@@ -71,9 +80,22 @@ cat > "$helper/Contents/Info.plist" <<PLIST
 <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
+} > "$bailong_phase_log" 2>&1
+bailong_phase_end
+bailong_phase_begin "4/4" "本地签名并保存应用"
+{
 codesign --force --sign - "$helper"
 codesign --force --sign - "$staging"
 # 输出目录按版本隔离，只组装原生运行资源。
 if [[ -d "$app" ]]; then rm -rf "$app"; fi
 mv "$staging" "$app"
-print "已构建 $app（$version，$target_arch，本地签名）"
+} > "$bailong_phase_log" 2>&1
+bailong_phase_end
+print "构建完成 · 总用时 $((SECONDS-bailong_started)) 秒"
+print -r -- "应用：$PWD/$app"
+bailong_directory "构建产物目录" "$output"
+if [[ "$target_arch" == "$(uname -m)" ]]; then
+    print "下一步：双击 launch.command 启动。"
+else
+    print "此产物的架构与当前进程架构不同，请在对应架构的 Mac 上运行。"
+fi

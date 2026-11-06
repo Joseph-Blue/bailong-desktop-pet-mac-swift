@@ -25,9 +25,17 @@ extension ChatController {
         guard running == nil && !store.isReadOnly else {return}
         let current = entry == .composer ? composerSelection : selected
         let conversation = Conversation()
-        conversation.cwd = cwd ?? (current?.external == false ? current?.cwd : nil) ?? LocalStorage.workspace.path
+        conversation.cwd = cwd ?? (current?.external == false ? current?.cwd : nil) ?? pet.preferences.defaultWorkspace.path
         unstartedConversations.append(conversation)
         selectConversation(conversation.key,entry:entry)
+    }
+    func newDefaultConversation(entry:ChatEntry) {
+        guard running == nil && !store.isReadOnly else {return}
+        let directory = pet.preferences.defaultWorkspace
+        do {
+            try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+            newConversation(cwd:directory.path,entry:entry)
+        } catch {showError("无法使用默认工作区",error)}
     }
     func chooseFolder(entry:ChatEntry = .history) {
         let target = entry == .composer ? composerSelection : selected
