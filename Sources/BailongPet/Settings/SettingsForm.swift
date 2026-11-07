@@ -295,7 +295,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         switch key {
         case "ownerName": icon = NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)
         case "petName": icon = petSymbol()
-        case "customAddress": icon = NSImage(systemSymbolName:"bubble.left",accessibilityDescription:nil)
+        case "customAddress": icon = NSImage(systemSymbolName:"person.text.rectangle",accessibilityDescription:nil)
         default: icon = nil
         }
         let token = ["ownerName":"{用户名}","petName":"{桌宠名}","customAddress":"{特定称呼}"][key]

@@ -1,6 +1,6 @@
 import AppKit
 
-final class ComposerPanel:NSPanel {
+final class ComposerPanel:ContentCursorPanel {
     override var canBecomeKey:Bool {true}
     override var canBecomeMain:Bool {false}
 }
@@ -45,6 +45,7 @@ final class ChatComposer: NSObject {
     var onNewDefault:() -> Void = {}
     init(models:ChatModelSettings) {
         super.init()
+        composer.tracksContentCursor = true; composer.acceptsMouseMovedEvents = true
         composer.level = NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1); composer.contentMinSize = NSSize(width:540,height:420)
         composer.isOpaque = false; composer.backgroundColor = .clear; composer.hasShadow = true
         composer.isMovable = false; composer.isMovableByWindowBackground = false

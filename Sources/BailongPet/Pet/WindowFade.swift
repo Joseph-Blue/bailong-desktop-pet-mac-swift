@@ -6,6 +6,7 @@ final class WindowFade: NSObject {
     private let preferences: PetPreferences
     private var timer: Timer?
     private var shown = false
+    private var onHidden: (() -> Void)?
     init(window: NSWindow, preferences: PetPreferences) {
         self.window = window; self.preferences = preferences
         super.init()
@@ -31,10 +32,19 @@ final class WindowFade: NSObject {
         timer = tick; RunLoop.main.add(tick,forMode:.common)
     }
     @objc private func settingsChanged() {if !preferences.bool("bubbleMotion") {finish()}}
+    func hide(completion: @escaping () -> Void) {
+        onHidden = completion
+        if !shown && timer == nil {finish()}
+        else {setVisible(false)}
+    }
     private func finish() {
         timer?.invalidate(); timer = nil
         if !shown {window?.orderOut(nil)}
         window?.alphaValue = 1
+        if !shown {
+            let completion = onHidden; onHidden = nil
+            completion?()
+        }
     }
     func stop() {shown = false; finish()}
     deinit {timer?.invalidate(); NotificationCenter.default.removeObserver(self)}

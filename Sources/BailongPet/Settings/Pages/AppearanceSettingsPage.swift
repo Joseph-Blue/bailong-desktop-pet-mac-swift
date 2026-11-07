@@ -75,7 +75,7 @@ final class AppearanceSettingsPage {
             controls.alphaValue = slider.isEnabled ? 1 : 0.45; glassControls = [controls]
             materialRows.append(form.row("玻璃不透明度",control:controls))
         }
-        materialRows.append(form.toggle("动态效果","bubbleMotion"))
+        materialRows.append(form.toggle("动态效果","bubbleMotion",detail:"控制气泡动画，以及桌宠启动、退出、显示和隐藏时的淡入淡出。"))
         materialRows.append(form.row("气泡效果",control:ActionButton("预览气泡") { [weak self] in self?.showPreview() }))
         form.group("消息窗口",materialRows)
     }

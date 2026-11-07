@@ -2,7 +2,7 @@
 
 **这是 `joseph/dev` 开发分支，面向开发者，不属于普通用户的安装说明，也不提供开发版 Release 程序下载。** 普通用户请前往 [main 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-开发快照版本：**0.7.4-dev.3（保留开发记录）**，正式版为 **0.7.4**。上述开发功能已整理为 main 的 0.7.4，开发分支保留自己的文档与版本。当前源码包含附件消息整理、Codex 历史用户消息、插话气泡及链接修复，最新交互效果待用户验收。新用户默认 512×512、12 帧缓冲；保留任务台词、轮廓阴影和 CPU 动画帧处理试验。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
+开发快照版本：**0.7.5-dev.3（显隐过渡与深色图标）**，正式版为 **0.7.4**。本轮补齐全屏隐藏图标，调整文件修改图标的深色显示，启动与退出共用显隐淡入淡出，并简化关于页。保留上一轮新托盘图、像素清理与右键菜单图标。实际显示和退出流程待用户验收。前一轮链接光标修复仍未解决，见 [TODO](todo.md)。开发线保留附件消息整理、Codex 历史用户消息和插话气泡。新用户默认 512×512、12 帧缓冲；保留任务台词、轮廓阴影和 CPU 动画帧处理试验。当前 P0 是运行内存占用与释放机制。
 
 基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC 与 AVFoundation，当前开发试验由 CPU / vImage 完成缩放和颜色转换；界面支持液态玻璃和系统外观。
 
@@ -62,9 +62,10 @@ local-assets/
   glass-symbols/
   BailongPet.icns
   openai-logo.png
+  pet-status-template.png           # 本轮新增，旧资源包不包含
 ```
 
-资源不存放在 Git 中。`samples.json` 用于独立预览与 PNG 替换，不是 App 运行必需文件。
+资源不存放在 Git 中。本轮新增模板图须按 [开发资源获取](docs/开发资源获取.md) 单独准备。`samples.json` 用于独立预览与 PNG 替换，不是 App 运行必需文件。
 
 ```sh
 ./scripts/run-dev.sh --build-only  # 仅编译

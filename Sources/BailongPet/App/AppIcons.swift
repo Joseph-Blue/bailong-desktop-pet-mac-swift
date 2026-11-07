@@ -19,25 +19,25 @@ enum AppIcons {
     }()
 
     static var application: NSImage? {NSImage(contentsOf:Paths.resources.appendingPathComponent("BailongPet.icns"))}
-    // 保留素材的透明轮廓，菜单栏交由系统按背景绘制为白/黑剪影。
-    static func petSilhouette(_ frame: Frame) -> NSImage {
-        let pixelBounds = frame.bounds.applying(CGAffineTransform(scaleX: Double(frame.image.width)/512, y: Double(frame.image.height)/512))
-        let crop = frame.image.cropping(to:pixelBounds.integral) ?? frame.image
-        let source = NSImage(cgImage:crop,size:NSSize(width:crop.width,height:crop.height))
-        let image = NSImage(size:NSSize(width:18,height:18),flipped:false) { rect in
-            let scale = min(rect.width/source.size.width,rect.height/source.size.height)
-            let size = NSSize(width:source.size.width*scale,height:source.size.height*scale)
-            let fitted = NSRect(x:(rect.width-size.width)/2,y:(rect.height-size.height)/2,width:size.width,height:size.height)
-            source.draw(in:fitted)
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current?.compositingOperation = .sourceIn
-            NSColor.white.setFill(); NSBezierPath(rect:fitted).fill()
-            NSGraphicsContext.restoreGraphicsState()
-            return true
+    // 源图已离线清理并裁到可见边界；仅保留 2× 小图，托盘和设置共用。
+    static let petTemplate: NSImage? = {
+        let url = Paths.resources.appendingPathComponent("pet-status-template.png")
+        guard let source = NSImage(contentsOf:url),
+              let context = CGContext(data:nil,width:36,height:36,bitsPerComponent:8,bytesPerRow:144,
+                                      space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue),
+              let sourceImage = source.cgImage(forProposedRect:nil,context:nil,hints:nil) else {
+            NSLog("无法读取桌宠模板图：%@",url.path); return nil
         }
+        let scale = min(36/CGFloat(sourceImage.width),36/CGFloat(sourceImage.height))
+        let size = CGSize(width:CGFloat(sourceImage.width)*scale,height:CGFloat(sourceImage.height)*scale)
+        let fitted = CGRect(x:(36-size.width)/2,y:(36-size.height)/2,width:size.width,height:size.height)
+        context.interpolationQuality = .high
+        context.draw(sourceImage,in:fitted)
+        guard let raster = context.makeImage() else {NSLog("无法绘制桌宠模板图"); return nil}
+        let image = NSImage(cgImage:raster,size:NSSize(width:18,height:18))
         image.isTemplate = true; image.accessibilityDescription = PetPreferences.shared.appName
         return image
-    }
+    }()
     static let finder: NSImage = {
         let image = NSImage(size:NSSize(width:22,height:22),flipped:false) { _ in
             NSColor.black.setStroke()

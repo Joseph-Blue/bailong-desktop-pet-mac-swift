@@ -101,6 +101,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var composerVisible = false {didSet {if composerVisible {progressBubble.hide()}}}
     var composerFrame:() -> CGRect? = {nil}
     private var greetingPending = true
+    private var exiting = false
     var pauseTime: Double?
     var press: CGPoint?, pressOrigin = CGPoint.zero
     var dragged = false, dragFromDock = false
@@ -124,7 +125,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var now: Double { ProcessInfo.processInfo.systemUptime }
     var size: Double { window.frame.width }
     var screen: NSScreen { window.screen ?? NSScreen.main ?? NSScreen.screens[0] }
-    var hidden: Bool { manualHidden || fullscreenHidden || sleeping }
+    var hidden: Bool { exiting || manualHidden || fullscreenHidden || sleeping }
     // 控制器采用与作者 Qt 相同的全局向下坐标；只在窗口边界转换成 AppKit 坐标。
     var top: Double { NSScreen.screens[0].frame.maxY }
     var position: CGPoint { CGPoint(x: window.frame.minX, y: top - window.frame.maxY) }
@@ -172,7 +173,11 @@ final class PetController: NSObject, NSMenuDelegate {
         manualHidden = !preferences.bool("showOnLaunch"); playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
         bubble.preferences = preferences
         sound = NSSound(contentsOf: Paths.resources.appendingPathComponent("sounds/click.wav"), byReference: true)
-        status.button?.title = PetPreferences.productName; status.button?.hoverHelp = preferences.appName; refreshMenu()
+        status.button?.image = AppIcons.petTemplate
+        status.button?.title = AppIcons.petTemplate == nil ? PetPreferences.productName : ""
+        status.button?.imagePosition = .imageOnly
+        status.button?.imageScaling = .scaleProportionallyDown
+        status.button?.hoverHelp = preferences.appName; refreshMenu()
         bubble.onClose = { [weak self] in self?.quotaActive = false }
         settings.petSymbol = { [weak self] in self?.status.button?.image }
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
@@ -213,16 +218,19 @@ final class PetController: NSObject, NSMenuDelegate {
             configureAnimationTimer(); return
         }
         decoder.load(clip, first: { [weak self] frame in
-            guard let self else { return }
+            guard let self, !self.exiting else { return }
+            if clip.id == self.catalog.idle.id && self.baseBounds == nil { self.baseBounds = frame.bounds }
             if self.animation == nil {
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id); self.began = self.now
                 self.animation = Animation([frame]); self.frameIndex = 0; self.view.needsDisplay = true
-                if !self.hidden {self.visibilityFade.setVisible(true)}
+                if !self.hidden {
+                    self.view.displayIfNeeded()
+                    self.visibilityFade.setVisible(true)
+                }
             }
-            if clip.id == self.catalog.idle.id && self.baseBounds == nil { self.baseBounds = frame.bounds }
             self.greetOnFirstAppearance()
         }, completion: { [weak self] result in
-            guard let self else { return }; self.loading = false
+            guard let self, !self.exiting else { return }; self.loading = false
             switch result {
             case .success(let animation):
                 RecoveryWindow.resolve("animation-initialization")
@@ -236,8 +244,6 @@ final class PetController: NSObject, NSMenuDelegate {
                 if clip.id == self.catalog.idle.id {
                     let icon = NSImage(cgImage: animation.frames[0].image, size: NSSize(width: 128,height: 128))
                     NSApp.applicationIconImage = AppIcons.application ?? icon
-                    if self.status.button?.image == nil {self.status.button?.image = AppIcons.petSilhouette(animation.frames[0])}
-                    self.status.button?.title = ""
                 }
                 if self.mode == "move" { self.planMotion(manual: true) }
                 self.greetOnFirstAppearance()
@@ -688,6 +694,15 @@ final class PetController: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) { PetMenu.refreshVisibility(in:menu,pet:self); dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
     deinit {motionDisplayLink?.invalidate()}
+    func prepareForExit(_ completion: @escaping () -> Void) {
+        exiting = true
+        timer?.invalidate(); timer = nil; desktopTimer?.invalidate(); desktopTimer = nil
+        motionDisplayLink?.invalidate(); motionDisplayLink = nil
+        decoder.cancel(); startup?.orderOut(nil)
+        window.ignoresMouseEvents = true
+        bubble.hide(); progressBubble.hide(); onVisibility(false)
+        visibilityFade.hide(completion:completion)
+    }
     func close() {
         diagnostics?.stop(); visibilityFade.stop()
         motionDisplayLink?.invalidate(); motionDisplayLink = nil

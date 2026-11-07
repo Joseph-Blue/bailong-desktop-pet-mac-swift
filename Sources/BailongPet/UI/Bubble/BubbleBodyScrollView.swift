@@ -55,6 +55,7 @@ final class BubbleBodyScrollView:GutterScrollView {
         if document.frame.size != size {document.setFrameSize(size)}
         tile()
         reflectScrolledClipView(contentView)
+        (window as? ContentCursorPanel)?.refreshContentCursor()
     }
 
     func showTop() {restorePosition(.zero)}
@@ -65,5 +66,6 @@ final class BubbleBodyScrollView:GutterScrollView {
         let point = NSPoint(x:0,y:y)
         if contentView.bounds.origin != point {contentView.scroll(to:point)}
         reflectScrolledClipView(contentView)
+        (window as? ContentCursorPanel)?.refreshContentCursor()
     }
 }

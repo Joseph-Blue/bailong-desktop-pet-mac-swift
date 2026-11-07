@@ -44,7 +44,7 @@ final class AboutPageController: NSViewController {
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
         tabs.font = .systemFont(ofSize:13)
-        for (identifier,label,text) in [("about","关于",aboutText()),("credits","开源项目、技术栈与致谢",creditsText())] {
+        for (identifier,label,text) in [("about","关于",aboutText()),("credits","来源与致谢",creditsText())] {
             let item = NSTabViewItem(identifier:identifier)
             item.label = label
             item.view = readingView(text)
@@ -129,41 +129,41 @@ final class AboutPageController: NSViewController {
 
     private func aboutText() -> NSAttributedString {
         let text = NSMutableAttributedString(string:"")
-        paragraph("本项目作者：Joseph Blue（约瑟Blue）",to:text)
-        paragraph("基于 jingh12312-rgb（風-隐）的《GPT白龙娘动态桌宠》，进行非官方 macOS 移植及 Swift + AppKit 原生重写，独立维护。",to:text)
-        paragraph("使用 Swift + AppKit 构建原生设置、历史对话与任务交互，透明动画由 Apple 系统框架播放。支持自定义台词、消息外观、720×720 原画、运行统计及本机历史管理。",to:text)
-        link("本项目公开仓库 · GitHub",url:Self.repositoryURL.absoluteString,to:text)
-        paragraph("对话功能连接本机 Codex，支持桌宠内发起任务与观察桌面端任务。更新入口位于设置的“更新”页及应用菜单，通过 GitHub 正式发布检查版本。",to:text)
-        link("GitHub 发布与更新说明",url:UpdateChecker.releases.absoluteString,to:text)
+        paragraph("让白龙娘住进你的 Mac 桌面，陪你聊天、工作。她会播放动作、显示 Codex 任务进展，也能提醒你回答问题或确认操作。",to:text)
+        paragraph("你可以给她起名字、修改台词，调整大小和气泡外观，在历史会话中查看之前的对话。聊天和任务功能需要本机安装 Codex。",to:text)
+        paragraph("作者：Joseph Blue（约瑟Blue）。本项目在《GPT白龙娘动态桌宠》的基础上，为 Mac 重新开发，由本项目作者独立维护。感谢原作者 jingh12312-rgb（風-隐）带来的白龙娘。",to:text)
+        link("项目主页与问题反馈",url:Self.repositoryURL.absoluteString,to:text)
+        paragraph("想更新应用，可以打开设置中的“更新”，或前往下面的发布页下载。",to:text)
+        link("下载与更新说明",url:UpdateChecker.releases.absoluteString,to:text)
         link("原作：GPT白龙娘动态桌宠 · jingh12312-rgb（風-隐）",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
         return text
     }
 
     private func creditsText() -> NSAttributedString {
         let text = NSMutableAttributedString(string:"")
-        paragraph("感谢原作者及以下项目。本页分别记录原作、素材和软件组件的来源；它们各自适用的许可并不相同。",to:text,color:.secondaryLabelColor)
+        paragraph("感谢原作者，以及帮助这个 Mac 版本完成的项目和工具。",to:text,color:.secondaryLabelColor)
 
         heading("原作 · GPT白龙娘动态桌宠",to:text)
-        paragraph("作者：jingh12312-rgb（風-隐）。行为与文案参考 v0.5.1 源码。原作 README 声明尚未指定开源许可证。",to:text)
+        paragraph("作者：jingh12312-rgb（風-隐）。桌宠的互动方式和台词参考原作 v0.5.1；原作的使用说明与许可信息见仓库 README。",to:text)
         link("原作仓库与说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
 
         heading("角色动画与应用图标",to:text)
-        paragraph("角色动画与应用图标来自原作者 v0.5.1 发布包。",to:text)
+        paragraph("角色动画来自原作 v0.5.1 发布包，应用图标取自角色画面。",to:text)
 
-        heading("原生透明动画",to:text)
-        paragraph("角色动画使用 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 解码，由 CPU／vImage 完成缩放和颜色转换。PNG 素材接入由 AVAssetWriter 和 Apple avconvert 完成。",to:text)
+        heading("动画播放",to:text)
+        paragraph("使用 macOS 自带的动画播放与图像处理功能，让角色周围保持透明。动画文件采用 Apple 的透明 HEVC 格式。",to:text)
         link("Apple 透明 HEVC 说明",url:"https://developer.apple.com/videos/play/wwdc2019/506/",to:text)
 
-        heading("SQLite · 本机任务记录读取",to:text)
-        paragraph("使用 macOS 提供的 SQLite 动态库，不另附数据库运行库。SQLite 项目声明其发布代码与文档属于公有领域。",to:text)
+        heading("SQLite · 对话记录",to:text)
+        paragraph("使用 macOS 自带的 SQLite 保存本机对话记录、读取 Codex 任务信息。SQLite 的代码和文档属于公有领域。",to:text)
         link("SQLite 官方版权说明",url:"https://www.sqlite.org/copyright.html",to:text)
 
         heading("macOS 界面设计参考 · macos-golden-gate-design",to:text)
-        paragraph("设置、侧栏、工具栏与原生控件布局参考 gambadio 的 macos-golden-gate-design 技能。该技能声明采用 MIT 许可证，用于开发阶段的设计与审查。",to:text)
+        paragraph("界面设计参考 gambadio 的 macos-golden-gate-design，让设置和窗口更贴近 Mac 的使用习惯。该设计指南采用 MIT 许可证。",to:text)
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)
 
-        heading("开发技术与系统服务",to:text)
-        paragraph("使用 Swift、AppKit、Foundation、AVFoundation、Accelerate／vImage、Core Image、Core Graphics 及 macOS 系统符号构建原生界面。这些系统技术单独列出，不将 AppKit 标注为第三方开源组件。对话功能调用用户已安装的 Codex，不随本应用分发 Codex。",to:text)
+        heading("Mac 与 Codex",to:text)
+        paragraph("应用用 Swift 和 AppKit 开发，窗口、菜单和设置使用 Mac 原生控件。聊天和任务由本机安装的 Codex 处理。",to:text)
         return text
     }
 

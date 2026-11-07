@@ -6,10 +6,15 @@ protocol TemplateContextMenu {}
 enum TextContextMenu {
     static func menu(for target: NSTextView) -> NSMenu {
         let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
-        for (title,action) in [("剪切",#selector(NSText.cut(_:))),("拷贝",#selector(NSText.copy(_:))),("粘贴",#selector(NSText.paste(_:))),("全选",#selector(NSResponder.selectAll(_:)))] {
+        for (title,action,symbol) in [("剪切",#selector(NSText.cut(_:)),"scissors"),("拷贝",#selector(NSText.copy(_:)),"doc.on.doc"),("粘贴",#selector(NSText.paste(_:)),"doc.on.clipboard"),("全选",#selector(NSResponder.selectAll(_:)),"")] {
+            if action == #selector(NSResponder.selectAll(_:)) {menu.addItem(.separator())}
             let item = NSMenuItem(title:title,action:action,keyEquivalent:"")
+            if !symbol.isEmpty {
+                item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
+            }
             item.target = target; menu.addItem(item)
         }
+        menu.showProvidedImages()
         return menu
     }
     private static var monitor: Any?

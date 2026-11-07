@@ -310,10 +310,6 @@ final class DesktopSync {
         if missing > 0 {lines.append("另有 \(missing) 条此前仍在进行的任务暂时读不到，正在等待状态更新。")}
         lines += [
             "", "最近刷新："+Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),
-            "", "这些数量怎么理解？",
-            "每次发送消息并等待回复算一条任务记录；同一个会话里多次发送会分别计数。",
-            "统计范围是最近使用的 Codex 会话，以及桌宠已经在跟踪的任务。",
-            "需要批准或补充信息时，请回到原 Codex 会话处理。"
         ]
         return lines.joined(separator:"\n")
     }

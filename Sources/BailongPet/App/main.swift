@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var localEvents: Any?
     var terminationSignals = [DispatchSourceSignal]()
     var quitReady = false
+    var quitInProgress = false
     var terminationRequested = false
     var explicitQuit = false
     let lifecycle = RunLifecycle()
@@ -182,10 +183,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Dock 的系统“退出”只关闭界面；完整退出必须来自桌宠的显式退出入口。
         if !explicitQuit {closeInterface(); return .terminateCancel}
         UpdateChecker.shared.cancel()
-        if quitReady || chat == nil {return .terminateNow}
+        if quitReady || (pet == nil && chat == nil) {return .terminateNow}
+        if quitInProgress {return .terminateLater}
+        quitInProgress = true
         sync?.close()
-        if chat?.running == nil {chat?.shutdown {}; return .terminateNow}
-        chat?.shutdown { [weak self] in self?.quitReady = true; NSApp.reply(toApplicationShouldTerminate:true) }
+        // 淡出与原任务清理并行，两个完成后才答复退出；同步完成也在返回 terminateLater 后答复。
+        let pending = DispatchGroup()
+        if let pet {pending.enter(); pet.prepareForExit {pending.leave()}}
+        if let chat {pending.enter(); chat.shutdown {pending.leave()}}
+        pending.notify(queue:.main) { [weak self] in
+            self?.quitReady = true; NSApp.reply(toApplicationShouldTerminate:true)
+        }
         return .terminateLater
     }
     func applicationWillTerminate(_ notification: Notification) {

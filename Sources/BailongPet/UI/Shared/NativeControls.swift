@@ -134,27 +134,27 @@ final class BubbleCloseButton: HoverIconButton {
     @objc private func closeBubble() {onClose()}
 }
 final class TopDownView: NSView {override var isFlipped: Bool {true}}
-final class PetWindow: NSPanel {
-    var allowsInput = false
-    override var canBecomeKey: Bool { allowsInput }
-    override var canBecomeMain: Bool { false }
+class ContentCursorPanel:NSPanel {
+    var tracksContentCursor = false
     override func sendEvent(_ event:NSEvent) {
         super.sendEvent(event)
-        guard allowsInput,event.type == .mouseMoved,let contentView else {return}
-        let point = contentView.convert(event.locationInWindow,from:nil)
-        guard contentView.bounds.insetBy(dx:6,dy:6).contains(point) else {return}
-        var hit = contentView.hitTest(point)
-        while let view = hit {
-            if let link = view as? LinkCursorControl,link.isEnabled {NSCursor.pointingHand.set(); return}
-            if let text = view as? NSTextView,
-               LinkAppearance.link(at:text.convert(event.locationInWindow,from:nil),in:text) != nil {
-                NSCursor.pointingHand.set(); return
-            }
-            if let text = view as? NSTextView,text.isEditable || text.isSelectable {NSCursor.iBeam.set(); return}
-            hit = view.superview
-        }
-        NSCursor.arrow.set()
+        guard [.mouseMoved,.mouseEntered,.cursorUpdate,.scrollWheel,.leftMouseUp].contains(event.type) else {return}
+        // AppKit 分发完成后再确定光标，输入能力与链接悬停互不依赖。
+        refreshContentCursor()
     }
+    func refreshContentCursor() {
+        guard tracksContentCursor,isVisible,let contentView,
+              NSWindow.windowNumber(at:NSEvent.mouseLocation,belowWindowWithWindowNumber:0) == windowNumber else {return}
+        let point = contentView.convert(convertPoint(fromScreen:NSEvent.mouseLocation),from:nil)
+        let interior = styleMask.contains(.resizable) ? contentView.bounds.insetBy(dx:6,dy:6) : contentView.bounds
+        guard interior.contains(point) else {return}
+        LinkAppearance.cursor(at:point,in:contentView).set()
+    }
+}
+final class PetWindow:ContentCursorPanel {
+    var allowsInput = false
+    override var canBecomeKey:Bool {allowsInput}
+    override var canBecomeMain:Bool {false}
 }
 // 正文与材质分开管理；切换材质不改消息、输入内容或窗口透明度。
 private final class BubbleBackingView: NSView {
@@ -173,6 +173,7 @@ final class BubbleBackgroundView: NSView {
     private var glass: NSView?
     private var fade: Timer?
     private var targetOpacity: CGFloat = 1
+    private var cursorTracking:NSTrackingArea?
     private let preferences: PetPreferences
     init(preferences: PetPreferences = .shared) {
         self.preferences = preferences
@@ -185,6 +186,19 @@ final class BubbleBackgroundView: NSView {
         updateMaterial()
     }
     required init?(coder:NSCoder) {fatalError()}
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let cursorTracking {removeTrackingArea(cursorTracking); self.cursorTracking = nil}
+        guard let panel = window as? ContentCursorPanel,panel.tracksContentCursor else {return}
+        // 非激活气泡仍接收移动事件；activeAlways 不会发送 cursorUpdate。
+        let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.mouseMoved,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+        addTrackingArea(area); cursorTracking = area
+        panel.refreshContentCursor()
+    }
+    override func mouseExited(with event:NSEvent) {
+        super.mouseExited(with:event)
+        if let cursorTracking,event.trackingArea === cursorTracking {NSCursor.arrow.set()}
+    }
     override var isOpaque: Bool {false}
     @objc private func preferencesChanged(_ note: Notification) {
         let keys = note.userInfo?["keys"] as? [String] ?? []

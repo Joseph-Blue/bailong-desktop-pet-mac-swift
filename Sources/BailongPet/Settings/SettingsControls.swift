@@ -79,10 +79,7 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
         return accepted
     }
     override func menu(for event:NSEvent) -> NSMenu? {
-        let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
-        for (title,action) in [("剪切",#selector(NSText.cut(_:))),("拷贝",#selector(NSText.copy(_:))),("粘贴",#selector(NSText.paste(_:))),("全选",#selector(NSResponder.selectAll(_:)))] {
-            let item = NSMenuItem(title:title,action:action,keyEquivalent:""); item.target = self; menu.addItem(item)
-        }
+        let menu = TextContextMenu.menu(for:self)
         guard allowsTokens else {return menu}
         menu.addItem(.separator())
         let font = NSFont.menuFont(ofSize:0)

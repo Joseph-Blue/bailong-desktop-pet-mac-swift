@@ -19,6 +19,19 @@ final class FileEditSection:NSObject {
 enum FileEditRendering {
     static let previewCount = 3
     static let disclosureLink = URL(string:"bailong-file-edits:toggle")!
+    private static func symbol(_ name:String,description:String,font:NSFont,side:CGFloat) -> NSAttributedString? {
+        guard let symbol = NSImage(systemSymbolName:name,accessibilityDescription:description)?.withSymbolConfiguration(.init(pointSize:side,weight:.regular)) else {return nil}
+        // 文本附件不自动给模板图着色；每次绘制使用当前正文色，不缓存浅色外观。
+        let image = NSImage(size:symbol.size,flipped:false) { rect in
+            symbol.draw(in:rect)
+            NSColor.labelColor.setFill(); rect.fill(using:.sourceIn)
+            return true
+        }
+        image.cacheMode = .never; image.accessibilityDescription = description
+        let attachment = NSTextAttachment(); attachment.image = image
+        attachment.bounds = NSRect(x:0,y:(font.capHeight-side)/2,width:side,height:side)
+        return NSAttributedString(attachment:attachment)
+    }
     static func render(_ edits:[FileEditSummary],font:NSFont,id:String) -> NSAttributedString {
         render(FileEditSection(id:id,edits:edits,font:font),expanded:false)
     }
@@ -61,11 +74,9 @@ enum FileEditRendering {
             result.append(value)
         }
         let header = NSMutableAttributedString(string:"已编辑 \(edits.count) 个文件",attributes:[.font:NSFont.systemFont(ofSize:font.pointSize,weight:.semibold),.foregroundColor:NSColor.labelColor])
-        if let image = NSImage(systemSymbolName:"doc.badge.plus",accessibilityDescription:"文件修改") {
-            let attachment = NSTextAttachment(); attachment.image = image
-            attachment.bounds = NSRect(x:0,y:(font.capHeight-font.pointSize)/2,width:font.pointSize,height:font.pointSize)
+        if let icon = symbol("doc.badge.plus",description:"文件修改",font:font,side:font.pointSize) {
             header.insert(NSAttributedString(string:"  ",attributes:base),at:0)
-            header.insert(NSAttributedString(attachment:attachment),at:0)
+            header.insert(icon,at:0)
         }
         cell(header,row:0,column:0)
         cell(total.map(counts) ?? NSAttributedString(string:""),row:0,column:1)
@@ -81,9 +92,14 @@ enum FileEditRendering {
             cell(edit.lines.map(counts) ?? NSAttributedString(string:""),row:index+1,column:1)
         }
         if edits.count > previewCount {
-            let label = expanded ? "收起文件列表  ⌃" : "再显示 \(edits.count-previewCount) 个文件  ⌄"
+            let label = expanded ? "收起文件列表" : "再显示 \(edits.count-previewCount) 个文件"
             let attributes:[NSAttributedString.Key:Any] = [.link:disclosureLink,.cursor:NSCursor.pointingHand,.foregroundColor:NSColor.labelColor,.font:font]
-            paragraph(NSAttributedString(string:label,attributes:attributes))
+            let disclosure = NSMutableAttributedString(string:label,attributes:attributes)
+            if let icon = symbol(expanded ? "chevron.up" : "chevron.down",description:expanded ? "收起" : "展开",font:font,side:font.pointSize*0.85) {
+                disclosure.append(NSAttributedString(string:"  ",attributes:attributes)); disclosure.append(icon)
+                disclosure.addAttributes(attributes,range:NSRange(location:0,length:disclosure.length))
+            }
+            paragraph(disclosure)
         }
         result.addAttribute(.fileEditSection,value:section,range:NSRange(location:0,length:result.length))
         result.append(NSAttributedString(string:"\n",attributes:base))

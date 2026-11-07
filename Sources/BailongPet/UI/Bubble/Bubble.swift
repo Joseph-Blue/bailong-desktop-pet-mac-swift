@@ -202,6 +202,7 @@ final class Bubble {
         window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = true
         window.level = .floating; window.hidesOnDeactivate = false
         window.worksWhenModal = true; window.acceptsMouseMovedEvents = true
+        window.tracksContentCursor = true
         window.collectionBehavior = [.canJoinAllSpaces,.ignoresCycle,.fullScreenNone]
         window.delegate = resizeDelegate
         resizeDelegate.resized = { [weak self] in
@@ -397,6 +398,7 @@ final class Bubble {
             }
         }
         motion.resize(to:NSSize(width:w,height:h))
+        window.refreshContentCursor()
     }
     private func layoutQuestions() {
         let width = bodyLayout.contentWidth
