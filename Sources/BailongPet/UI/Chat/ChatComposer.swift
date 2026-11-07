@@ -253,7 +253,9 @@ final class ChatComposer: NSObject {
         recentReply.update(turn:state.conversation?.turns.max(by:{$0.date < $1.date}))
         inputStatus.stringValue = state.note; inputStatus.hoverHelp = state.replyNote ?? state.note; inputStatus.isHidden = state.note.isEmpty
         stopButton.isHidden = !state.ownsRunningTask
+        stopButton.isEnabled = !state.stopping
+        stopButton.title = state.stopping ? "正在停止…" : "停止任务"
         checkButton.isHidden = !state.unconfirmed
-        status.stringValue = PetPreferences.shared.fixedText("主人，今天想让我帮什么忙呀？")
+        status.stringValue = state.composerTitle
     }
 }

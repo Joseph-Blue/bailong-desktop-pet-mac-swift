@@ -47,9 +47,9 @@ struct TaskActivity:Equatable {
             }.filter {!$0.isEmpty}.joined(separator:"\n")
         }
         if type == "fileChange" {detail = paths.joined(separator:"\n")}
-        if status == "failed" {detail = [detail,"本次调用失败"].filter {!$0.isEmpty}.joined(separator:" · ")}
+        if status == "failed" {detail = [labels.1,detail,"本次调用失败，任务尚未报告结束。"].filter {!$0.isEmpty}.joined(separator:" · ")}
         return .init(title:ended ? labels.1 : labels.0,detail:detail,finished:ended,
-                     templateKey:type == "commandExecution" ? (ended ? "taskCommandCompletedTemplate" : "taskCommandTemplate") : nil)
+                     templateKey:status == "failed" ? "taskWarningTemplate" : type == "commandExecution" ? (ended ? "taskCommandCompletedTemplate" : "taskCommandTemplate") : nil)
     }
     static func from(item:[String:Any]) -> TaskActivity? {
         var status = item["status"] as? String
@@ -63,7 +63,7 @@ struct TaskActivity:Equatable {
         var result:TaskActivity?, runningTool:TaskActivity?
         for item in items {
             let type = item["type"] as? String ?? ""
-            if type == "agentMessage" {result = .init(title:"正在回复",kind:.reply); continue}
+            if type == "agentMessage" {result = .init(title:"正在回复",kind:.reply,templateKey:"taskReplyTemplate"); continue}
             guard let next = from(item:item) else {continue}
             if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = next}
             // 连续的空 reasoning 项不擦掉此前同阶段已公开的摘要；工具/回复切换仍改变状态。

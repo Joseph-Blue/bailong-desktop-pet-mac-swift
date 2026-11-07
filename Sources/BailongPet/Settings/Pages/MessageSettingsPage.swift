@@ -12,6 +12,9 @@ enum MessageSettingsPage {
             form.toggle("任务消息","progressBubbles",detail:"显示执行中的助手消息。",requires:["taskBubbles"]),
             form.toggle("最终回复","resultBubbles",requires:["taskBubbles"]),
             form.toggle("思考与工具进展小气泡","progressToastEnabled",detail:"任务消息开启时，思考摘要或工具状态变化会自动弹出短气泡。",requires:["taskBubbles","progressBubbles"])])
+        form.group("进展提醒",[
+            form.toggle("久无进展时提醒","taskReminderEnabled",detail:"连续 90 秒没有新进展，且距上次消息达到提醒间隔时显示。等待回答、批准或正在停止时不提醒。",requires:["taskBubbles","progressBubbles"]),
+            form.slider("提醒间隔","taskReminderMinutes",range:1...30,suffix:"分钟",requires:["taskBubbles","progressBubbles","taskReminderEnabled"])])
         form.group("显示哪些消息",[
             form.toggle("互动台词","interactionBubbles"),
             form.toggle("显示思考摘要","showThinkingProgress",detail:"在任务概览和进展小气泡中显示公开思考摘要，不计入气泡记录。"),

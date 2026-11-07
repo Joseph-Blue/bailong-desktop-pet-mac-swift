@@ -11,8 +11,7 @@ case "$target_arch" in
     arm64|x86_64) ;;
     *) print -u2 "不支持的架构：$target_arch"; exit 2 ;;
 esac
-bailong_header "构建应用包 · 仅构建当前目标架构" "$target_arch"
-print "完成后替换本版本、本架构的构建产物，不自动安装到 /Applications。"
+bailong_header "构建应用包" "$target_arch"
 assets="local-assets/native-hevc/catalog"
 [[ -f "$assets/素材清单.json" ]] || { print -u2 "缺少原生素材清单。请按 docs/开发资源获取.md 准备 local-assets/native-hevc/catalog。"; exit 1; }
 version="$(<VERSION)"
@@ -92,10 +91,4 @@ mv "$staging" "$app"
 } > "$bailong_phase_log" 2>&1
 bailong_phase_end
 print "构建完成 · 总用时 $((SECONDS-bailong_started)) 秒"
-print -r -- "应用：$PWD/$app"
-bailong_directory "构建产物目录" "$output"
-if [[ "$target_arch" == "$(uname -m)" ]]; then
-    print "下一步：双击 launch.command 启动。"
-else
-    print "此产物的架构与当前进程架构不同，请在对应架构的 Mac 上运行。"
-fi
+bailong_artifact "应用" "$app"

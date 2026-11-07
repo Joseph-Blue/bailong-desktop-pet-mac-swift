@@ -59,27 +59,22 @@ bailong_phase_finish() {
 
 bailong_phase_end() { bailong_phase_finish "✓" "完成" }
 
-bailong_directory() {
-    # 直接输出 file:// URL，供终端的 ⌘ 单击识别；链接始终指向目录。
-    emulate -L zsh
-    setopt localoptions nomultibyte
-    local directory="${2:A}" encoded="" byte escape
-    for byte in ${(s::)directory}; do
-        if [[ "$byte" == [a-zA-Z0-9/._~-] ]]; then
-            encoded+="$byte"
-        else
-            printf -v escape '%%%02X' "'$byte"
-            encoded+="$escape"
-        fi
-    done
-    print -ru "$bailong_ui_fd" -- "$1：$directory"
-    print -ru "$bailong_ui_fd" -- "访达目录（⌘ 单击）：file://$encoded/"
+bailong_artifact() {
+    setopt localoptions pipefail
+    local artifact="${2:A}" bytes size
+    if [[ -d "$artifact" ]]; then
+        bytes="$(find "$artifact" -type f -exec stat -f '%z' {} + | awk '{sum += $1} END {printf "%.0f", sum}')"
+    else
+        bytes="$(stat -f '%z' "$artifact")"
+    fi
+    size="$(awk -v bytes="$bytes" 'BEGIN {printf "%.2f MiB", bytes / 1048576}')"
+    print -ru "$bailong_ui_fd" -- "$1：$artifact"
+    print -ru "$bailong_ui_fd" -- "大小：$size"
 }
 
 TRAPZERR() {
     local result=$?
     bailong_phase_finish "✗" "失败（退出码 $result）"
-    print -ru "$bailong_ui_fd" -- "操作未完成，请根据上方错误处理后重试。"
     return "$result"
 }
 TRAPINT() { bailong_phase_finish "■" "已取消"; exit 130 }
