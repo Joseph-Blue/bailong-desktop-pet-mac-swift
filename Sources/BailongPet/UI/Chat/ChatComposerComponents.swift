@@ -81,7 +81,7 @@ final class ChatReplyPreview: NSTextField {
 }
 
 // 链接只负责路径显示和用户点击，打开目录交给调用方，不读取文件或会话数据。
-final class WorkspaceLinkButton: NSButton {
+final class WorkspaceLinkButton: NSButton,LinkCursorControl {
     var onOpen:(URL) -> Void = {_ in}
     private var directory:URL?
     private var displayedPath:String?

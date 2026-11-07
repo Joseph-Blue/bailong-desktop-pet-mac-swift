@@ -2,6 +2,9 @@ import AppKit
 
 // Foundation 负责 Markdown 解析，AppKit 负责文字显示；原始历史仍保存原文。
 enum MarkdownText {
+    static func renderUserInput(_ source:String,font:NSFont) -> NSAttributedString {
+        render(UserInputText.display(source),font:font,lineSpacing:2,paragraphSpacing:0,inlineOnly:true)
+    }
     private struct TableContent {
         let columns: [PresentationIntent.TableColumn]
         var rows = [Int]()
@@ -15,14 +18,14 @@ enum MarkdownText {
         let text: NSAttributedString
     }
     static func render(_ source: String, font: NSFont = .systemFont(ofSize:14), color: NSColor = .labelColor,
-                       lineSpacing: CGFloat = 4, paragraphSpacing: CGFloat = 12) -> NSAttributedString {
+                       lineSpacing: CGFloat = 4, paragraphSpacing: CGFloat = 12,inlineOnly:Bool = false) -> NSAttributedString {
         // 生成中的 Markdown 可能尚未闭合，此时保留可解析内容或原文。
         let hasFileCitation = source.contains(CodexFileCitation.marker)
-        var parsed = (try? AttributedString(markdown:source,options:.init(interpretedSyntax:.full,failurePolicy:.returnPartiallyParsedIfPossible,appliesSourcePositionAttributes:hasFileCitation))) ?? AttributedString(source)
+        var parsed = (try? AttributedString(markdown:source,options:.init(interpretedSyntax:inlineOnly ? .inlineOnlyPreservingWhitespace : .full,failurePolicy:.returnPartiallyParsedIfPossible,appliesSourcePositionAttributes:hasFileCitation))) ?? AttributedString(source)
         if hasFileCitation {
             let displaySource = CodexFileCitation.markdown(source,parsed:parsed)
             if displaySource != source {
-                parsed = (try? AttributedString(markdown:displaySource,options:.init(interpretedSyntax:.full,failurePolicy:.returnPartiallyParsedIfPossible))) ?? AttributedString(displaySource)
+                parsed = (try? AttributedString(markdown:displaySource,options:.init(interpretedSyntax:inlineOnly ? .inlineOnlyPreservingWhitespace : .full,failurePolicy:.returnPartiallyParsedIfPossible))) ?? AttributedString(displaySource)
             }
         }
         var fragments = [Fragment](), tables = [Int:TableContent](), codeBlocks = [Int:(language:String,text:String)]()
@@ -113,6 +116,18 @@ enum MarkdownText {
                     result.append(NSAttributedString(string:"\n",attributes:attributes))
                 }
                 result.append(fragment.text); previousBlock = fragment.block
+            }
+        }
+        // 裸网址同样可点击；已有 Markdown 链接及代码区域保持原语义。
+        if let detector = try? NSDataDetector(types:NSTextCheckingResult.CheckingType.link.rawValue) {
+            for match in detector.matches(in:result.string,range:NSRange(location:0,length:result.length)) {
+                guard let url = match.url,["https","http","mailto"].contains(url.scheme?.lowercased() ?? "") else {continue}
+                var literal = false
+                result.enumerateAttributes(in:match.range) {attributes,_,_ in
+                    if attributes[.link] != nil || attributes[.backgroundColor] != nil ||
+                       (attributes[.paragraphStyle] as? NSParagraphStyle)?.textBlocks.isEmpty == false {literal = true}
+                }
+                if !literal {result.addAttributes(LinkAppearance.attributes(for:url),range:match.range)}
             }
         }
         return result

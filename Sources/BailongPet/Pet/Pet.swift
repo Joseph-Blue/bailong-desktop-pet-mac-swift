@@ -257,10 +257,13 @@ final class PetController: NSObject, NSMenuDelegate {
         })
     }
     func idle() {
-        if dock != nil {play(preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"idle"); return}
+        if dock != nil {play(preferences.choose(catalog.idles,previous:current.id,selection:.docked) ?? catalog.idle,"idle"); return}
         if !activeTasks.isEmpty {
-            let pool = Double.random(in:0..<1) < 0.35 ? catalog.work.filter {$0.id != "work01"} : catalog.idles
-            play(preferences.choose(pool,previous:current.id) ?? preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"working")
+            let work = catalog.work.filter {$0.id != "work01" && $0.id != current.id && preferences.weight($0.id) > 0}
+            let idles = catalog.idles.filter {$0.id != current.id && preferences.weight($0.id) > 0}
+            let pool = !work.isEmpty && (idles.isEmpty || Double.random(in:0..<1) < 0.35) ? work : idles
+            // 若用户只启用当前这一段，则继续默认待机，避免停在结束帧。
+            play(preferences.choose(pool,previous:nil,selection:.task) ?? catalog.idle,"working")
             return
         }
         if leisureAllowed() {
@@ -272,7 +275,7 @@ final class PetController: NSObject, NSMenuDelegate {
             if let clip = preferences.choose(catalog.extras,previous:current.id) {nextMovement = autoMove; play(clip,"extra"); return}
             nextMovement = autoMove
         }
-        play(preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"idle")
+        play(preferences.choose(catalog.idles,previous:current.id,selection:.idle) ?? catalog.idle,"idle")
     }
     func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !(quotaActive && bubble.kind == "quotaLoading") && press == nil && !menuOpen && now >= max(nextLeisure,lastInteraction+preferences.activityInterval) }
     func route(_ clip: Clip) -> CGPoint? {
@@ -340,7 +343,7 @@ final class PetController: NSObject, NSMenuDelegate {
             if elapsed >= duration && !loading {
                 if motion != nil {updateMovement(at:elapsed); movementReady = now + 10; motion = nil}
                 if mode == "drag" { began = now; selectFrame(at: 0, animation: animation) }
-                else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:current.id) { play(clip,"working") }
+                else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:nil,selection:.task) { play(clip,"working") }
                 else { idle() }
             } else {
                 let playback = max(0,elapsed).truncatingRemainder(dividingBy:duration)
@@ -426,7 +429,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = []) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -445,7 +448,7 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview),select:selectCard)
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput),select:selectCard)
         }
         placeBubble()
     }

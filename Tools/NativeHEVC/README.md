@@ -1,6 +1,6 @@
 # 原生素材工具
 
-应用和工具版本以仓库根目录 VERSION 为准。运行、构建和 PNG 接入均使用 Apple 原生技术；退役的 WebM 转码工具已删除。
+当前源码为 0.7.4，应用和工具版本以仓库根目录 VERSION 为准。0.7.4 沿用 0.7.3 App 内的运行素材，不在构建时重新转换。运行、构建和 PNG 接入均使用 Apple 原生技术；退役的 WebM 转码工具已删除。
 
 ## 输入资源
 
@@ -24,7 +24,7 @@
 ./scripts/apply-native-png-repairs.sh <落地PNG根目录> --landing
 ```
 
-Swift 工具以 Core Image 读取 PNG，通过 AVAssetWriter 写入 ProRes 4444，再调用系统 avconvert 的 PresetHEVCHighestQualityWithAlpha 编码透明 HEVC。工具检查输出尺寸、时长、帧率、透明标记和原生首帧读取；完成后才切换当前 catalog，旧目录保留为 `catalog-before-png-<VERSION>`。中间文件不进入应用包。0.3.0 中新编码实现已编译，未重新转换现有素材。
+Swift 工具以 Core Image 读取 PNG，通过 AVAssetWriter 写入 ProRes 4444，再调用系统 avconvert 的 PresetHEVCHighestQualityWithAlpha 编码透明 HEVC。工具检查输出尺寸、时长、帧率、透明标记和原生首帧读取；完成后才切换当前 catalog，旧目录保留为 `catalog-before-png-<VERSION>`。中间文件不进入应用包。PNG 替换属于独立素材制作步骤，普通应用构建只复制现有资源。
 
 ## 独立预览
 

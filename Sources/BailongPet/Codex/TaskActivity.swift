@@ -59,11 +59,11 @@ struct TaskActivity:Equatable {
                     tool:tool.isEmpty ? item["query"] as? String : tool,command:item["command"] as? String,
                     actions:item["commandActions"] as? [[String:Any]] ?? [],paths:(item["changes"] as? [[String:Any]] ?? []).compactMap {$0["path"] as? String})
     }
-    static func current(items:[[String:Any]]) -> TaskActivity? {
+    static func current(items:[[String:Any]],replyTemplateKey:String = "taskReplyTemplate") -> TaskActivity? {
         var result:TaskActivity?, runningTool:TaskActivity?
         for item in items {
             let type = item["type"] as? String ?? ""
-            if type == "agentMessage" {result = .init(title:"正在回复",kind:.reply,templateKey:"taskReplyTemplate"); continue}
+            if type == "agentMessage" {result = .init(title:"正在回复",kind:.reply,templateKey:replyTemplateKey); continue}
             guard let next = from(item:item) else {continue}
             if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = next}
             // 连续的空 reasoning 项不擦掉此前同阶段已公开的摘要；工具/回复切换仍改变状态。

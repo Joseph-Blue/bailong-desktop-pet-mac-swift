@@ -25,6 +25,7 @@ enum SettingsSection: Int, CaseIterable {
 }
 
 enum MessagePurpose { case interaction, progress, result, attention, quota, preview }
+enum AnimationSelection { case general, idle, docked, task }
 
 enum SendShortcut: String, CaseIterable {
     case commandReturn, returnToSend, controlOrCommandReturn
@@ -68,7 +69,7 @@ final class PetPreferences {
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
-        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",
+        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),
@@ -101,6 +102,10 @@ final class PetPreferences {
         self.defaults = defaults
         guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {return}
         TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
+        let receivedKeys = ["desktopTaskReceivedTemplate","desktopTaskReceivedBodyTemplate"]
+        let received = Dictionary(uniqueKeysWithValues:receivedKeys.compactMap {key in defaults.object(forKey:key).map {(key,$0)}})
+        for (key,value) in ConversationLines.migrateReceivedLine(received) {defaults.set(value,forKey:key)}
+        defaults.removeObject(forKey:"desktopTaskReceivedBodyTemplate")
         defaults.removeObject(forKey:"addressMode")
         if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
     }
@@ -180,8 +185,9 @@ final class PetPreferences {
         if text.isEmpty {lines.removeValue(forKey:id)} else {lines[id] = text}
         set(lines,for:"customLines")
     }
+    func defaultWeight(_ id:String) -> Int {id == "idle" ? 4 : id == "idle2" ? 1 : 3}
     func baseWeight(_ id: String) -> Int {
-        (value("animationWeights") as? [String:Int])?[id] ?? (id == "idle" ? 4 : id == "idle2" ? 1 : 3)
+        (value("animationWeights") as? [String:Int])?[id] ?? defaultWeight(id)
     }
     func weight(_ id: String) -> Double {Double(baseWeight(id)) * (favorites.contains(id) ? 2 : 1)}
     var favorites: [String] {value("favorites") as? [String] ?? []}
@@ -189,10 +195,19 @@ final class PetPreferences {
     func clipSpeed(_ id: String) -> Double {(value("animationSpeeds") as? [String:Double])?[id] ?? 1}
     func speed(_ id: String) -> Double {number("playbackSpeed") * clipSpeed(id)}
     func setSpeed(_ speed: Double, for id: String) {var map = value("animationSpeeds") as? [String:Double] ?? [:]; map[id] = speed; set(map,for:"animationSpeeds")}
-    func choose(_ clips: [Clip], previous: String?) -> Clip? {
+    func choose(_ clips: [Clip], previous: String?, selection:AnimationSelection = .general) -> Clip? {
         let pool = clips.filter {weight($0.id) > 0}
-        // 降低刚播放动作的权重，而非强制排除；只有两段待机时也能保留频率差异。
-        func adjusted(_ clip: Clip) -> Double {weight(clip.id) * (bool("avoidRepeat") && pool.count > 1 && clip.id == previous ? 0.35 : 1)}
+        // 原作普通待机 4:1、吸边 7:3、任务组内均匀；手动频率与偏爱按比例调整。
+        // 任务候选由调用方先排除上一动作；减少重复只用于其他随机互动。
+        func adjusted(_ clip: Clip) -> Double {
+            let weight = weight(clip.id)
+            switch selection {
+            case .idle: return weight
+            case .docked: return weight / Double(defaultWeight(clip.id)) * (clip.id == "idle" ? 7 : 3)
+            case .task: return weight / Double(defaultWeight(clip.id))
+            case .general: return weight * (bool("avoidRepeat") && pool.count > 1 && clip.id == previous ? 0.35 : 1)
+            }
+        }
         let total = pool.reduce(0.0) {$0 + adjusted($1)}
         guard total > 0 else {return nil}
         var pick = Double.random(in:0..<total)
@@ -242,6 +257,7 @@ final class PetPreferences {
             throw PetFailure(message:"不支持设置格式 \(schema)，请使用对应版本的应用。尚未导入任何更改。")
         }
         values = TemplateSyntax.migrate(values)
+        values = ConversationLines.migrateReceivedLine(values)
         values.removeValue(forKey:"addressMode")
         if let old = values["animationFPSLimit"] as? String, ["24","30"].contains(old) {values["animationFPSLimit"] = "full"}
         for (key,value) in values {
@@ -270,7 +286,7 @@ final class PetPreferences {
             return CFGetTypeID(n) != CFBooleanGetTypeID() && range.contains(n.doubleValue) && (!integer || n.doubleValue.rounded() == n.doubleValue)
         }
         if let b = baseline as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID() {return (value as? NSNumber).map {CFGetTypeID($0) == CFBooleanGetTypeID()} ?? false}
-        if baseline is String, let s = value as? String {return (TemplateSyntax.isTemplateKey(key) ? TemplateSyntax.count(s) : s.count) <= (key.hasSuffix("Template") ? 120 : ["ownerName","customAddress","petName"].contains(key) ? 20 : 80) && (choices[key]?.contains(s) ?? true)}
+        if baseline is String, let s = value as? String {return (TemplateSyntax.isTemplateKey(key) ? TemplateSyntax.count(s) : s.count) <= (key.hasSuffix("Template") ? ConversationLines.limit(key) : ["ownerName","customAddress","petName"].contains(key) ? 20 : 80) && (choices[key]?.contains(s) ?? true)}
         return false
     }
 }

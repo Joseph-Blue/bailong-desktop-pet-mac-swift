@@ -75,13 +75,14 @@ enum FileEditRendering {
             let name = (edit.path as NSString).lastPathComponent
             let nameRange = NSRange(location:path.length-(name as NSString).length,length:(name as NSString).length)
             path.addAttribute(.font,value:NSFont.systemFont(ofSize:font.pointSize,weight:.medium),range:nameRange)
-            if let link = MessageFileLink.url(forPath:edit.path) {path.addAttributes(LinkAppearance.attributes(for:link),range:NSRange(location:0,length:path.length))}
+            path.addAttribute(.foregroundColor,value:NSColor.labelColor,range:nameRange)
+            if let link = MessageFileLink.url(forPath:edit.path) {path.addAttributes([.link:link,.cursor:NSCursor.pointingHand],range:NSRange(location:0,length:path.length))}
             cell(path,row:index+1,column:0)
             cell(edit.lines.map(counts) ?? NSAttributedString(string:""),row:index+1,column:1)
         }
         if edits.count > previewCount {
             let label = expanded ? "收起文件列表  ⌃" : "再显示 \(edits.count-previewCount) 个文件  ⌄"
-            var attributes = LinkAppearance.attributes(for:disclosureLink); attributes[.font] = font
+            let attributes:[NSAttributedString.Key:Any] = [.link:disclosureLink,.cursor:NSCursor.pointingHand,.foregroundColor:NSColor.labelColor,.font:font]
             paragraph(NSAttributedString(string:label,attributes:attributes))
         }
         result.addAttribute(.fileEditSection,value:section,range:NSRange(location:0,length:result.length))

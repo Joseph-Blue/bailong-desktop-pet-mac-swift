@@ -37,6 +37,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 | 外部会话与请求 | `Conversation/DesktopConversationSession.swift`、`Codex/DesktopHistoryReader.swift`、`Codex/DesktopSync.swift`、`Codex/RequestCoordinator.swift` |
 | 公开进展与审批 | `Codex/DesktopRuntimeProjection.swift`、`Codex/DesktopApprovalReader.swift`、`Codex/DesktopApproval.swift`、`Codex/DesktopQuestionReply.swift` |
 | 历史与输入窗 | `Conversation/History.swift`、`Conversation/HistorySearch.swift`、`UI/Chat/ChatUI.swift`、`UI/Chat/ChatComposer.swift`、`UI/Chat/TranscriptRenderer.swift` |
+| 用户消息投影 | `Codex/UserInputText.swift`、`DesktopHistoryReader.swift`（同目录）、`Conversation/ChatController.swift`、`UI/Shared/MarkdownText.swift` |
 | 输入显示与模型 | `UI/Chat/ChatComposerComponents.swift`、`UI/Chat/ChatViewLayout.swift`、`Codex/ModelSelection.swift` |
 | 窗口生命周期与辅助面板 | `App/InterfaceWindows.swift`、`UI/Shared/PanelPresentation.swift` |
 | 共用显示 | `UI/Shared/MarkdownText.swift`、`MessageTextView.swift`、`CodeBlockRendering.swift`、`ProgressTextEffects.swift`、`InlineStatusLayout.swift`、`CopyFeedback.swift`（后五者同目录） |
@@ -59,6 +60,12 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - `InlineStatusLayout` 共用文字基线、盲文与秒表定位；`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
 - 代码块使用原生 NSTextTableBlock，语言标签与拷贝按钮共用 `CodeBlockHeaderLayout`。拷贝与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
 
+用户输入由 `UserInputText` 统一整理，`MarkdownText.renderUserInput` 同时用于气泡与历史。识别附件包装前先处理空白和换行格式，提取真实提问与紧凑文件链接，不读取图片载荷；只在已识别包装中去除对应的重复图片占位，不全局删除用户写下的 `[图片]`。正文不解析为大标题，不添加额外段间距。显示层重复整理不得截断已生成的链接。
+
+`ChatController.showUserMessage` 共用人设／项目用户卡片展示，各入口保留自己的接收台词。插话标题统一取 `ConversationLines` 的 `taskSteeringTemplate`，设置、搜索、恢复和导入导出共用元数据，不再拼接标题后缀。项目插话通过既有外部观察器按真实 userMessage ID 合并，排除问卷回执，沿用原任务计时；IPC 回执不另造卡片，不触发 taskStarted。显示复用不代表人设会话支持执行中发送，也不改变动画动作切换。
+
+工具调用短进展气泡共用 `Bubble.showProgressToast`，按真实正文视口及 TextKit 排版截断，字素边界后追加 `...`；只截显示文本，完整 hover 与原始数据保留。该模式关闭正文滚动，尺寸过渡也不出现滚动条；思考摘要沿用原规则。
+
 ## 会话入口与选择状态
 
 - `ChatNavigation` 负责目标切换，`ChatDraftCache` 按入口和会话分别保留内存草稿；历史浏览目标、临时发送目标与运行任务不可共用一个选择变量。
@@ -74,15 +81,17 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - 外部观察通过 `DesktopHistoryReader`／`DesktopSync`，设置、明确回复及插话由 `DesktopConversationSession` 管理。发送沿用原会话设置，不附加桌宠人格；按原请求、轮次和窗口身份处理回执，超时保留草稿及待确认状态，不自动重发或改成新会话。
 - 仅 completed 表示成功。中间工具错误不冒充整轮失败，缺少助手正文不以用户输入或会话标题回填。新命令记录只保存状态及命令摘要，不写 aggregatedOutput；已有历史保持原文。
 - 实时进展只采用公开 reasoning.summary 和工具结构化字段。敏感问题仅跳转 Codex，不显示或保存答案；审批默认拒绝，真实停止、请求身份校验和进程清理必须保留。
+- 外部用户输入通过现有数据库读取边界提取有界文本及附件计数，不放入实时进展投影。历史补缺仅处理当前页，通过 `HistoryStore.canEnrichInput` 和页请求身份校验；不覆盖已有明确发送的输入，不新增全库扫描或轮询。
 - 历史关闭时冻结快照，重新开启不补录关闭期间变化。损坏或不支持的数据保持只读，不以空历史覆盖；保存失败暂停自动写入，提供显式重试。详细迁移与恢复行为遵循 AGENTS。
 
 ## 文件引用与链接链路
 
 - `CodexFileCitation` 在 `MarkdownText` 入口将 `:codex-file-citation{path="…" ...}` 转为文件名链接，使用绝对路径，不按扩展名限制。用 Foundation 源码位置排除代码块、行内代码及已有链接；不完整标记保留原文，历史源文本不改写。
 - Markdown 链接、图片入口、imageGeneration 的公开 savedPath、产物引用及文件修改摘要共用 `MessageTextView → MessageFileLink → FinderFileReveal`。相对路径取所属会话 cwd，仅点击时检查文件；非本机链接交给系统，`sandbox:` 保留下载提示。
+- 裸 http(s)／mailto 地址在正文中补充链接属性，排除代码及已有链接。`LinkAppearance` 按 TextKit 实际字形命中；PetWindow 鼠标处理须保留文字链接和 LinkCursorControl 的手形，不用 linkTextAttributes 统一覆盖原有语义颜色。
 - 文件点击复用访达目标目录窗口、取消该窗口最小化并选中文件；没有对应窗口才创建。固定脚本通过参数接收路径，不恢复全部窗口，`.app` 只定位不运行，不新增无关 App 权限。
 - `FileEditSummary` 共用内外来源的 completed fileChange：内置按 item ID 替换，轮次内同路径合并；add／delete 按完整文本行数，update 按 diff hunk 统计。数值是本轮完成修改的累计量，不是最终 Git 净差异；缺少 diff 仅显示路径。
-- `FileEditRendering` 在气泡和历史中共用原生摘要，标题右侧同排显示总计，默认 3 项并支持展开／收起。`FileEditPresentation` 只管理显示层展开状态，同身份更新保留，离开当前正文清理；搜索展开隐藏匹配项。复用 TextKit 与原滚动容器，不添加撤销或 diff 操作。摘要存入可选 `Turn.fileEdits`，不保存原始 diff、不拼进助手正文；快照、搜索和缓存签名同步维护。外部文件汇总读取完整轮次，不受近期消息数量限制。
+- `FileEditRendering` 在气泡和历史中共用原生摘要，标题右侧同排显示总计，默认 3 项并支持展开／收起；目录次级灰，文件名及展开／收起用正文色，增减保持绿／红，普通链接用强调色。`FileEditPresentation` 只管理显示层展开状态，同身份更新保留，离开当前正文清理；搜索展开隐藏匹配项。复用 TextKit 与原滚动容器，不添加撤销或 diff 操作。摘要存入可选 `Turn.fileEdits`，不保存原始 diff、不拼进助手正文；快照、搜索和缓存签名同步维护。外部文件汇总读取完整轮次，不受近期消息数量限制。
 
 ## 原生界面与设置
 
@@ -96,8 +105,8 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 
 ## 动画、额度与系统集成
 
-- 使用透明 HEVC、AVFoundation 与 Core Image，不重新引入 FFmpeg。PNG 接入使用 AVAssetWriter 和系统 avconvert；原素材与修复副本保留在本地。
-- 默认 720×720、流式 24 帧缓冲、满帧，满帧按真实素材帧率调度；整段预加载默认关闭，不预热全素材库。素材解码与几何 displayLink 分离，隐藏和结束释放相应计时器，不以屏幕刷新率增加解码。
+- 播放使用透明 HEVC 与 AVFoundation；当前源码的缩放和颜色转换由 CPU／vImage 处理，动作默认选择按原作：普通待机 4:1、吸边 7:3；任务中先排除上一动作，再按 35:65 选工作／待机组，组内默认均匀。手动频率与偏爱按场景权重成比例调整，其他随机互动保留减少重复。PNG 接入仍使用 Core Image、AVAssetWriter 和系统 avconvert。FFmpeg 播放实验暂缓，不能写成已经切换；离线抽帧的任务授权不等于允许修改运行依赖。原素材与修复副本保留在本地。
+- 当前新用户默认 512×512、流式 12 帧缓冲、满帧，已有保存值保留；参数变更同步 AGENTS 与 README。满帧按真实素材帧率调度；整段预加载默认关闭，不预热全素材库。素材解码与几何 displayLink 分离，隐藏和结束释放相应计时器，不以屏幕刷新率增加解码。
 - 性能窗口关闭即停止统计。产品统一写“运行内存 (RAM)”，不将像素估算、旧版反馈或系统 Swap 写成当前进程实测。
 - 每次额度重新请求，先额度、并行账号，晚到数据仅补同次查询；不缓存旧结果冒充新查询。remaining ≤5% 红色、≤10% 橙色，同时作用于百分比和进度条，无百分比行不套阈值。
 - 不读取凭证、Keychain、auth.json 或修改全局 Codex 配置，不为额度增加登录。启动更新检查默认关闭，仅接收正式 Release，不自动安装应用。
@@ -112,4 +121,4 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 ./scripts/build.sh arm64           # Apple Silicon App 与跟随助手
 ```
 
-按用户当次范围选择命令；文档修改不触发应用构建。默认只构建 Apple Silicon。0.7.2 已提供 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。
+按用户当次范围选择命令；文档修改不触发应用编译或回归测试。代码改动按实际风险做必要检查，不自动运行全部本地 Tests；用户承担视觉 review 时不追加截图或视觉检查。`--build-only` 生成 `.build/dev/BailongPetDev`，不会更新现有 App 或 dist；打包前核对输出目录，独立试用不覆盖既有产物。默认只构建 Apple Silicon。0.7.4 提供 Apple Silicon 包与 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。main 的 README 面向用户，CHANGELOG 和 Release 分别整理相较上一正式版的变化；未完成的手形光标修复不列为已修复。当前发布版本为 0.7.4；版本与后续发布授权以目标分支 AGENTS 和当次用户要求为准。

@@ -75,7 +75,7 @@ final class BubbleTaskList: NSView {
     deinit {stop()}
 }
 
-private final class BubbleTaskRow:NSButton {
+private final class BubbleTaskRow:NSButton,LinkCursorControl {
     override var isFlipped:Bool {false}
     private(set) var task:BubbleTaskSummary
     let scale:CGFloat

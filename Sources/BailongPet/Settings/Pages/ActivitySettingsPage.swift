@@ -15,14 +15,14 @@ final class ActivitySettingsPage {
         form.group("自主活动",[
             form.popup("活跃程度",options:[("60","安静"),("15","适中"),("8","活泼"),("custom","自定义")],value:preset) { [weak self] value in if let seconds = Double(value) {self?.preferences.set(seconds,for:"leisureInterval"); self?.reload()} },
             form.slider("活动间隔","leisureInterval",range:5...180,suffix:"秒",detail:"到达间隔后，当前动作播放完再切换。"),
-            form.toggle("自主移动","autoMove"),form.choice("活动范围","movementRange",[("still","原地陪伴"),("nearby","小范围活动"),("screen","整个屏幕")],requires:["autoMove"]),form.toggle("减少重复动作","avoidRepeat"),
+            form.toggle("自主移动","autoMove"),form.choice("活动范围","movementRange",[("still","原地陪伴"),("nearby","小范围活动"),("screen","整个屏幕")],requires:["autoMove"]),form.toggle("减少重复动作","avoidRepeat",detail:"用于随机互动、自主额外动作和移动；任务中固定排除上一动作，普通待机与吸边按各自频率选择。"),
             form.slider("整体播放速度","playbackSpeed",range:0.75...1.5,step:0.05,suffix:"×",detail:"动作和位移使用同一时间轴。单个动作倍率会与整体倍率相乘。")])
         form.group("任务动作",[form.toggle("收到任务时播放开场","taskOpening"),form.toggle("完成任务时播放庆祝","taskCelebration")])
         guard let catalog else {return}
         for (title,clips,automatic) in [("待机动作",catalog.idles+catalog.extras,true),("互动动作",catalog.variants,true),("工作动作",catalog.work,true),("移动动作",catalog.movementAnimations,true),("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation],false)] {
             form.group(title,clips.map {clip in animationRow(clip,automatic:automatic)})
         }
-        form.fill(form.note("频率控制同组随机选择的偏好；星标会让该动作更常出现。手动预览和明确的拖拽、落地、额度及任务事件不受随机频率影响。默认待机始终保留。"),in:form.content)
+        form.fill(form.note("默认普通待机按 4:1、吸边按 7:3 选择；任务中按 35:65 选择工作／待机组，排除上一动作，组内默认均匀选择。频率和偏爱在各场景默认权重上调整。手动预览和明确的拖拽、落地、额度及任务事件不受随机频率影响。默认待机始终保留。"),in:form.content)
     }
     private func animationRow(_ clip: Clip, automatic: Bool) -> NSView {
         let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 8

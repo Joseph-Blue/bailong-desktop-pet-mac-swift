@@ -22,6 +22,7 @@ struct BubbleBodyLayout {
 // 文档尺寸由内容提供，视口由气泡提供；滚动条只在真正溢出时存在。
 final class BubbleBodyScrollView:GutterScrollView {
     private(set) var bodyHeight:CGFloat = 0
+    var allowsScrolling = true {didSet {updateGeometry()}}
     override var documentLayoutWidth:CGFloat {Self.documentWidth(for:bounds.width)}
 
     override init(frame:NSRect) {
@@ -48,9 +49,9 @@ final class BubbleBodyScrollView:GutterScrollView {
 
     private func updateGeometry() {
         guard let document = documentView else {return}
-        let overflow = bodyHeight > bounds.height
+        let overflow = allowsScrolling && bodyHeight > bounds.height
         if hasVerticalScroller != overflow {hasVerticalScroller = overflow}
-        let size = NSSize(width:documentLayoutWidth,height:bodyHeight)
+        let size = NSSize(width:documentLayoutWidth,height:allowsScrolling ? bodyHeight : min(bodyHeight,bounds.height))
         if document.frame.size != size {document.setFrameSize(size)}
         tile()
         reflectScrolledClipView(contentView)
@@ -60,7 +61,7 @@ final class BubbleBodyScrollView:GutterScrollView {
 
     func restorePosition(_ origin:NSPoint) {
         // 本容器中的文档均按从上往下布局；不足一页时只存在顶部位置。
-        let y = min(max(0,origin.y),max(0,bodyHeight-contentView.bounds.height))
+        let y = allowsScrolling ? min(max(0,origin.y),max(0,bodyHeight-contentView.bounds.height)) : 0
         let point = NSPoint(x:0,y:y)
         if contentView.bounds.origin != point {contentView.scroll(to:point)}
         reflectScrolledClipView(contentView)

@@ -168,6 +168,10 @@ final class HistoryStore {
     private var writeEpoch = 0
     var deletedThreads: Set<String> {policy.deletedThreads ?? []}
     var recordsAutomatically: Bool {recording}
+    func canEnrichInput(_ turn:Turn,in conversation:Conversation) -> Bool {
+        recording && !isReadOnly && !policy.excludedTurns.contains(turn.key) &&
+            (!conversation.external || turn.date.timeIntervalSince1970 > policy.externalBefore)
+    }
     init(recording:Bool = true, directory:URL = Paths.data) throws {
         url = directory.appendingPathComponent("conversations.json")
         exportSourceURL = url

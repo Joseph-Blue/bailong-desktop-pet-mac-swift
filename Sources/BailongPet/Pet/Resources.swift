@@ -1,6 +1,5 @@
 import AppKit
 import AVFoundation
-import CoreImage
 
 struct PetFailure: LocalizedError { let message: String; var errorDescription: String? { message } }
 
@@ -91,20 +90,19 @@ private final class WeakAnimation {
     init(_ value: Animation) { self.value = value }
 }
 
-// 可变解码状态由 lock 保护；Core Image 上下文复用，默认流式读取，整段预加载按偏好启用。
+// 可变解码状态由 lock 保护；默认流式读取，CPU 工作区随当前动画复用，整段预加载按偏好启用。
 final class Decoder: @unchecked Sendable {
     private let lock = NSLock()
     private let group = DispatchGroup()
     private var worker: Task<Void, Never>?
     private var stream: StreamingAnimation?
     private var generation = 0
-    private var bufferCapacity = 24
-    private var resolution = 720
+    private var bufferCapacity = 12
+    private var resolution = 512
     private var preloadWhole = false
     private var preloadProgress: (id: String, frames: Int, total: Int)?
     func preloadingStatistics() -> (id: String, frames: Int, total: Int)? { lock.withLock { preloadProgress } }
     private var resident = [String: WeakAnimation]()
-    private let context = CIContext(options: [.cacheIntermediates: false, .outputPremultiplied: true])
     func residentFrameStatistics() -> (clips: Int, frames: Int, bytes: Int) {
         lock.withLock {
             let live = resident.values.compactMap { $0.value }
@@ -117,7 +115,6 @@ final class Decoder: @unchecked Sendable {
             self.bufferCapacity = bufferCapacity; self.resolution = resolution; self.preloadWhole = preloadWhole
             resident.removeAll()
         }
-        context.clearCaches()
     }
     func cancel() {
         let (pending, streaming) = lock.withLock { () -> (Task<Void, Never>?, StreamingAnimation?) in
@@ -130,7 +127,6 @@ final class Decoder: @unchecked Sendable {
     func close() {
         let activeStream = lock.withLock { stream }
         cancel(); activeStream?.waitUntilStopped(); group.wait()
-        context.clearCaches()
         lock.withLock { resident.removeAll() }
     }
     private func current(_ token: Int) -> Bool { lock.withLock { generation == token } }
@@ -150,7 +146,7 @@ final class Decoder: @unchecked Sendable {
                 guard rate.isFinite && rate > 0 else {throw PetFailure(message:"「\(clip.title)」缺少有效的素材帧率。")}
                 let range = try await track.load(.timeRange)
                 guard current(token) else { return }
-                let streaming = StreamingAnimation(asset: asset, track: track, context: context, capacity: capacity, resolution: side,
+                let streaming = StreamingAnimation(asset: asset, track: track, capacity: capacity, resolution: side,
                     frameCount: max(1, Int((range.duration.seconds * Double(rate)).rounded())),
                     startTime: range.start.seconds, onFailure: { [weak self] error in
                         if self?.current(token) == true { completion(.failure(error)) }
