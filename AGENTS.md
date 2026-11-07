@@ -2,7 +2,7 @@
 
 ## joseph/dev 开发线
 
-- 当前开发版本为 0.7.4-dev.3（任务气泡修复与默认性能设置调整），正式版仍为 0.7.3；本地与远端开发工作均使用 joseph/dev，跟踪 origin/joseph/dev。main 保留正式版，不自动合并、变基或推送到 main。
+- 当前开发版本为 0.7.4-dev.3（任务气泡修复与默认性能设置调整），正式版为 0.7.4；本地与远端开发工作均使用 joseph/dev，跟踪 origin/joseph/dev。main 保留正式版，不自动合并、变基或推送到 main。
 - 本分支 README 面向开发者，明确为开发分支及当前 dev／rc 阶段，不提供 Release 程序下载；不创建程序 Release 或应用版本标签。经用户授权可发布仅含素材的资源 Pre-release，使用独立 dev-assets-* 标签并显式设为非 Latest。更高的开发版本号不会进入只读取正式 Release 的更新检查。
 - 本分支 CHANGELOG 保留开发迭代与历史来源索引，未来整理正式版时不删除开发记录。开发文档跟踪范围以 .gitignore 白名单和 docs/开发分支.md 为准，覆盖下文仅追踪来源与架构的主线规则。原始本机实施流水仍不上传。
 - 本次历史归档已获用户授权；后续构建、跨分支合并、推送与发布按当次授权执行。
@@ -11,7 +11,7 @@
 
 ## 应用实现约束
 
-- 当前正式版本为 0.7.3，基于正式版 0.7.2，完善会话跳转、默认工作区、桌宠召回、消息阅读与设置交互；正式 CHANGELOG 仅汇总相较上一 Release 的变化。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
+- 当前正式版本为 0.7.4，基于正式版 0.7.3，完善附件、历史用户消息、插话和短进展，调整待机选择与默认性能设置；正式 CHANGELOG 仅汇总相较上一 Release 的变化。项目使用 Swift + AppKit、透明 HEVC、AVFoundation 与 Core Image。旧 FFmpeg 运行及离线转换方案已移除，不得重新引入；PNG 接入使用 AVAssetWriter 与系统 avconvert。原始 WebM／PNG 和修复副本本地保留，不加入运行包或 Git。旧 Python/PySide6 工程只作交互参考。
 - 官方行为依据：../bailong-desktop-pet，源码基线 b102e73 / v0.5.1。修改前阅读相关函数，不整仓复制，不修改参考仓库，不运行 Windows EXE。
 - 独立遵守 SemVer，中文提交信息和 CHANGELOG。功能新增升次版本，兼容修复升补丁版本，开发中使用 dev 预发布标识，进入候选阶段使用 rc.1 等标识；根目录 VERSION 是应用与工具版本来源。
 - 不要过度校验或过度防御。必要编译与针对改动的静态检查即可，不自动跑 SHA-256、截图、视觉、自检或冒烟流程。不用静默吞错或猜测性兼容层掩盖问题。
@@ -21,7 +21,7 @@
 - 新用户默认流式播放：较高 512×512、12 帧缓冲、满帧，已有保存值保留；缓冲范围 6～240，非法输入结束编辑恢复 12。性能页按画质、帧率上限、缓冲、整段预加载排列。整段预加载默认关闭，开启后缓冲置灰且保留值，不预热整个素材库。
 - 性能统计独立窗口，默认关闭，关闭即停止后台统计；支持 Dock／菜单召回，设置开关不抢设置焦点。底栏 pin 置顶开关与右侧关闭／拷贝对齐。CPU 总体在前、单核基准在后；GPU 明确应用组口径，Swap 不将系统用量混作本进程用量。
 - 临时气泡中的进展及额度加载盲文动画只在显示层生成并跟随强调色；标题替换、隐藏和销毁时停止，不写入历史或任务正文。
-- 默认构建 Apple Silicon；0.7.3 提供 Apple Silicon 包与 Intel 社区测试包，尚未经过 Intel Mac 实机验收。Intel 源码构建入口保留，不自动追加 Intel 构建。主程序和跟随 helper 必须匹配目标架构，关于页面按编译目标显示。编译通过不等于真机运行验收。
+- 默认构建 Apple Silicon；0.7.4 提供 Apple Silicon 包与 Intel 社区测试包，尚未经过 Intel Mac 实机验收。Intel 源码构建入口保留，不自动追加 Intel 构建。主程序和跟随 helper 必须匹配目标架构，关于页面按编译目标显示。编译通过不等于真机运行验收。
 - 内置 Codex 任务与外部只读观察分开；真实停止、默认拒绝审批、历史保护及进程回收必须保留，只有 completed 可宣告成功。
 - 默认数据目录 ~/Library/Application Support/BailongPetAppKit；不读取凭证、不改全局 Codex 连接配置、不为未启用用户自动注册 LaunchAgent；已启用启动项在新版运行时维护路径和版本。跟随启动仅识别 Codex／ChatGPT 桌面应用，不监测 CLI，拒绝 AppTranslocation 临时路径。
 - 不派发其他 agent。实现进度和未验证项记录到本地 docs/实施记录.md，不把构建成功当运行验收。

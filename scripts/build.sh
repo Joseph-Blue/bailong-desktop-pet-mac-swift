@@ -13,7 +13,7 @@ case "$target_arch" in
 esac
 bailong_header "构建应用包" "$target_arch"
 assets="local-assets/native-hevc/catalog"
-[[ -f "$assets/素材清单.json" ]] || { print -u2 "缺少原生素材清单。请按 docs/开发资源获取.md 准备 local-assets/native-hevc/catalog。"; exit 1; }
+[[ -f "$assets/素材清单.json" ]] || { print -u2 "缺少原生素材清单。请按 README 的资源获取说明准备 local-assets/native-hevc/catalog。"; exit 1; }
 version="$(<VERSION)"
 output="dist/native-hevc/$version/$target_arch"
 mkdir -p ".build/$target_arch" .build/module-cache "$output"

@@ -2,7 +2,7 @@
 
 **这是 `joseph/dev` 开发分支，面向开发者，不属于普通用户的安装说明，也不提供开发版 Release 程序下载。** 普通用户请前往 [main 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-当前源码版本：**0.7.4-dev.3（开发修复）**，正式版仍为 **0.7.3**。当前源码包含附件消息整理、Codex 历史用户消息、插话气泡及链接修复，最新交互效果待用户验收。新用户默认 512×512、12 帧缓冲；保留任务台词、轮廓阴影和 CPU 动画帧处理试验。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
+开发快照版本：**0.7.4-dev.3（保留开发记录）**，正式版为 **0.7.4**。上述开发功能已整理为 main 的 0.7.4，开发分支保留自己的文档与版本。当前源码包含附件消息整理、Codex 历史用户消息、插话气泡及链接修复，最新交互效果待用户验收。新用户默认 512×512、12 帧缓冲；保留任务台词、轮廓阴影和 CPU 动画帧处理试验。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
 
 基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC 与 AVFoundation，当前开发试验由 CPU / vImage 完成缩放和颜色转换；界面支持液态玻璃和系统外观。
 
@@ -28,7 +28,7 @@
 
 沿用正式版的任务概览、额度查询、历史搜索、气泡审批与问卷、Codex 项目快捷回复／插话、原生代码块及本机文件定位。详细行为见 [来源与架构](docs/来源与架构.md)，开发迭代见 [CHANGELOG](CHANGELOG.md)。
 
-最新消息修复已完成开发程序编译，尚未重新打包 App，也未更新 `dist`。用户已确认前一轮历史能显示用户消息；后续气泡附件、紧凑排版、插话台词、工具短气泡省略、动画选择及链接交互仍待用户 review，编译通过不代表运行验收。待办见 [TODO](todo.md)，其中一键卸载仅记录方案，尚未实现。
+相关源码已在 main 整理为 0.7.4，并完成 Apple Silicon 与 Intel 社区测试包构建。用户已确认前一轮历史能显示用户消息；后续气泡附件、紧凑排版、插话台词、工具短气泡省略、动画选择及链接交互仍待用户 review，编译通过不代表运行验收。待办见 [TODO](todo.md)，其中一键卸载仅记录方案，尚未实现。
 
 Silicon 版，最低目标机为 13 英寸 M1 MacBook Air，最低目标操作系统为 MacOS 14 Sonoma。
 
@@ -73,7 +73,7 @@ local-assets/
 ./scripts/run-dev.sh               # 编译并开发运行
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app`。正式版 0.7.3 提供 Apple Silicon 包与 Intel 社区测试包；Intel Mac 实机验收尚未完成，开发构建默认只选择 Apple Silicon。
+也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/native-hevc/<VERSION>/<架构>/白龙桌宠Swift.app`。正式版 0.7.4 提供 Apple Silicon 包与 Intel 社区测试包；Intel Mac 实机验收尚未完成，开发构建默认只选择 Apple Silicon。
 
 三个入口会显示版本、目标架构、当前阶段和耗时。交互终端显示盲文转圈，重定向日志时使用普通阶段文本；原始诊断在阶段结束时输出，失败保留退出码。完成时显示产物绝对路径和大小。
 

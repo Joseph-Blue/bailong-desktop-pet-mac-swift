@@ -151,7 +151,7 @@ final class AboutPageController: NSViewController {
         paragraph("角色动画与应用图标来自原作者 v0.5.1 发布包。",to:text)
 
         heading("原生透明动画",to:text)
-        paragraph("角色动画使用 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 与 Core Image 解码和缩放。PNG 素材接入由 AVAssetWriter 和 Apple avconvert 完成。",to:text)
+        paragraph("角色动画使用 HEVC with Alpha，运行时通过 macOS 的 AVFoundation 解码，由 CPU／vImage 完成缩放和颜色转换。PNG 素材接入由 AVAssetWriter 和 Apple avconvert 完成。",to:text)
         link("Apple 透明 HEVC 说明",url:"https://developer.apple.com/videos/play/wwdc2019/506/",to:text)
 
         heading("SQLite · 本机任务记录读取",to:text)
@@ -163,7 +163,7 @@ final class AboutPageController: NSViewController {
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)
 
         heading("开发技术与系统服务",to:text)
-        paragraph("使用 Swift、AppKit、Foundation、AVFoundation、Core Image、Core Graphics 及 macOS 系统符号构建原生界面。这些系统技术单独列出，不将 AppKit 标注为第三方开源组件。对话功能调用用户已安装的 Codex，不随本应用分发 Codex。",to:text)
+        paragraph("使用 Swift、AppKit、Foundation、AVFoundation、Accelerate／vImage、Core Image、Core Graphics 及 macOS 系统符号构建原生界面。这些系统技术单独列出，不将 AppKit 标注为第三方开源组件。对话功能调用用户已安装的 Codex，不随本应用分发 Codex。",to:text)
         return text
     }
 
