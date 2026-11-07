@@ -32,6 +32,7 @@ struct BubbleCard {
     var approval:ApprovalPresentation? = nil
     var fileEdits = [FileEditSummary]()
     var showsTaskOverview = false
+    var isUserInput = false
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
     var priority:Priority {

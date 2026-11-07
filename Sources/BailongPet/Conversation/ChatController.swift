@@ -332,7 +332,7 @@ final class ChatController {
         reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskReceivedTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
+        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskReceivedTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:turn.date,key:"own"),selectCard:true,isUserInput:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}

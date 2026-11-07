@@ -2,7 +2,7 @@
 
 **这是 `joseph/dev` 开发分支，面向开发者，不属于普通用户的安装说明，也不提供开发版 Release 程序下载。** 普通用户请前往 [main 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-当前源码版本：**0.7.4-dev.2（开发试验）**，正式版仍为 **0.7.3**。本轮恢复任务台词与轮廓阴影，并试验 CPU 动画帧处理；开发线保留完整迭代记录。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
+当前源码版本：**0.7.4-dev.3（开发修复）**，正式版仍为 **0.7.3**。本轮修正任务接收气泡与台词，新用户默认 512×512、12 帧缓冲；保留任务台词、轮廓阴影和 CPU 动画帧处理试验；开发线保留完整迭代记录。当前 P0 是运行内存占用与释放机制，进度和验收条件见 [TODO](todo.md)。
 
 基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC 与 AVFoundation，当前开发试验由 CPU / vImage 完成缩放和颜色转换；界面支持液态玻璃和系统外观。
 

@@ -41,6 +41,7 @@ final class Bubble {
     private var cards:[BubbleCard] {cardStore.cards}
     private var cardIndex:Int? {cardStore.cardIndex}
     private var renderedCardID:String?
+    private var userInputPrefixLength = 0
     private var refreshStandalone:(() -> Void)?
     private var isBrowsingCards:Bool {cardStore.isBrowsingCards}
     private var submittingQuestion:Bool {questionForm?.isSubmitting == true}
@@ -175,7 +176,7 @@ final class Bubble {
         updateCardNavigation()
         show(title:card.title,body:card.approval?.body ?? card.body,kind:card.kind,scale:preferences.number("bubblePercent")/100,seconds:preferences.duration(card.purpose,text:card.body),
              details:card.thread != nil,resetText:card.resetText || changedCard,animateHeading:card.animateHeading,
-             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits)
+             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits,isUserInput:card.isUserInput)
         relatedConversation = card.thread; purpose = card.purpose
         renderedCardID = card.id
         cardStore.saveForm(questionForm,size:questionSize)
@@ -211,8 +212,12 @@ final class Bubble {
         window.contentView = content
         title.isSelectable = false; title.font = .boldSystemFont(ofSize:13)
         title.colorsChanged = { [weak self] in
-            guard let self,self.headingAnimated else {return}
-            self.setHeading(self.plainHeading,animated:true)
+            guard let self else {return}
+            if self.headingAnimated {self.setHeading(self.plainHeading,animated:true)}
+            if self.userInputPrefixLength > 0,let storage = self.text.textStorage,storage.length >= self.userInputPrefixLength {
+                let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:self.window.effectiveAppearance))!
+                storage.addAttribute(.foregroundColor,value:accent,range:NSRange(location:0,length:self.userInputPrefixLength))
+            }
         }
         text.isEditable = false; text.isSelectable = false; text.drawsBackground = false
         // 正文宽度由气泡布局统一提供，不随滚动条显隐自动拉伸。
@@ -403,8 +408,9 @@ final class Bubble {
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = []) {
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false) {
         taskList?.stop(); taskList = nil
+        userInputPrefixLength = 0
         if (attentionAction && !questions.isEmpty || !laysOutBody) && !text.string.isEmpty {text.releaseRenderedContent()}
         if !fromCard {saveCardForm(); approval = nil; cardStore.clearSelection(); renderedCardID = nil; updateCardNavigation()}
         let taskKey = timing?.key
@@ -477,6 +483,13 @@ final class Bubble {
         } else if laysOutBody {
             let rendered = approval.map {ApprovalText.render($0,font:bodyFont)} ?? (kind == "task" ? MarkdownText.render(body,font:bodyFont,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:bodyFont,.foregroundColor:NSColor.labelColor]))
             let content = NSMutableAttributedString(attributedString:rendered)
+            if isUserInput && !body.isEmpty {
+                // 发言人标记仅在气泡排版时添加，原始提问与历史正文保持原文。
+                let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:window.effectiveAppearance))!
+                let prefix = NSAttributedString(string:preferences.ownerName+"：",attributes:[.font:bodyFont,.foregroundColor:accent])
+                content.insert(prefix,at:0)
+                userInputPrefixLength = prefix.length
+            }
             if !fileEdits.isEmpty {
                 if content.length > 0 {content.append(NSAttributedString(string:"\n\n",attributes:[.font:bodyFont]))}
                 content.append(FileEditRendering.render(fileEdits,font:bodyFont,id:timing?.key ?? renderedCardID ?? "standalone"))
@@ -491,7 +504,7 @@ final class Bubble {
             guard let self else {return}
             self.show(title:heading,body:body,kind:kind,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,
                 details:enabled,resetText:false,animateHeading:animateHeading,attentionAction:attentionAction,
-                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits)
+                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput)
         }
     }
     private func layoutTextBody() {

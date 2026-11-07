@@ -181,7 +181,7 @@ final class DesktopSync {
             if active && value.attention == nil && !value.status.hasPrefix("waiting"),
                previous == nil || (previous?.receivedText == nil && value.receivedText != nil) {
                 chat.pet.say(chat.pet.preferences.statusLine("desktopTaskReceivedTemplate"),body:value.receivedText ?? "",kind:"task",thread:conversation.key,
-                    purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:turn.date,key:key),messageID:"task-received")
+                    purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:turn.date,key:key),messageID:"task-received",isUserInput:true)
             }
             if different {
                 if value.activity == nil || !active {chat.pet.bubble.removeActivity(taskKey:key)}

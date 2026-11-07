@@ -426,7 +426,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = []) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -445,7 +445,7 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview),select:selectCard)
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput),select:selectCard)
         }
         placeBubble()
     }

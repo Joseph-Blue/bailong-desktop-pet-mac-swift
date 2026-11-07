@@ -68,7 +68,7 @@ final class PetPreferences {
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
-        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",
+        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),
