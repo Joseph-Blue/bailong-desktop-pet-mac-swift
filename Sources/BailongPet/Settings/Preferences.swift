@@ -12,10 +12,10 @@ enum SettingsSection: Int, CaseIterable {
     var keys: [String] {
         switch self {
         case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
-        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"]
+        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return ["singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
-        case .messages: return ["approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
-        case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
+        case .messages: return ["taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .appearance: return ["petPercent","petShadow","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
         case .updates: return ["automaticallyCheckUpdates"]
@@ -65,14 +65,14 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
-        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,
+        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":24,"animationQuality":"720","animationFPSLimit":"full",
         "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),
-        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskThinkingTemplate":"{桌宠名}正在思考","taskToolTemplate":"{桌宠名}正在调用工具","taskCommandTemplate":"{桌宠名}正在运行命令","taskCommandCompletedTemplate":"{桌宠名}已运行命令","taskSuccessTemplate":"{用户名}，完成啦！",
+        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskThinkingTemplate":"{桌宠名}正在思考","taskToolTemplate":"{桌宠名}正在调用工具","taskCommandTemplate":"{桌宠名}正在运行命令","taskCommandCompletedTemplate":"{桌宠名}已运行命令","taskSuccessTemplate":"{用户名}，完成啦！",
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
@@ -83,10 +83,10 @@ final class PetPreferences {
         "interactionSeconds":5.0,"progressSeconds":10.0,"resultSeconds":20.0,"quotaSeconds":5.0,
         "autoReadTime":true,"pauseOnHover":true,"countAfterReveal":true,"typingEffect":true,"soundEnabled":true,
         "quietCompanion":false,"quietSchedule":false,"quietStart":22*60,"quietEnd":8*60,
-        "petPercent":100,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
-    ]
+        "petPercent":100,"petShadow":true,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
+    ].merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
-        "bubbleCardLimit":5...100,"recentTaskCount":1...20,
+        "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
         "glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"bubbleAspectRatio":0.6...3,"messageFontSize":11...20

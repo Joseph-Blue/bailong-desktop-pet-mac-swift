@@ -18,6 +18,8 @@ final class ChatController {
     private var clearingWorkspace = false
     var cancelled = false, closing = false
     private var messagesState = TaskMessageAccumulator()
+    var reminderClock:TaskReminderClock?
+    private var interruptInFlight = false
     var currentActivity:TaskActivity? {messagesState.currentActivity}
     var saveError: String?
     var updateTimer: Timer?
@@ -231,6 +233,9 @@ final class ChatController {
     private func inputState(_ conversation:Conversation?,kind:ConversationKind) -> ChatInputState {
         var state = ChatInputState(conversation:conversation,kind:kind)
         state.runningTitle = running?.0.title; state.ownsRunningTask = conversation != nil && running?.0 === conversation
+        state.stopping = state.ownsRunningTask && cancelled
+        state.executing = state.ownsRunningTask || (conversation?.external == true && desktopTasks.contains {$0.threadID == conversation?.threadID && $0.active})
+        state.newConversation = conversation.map {candidate in candidate.turns.isEmpty && unstartedConversations.contains {$0 === candidate}} ?? false
         state.readOnly = store.isReadOnly
         if let conversation,conversation.external {
             state.sending = desktopSession.sending(conversation.key); state.unconfirmed = desktopSession.unconfirmed(conversation.key)
@@ -323,10 +328,11 @@ final class ChatController {
         let turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
-        running = (c,turn); cancelled = false; messagesState = TaskMessageAccumulator()
+        running = (c,turn); cancelled = false; interruptInFlight = false; messagesState = TaskMessageAccumulator()
+        reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskProgressTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
+        pet.taskStarted("own"); pet.say(pet.preferences.statusLine("taskReceivedTemplate"), body:text, kind:"task", thread:c.key, personalizeTitle:false, animateHeading:true, timing:.init(start:turn.date,key:"own"),selectCard:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}
@@ -368,6 +374,7 @@ final class ChatController {
         case "error": t.error = (p["error"] as? [String:Any])?["message"] as? String ?? "Codex 报告错误"
         default:guard messagesState.receive(method,p) else {return}
         }
+        reminderClock?.lastProgress = Date().timeIntervalSince1970
         scheduleUpdate()
     }
     func updateText() {
@@ -389,8 +396,9 @@ final class ChatController {
     }
     private func presentAgentMessages(conversation:Conversation,turn:Turn) {
         for message in messagesState.takeChangedMessages() {
-            pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
+            pet.say(pet.preferences.statusLine(message.complete ? "taskUpdateTemplate" : "taskReplyTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
                 timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:message.id)
+            reminderClock?.lastNotice = Date().timeIntervalSince1970
         }
     }
     func scheduleSave() {
@@ -404,9 +412,11 @@ final class ChatController {
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
         messagesState.finalize(t)
         presentAgentMessages(conversation:c,turn:t)
+        let stoppedByUser = cancelled && ["interrupted","cancelled","canceled"].contains(status)
+        reminderClock = nil; interruptInFlight = false
         running = nil; requestCoordinator.dismiss(); pet.bubble.resolveQuestions(taskKey:"own"); pet.taskEnded("own",status:status); persist()
-        let title = pet.preferences.taskResultLine(status)
-        if !error.isEmpty && status != "completed" && !closing {
+        let title = stoppedByUser ? pet.preferences.statusLine("taskStoppedTemplate") : pet.preferences.taskResultLine(status)
+        if !error.isEmpty && status != "completed" && !stoppedByUser && !closing {
             let failure = AppFailure.codex(error)
             if composerSelection === c {
                 ui.showFailure(failure) { [weak self] in
@@ -424,13 +434,20 @@ final class ChatController {
         if closing {finishShutdown()}
     }
     func stop() {
-        guard let (_,turn) = running else {return}
-        cancelled = true; requestCoordinator.dismiss(); ui.status.stringValue = "正在停止任务…"
+        guard let (_,turn) = running,!cancelled else {return}
+        cancelled = true; requestCoordinator.dismiss(); refresh()
         if turn.id == nil {connection.abortUnconfirmedTask()} else {interrupt()}
     }
     func interrupt() {
-        guard let (c,t) = running, let thread = c.threadID, let turn = t.id else{return}
-        connection.call("turn/interrupt",["threadId":thread,"turnId":turn]) { [weak self] result in if case .failure(let error) = result {self?.running?.1.error = error.localizedDescription; self?.persist()} }
+        guard let (c,t) = running,let thread = c.threadID,let turn = t.id,!interruptInFlight else{return}
+        interruptInFlight = true
+        connection.call("turn/interrupt",["threadId":thread,"turnId":turn]) { [weak self,weak t] result in
+            guard let self,let t,self.running?.1 === t else {return}
+            if case .failure(let error) = result {
+                self.interruptInFlight = false; self.cancelled = false; t.error = error.localizedDescription; self.persist()
+                showError("停止任务未成功",error)
+            }
+        }
     }
     func shutdown(_ completion: @escaping () -> Void) {
         closing = true; onFinishedShutdown = completion

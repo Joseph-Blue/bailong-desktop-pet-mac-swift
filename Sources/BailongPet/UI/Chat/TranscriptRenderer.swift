@@ -6,7 +6,7 @@ final class TranscriptRenderer {
     func invalidate() {transcriptCache.removeAll()}
     func style(_ conversation:Conversation) -> [String] {
         let preferences = PetPreferences.shared
-        return [preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
+        return [preferences.statusLine("conversationEmptyTemplate"),preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
     }
     func turnSignature(_ turn:Turn) -> [String] {
         [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970)]
@@ -27,7 +27,7 @@ final class TranscriptRenderer {
         if turns.isEmpty {
             invalidate()
             append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.color)
-            append("在下方输入想做的事。",color:.secondaryLabelColor)
+            append(conversation.external ? "在下方输入想做的事。" : PetPreferences.shared.statusLine("conversationEmptyTemplate"),color:.secondaryLabelColor)
             return result
         }
         let style = style(conversation)

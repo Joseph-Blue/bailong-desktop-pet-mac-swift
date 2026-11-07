@@ -219,7 +219,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func stopTarget(_ entry:ChatEntry) {
-        guard let state = inputStates[entry],state.ownsRunningTask,let key = state.conversation?.key else {return}
+        guard let state = inputStates[entry],state.ownsRunningTask,!state.stopping,let key = state.conversation?.key else {return}
         onStop(key)
     }
     private func checkTarget(_ entry:ChatEntry) {
@@ -423,8 +423,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyModel.isHidden = selected.external; inheritedSettings.isHidden = !selected.external
         historyRetrySettings.isHidden = !selected.external || historyState.desktopReady || historyState.modelNote == nil
         historyRetrySettings.isEnabled = !historyState.sending
+        historyStop.isEnabled = !historyState.stopping
+        historyStop.title = historyState.stopping ? "正在停止…" : "停止任务"
         historyStop.isHidden = !historyState.ownsRunningTask; historyCheck.isHidden = !historyState.unconfirmed
-        historyStatus.stringValue = historyState.note; historyStatus.hoverHelp = historyState.replyNote ?? historyState.note
+        historyStatus.stringValue = historyState.historyNote; historyStatus.hoverHelp = historyState.replyNote ?? historyState.historyNote
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
         resizeHistoryInput(); modelStateChanged()
         composerEditor.placeholder = composerState.kind == .project ? "发送到这条 Codex 项目对话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")

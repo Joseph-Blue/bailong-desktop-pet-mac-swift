@@ -33,6 +33,8 @@ final class SpriteView: NSView {
         transform.concat()
         NSImage(cgImage: frame.image, size: NSSize(width: 512, height: 512)).draw(in: pet.drawRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
         NSGraphicsContext.restoreGraphicsState()
+        // 复用当前透明帧更新系统阴影，不创建描边位图或额外帧缓存。
+        if window?.hasShadow == true {window?.invalidateShadow()}
         pet.diagnostics?.record(frame.image)
     }
     override func mouseDown(with event: NSEvent) {
@@ -155,7 +157,7 @@ final class PetController: NSObject, NSMenuDelegate {
         for key in ["petPercent","bubblePercent"] where defaults.object(forKey:key) == nil {
             defaults.set(100,forKey:key)
         }
-        window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = false
+        window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = preferences.bool("petShadow")
         window.level = .floating; window.hidesOnDeactivate = false
         window.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .fullScreenNone]
         window.contentView = view; view.pet = self
@@ -637,6 +639,11 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
+        if keys.contains("petShadow") {
+            window.hasShadow = preferences.bool("petShadow")
+            view.needsDisplay = true
+            if keys.count == 1 {return}
+        }
         if keys.contains("appearanceMode") {AppAppearance.apply()}
         // 连续拖动材质滑块只刷新气泡背景，不触发任务同步与桌宠调度。
         if !keys.isEmpty && Set(keys).isSubset(of:["bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]) {return}

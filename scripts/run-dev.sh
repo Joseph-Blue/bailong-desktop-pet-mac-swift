@@ -52,15 +52,12 @@ else
     print "源码未变化，复用上次编译结果。"
 fi
 
-print -r -- "开发程序：$PWD/$binary"
-bailong_directory "开发产物目录" "${binary:h}"
+bailong_artifact "开发程序" "$binary"
 if [[ "${1:-}" == "--build-only" ]]; then
-    print "编译准备完成 · 总用时 $((SECONDS-bailong_started)) 秒"
-    print "下一步：双击 run-dev.command 开发运行。"
+    print "编译完成 · 总用时 $((SECONDS-bailong_started)) 秒"
     exit 0
 fi
 [[ -f "local-assets/native-hevc/catalog/素材清单.json" ]] || { print -u2 "请先按 README 准备 local-assets/native-hevc/catalog 原生素材。"; exit 1; }
-print "沿用本机现有桌宠设置和历史。若已有桌宠在运行，请先从其菜单退出。"
-print "即将前台运行：请保持终端打开，按 Ctrl+C 停止。"
+print "启动开发程序，按 Ctrl+C 停止。"
 export BAILONG_DEV_RUN=1
 exec "$binary"

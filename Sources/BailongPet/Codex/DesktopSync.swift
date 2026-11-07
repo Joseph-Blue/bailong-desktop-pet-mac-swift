@@ -65,6 +65,8 @@ final class DesktopSync {
         }
     }
     private func poll() {
+        guard !stopped else {return}
+        chat.checkTaskReminder(now:Date().timeIntervalSince1970)
         chat.refreshDesktopSettingsIfNeeded()
         guard !reading && !stopped else{return}; reading = true
         let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID}).union(chat.store.deletedThreads)
@@ -173,6 +175,12 @@ final class DesktopSync {
                 if turn.completedAt != end {turn.completedAt = end; changed = true}
             }
             tracked[key] = value
+            if previous == nil {noticedAt[key] = now}
+            if previous?.activity != value.activity {changedAt[key] = now}
+            if previous == nil && active && value.attention == nil && !value.status.hasPrefix("waiting") {
+                chat.pet.say(chat.pet.preferences.statusLine("taskReceivedTemplate"),body:value.title,kind:"task",thread:conversation.key,
+                    purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:turn.date,key:key),messageID:"task-received")
+            }
             if different {
                 if value.activity == nil || !active {chat.pet.bubble.removeActivity(taskKey:key)}
                 if previousAttention != nil && value.attention == nil {chat.pet.bubble.resolveQuestions(taskKey:key)}
@@ -194,9 +202,10 @@ final class DesktopSync {
                 let messages = value.agentMessages.filter {!$0.isFinal}
                 let incoming = previous == nil && value.started < born ? Array(messages.suffix(1)) : messages
                 for message in incoming where previous?.agentMessages.first(where:{$0.id == message.id})?.text != message.text {
-                    chat.pet.say(chat.pet.preferences.statusLine("taskProgressTemplate"),body:message.text,kind:"task",thread:conversation.key,
+                    chat.pet.say(chat.pet.preferences.statusLine("taskUpdateTemplate"),body:message.text,kind:"task",thread:conversation.key,
                         purpose:.progress,personalizeTitle:false,animateHeading:active,
                         timing:.init(start:Date(timeIntervalSince1970:value.started),key:key,finished:active ? nil : turn.completedAt,status:active ? nil : value.status),messageID:message.id)
+                    noticedAt[key] = now
                 }
             }
             if active {
@@ -204,7 +213,10 @@ final class DesktopSync {
                     chat.pet.showProgressToast(value.activity,key:key,timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key))
                 }
                 if !running.contains(key) {running.insert(key); chat.pet.taskStarted(key)}
-                let repeatDue = now-(noticedAt[key] ?? 0) >= 300
+                if value.attention == nil && ["running","inProgress"].contains(value.status),
+                   TaskReminderClock.isDue(now:now,lastProgress:changedAt[key] ?? now,lastNotice:noticedAt[key] ?? now,interval:chat.pet.preferences.number("taskReminderMinutes")*60),
+                   chat.showTaskReminder(conversation:conversation,start:turn.date,key:key) {noticedAt[key] = now}
+                let repeatDue = now-(noticedAt[key] ?? now) >= 300
                 if !skippedAll && (different || repeatDue) {
                     let quiet = now-(changedAt[key] ?? now) >= 90
                     let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.agentMessages.last(where:{!$0.isFinal})?.text ?? value.messages
