@@ -1,5 +1,10 @@
 import Foundation
 
+struct PublicUserMessage:Equatable {
+    let id:String
+    let text:String
+}
+
 struct PublicAgentMessage:Equatable {
     let id:String
     let text:String
@@ -21,9 +26,20 @@ struct PublicSnapshot {
     var fileEdits = [FileEditSummary]()
     var isLatest = true
     var receivedText:String?
+    var steeringMessages = [PublicUserMessage]()
     var resultText:String {GeneratedImageLink.appending(agentMessages.filter(\.isImage).map(\.text),to:final)}
     var key: String { actual+":"+turn }
-    var fingerprint: [String] { fileEdits.flatMap(\.signature) + agentMessages.flatMap {[$0.id,$0.text]} + [status,messages,final,alert,step,error,approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
+    var fingerprint:[String] {
+        var result = steeringMessages.flatMap {[$0.id,$0.text]}
+        result += fileEdits.flatMap(\.signature)
+        result += agentMessages.flatMap {[$0.id,$0.text]}
+        result += [status,messages,final,alert,step,error,receivedText ?? "",approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""]
+        for question in attention?.questions ?? [] {
+            result += [question.id,question.prompt]
+            result += question.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}
+        }
+        return result
+    }
 }
 
 final class DesktopSync {
@@ -153,6 +169,7 @@ final class DesktopSync {
                 if chat.store.recordsAutomatically,!chat.store.isReadOnly,
                    let conversation = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical}),
                    let turn = conversation.turns.first(where:{$0.id == value.turn}) {
+                    if chat.store.canEnrichInput(turn,in:conversation),let input = value.receivedText,turn.input.isEmpty,!input.isEmpty {turn.input = input; changed = true}
                     let enriched = GeneratedImageLink.appending(value.agentMessages.filter(\.isImage).map(\.text),to:turn.messages)
                     if enriched != turn.messages {turn.messages = enriched; changed = true}
                     if turn.fileEdits != value.fileEdits {turn.fileEdits = value.fileEdits; changed = true}
@@ -179,9 +196,8 @@ final class DesktopSync {
             if previous == nil {noticedAt[key] = now}
             if previous?.activity != value.activity {changedAt[key] = now}
             if active && value.attention == nil && !value.status.hasPrefix("waiting"),
-               previous == nil || (previous?.receivedText == nil && value.receivedText != nil) {
-                chat.pet.say(chat.pet.preferences.statusLine("desktopTaskReceivedTemplate"),body:value.receivedText ?? "",kind:"task",thread:conversation.key,
-                    purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:turn.date,key:key),messageID:"task-received",isUserInput:true)
+               previous == nil || previous?.receivedText != value.receivedText {
+                chat.showUserMessage(value.receivedText ?? "",in:conversation,timing:.init(start:turn.date,key:key),messageID:"task-received")
             }
             if different {
                 if value.activity == nil || !active {chat.pet.bubble.removeActivity(taskKey:key)}
@@ -190,6 +206,7 @@ final class DesktopSync {
                     chat.pet.bubble.hide()
                 }
                 fingerprints[key] = value.fingerprint; changedAt[key] = now
+                if let input = value.receivedText,turn.input.isEmpty,!input.isEmpty {turn.input = input}
                 if value.hasSensitiveQuestion {turn.sensitiveQuestionNotice = chat.pet.preferences.sensitiveQuestionNotice}
                 if value.hasSensitiveInput {turn.sensitiveInputNotice = chat.pet.preferences.sensitiveInputNotice}
                 if turn.messages != value.messages || turn.final != value.final {
@@ -208,6 +225,15 @@ final class DesktopSync {
                         purpose:.progress,personalizeTitle:false,animateHeading:active,
                         timing:.init(start:Date(timeIntervalSince1970:value.started),key:key,finished:active ? nil : turn.completedAt,status:active ? nil : value.status),messageID:message.id)
                     noticedAt[key] = now
+                }
+                // 同一观察入口覆盖桌宠 IPC 与 Codex 端插话；回执不另造卡片。
+                // 首次接入已在运行的旧任务不重放先前插话；后续只显示真实 ID 的新增或更新。
+                if previous != nil || value.started >= born {
+                    for message in value.steeringMessages where previous?.steeringMessages.first(where:{$0.id == message.id})?.text != message.text {
+                        chat.showUserMessage(message.text,in:conversation,
+                            timing:.init(start:turn.date,key:key,finished:active ? nil : turn.completedAt,status:active ? nil : value.status),
+                            messageID:"user-"+message.id,steering:true)
+                    }
                 }
             }
             if active {

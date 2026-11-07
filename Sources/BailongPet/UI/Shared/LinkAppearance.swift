@@ -1,5 +1,8 @@
 import AppKit
 
+// 链接按钮与整行跳转控件，供非激活面板保留其原生手形光标。
+protocol LinkCursorControl:AnyObject {var isEnabled:Bool {get}}
+
 // 仅提供超链接外观与命中区域；导航、文件定位和展开动作仍由调用方处理。
 enum LinkAppearance {
     static var attributes:[NSAttributedString.Key:Any] {
@@ -27,6 +30,18 @@ enum LinkAppearance {
                 if !hit.isEmpty {addCursorRect(hit,to:text)}
             }
         }
+    }
+    static func link(at point:NSPoint,in text:NSTextView) -> (value:Any,index:Int)? {
+        guard text.visibleRect.contains(point),let storage = text.textStorage,storage.length > 0,
+              let manager = text.layoutManager,let container = text.textContainer else {return nil}
+        manager.ensureLayout(for:container)
+        let local = NSPoint(x:point.x-text.textContainerOrigin.x,y:point.y-text.textContainerOrigin.y)
+        let glyph = manager.glyphIndex(for:local,in:container)
+        guard glyph < manager.numberOfGlyphs,
+              manager.boundingRect(forGlyphRange:NSRange(location:glyph,length:1),in:container).contains(local) else {return nil}
+        let index = manager.characterIndexForGlyph(at:glyph)
+        guard index < storage.length,let value = storage.attribute(.link,at:index,effectiveRange:nil) else {return nil}
+        return (value,index)
     }
 }
 

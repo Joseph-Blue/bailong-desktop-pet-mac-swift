@@ -61,6 +61,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onNewDefault:(ChatEntry) -> Void = {_ in}
     var onComposerSelect:(String) -> Void = {_ in}, onMode:(ConversationKind) -> Void = {_ in}
     var onReleaseHistory:() -> Void = {}
+    var onHistoryPage:(Conversation,[Turn]) -> Void = {_,_ in}
     var onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
     var presentingFolderPicker:Bool {get {composerView.presentingFolderPicker} set {composerView.presentingFolderPicker = newValue}}
     var isPetInteraction:(NSEvent) -> Bool {get {composerView.isPetInteraction} set {composerView.isPetInteraction = newValue}}
@@ -443,6 +444,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
         let range = historyPage.range(count:selected.turns.count)
         let turns = Array(selected.turns[range])
+        onHistoryPage(selected,turns)
         let pageChanged = renderedPageStart != range.lowerBound
         pageNavigation.setEnabled(range.lowerBound > 0,forSegment:0)
         pageNavigation.setEnabled(range.upperBound < selected.turns.count,forSegment:1)

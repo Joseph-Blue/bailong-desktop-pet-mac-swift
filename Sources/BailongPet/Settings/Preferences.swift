@@ -25,6 +25,7 @@ enum SettingsSection: Int, CaseIterable {
 }
 
 enum MessagePurpose { case interaction, progress, result, attention, quota, preview }
+enum AnimationSelection { case general, idle, docked, task }
 
 enum SendShortcut: String, CaseIterable {
     case commandReturn, returnToSend, controlOrCommandReturn
@@ -184,8 +185,9 @@ final class PetPreferences {
         if text.isEmpty {lines.removeValue(forKey:id)} else {lines[id] = text}
         set(lines,for:"customLines")
     }
+    func defaultWeight(_ id:String) -> Int {id == "idle" ? 4 : id == "idle2" ? 1 : 3}
     func baseWeight(_ id: String) -> Int {
-        (value("animationWeights") as? [String:Int])?[id] ?? (id == "idle" ? 4 : id == "idle2" ? 1 : 3)
+        (value("animationWeights") as? [String:Int])?[id] ?? defaultWeight(id)
     }
     func weight(_ id: String) -> Double {Double(baseWeight(id)) * (favorites.contains(id) ? 2 : 1)}
     var favorites: [String] {value("favorites") as? [String] ?? []}
@@ -193,10 +195,19 @@ final class PetPreferences {
     func clipSpeed(_ id: String) -> Double {(value("animationSpeeds") as? [String:Double])?[id] ?? 1}
     func speed(_ id: String) -> Double {number("playbackSpeed") * clipSpeed(id)}
     func setSpeed(_ speed: Double, for id: String) {var map = value("animationSpeeds") as? [String:Double] ?? [:]; map[id] = speed; set(map,for:"animationSpeeds")}
-    func choose(_ clips: [Clip], previous: String?) -> Clip? {
+    func choose(_ clips: [Clip], previous: String?, selection:AnimationSelection = .general) -> Clip? {
         let pool = clips.filter {weight($0.id) > 0}
-        // 降低刚播放动作的权重，而非强制排除；只有两段待机时也能保留频率差异。
-        func adjusted(_ clip: Clip) -> Double {weight(clip.id) * (bool("avoidRepeat") && pool.count > 1 && clip.id == previous ? 0.35 : 1)}
+        // 原作普通待机 4:1、吸边 7:3、任务组内均匀；手动频率与偏爱按比例调整。
+        // 任务候选由调用方先排除上一动作；减少重复只用于其他随机互动。
+        func adjusted(_ clip: Clip) -> Double {
+            let weight = weight(clip.id)
+            switch selection {
+            case .idle: return weight
+            case .docked: return weight / Double(defaultWeight(clip.id)) * (clip.id == "idle" ? 7 : 3)
+            case .task: return weight / Double(defaultWeight(clip.id))
+            case .general: return weight * (bool("avoidRepeat") && pool.count > 1 && clip.id == previous ? 0.35 : 1)
+            }
+        }
         let total = pool.reduce(0.0) {$0 + adjusted($1)}
         guard total > 0 else {return nil}
         var pick = Double.random(in:0..<total)

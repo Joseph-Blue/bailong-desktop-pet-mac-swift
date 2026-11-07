@@ -46,7 +46,8 @@ final class MessageTextView: LinkTextView {
         super.clicked(onLink:link,at:charIndex)
     }
     @discardableResult func setContent(_ value:NSAttributedString,reset:Bool = false) -> Bool {
-        linkTextAttributes = LinkAppearance.attributes
+        // 保留链接自身的语义颜色：普通链接强调色，文件列表仍区分目录与文件名。
+        linkTextAttributes = [.cursor:NSCursor.pointingHand]
         return applyContent(fileEditPresentation.content(value),reset:reset)
     }
     func releaseRenderedContent() {

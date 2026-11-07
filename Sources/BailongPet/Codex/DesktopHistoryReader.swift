@@ -32,22 +32,52 @@ enum DesktopHistoryReader {
     // 接收卡片只读本轮首条普通用户消息；问卷回执整条排除，不取答案或图片数据。
     // SQL 限制输出长度，避免把超长输入载入持续刷新的任务投影。
     static func receivedText(_ history:ReadDatabase,thread:String,turn:String) throws -> String? {
+        try userMessages(history,thread:thread,turn:turn).first?.text
+    }
+    private static func userMessages(_ history:ReadDatabase,thread:String,turn:String,recent:Bool = false) throws -> [PublicUserMessage] {
         let rows = try history.rows("""
-            SELECT substr(COALESCE((SELECT group_concat(json_extract(part.value,'$.text'),char(10)||char(10))
+            WITH input AS (SELECT json_extract(item.item_json,'$.id') message_id,item.rollout_ordinal ordinal,
+                replace(ltrim(COALESCE((SELECT group_concat(json_extract(part.value,'$.text'),char(10)||char(10))
                 FROM json_each(item.item_json,'$.content') part
                 WHERE json_extract(part.value,'$.type') IN ('text','inputText','input_text')
-                  AND json_type(part.value,'$.text')='text'),json_extract(item.item_json,'$.text'),''),1,8193) text
+                  AND json_type(part.value,'$.text')='text'),json_extract(item.item_json,'$.text'),''),char(9)||char(10)||char(13)||' '),char(13)||char(10),char(10)) text,
+                (SELECT count(*) FROM json_each(item.item_json,'$.content') part
+                    WHERE json_extract(part.value,'$.type') IN ('image','inputImage','input_image','localImage')) images,
+                (SELECT count(*) FROM json_each(item.item_json,'$.content') part
+                    WHERE json_extract(part.value,'$.type') IN ('file','inputFile','input_file')) files
             FROM thread_items item
             WHERE item.thread_id=? AND item.turn_id=? AND item.item_type='userMessage'
               AND NOT EXISTS (SELECT 1 FROM json_each(item.item_json,'$.content') part
                 WHERE ltrim(json_extract(part.value,'$.text'),char(9)||char(10)||char(13)||' ') LIKE '<send_user_message_question_reply>%')
               AND COALESCE(ltrim(json_extract(item.item_json,'$.text'),char(9)||char(10)||char(13)||' '),'') NOT LIKE '<send_user_message_question_reply>%'
-            ORDER BY item.rollout_ordinal LIMIT 1
+            ORDER BY item.rollout_ordinal \(recent ? "DESC" : "ASC") LIMIT \(recent ? 20 : 1))
+            SELECT message_id,substr(text,1,8193) text,images,files,
+                CASE WHEN text LIKE '# Files mentioned by the user:%'
+                    AND instr(text,char(10)||'## My request:'||char(10))>0
+                THEN substr(text,instr(text,char(10)||'## My request:'||char(10))+length(char(10)||'## My request:'||char(10)),8193) END request_text
+            FROM input ORDER BY ordinal
             """,[thread,turn])
-        guard let text = rows.first?["text"] else {return nil}
-        return text.count > 8192 ? String(text.prefix(8192))+"…" : text
+        return rows.compactMap {row in
+            guard let text = row["text"] else {return nil}
+            return PublicUserMessage(id:row["message_id"] ?? "",text:UserInputText.display(text,request:row["request_text"],images:Int(row["images"] ?? "0") ?? 0,files:Int(row["files"] ?? "0") ?? 0,limitBody:true))
+        }
     }
     // 会话存在性与显示名称无关；内置对话的 name 可以尚未生成。
+    static func userInputs(thread:String,turns:[String]) throws -> [String:String] {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
+        let state = try ReadDatabase(root+"/state_5.sqlite")
+        guard let row = try state.rows("SELECT rollout_path FROM threads WHERE id=?",[thread]).first else {return [:]}
+        let path = row["rollout_path"] ?? ""
+        let pattern = try NSRegularExpression(pattern:"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+        let actual = pattern.matches(in:path,range:NSRange(path.startIndex...,in:path)).last
+            .flatMap {Range($0.range,in:path)}.map {String(path[$0])} ?? thread
+        let history = try ReadDatabase(root+"/thread_history_1.sqlite")
+        var result = [String:String]()
+        for turn in turns.prefix(HistoryPageWindow.size) {
+            if let text = try receivedText(history,thread:actual,turn:turn),!text.isEmpty {result[turn] = text}
+        }
+        return result
+    }
     static func containsThread(_ id:String) throws -> Bool {
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
         let state = try ReadDatabase(root+"/state_5.sqlite")
@@ -208,9 +238,12 @@ enum DesktopHistoryReader {
                 result[result.count-1].fileEdits = FileEditSummary.merged(fileEdits)
                 result[result.count-1].activity = activity
                 result[result.count-1].isLatest = turn["turn_id"] == latestTurn
-                if turn["turn_id"] == latestTurn, activeStatuses.contains(turn["status"] ?? "") {
-                    result[result.count-1].receivedText = try watched.first(where:{$0.actual == actual && $0.turn == turn["turn_id"]})?.receivedText
-                        ?? receivedText(history,thread:actual,turn:turn["turn_id"]!)
+                // 已结束轮次也需要用户输入；沿用现有有界轮次扫描，不扩大历史读取范围。
+                let initialInput = try userMessages(history,thread:actual,turn:turn["turn_id"]!).first
+                result[result.count-1].receivedText = initialInput?.text
+                if turn["turn_id"] == latestTurn && (activeStatuses.contains(turn["status"] ?? "") || watched.contains(where:{$0.key == actual+":"+turn["turn_id"]!})) {
+                    result[result.count-1].steeringMessages = try userMessages(history,thread:actual,turn:turn["turn_id"]!,recent:true)
+                        .filter {!$0.id.isEmpty && $0.id != initialInput?.id && !$0.text.isEmpty && !$0.text.hasPrefix("<external_codex_apps_")}
                 }
             }
         }

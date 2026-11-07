@@ -257,10 +257,13 @@ final class PetController: NSObject, NSMenuDelegate {
         })
     }
     func idle() {
-        if dock != nil {play(preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"idle"); return}
+        if dock != nil {play(preferences.choose(catalog.idles,previous:current.id,selection:.docked) ?? catalog.idle,"idle"); return}
         if !activeTasks.isEmpty {
-            let pool = Double.random(in:0..<1) < 0.35 ? catalog.work.filter {$0.id != "work01"} : catalog.idles
-            play(preferences.choose(pool,previous:current.id) ?? preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"working")
+            let work = catalog.work.filter {$0.id != "work01" && $0.id != current.id && preferences.weight($0.id) > 0}
+            let idles = catalog.idles.filter {$0.id != current.id && preferences.weight($0.id) > 0}
+            let pool = !work.isEmpty && (idles.isEmpty || Double.random(in:0..<1) < 0.35) ? work : idles
+            // 若用户只启用当前这一段，则继续默认待机，避免停在结束帧。
+            play(preferences.choose(pool,previous:nil,selection:.task) ?? catalog.idle,"working")
             return
         }
         if leisureAllowed() {
@@ -272,7 +275,7 @@ final class PetController: NSObject, NSMenuDelegate {
             if let clip = preferences.choose(catalog.extras,previous:current.id) {nextMovement = autoMove; play(clip,"extra"); return}
             nextMovement = autoMove
         }
-        play(preferences.choose(catalog.idles,previous:current.id) ?? catalog.idle,"idle")
+        play(preferences.choose(catalog.idles,previous:current.id,selection:.idle) ?? catalog.idle,"idle")
     }
     func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !(quotaActive && bubble.kind == "quotaLoading") && press == nil && !menuOpen && now >= max(nextLeisure,lastInteraction+preferences.activityInterval) }
     func route(_ clip: Clip) -> CGPoint? {
@@ -340,7 +343,7 @@ final class PetController: NSObject, NSMenuDelegate {
             if elapsed >= duration && !loading {
                 if motion != nil {updateMovement(at:elapsed); movementReady = now + 10; motion = nil}
                 if mode == "drag" { began = now; selectFrame(at: 0, animation: animation) }
-                else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:current.id) { play(clip,"working") }
+                else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:nil,selection:.task) { play(clip,"working") }
                 else { idle() }
             } else {
                 let playback = max(0,elapsed).truncatingRemainder(dividingBy:duration)

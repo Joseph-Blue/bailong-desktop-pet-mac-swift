@@ -41,7 +41,8 @@ final class TranscriptRenderer {
             result = NSMutableAttributedString()
             if !body.input.isEmpty {
                 append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
-                append(body.input)
+                result.append(MarkdownText.renderUserInput(body.input,font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))))
+                result.append(NSAttributedString(string:"\n"))
             }
             append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
             // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。

@@ -145,6 +145,11 @@ final class PetWindow: NSPanel {
         guard contentView.bounds.insetBy(dx:6,dy:6).contains(point) else {return}
         var hit = contentView.hitTest(point)
         while let view = hit {
+            if let link = view as? LinkCursorControl,link.isEnabled {NSCursor.pointingHand.set(); return}
+            if let text = view as? NSTextView,
+               LinkAppearance.link(at:text.convert(event.locationInWindow,from:nil),in:text) != nil {
+                NSCursor.pointingHand.set(); return
+            }
             if let text = view as? NSTextView,text.isEditable || text.isSelectable {NSCursor.iBeam.set(); return}
             hit = view.superview
         }
