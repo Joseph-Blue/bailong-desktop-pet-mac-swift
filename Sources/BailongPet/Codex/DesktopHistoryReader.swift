@@ -29,6 +29,24 @@ final class ReadDatabase {
     }
 }
 enum DesktopHistoryReader {
+    // 接收卡片只读本轮首条普通用户消息；问卷回执整条排除，不取答案或图片数据。
+    // SQL 限制输出长度，避免把超长输入载入持续刷新的任务投影。
+    static func receivedText(_ history:ReadDatabase,thread:String,turn:String) throws -> String? {
+        let rows = try history.rows("""
+            SELECT substr(COALESCE((SELECT group_concat(json_extract(part.value,'$.text'),char(10)||char(10))
+                FROM json_each(item.item_json,'$.content') part
+                WHERE json_extract(part.value,'$.type') IN ('text','inputText','input_text')
+                  AND json_type(part.value,'$.text')='text'),json_extract(item.item_json,'$.text'),''),1,8193) text
+            FROM thread_items item
+            WHERE item.thread_id=? AND item.turn_id=? AND item.item_type='userMessage'
+              AND NOT EXISTS (SELECT 1 FROM json_each(item.item_json,'$.content') part
+                WHERE ltrim(json_extract(part.value,'$.text'),char(9)||char(10)||char(13)||' ') LIKE '<send_user_message_question_reply>%')
+              AND COALESCE(ltrim(json_extract(item.item_json,'$.text'),char(9)||char(10)||char(13)||' '),'') NOT LIKE '<send_user_message_question_reply>%'
+            ORDER BY item.rollout_ordinal LIMIT 1
+            """,[thread,turn])
+        guard let text = rows.first?["text"] else {return nil}
+        return text.count > 8192 ? String(text.prefix(8192))+"…" : text
+    }
     // 会话存在性与显示名称无关；内置对话的 name 可以尚未生成。
     static func containsThread(_ id:String) throws -> Bool {
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
@@ -190,6 +208,10 @@ enum DesktopHistoryReader {
                 result[result.count-1].fileEdits = FileEditSummary.merged(fileEdits)
                 result[result.count-1].activity = activity
                 result[result.count-1].isLatest = turn["turn_id"] == latestTurn
+                if turn["turn_id"] == latestTurn, activeStatuses.contains(turn["status"] ?? "") {
+                    result[result.count-1].receivedText = try watched.first(where:{$0.actual == actual && $0.turn == turn["turn_id"]})?.receivedText
+                        ?? receivedText(history,thread:actual,turn:turn["turn_id"]!)
+                }
             }
         }
         return result.sorted{$0.started < $1.started}

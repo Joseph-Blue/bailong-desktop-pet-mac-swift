@@ -101,6 +101,10 @@ final class PetPreferences {
         self.defaults = defaults
         guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {return}
         TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
+        let receivedKeys = ["desktopTaskReceivedTemplate","desktopTaskReceivedBodyTemplate"]
+        let received = Dictionary(uniqueKeysWithValues:receivedKeys.compactMap {key in defaults.object(forKey:key).map {(key,$0)}})
+        for (key,value) in ConversationLines.migrateReceivedLine(received) {defaults.set(value,forKey:key)}
+        defaults.removeObject(forKey:"desktopTaskReceivedBodyTemplate")
         defaults.removeObject(forKey:"addressMode")
         if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
     }
@@ -242,6 +246,7 @@ final class PetPreferences {
             throw PetFailure(message:"不支持设置格式 \(schema)，请使用对应版本的应用。尚未导入任何更改。")
         }
         values = TemplateSyntax.migrate(values)
+        values = ConversationLines.migrateReceivedLine(values)
         values.removeValue(forKey:"addressMode")
         if let old = values["animationFPSLimit"] as? String, ["24","30"].contains(old) {values["animationFPSLimit"] = "full"}
         for (key,value) in values {
@@ -270,7 +275,7 @@ final class PetPreferences {
             return CFGetTypeID(n) != CFBooleanGetTypeID() && range.contains(n.doubleValue) && (!integer || n.doubleValue.rounded() == n.doubleValue)
         }
         if let b = baseline as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID() {return (value as? NSNumber).map {CFGetTypeID($0) == CFBooleanGetTypeID()} ?? false}
-        if baseline is String, let s = value as? String {return (TemplateSyntax.isTemplateKey(key) ? TemplateSyntax.count(s) : s.count) <= (key.hasSuffix("Template") ? 120 : ["ownerName","customAddress","petName"].contains(key) ? 20 : 80) && (choices[key]?.contains(s) ?? true)}
+        if baseline is String, let s = value as? String {return (TemplateSyntax.isTemplateKey(key) ? TemplateSyntax.count(s) : s.count) <= (key.hasSuffix("Template") ? ConversationLines.limit(key) : ["ownerName","customAddress","petName"].contains(key) ? 20 : 80) && (choices[key]?.contains(s) ?? true)}
         return false
     }
 }

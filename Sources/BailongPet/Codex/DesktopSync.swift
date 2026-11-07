@@ -20,6 +20,7 @@ struct PublicSnapshot {
     var agentMessages = [PublicAgentMessage]()
     var fileEdits = [FileEditSummary]()
     var isLatest = true
+    var receivedText:String?
     var resultText:String {GeneratedImageLink.appending(agentMessages.filter(\.isImage).map(\.text),to:final)}
     var key: String { actual+":"+turn }
     var fingerprint: [String] { fileEdits.flatMap(\.signature) + agentMessages.flatMap {[$0.id,$0.text]} + [status,messages,final,alert,step,error,approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""] + (attention?.questions.flatMap {[$0.id,$0.prompt] + $0.options.flatMap {[$0.title,$0.detail ?? "",String($0.recommended)]}} ?? []) }
@@ -177,8 +178,9 @@ final class DesktopSync {
             tracked[key] = value
             if previous == nil {noticedAt[key] = now}
             if previous?.activity != value.activity {changedAt[key] = now}
-            if previous == nil && active && value.attention == nil && !value.status.hasPrefix("waiting") {
-                chat.pet.say(chat.pet.preferences.statusLine("desktopTaskReceivedTemplate"),body:chat.pet.preferences.statusLine("desktopTaskReceivedBodyTemplate"),kind:"task",thread:conversation.key,
+            if active && value.attention == nil && !value.status.hasPrefix("waiting"),
+               previous == nil || (previous?.receivedText == nil && value.receivedText != nil) {
+                chat.pet.say(chat.pet.preferences.statusLine("desktopTaskReceivedTemplate"),body:value.receivedText ?? "",kind:"task",thread:conversation.key,
                     purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:turn.date,key:key),messageID:"task-received")
             }
             if different {
