@@ -58,7 +58,7 @@ final class DesktopApprovalReader {
             var result = [String:StateApproval](); activities.removeAll()
             for record in active {
                 guard let state = states[record.logical] else {continue}
-                if let turn = DesktopRuntimeProjection.findTurn(state.projection,record.turn),let activity = TaskActivity.current(items:turn["items"] as? [[String:Any]] ?? []) {activities[record.key] = activity}
+                if let turn = DesktopRuntimeProjection.findTurn(state.projection,record.turn),let activity = TaskActivity.current(items:turn["items"] as? [[String:Any]] ?? [],replyTemplateKey:"taskUpdateTemplate") {activities[record.key] = activity}
                 let requests = (state.projection["requests"] as? [[String:Any]] ?? []).filter {($0["params"] as? [String:Any])?["turnId"] as? String == record.turn}
                 if let request = requests.first(where:{Self.methods.contains($0["method"] as? String ?? "")}) {
                     if let approval = DesktopApproval(thread:record.logical,turn:record.turn,source:state.source,request:request,conversation:state.projection) {

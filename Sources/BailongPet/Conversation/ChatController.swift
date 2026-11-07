@@ -396,7 +396,7 @@ final class ChatController {
     }
     private func presentAgentMessages(conversation:Conversation,turn:Turn) {
         for message in messagesState.takeChangedMessages() {
-            pet.say(pet.preferences.statusLine(message.complete ? "taskUpdateTemplate" : "taskReplyTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
+            pet.say(pet.preferences.statusLine(message.isImage ? "taskUpdateTemplate" : "taskReplyTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
                 timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:message.id)
             reminderClock?.lastNotice = Date().timeIntervalSince1970
         }

@@ -4,7 +4,6 @@ import Foundation
 final class TaskMessageAccumulator {
     private var messages = [String:String](), messageOrder = [String](), summaries = [String:String](), steps = [String:String]()
     private var previewedMessages = [String:String]()
-    private var completedMessages = Set<String>(), previewedCompleted = Set<String>()
     private(set) var finalMessageID:String?
     private var imageMessageIDs = Set<String>()
     private(set) var currentActivity:TaskActivity?
@@ -14,16 +13,14 @@ final class TaskMessageAccumulator {
     var imageLinks:[String] {messageOrder.filter {imageMessageIDs.contains($0)}.compactMap {messages[$0]}}
     func clearActivity() {currentActivity = nil; activityItems.removeAll()}
     func finalize(_ turn:Turn) {
-        completedMessages.formUnion(messageOrder)
         if turn.final.isEmpty {finalMessageID = messageOrder.last(where:{!imageMessageIDs.contains($0)}); turn.final = finalMessageID.flatMap {messages[$0]} ?? ""}
     }
-    func takeChangedMessages() -> [(id:String,text:String,complete:Bool)] {
-        var changed = [(id:String,text:String,complete:Bool)]()
+    func takeChangedMessages() -> [(id:String,text:String,isImage:Bool)] {
+        var changed = [(id:String,text:String,isImage:Bool)]()
         for id in messageOrder where id != finalMessageID {
-            guard let text = messages[id],!text.isEmpty,previewedMessages[id] != text || completedMessages.contains(id) != previewedCompleted.contains(id) else {continue}
+            guard let text = messages[id],!text.isEmpty,previewedMessages[id] != text else {continue}
             previewedMessages[id] = text
-            if completedMessages.contains(id) {previewedCompleted.insert(id)}
-            changed.append((id,text,completedMessages.contains(id)))
+            changed.append((id,text,imageMessageIDs.contains(id)))
         }
         return changed
     }
@@ -38,7 +35,6 @@ final class TaskMessageAccumulator {
             updateActivity(["id":p["itemId"] as? String ?? "","type":"reasoning","summary":summaries.filter {$0.key.hasPrefix("\(p["itemId"] ?? ""):")}.sorted {$0.key < $1.key}.map(\.value)])
         case "item/started", "item/completed": if let item = p["item"] as? [String:Any] {
             record(item)
-            if method == "item/completed",item["type"] as? String == "agentMessage",let id = item["id"] as? String {completedMessages.insert(id)}
             let type = item["type"] as? String ?? ""
             if type != "agentMessage" && !(type == "imageGeneration" && imageMessageIDs.contains(item["id"] as? String ?? "")) {
                 var progress = item
@@ -51,7 +47,7 @@ final class TaskMessageAccumulator {
                 updateActivity(item)
             }
         }
-        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "")
+        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",templateKey:"taskUpdateTemplate")
         default:return false
         }
         return true
@@ -77,7 +73,7 @@ final class TaskMessageAccumulator {
         case "imageGeneration":
             if let link = GeneratedImageLink.markdown(status:item["status"] as? String,savedPath:item["savedPath"] as? String) {
                 if messages[id] == nil {messageOrder.append(id)}
-                messages[id] = link; imageMessageIDs.insert(id); completedMessages.insert(id); steps.removeValue(forKey:id)
+                messages[id] = link; imageMessageIDs.insert(id); steps.removeValue(forKey:id)
                 currentActivity = nil
             } else if ["inProgress","running"].contains(item["status"] as? String ?? "") {
                 steps[id] = "正在生成图片"

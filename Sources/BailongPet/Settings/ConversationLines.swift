@@ -4,8 +4,10 @@ import Foundation
 enum ConversationLines {
     struct Entry {let key:String; let title:String; let text:String}
     static let task:[Entry] = [
-        .init(key:"taskReceivedTemplate",title:"收到任务",text:"{用户名}，我收到啦！这就认真帮你处理。"),
-        .init(key:"taskReplyTemplate",title:"正在回复",text:"{用户名}，我正在回复你…"),
+        .init(key:"taskReceivedTemplate",title:"桌宠对话收到任务",text:"{用户名}，我收到啦！这就认真帮你处理。"),
+        .init(key:"taskReplyTemplate",title:"桌宠对话正在回复",text:"{用户名}，我正在回复你…"),
+        .init(key:"desktopTaskReceivedTemplate",title:"Codex 任务接收标题",text:"{用户名}，我收到啦！"),
+        .init(key:"desktopTaskReceivedBodyTemplate",title:"Codex 任务接收正文",text:"这就认真帮你处理 Codex 里的任务。"),
         .init(key:"taskStoppingTemplate",title:"正在停止任务",text:"{用户名}，我正在收好手头的工作…"),
         .init(key:"taskStoppedTemplate",title:"主动停止完成",text:"{用户名}，我先停下来啦。"),
         .init(key:"taskWarningTemplate",title:"步骤执行异常",text:"{用户名}，有个情况要告诉你。")]

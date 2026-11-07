@@ -172,7 +172,7 @@ enum DesktopHistoryReader {
                 else if !questions.isEmpty {attention = TaskAttention(kind:.answer,body:questions.map {TaskAttention.question($0).body}.joined(separator:"\n\n"),questions:questions.flatMap {TaskAttention.question($0).questions})}
                 else if turn["status"] == "waitingForApproval" {attention = .approval(fileChange:false,reason:nil)}
                 else if turn["status"] == "waitingForInput" {attention = TaskAttention(kind:.answer,body:"需要补充信息，请回到 Codex 处理。")}
-                activity = TaskActivity.current(items:activityItems)
+                activity = TaskActivity.current(items:activityItems,replyTemplateKey:"taskUpdateTemplate")
                 if !activeStatuses.contains(turn["status"] ?? "") {attention = nil; activity = nil}
                 let step = activity?.text ?? ""
                 alert = attention?.body ?? ""

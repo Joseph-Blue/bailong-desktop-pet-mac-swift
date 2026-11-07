@@ -1,5 +1,4 @@
 import AVFoundation
-import CoreImage
 
 // AVAssetReader 只在串行队列访问；主线程只取已完成的画面，不等待解码。
 final class StreamingAnimation: @unchecked Sendable {
@@ -10,8 +9,7 @@ final class StreamingAnimation: @unchecked Sendable {
     private let lock = NSLock()
     private let asset: AVAsset
     private let track: AVAssetTrack
-    private let context: CIContext
-    private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    private let converter: CPUFrameConverter
     private let onFailure: (Error) -> Void
     private var reader: AVAssetReader?
     private var output: AVAssetReaderTrackOutput?
@@ -27,8 +25,8 @@ final class StreamingAnimation: @unchecked Sendable {
     private var ended = false
     private var totalFrames: Int
     private let startTime: Double
-    init(asset: AVAsset, track: AVAssetTrack, context: CIContext, capacity: Int, resolution: Int, frameCount: Int, startTime: Double, onFailure: @escaping (Error) -> Void) {
-        self.asset = asset; self.track = track; self.context = context; totalFrames = frameCount
+    init(asset: AVAsset, track: AVAssetTrack, capacity: Int, resolution: Int, frameCount: Int, startTime: Double, onFailure: @escaping (Error) -> Void) {
+        self.asset = asset; self.track = track; converter = CPUFrameConverter(resolution: resolution); totalFrames = frameCount
         self.startTime = startTime; self.onFailure = onFailure
         self.capacity = capacity; self.resolution = resolution
     }
@@ -123,28 +121,8 @@ final class StreamingAnimation: @unchecked Sendable {
                 return nil
             }
             guard let buffer = CMSampleBufferGetImageBuffer(sample) else { throw PetFailure(message: "流式视频帧缺少像素数据。") }
-            let source = CIImage(cvPixelBuffer: buffer)
-            let scaled = source.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: Double(resolution) / source.extent.height, kCIInputAspectRatioKey: source.extent.height / source.extent.width])
-            guard let image = context.createCGImage(scaled, from: CGRect(x: 0, y: 0, width: resolution, height: resolution), format: .RGBA8, colorSpace: colorSpace, deferred: false),
-                  let data = image.dataProvider?.data else { throw PetFailure(message: "无法创建流式透明画面。") }
-            let pixels = data as Data
-            var alpha = Data(count: resolution * resolution)
-            var x0 = resolution, y0 = resolution, x1 = -1, y1 = -1
-            alpha.withUnsafeMutableBytes { (destination: UnsafeMutableRawBufferPointer) in
-                pixels.withUnsafeBytes { (source: UnsafeRawBufferPointer) in
-                    for y in 0..<resolution { for x in 0..<resolution {
-                        let value = source[y * image.bytesPerRow + x * 4 + 3]
-                        destination[y * resolution + x] = value
-                        if nextIndex == 0 && value > 0 { x0 = min(x0, x); y0 = min(y0, y); x1 = max(x1, x); y1 = max(y1, y) }
-                    } }
-                }
-            }
-            if nextIndex == 0 {
-                let scale = 512.0 / Double(resolution)
-                referenceBounds = x1 < 0 ? .zero : CGRect(x: Double(x0) * scale, y: Double(y0) * scale,
-                    width: Double(x1-x0+1) * scale, height: Double(y1-y0+1) * scale)
-            }
-            let frame = Frame(image: image, pixels: alpha, bounds: referenceBounds, alphaOnly: true)
+            let frame = try converter.frame(from: buffer, bounds: nextIndex == 0 ? nil : referenceBounds)
+            if nextIndex == 0 { referenceBounds = frame.bounds }
             let entry = Entry(index: nextIndex, time: max(0, CMSampleBufferGetPresentationTimeStamp(sample).seconds - startTime), frame: frame)
             nextIndex += 1
             return entry
