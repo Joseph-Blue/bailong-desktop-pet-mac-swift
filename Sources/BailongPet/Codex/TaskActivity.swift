@@ -31,7 +31,7 @@ struct TaskActivity:Equatable {
     }
     var symbolName:String {
         switch kind {
-        case .reasoning:return "ellipsis.bubble"
+        case .reasoning:return "brain"
         case .reply:return "text.bubble"
         case .tool:
             switch toolOperation {

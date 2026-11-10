@@ -17,6 +17,7 @@ final class ChatModeControl: NSSegmentedControl {
 }
 
 final class ChatMetadataRow: NSStackView {
+    static let captionWidth = ("工作区" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)
     init(_ title:String,content:NSView,accessory:NSView? = nil,expandsContent:Bool = false) {
         super.init(frame:.zero)
         orientation = .horizontal; alignment = .centerY; distribution = .fill; spacing = 8
@@ -24,7 +25,7 @@ final class ChatMetadataRow: NSStackView {
         caption.font = .systemFont(ofSize:12); caption.textColor = .secondaryLabelColor
         caption.setContentCompressionResistancePriority(.required,for:.horizontal)
         addArrangedSubview(caption); addArrangedSubview(content)
-        caption.widthAnchor.constraint(equalToConstant:("工作区" as NSString).size(withAttributes:[.font:caption.font!]).width.rounded(.up)).isActive = true
+        caption.widthAnchor.constraint(equalToConstant:Self.captionWidth).isActive = true
         if let accessory {addArrangedSubview(accessory); accessory.setContentCompressionResistancePriority(.required,for:.horizontal)}
         if !expandsContent {addArrangedSubview(NSView()); content.setContentHuggingPriority(.defaultHigh,for:.horizontal)}
     }

@@ -79,6 +79,12 @@ final class MessageTextView: LinkTextView {
                 self.measuredWidth = -1; self.invalidateCodeLayout()
                 if self.isVerticallyResizable {self.sizeToFit()}
                 self.onContentLayoutChange?()
+                if self.expandedUsage.contains(content.id),let toolbar = self.transcriptToolbars[range.location] {
+                    self.layoutSubtreeIfNeeded()
+                    // 仅用户展开时显露最后一行，后台更新与收起仍保留阅读位置。
+                    let lastLineHeight = ceil(content.font.ascender-content.font.descender+content.font.leading)+8
+                    self.scrollToVisible(NSRect(x:0,y:max(0,toolbar.frame.maxY-lastLineHeight),width:1,height:lastLineHeight))
+                }
             }
             let height = toolbar.arrange(width:footerWidth(width))
             let previous = storage.attribute(.paragraphStyle,at:range.location,effectiveRange:nil) as? NSParagraphStyle

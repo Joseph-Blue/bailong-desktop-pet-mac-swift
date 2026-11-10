@@ -30,19 +30,20 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 | 职责 | 入口 |
 | --- | --- |
 | 启动、退出与菜单 | `App/main.swift`、`App/RunLifecycle.swift`、`Pet/PetMenu.swift` |
-| 动画与素材 | `Pet/Pet.swift`、`Pet/Resources.swift`、`Pet/StreamingAnimation.swift` |
+| 动画、素材与吸边 | `Pet/Pet.swift`、`Pet/Resources.swift`、`Pet/StreamingAnimation.swift`、`Pet/NotchDock.swift` |
 | 气泡展示与几何 | `UI/Bubble/Bubble.swift`、`BubblePresentation.swift`、`BubbleBodyScrollView.swift`（后两者同目录） |
 | 卡片、倒计时与表单 | `UI/Bubble/BubbleCardStore.swift`、`BubbleCountdown.swift`、`BubbleTaskList.swift`、`QuestionForm.swift`（后三者同目录） |
 | 内置任务与消息聚合 | `Conversation/ChatController.swift`、`Conversation/TaskMessageAccumulator.swift`、`Conversation/CommandSummary.swift` |
 | 外部会话与请求 | `Conversation/DesktopConversationSession.swift`、`Codex/DesktopHistoryReader.swift`、`Codex/DesktopSync.swift`、`Codex/RequestCoordinator.swift` |
-| 公开进展与审批 | `Codex/DesktopRuntimeProjection.swift`、`Codex/DesktopApprovalReader.swift`、`Codex/DesktopApproval.swift`、`Codex/DesktopQuestionReply.swift` |
-| 历史与输入窗 | `Conversation/History.swift`、`Conversation/HistorySearch.swift`、`UI/Chat/ChatUI.swift`、`UI/Chat/ChatComposer.swift`、`UI/Chat/TranscriptRenderer.swift` |
+| 公开进展与审批 | `Codex/TaskActivity.swift`、`Codex/DesktopRuntimeProjection.swift`、`Codex/DesktopApprovalReader.swift`、`Codex/DesktopApproval.swift`、`Codex/DesktopQuestionReply.swift` |
+| 历史与输入窗 | `Conversation/History.swift`、`Conversation/HistorySearch.swift`、`UI/Chat/ChatUI.swift`、`UI/Chat/ChatComposer.swift`、`UI/Chat/TranscriptRenderer.swift`、`UI/Chat/TranscriptPresentation.swift` |
 | 用户消息投影 | `Codex/UserInputText.swift`、`DesktopHistoryReader.swift`（同目录）、`Conversation/ChatController.swift`、`UI/Shared/MarkdownText.swift` |
 | 输入显示与模型 | `UI/Chat/ChatComposerComponents.swift`、`UI/Chat/ChatViewLayout.swift`、`Codex/ModelSelection.swift` |
 | 窗口生命周期与辅助面板 | `App/InterfaceWindows.swift`、`UI/Shared/PanelPresentation.swift` |
 | 共用显示 | `UI/Shared/MarkdownText.swift`、`MessageTextView.swift`、`CodeBlockRendering.swift`、`ProgressTextEffects.swift`、`InlineStatusLayout.swift`、`CopyFeedback.swift`（后五者同目录） |
 | 文件产物与修改统计 | `UI/Shared/CodexFileCitation.swift`、`Conversation/FileEditSummary.swift`、`UI/Shared/FileEditRendering.swift`、`UI/Shared/FileEditPresentation.swift`、`UI/MessageFileLink.swift`、`UI/FinderFileReveal.swift` |
 | 额度 | `Conversation/QuotaCoordinator.swift`、`Codex/QuotaQuery.swift`、`Codex/QuotaResetCards.swift`、`UI/SubscriptionManagement.swift` |
+| Token 统计 | `Conversation/TokenUsage.swift`、`Codex/TurnTokenReader.swift`、`Codex/LocalDailyTokenReader.swift`、`Codex/DailyTokenUsage.swift` |
 | 设置 | `Settings/Preferences.swift`、`Settings/Settings.swift`、`Settings/SettingsForm.swift`、`Settings/Pages/`、`Settings/SettingsSearch.swift` |
 | 更新、启动项与恢复 | `Infrastructure/Updates.swift`、`Infrastructure/Autostart.swift`、`Infrastructure/FollowMonitor.swift`、`Infrastructure/Recovery.swift` |
 | 构建与 PNG 接入（仓库根目录） | `scripts/swift-sources.sh`、`scripts/build.sh`、`Tools/NativeHEVC/ApplyPNGRepairs.swift` |
@@ -55,16 +56,20 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - `BubbleBodyScrollView` 管理气泡实际文档高度、纵向视口和阅读位置；只有内容溢出才启用原生滚动条，不自绘轨道。`BubbleBodyLayout` 统一正文与视口宽度，左右正文边距对称，轨道使用右边距，禁止重复扣除 gutter。
 - 气泡 `lineFragmentPadding` 为 0，输入框及历史保留自身边距。滚动条显隐不改变换行宽度，气泡比例或字号真实变化才重新排版；多行阅读与输入容器禁止横向偏移，单行系统编辑器保持原生行为。
 - 普通气泡打开、切卡及正文变化从顶部显示；历史进入会话或重新打开窗口时到最下方，同会话刷新保留阅读位置，搜索显式定位优先。配色刷新不视为进入会话，不用持续锁顶或自动追尾修复布局。
-- `MessageTextView` 用同一 TextKit 容器测量富文本，只替换变化尾部；未变化文本不重新排版。`TranscriptRenderer` 缓存包含全部显示内容，新增结构化字段须同步签名和搜索。
+- `MessageTextView` 用同一 TextKit 容器测量富文本，只替换变化尾部；未变化文本不重新排版。底栏占位末尾不附加换行，避免 extraLineFragment 重复继承整块高度；轮次分隔由渲染器显式添加，明细展开／收起重新测量。`TranscriptRenderer` 缓存包含全部显示内容，新增结构化字段须同步签名和搜索。
+- 可选择的 Token 表格使用同一 TextKit 管理器测量、显示与选择，显式建立文本存储与容器，避免共享 field editor 丢失制表位。底栏按实际文字／按钮高度排版；用户展开明细时显露末行并计入底部留白，后台刷新不持续追尾。
 - `ProgressTextEffects` 共用标题流水与概览跑马灯；任务列表执行中标题复用纯标题流水和列表已有刷新计时，结束恢复静态，不新增行级定时器。盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，旧偏好仅保留兼容，不显示控件或搜索条目。
-- `InlineStatusLayout` 共用文字基线、盲文与秒表定位；`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
+- 主气泡和概览进展取当前任务真实会话／轮次及开始时间；内置 activityKey 与 own 调度槽分开，不能取全局最新 activity。TaskActivity.line 展示真实公开摘要及操作，个性台词留在标题。主气泡进展单独增高，短进展气泡不追加跑马灯；固定图标由 TaskActivity 统一分类。
+- `InlineStatusLayout` 共用文字基线、盲文与秒表定位；盲文按完整单元字形保持各帧中心一致，固定图标不随跑马灯滚动。`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
 - 代码块使用原生 NSTextTableBlock，语言标签与拷贝按钮共用 `CodeBlockHeaderLayout`。拷贝与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
 
 用户输入由 `UserInputText` 统一整理，`MarkdownText.renderUserInput` 同时用于气泡与历史。识别附件包装前先处理空白和换行格式，提取真实提问与紧凑文件链接，不读取图片载荷；只在已识别包装中去除对应的重复图片占位，不全局删除用户写下的 `[图片]`。正文不解析为大标题，不添加额外段间距。显示层重复整理不得截断已生成的链接。
 
 `ChatController.showUserMessage` 共用人设／项目用户卡片展示，各入口保留自己的接收台词。插话标题统一取 `ConversationLines` 的 `taskSteeringTemplate`，设置、搜索、恢复和导入导出共用元数据，不再拼接标题后缀。项目插话通过既有外部观察器按真实 userMessage ID 合并，排除问卷回执，沿用原任务计时；IPC 回执不另造卡片，不触发 taskStarted。显示复用不代表人设会话支持执行中发送，也不改变动画动作切换。
 
-工具调用短进展气泡共用 `Bubble.showProgressToast`，按真实正文视口及 TextKit 排版截断，字素边界后追加 `...`；只截显示文本，完整 hover 与原始数据保留。该模式关闭正文滚动，尺寸过渡也不出现滚动条；思考摘要沿用原规则。
+工具调用短进展气泡共用 `Bubble.showProgressToast`，按真实正文视口及 TextKit 排版截断，字素边界后追加 `...`；只截显示文本，hover 使用 TaskActivity 同一份有界工具摘要，原始数据保留。该模式关闭正文滚动，尺寸过渡也不出现滚动条；思考摘要沿用原规则。
+
+普通命令摘要保留首行子命令、参数及对象，无“命令：”前缀；多行命令不拼接脚本正文，标记省略。结构化读取／搜索优先使用公开 commandActions，不根据原始脚本猜测意图；不把 raw tool arguments／输出或 reasoning.content 加入进展。摘要限制与图标选择以 AGENTS 和 TaskActivity 为准。
 
 ## 会话入口与选择状态
 
@@ -72,6 +77,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - `ChatInputState` 只提供显示状态；发送传递明确会话与入口，异步回执不得清空或关闭后来选择的会话。主按钮统一“发送”，停止任务独立且核对目标身份。
 - `ChatModelLoader` 每入口独立，并核对工作区请求身份；外部会话由 `DesktopReply.Settings` 提供结构化只读模型数据，`ChatReadOnlyModelField` 共用展示。首次读取成功前禁用发送；失败保留草稿与真实原因，未加载会话不自动发送或用内置连接接管。
 - 临时输入使用原生分段导航，会话选择同行右对齐；关于页保留原生 NSTabView。`ChatComposerComponents` 只拥有显示与用户操作回调，工作区点击由控制器调用 `FinderFileReveal.openDirectory`。最近回复从已有助手正文生成纯文本摘要，hover 最多 200 字，不额外查询或改写历史。
+- 临时输入的短普通状态仅在模型旁有足够宽度时同行；错误、多行及超宽状态保留 ComposerStatusView 的整行换行、有限高度滚动与全文选择复制，不用省略号修复拥挤。
 - 输入随草稿增高并封顶；发送按钮共用向上箭头及横向留白，完整发送／换行快捷键放在 hover，保留辅助功能说明。`ModelSelector` 展开时固定锚点宽度，关闭恢复；思考滑块松开提交，隐藏说明不占布局高度。
 - `InterfaceWindows` 登记尚未关闭的普通窗口，最小化仍保留 Dock 入口，最后一个关闭后收回；Dock 不召回已经关闭的窗口。输入窗独立于卡片，主气泡通过 `BubblePlacement` 避让，进展小气泡在编辑期间让位。源码已接入，运行验收状态查看 README 和本机实施记录。
 
@@ -109,6 +115,10 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - 当前新用户默认 512×512、流式 12 帧缓冲、满帧，已有保存值保留；参数变更同步 AGENTS 与 README。满帧按真实素材帧率调度；整段预加载默认关闭，不预热全素材库。素材解码与几何 displayLink 分离，隐藏和结束释放相应计时器，不以屏幕刷新率增加解码。
 - 性能窗口关闭即停止统计。产品统一写“运行内存 (RAM)”，不将像素估算、旧版反馈或系统 Swap 写成当前进程实测。
 - 每次额度重新请求，先额度、并行账号，晚到数据仅补同次查询；不缓存旧结果冒充新查询。remaining ≤5% 红色、≤10% 橙色，同时作用于百分比和进度条，无百分比行不套阈值。
+- 本轮 Token 使用会话累计快照的轮次增量，缓存输入已含于输入；不把最后请求或上下文占用当整轮用量。用量持久化与渲染签名同步维护，历史补缺只处理当前页并遵守冻结／只读策略。
+- 今日 Token 来自当前 Codex 目录的本机日志，以本机时区统计累计增量并去重分叉事件，不冒充账号全量。额度先展示，再同次后台懒加载本机统计；晚到结果核对查询身份，不重开已关闭气泡。所有套餐按内容及屏幕边界布局，加载动画只存在于显示层。
+- 刘海位置读取内建屏幕的 safeAreaInsets 与 auxiliary 区域，使用当前逻辑坐标，不按英寸、机型或 Retina 倍率推断。没有有效区域时保留可操作设置与原左右吸边，不伪造顶部收纳。SDK 声明可用性、实际类型检查与硬件验收分开记录。
+- 刘海收纳尺寸与露出比例独立于动作 renderScale；当前参数查看 AGENTS／Preferences。正常顶部安全距离保留，收纳按角色轮廓定位，召回窗口位移与旋转／缩放使用同一过渡，不在末帧才移动原位。偏好改默认值保留显式用户选择。
 - 不读取凭证、Keychain、auth.json 或修改全局 Codex 配置，不为额度增加登录。启动更新检查默认关闭，仅接收正式 Release，不自动安装应用。
 - 登录／跟随启动只维护用户已启用项，尊重系统撤销许可；不要求安装到 /Applications，不接受 AppTranslocation，跟随仅识别 Codex／ChatGPT 桌面端。
 
@@ -121,4 +131,4 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 ./scripts/build.sh arm64           # Apple Silicon App 与跟随助手
 ```
 
-按用户当次范围选择命令；文档修改不触发应用编译或回归测试。代码改动按实际风险做必要检查，不自动运行全部本地 Tests；用户承担视觉 review 时不追加截图或视觉检查。`--build-only` 生成 `.build/dev/BailongPetDev`，不会更新现有 App 或 dist；打包前核对输出目录，独立试用不覆盖既有产物。默认只构建 Apple Silicon。0.7.4 提供 Apple Silicon 包与 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。
+按用户当次范围选择命令；文档修改不触发应用编译或回归测试。代码改动按实际风险做必要检查，不自动运行全部本地 Tests；用户承担视觉 review 时不追加截图或视觉检查。`--build-only` 生成 `.build/dev/BailongPetDev`，不会更新现有 App 或 dist；打包前核对输出目录，独立试用不覆盖既有产物。默认只构建 Apple Silicon。0.7.4 提供 Apple Silicon 包与 Intel 社区测试包；Intel 实机验收未完成，后续 Intel 构建仍须当次明确授权。交付说明列出具体改动、执行过的检查、产物位置及待手动验收事项。提交或发布前核对范围，不将构建通过写成界面或真实 Codex 链路已验收。main 的 README 面向用户，CHANGELOG 和 Release 分别整理相较上一正式版的变化；未完成的手形光标修复不列为已修复。当前发布版本为 0.7.4；版本与后续发布授权以目标分支 AGENTS 和当次用户要求为准。
