@@ -4,7 +4,7 @@
 
 版本与验证范围：
 
-- `joseph/dev` 当前源码为 `0.8.0-rc.1`，基于 `0.7.5-rc.1` 新增本轮／今日 Token，保留模型／历史／变量编辑／头像改动，沿用 SDK 构建改进与 dev.5 动画加载交接，保留任务台词、阴影恢复与 CPU 动画帧处理试验；0.7.3-RC2／RC3 的跨端接管、连接探测及释放尝试已撤回。
+- `joseph/dev` 当前版本见 [VERSION](VERSION)，0.8.0 系列基于 `0.7.5-rc.1` 新增本轮／今日 Token，保留模型／历史／变量编辑／头像改动，沿用 SDK 构建改进与 dev.5 动画加载交接，保留任务台词、阴影恢复与 CPU 动画帧处理试验；0.7.3-RC2／RC3 的跨端接管、连接探测及释放尝试已撤回。
 - Rosetta 启动提示已包含在 `edb6e8f`（0.7.3-dev.1）提交中，并沿用至 RC1；未发布开发版 App。具体后续事项见下方 Intel 条目。
 - Silicon 版最低目标机：13 英寸 M1 MacBook Air，macOS 14 Sonoma。开发环境：16 英寸 M5 Pro MacBook Pro，macOS 27.2 Golden Gate。
 - 最低目标机验收尚未完成；Intel 包未经 Intel Mac 实机测试，仅通过 Rosetta 转译进行了少量测试。
