@@ -28,7 +28,9 @@
 
 动画加载期间保留旧动作供帧，目标准备完成后交接画面、时间轴及素材校准。按下桌宠不再停帧；流式目标先准备首帧和后续缓冲，整段预加载等完整解码，快速连续选择只接收最后一次请求。起播缓冲为解码较慢的设备留出准备时间，保留为面向老设备的优化方向，M1 Air 的实际收益待实测。不预缓存全部素材。吸边召回指定动作直接播放，手动入口减少重复显示刷新，并先加载动画再排版气泡。
 
-构建入口共用 SDK 与编译器选择，按实际 SDK 编入外观能力；开发缓存同时核对工具链、SDK、档位与源码。默认输出改为 `dist/<VERSION>/<架构>/`，`launch.command` 同步该路径。用户已对这轮构建入口改进表示满意。感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 SDK 兼容处理，为本轮编译脚本改进提供了灵感与参考。
+构建入口共用 SDK 与编译器选择，按实际 SDK 编入外观能力；开发缓存同时核对工具链、SDK、档位与源码。默认输出改为 `dist/<VERSION>/<架构>/`，`launch.command` 同步该路径。
+
+**感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 SDK 兼容处理，为本轮编译脚本改进提供了灵感与参考。**
 
 dev.6 验证状态：SDK 27.2 完整档开发编译与缓存复用、SDK 26.5 玻璃档主程序／helper 类型检查通过。用户在 agy 运行期间使用 dev.4、dev.6 均遇到停顿；负载下降后 dev.3 基本流畅。dev.5 的续播与起播缓冲改进保留，P0 继续定位并发负载下的刷新和供帧瓶颈。最低目标机 M1 Air 与切换期运行内存待实测。
 

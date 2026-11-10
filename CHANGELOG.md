@@ -79,7 +79,6 @@
 - 开发编译缓存同时核对 SDK、工具链、档位与源码，环境变化时重新编译。构建输出显示实际 SDK、编译器和编入能力。感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 SDK 兼容处理，为本轮编译脚本改进提供了灵感与参考。
 - 应用及预览产物改为 `dist/<VERSION>/<架构>/`，显式对比档位独立存放；`launch.command` 同步默认路径。build／run-dev 根入口继续转发共用脚本。
 - 不引入 exp 的 API 功能、供应商图标或版本号。保留 dev.5 动画修正及 P0 待验收状态。
-- 验证：SDK 27.2 完整档开发编译与同环境缓存复用通过，SDK 26.5 玻璃档主程序／helper 类型检查通过；用户对构建入口改进表示满意。本轮未打包或启动 App。
 
 ## [0.7.5-dev.5] — 2026-11-10
 
