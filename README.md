@@ -2,7 +2,7 @@
 
 **这是 `joseph/dev` 开发分支，面向开发者，不属于普通用户的安装说明，也不提供开发版 Release 程序下载。** 普通用户请前往 [main 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-当前开发版本：**0.8.0-rc.1**，基于 **0.7.5-rc.1**，正式版为 **0.7.4**。新增对话完成后的本轮 Token 统计与额度查询中的今日 Token，沿用 RC1 的模型、历史、变量编辑、头像、动画及 SDK 构建改进。手动动画停顿和运行内存占用仍列为 P0，见 [TODO](todo.md)。
+当前开发版本：**0.8.0-rc.3**，基于 **0.7.5-rc.1**，正式版为 **0.7.4**。新增对话完成后的本轮 Token 统计与额度查询中的今日 Token，沿用 RC1 的模型、历史、变量编辑、头像、动画及 SDK 构建改进。手动动画停顿和运行内存占用仍列为 P0，见 [TODO](todo.md)。
 
 基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，由 Codex 使用 Swift + AppKit 原生重写，独立维护。动画使用透明 HEVC 与 AVFoundation，当前开发试验由 CPU / vImage 完成缩放和颜色转换；界面支持液态玻璃和系统外观。
 
@@ -14,7 +14,7 @@
 
 | 方向 | 已落入源码的改动 |
 | --- | --- |
-| 动画与任务反馈 | 默认普通待机 4:1、吸边 7:3，任务按工作／待机 35:65 抽选并排除上一动作；手动频率与偏爱保留。试验复用 CPU 帧处理缓冲；恢复默认开启的轮廓阴影、任务台词及久无进展提醒，内置对话与外部 Codex 任务分别使用对应台词。当前尚未达到运行内存优化目标。 |
+| 动画与任务反馈 | 默认普通待机 4:1、吸边 7:3，任务按工作／待机 35:65 抽选并排除上一动作；手动频率与偏爱保留。任务概览独立抽取可编辑的工作中台词，鼠标行为可单独选择仅动作与一句台词的“随机动画”；试验复用 CPU 帧处理缓冲；恢复默认开启的轮廓阴影、任务台词及久无进展提醒，内置对话与外部 Codex 任务分别使用对应台词。当前尚未达到运行内存优化目标。 |
 | 运行内存 | 历史正文改为 SQLite 按需读取，缓存最多 16 条、合计 2 MiB；每页展示 20 轮。保存仅写变化正文，首次迁移保留旧 JSON；历史关闭释放显示缓存，外部同步减少重复快照，实时观察仅保留目标轮次正文。气泡隐藏释放富文本与临时视图，搜索弹出框关闭释放结果，任务结束释放消息聚合器。 |
 | 气泡与滚动 | 共用正文尺寸和纵向滚动组件；按实际溢出显示原生滚动条，显隐不改变换行宽度。普通气泡从顶部阅读，历史进入会话时定位底部。 |
 | 辅助窗口 | 文件浏览与保存、设置调色板打开时在发起屏幕居中，保留拖动；桌宠点击阻止默认应用窗口整体置前。 |
@@ -49,43 +49,26 @@ Silicon 版，最低目标机为 13 英寸 M1 MacBook Air，最低目标操作�
 
 ## 获取资源与构建
 
-先安装 Apple Command Line Tools。构建按实际选用的 SDK 编入对应外观能力：SDK 27+ 包含液态玻璃与菜单图标显式显示，SDK 26 包含液态玻璃，更早 SDK 使用普通材质；运行时仍检查系统版本。脚本显示实际 SDK、Swift 编译器与能力，最低运行目标保持 macOS 14。
+双击 `build.command` 检查环境、准备资源并构建 App。缺少 Apple 开发工具时提供安装入口；缺资源时可选择下载或导入本地 ZIP。默认 Apple Silicon，Intel Mac 双击后可选择 Intel。无参数且连接终端时启用菜单；带参数调用及 scripts 入口默认不弹菜单。
 
-下载 [开发资源 ZIP](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/dev-assets-2026-11-02/bailong-dev-assets-2026-11-02.zip)，按 [开发资源获取](docs/开发资源获取.md) 解压到仓库。该文档还提供从已有 App 提取资源的方法、目录对应和素材制作入口。
-
-```text
-local-assets/
-  native-hevc/catalog/素材清单.json
-  native-hevc/catalog/samples.json
-  native-hevc/catalog/透明HEVC/*.mov
-  sounds/click.wav
-  sounds/来源.txt
-  sounds/Kenney-License.txt
-  glass-symbols/
-  BailongPet.icns
-  openai-logo.png
-  pet-status-template.png           # 本轮新增，旧资源包不包含
-```
-
-资源不存放在 Git 中。本轮新增模板图须按 [开发资源获取](docs/开发资源获取.md) 单独准备。`samples.json` 用于独立预览与 PNG 替换，不是 App 运行必需文件。
+**2026-11-10 完整资源包已在本机准备，尚未发布。** 2026-11-02 旧包缺少两个桌宠模板图，无法单独完成当前版本构建。当前请取得新版本地 ZIP，详见 [开发资源获取](docs/开发资源获取.md)。
 
 ```sh
-./scripts/run-dev.sh --build-only  # 仅编译
-./scripts/build.sh arm64           # 构建 Apple Silicon App
-./scripts/build.sh x86_64          # 按需构建 Intel App
-./scripts/run-dev.sh               # 编译并开发运行
+./build.command --resources-zip /路径/bailong-dev-assets-2026-11-10.zip
+./build.command --check           # 只检查环境和资源，不构建 App
+./build.command                  # Apple Silicon App
+./build.command x86_64            # Intel App
+./run-dev.command --build-only    # 只编译开发程序
+./run-dev.command                # 编译并运行开发程序
 ```
 
-也可双击 `build.command`、`launch.command`、`run-dev.command`。版本取自 [VERSION](VERSION)，应用产物位于 `dist/<VERSION>/<架构>/白龙桌宠Swift.app`。正式版 0.7.4 提供 Apple Silicon 包与 Intel 社区测试包；Intel Mac 实机验收尚未完成，开发构建默认只选择 Apple Silicon。
+导入默认只补齐缺失文件；加 `--replace-resources` 备份后替换包内文件，其他本地素材保留。发布后可用 `--download-resources` 获取清单固定版本；未发布时直接提示，不下载旧包。`--help` 查看参数。
 
-三个入口会显示版本、目标架构、当前阶段和耗时。交互终端显示盲文转圈，重定向日志时使用普通阶段文本；原始诊断在阶段结束时输出，失败保留退出码。完成时显示产物绝对路径和大小。
-
-- `SDKROOT` 可指定已安装 SDK；`BAILONG_BUILD_PROFILE` 可选 `auto`（默认）、`full`、`glass`、`plain`。显式档位产物存于 `dist/<VERSION>/<架构>/<档位>/`；`launch.command` 打开默认目录，分档产物直接打开对应 App。`full` 要求 SDK 27+，`glass` 要求 SDK 26+；`plain` 在新系统上也使用普通材质。
-- `run-dev.command` 缓存同时核对源码、SDK、Swift 工具链及构建档位，切换环境后重新编译。
-- `build.command` 默认只构建 Apple Silicon；Intel 须显式执行 `./build.command x86_64`。构建替换当前版本、当前架构的产物，不自动安装到 `/Applications`。
-- `launch.command` 按当前进程架构打开已有应用，成功提示仅表示已提交打开请求。
-- `run-dev.command` 编译或复用 Apple Silicon 开发程序；开发运行沿用现有设置和历史，终端需保持打开，Ctrl+C 停止。`--build-only` 只生成 `.build/dev/BailongPetDev`，不会更新已有 App 或 `dist`。
-
+- 编译显示阶段及耗时，warning／error 与上下文实时输出，结束汇总诊断，不保留日志文件。下载显示原网址、进度条、百分比、大小及速度。
+- 构建共用 SDK 和资源清单。`SDKROOT` 指定 SDK；`BAILONG_BUILD_PROFILE=auto|full|glass|plain` 选择能力。SDK 27+ 自动 full、26 为 glass、更早为 plain，最低 SDK 与运行目标为 macOS 14；旧工具链完整兼容仍待验证。
+- App 输出到 `dist/<VERSION>/<架构>/白龙桌宠Swift.app`，显式档位增加 `<档位>/`。`launch.command [arm64|x86_64]` 支持相同档位变量。双击构建完成后可在访达中显示或启动 App。
+- `run-dev.command` 缓存核对源码、SDK、工具链及档位；arm64 输出 `.build/dev/`，显式 Intel 输出 `.build/dev-x86_64/`。开发运行沿用现有设置和历史，Ctrl+C 停止。`--build-only` 不要求运行资源，不更新已有 App。
+- 正式版 0.7.4 提供 Apple Silicon 包与 Intel 社区测试包，Intel Mac 实机验收尚未完成。
 
 ## 代码与维护入口
 

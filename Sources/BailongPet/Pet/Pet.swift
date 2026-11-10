@@ -452,7 +452,11 @@ final class PetController: NSObject, NSMenuDelegate {
         if wasHidden != hidden { applyVisibility() }
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
-        say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:taskOverview && preferences.bool("showTaskOverview"))
+        let showsOverview = taskOverview && preferences.bool("showTaskOverview")
+        let title = showsOverview && bubble.taskProvider().tasks.contains(where:{$0.active})
+            ? preferences.workingOverviewLine()
+            : preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate")
+        say(title,kind:"interaction",personalizeTitle:false,taskOverview:showsOverview)
     }
     func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TranscriptActions? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
@@ -604,6 +608,7 @@ final class PetController: NSObject, NSMenuDelegate {
         case "quota": soundOnce(); onQuota()
         case "history": soundOnce(); onHistory(nil)
         case "random": randomAnimation(taskOverview:true)
+        case "randomAnimation": randomAnimation()
         default: break
         }
     }

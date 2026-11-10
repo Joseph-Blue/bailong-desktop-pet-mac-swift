@@ -44,6 +44,8 @@ struct SettingsSearchEntry {
         add(.general,"桌面",["全屏时自动隐藏","所在显示器"],"屏幕 多屏")
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 预览")
+        add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
+        for line in ConversationLines.working {add(.identity,"工作中台词",[line.title],"随机 工作中 任务概览 台词 模板 "+line.text)}
         add(.identity,"任务状态台词",["执行任务中"],"台词 模板 我还在留意进展")
         add(.identity,"任务状态台词",["有新进展"],"台词 模板 进度 任务计划 阶段性进展 Codex 项目任务 我忙到这一步啦")
         add(.identity,"任务状态台词",["等待回答","等待批准","任务成功","任务失败","任务中断或取消"],"台词 审批 模板")
@@ -51,7 +53,7 @@ struct SettingsSearchEntry {
         for line in ConversationLines.task {add(.identity,"任务状态台词",[line.title],"台词 模板 "+line.text)}
         for line in ConversationLines.interface {add(.identity,"聊天窗口台词",[line.title],"台词 模板 "+line.text)}
         add(.identity,"额度查询台词",["正在查询"],"额度 台词")
-        add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天 查看额度 历史消息 显示任务进度 播放随机动画")
+        add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天 查看额度 历史消息 显示任务进度 播放随机动画 单句台词")
         add(.activity,"吸边",["收进刘海","露出比例"],"刘海 屏幕 顶部 收纳 倒挂 探头 召回 默认开启 内置屏幕 大小 55% 100%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 活泼 倍速 待机 吸边 任务 排除上一动作 随机互动")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")

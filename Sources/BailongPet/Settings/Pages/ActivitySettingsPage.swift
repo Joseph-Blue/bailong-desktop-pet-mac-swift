@@ -8,7 +8,7 @@ final class ActivitySettingsPage {
         self.form = form; self.catalog = catalog; self.reload = reload; self.onPreview = onPreview
     }
     func render() {
-        let actions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),("random","显示任务进度、播放随机动画")]
+        let actions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),("random","显示任务进度、播放随机动画"),("randomAnimation","随机动画")]
         form.group("鼠标互动",[form.choice("单击桌宠","singleClickAction",actions),form.choice("双击桌宠","doubleClickAction",actions),form.choice("右键双击桌宠","rightDoubleClickAction",actions)])
         form.group("吸边",[
             form.toggle("收进刘海","notchDockEnabled",detail:"拖到刘海下方松开后倒挂收纳，单击或拖动召回。收纳大小最高为桌宠默认 100%，更小的保持原大小。默认开启，仅带刘海的内置屏幕生效。"),

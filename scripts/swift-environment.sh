@@ -1,9 +1,28 @@
 # 由仓库根目录的 zsh 编译入口 source；SDKROOT 可指定已安装的 SDK 路径。
 # 能力按实际传给 swiftc 的 SDK 判定，不以编译器版本代替 SDK 版本。
-bailong_sdk_path="$(xcrun --sdk "${SDKROOT:-macosx}" --show-sdk-path)"
-bailong_sdk_version="$(xcrun --sdk "$bailong_sdk_path" --show-sdk-version)"
-bailong_swiftc="$(xcrun --find swiftc)"
-bailong_swift_version="$("$bailong_swiftc" --version 2>&1)"
+if ! bailong_sdk_path="$(xcrun --sdk "${SDKROOT:-macosx}" --show-sdk-path 2>&1)"; then
+    print -u2 -- "无法读取 macOS SDK：$bailong_sdk_path"
+    if [[ -n "${SDKROOT:-}" ]]; then
+        print -u2 -- "检查 SDKROOT=$SDKROOT；使用默认 SDK：unset SDKROOT"
+    else
+        print -u2 -- "请安装或更新 Apple 开发工具，并检查 Xcode 的 Command Line Tools 选择。"
+    fi
+    return 1
+fi
+if [[ ! -d "$bailong_sdk_path" ]]; then
+    print -u2 -- "SDK 目录不存在：$bailong_sdk_path"
+    print -u2 -- "检查 SDKROOT；使用默认 SDK：unset SDKROOT"
+    return 1
+fi
+if ! bailong_sdk_version="$(xcrun --sdk "$bailong_sdk_path" --show-sdk-version 2>&1)"; then
+    print -u2 -- "无法读取 SDK 版本：$bailong_sdk_version"; return 1
+fi
+if ! bailong_swiftc="$(xcrun --find swiftc 2>&1)"; then
+    print -u2 -- "未找到 Swift 编译器：$bailong_swiftc"; return 1
+fi
+if ! bailong_swift_version="$("$bailong_swiftc" --version 2>&1)"; then
+    print -u2 -- "Swift 编译器无法运行：$bailong_swift_version"; return 1
+fi
 bailong_sdk_major="${bailong_sdk_version%%.*}"
 if [[ "$bailong_sdk_major" != <-> ]] || (( bailong_sdk_major < 14 )); then
     print -u2 -- "需要 macOS 14 或更新的 SDK，当前为：$bailong_sdk_version"

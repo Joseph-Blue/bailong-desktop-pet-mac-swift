@@ -3,32 +3,41 @@ set -eu
 cd "${0:A:h:h}"
 source scripts/terminal-ui.sh
 
-if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != "--build-only" ]]; }; then
-    print -u2 "用法：$0 [--build-only]"
-    exit 2
-fi
-
-bailong_header "开发程序 · 不打包 .app" "arm64"
+source scripts/build-preflight.sh
+source scripts/build-resources.sh
+source scripts/build-options.sh
+bailong_entry=dev; bailong_entry_command=run-dev.command
+bailong_parse_options "$@"
+bailong_header "开发程序" "$target_arch"
+bailong_check_tools
 source scripts/swift-sources.sh
+(( ${#swift_sources} > 0 )) || { bailong_error "未找到 Swift 源码。请完整解压仓库。"; exit 1; }
 source scripts/swift-environment.sh
 bailong_show_build_environment
-binary=".build/dev/BailongPetDev"
-mkdir -p .build/dev .build/module-cache
+if (( ! bailong_build_only )); then
+    bailong_ensure_resources "$bailong_resource_zip" "$bailong_resource_mode" "$bailong_download_requested"
+fi
+# 沿用 arm64 既有路径，Intel 缓存独立。
+dev_dir=".build/dev"
+[[ "$target_arch" != x86_64 ]] || dev_dir=".build/dev-x86_64"
+binary="$dev_dir/BailongPetDev"
+bailong_check_output "$dev_dir"
+if (( bailong_check_only )); then bailong_ok "检查通过"; exit 0; fi
+mkdir -p .build/module-cache
 rebuild=0
 [[ -x "$binary" ]] || rebuild=1
 source_manifest="${(F)swift_sources}"
-[[ -f .build/dev/sources.txt && "$(<.build/dev/sources.txt)" == "$source_manifest" ]] || rebuild=1
-[[ -f .build/dev/environment.txt && "$(<.build/dev/environment.txt)" == "$bailong_build_environment" ]] || rebuild=1
+[[ -f "$dev_dir/sources.txt" && "$(<"$dev_dir/sources.txt")" == "$source_manifest" ]] || rebuild=1
+[[ -f "$dev_dir/environment.txt" && "$(<"$dev_dir/environment.txt")" == "$bailong_build_environment" ]] || rebuild=1
 for source in $swift_sources VERSION scripts/swift-sources.sh scripts/swift-environment.sh "${0:A}"; do
     if [[ "$source" -nt "$binary" ]]; then rebuild=1; break; fi
 done
 
 if (( rebuild )); then
     bailong_phase_begin "1/1" "编译开发程序"
-    {
     version="$(<VERSION)"
     # 将应用身份与系统语言设置嵌入可执行文件，直接运行也使用原生框架本地化。
-    cat > .build/dev/Info.plist <<PLIST
+    cat > "$dev_dir/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -42,26 +51,26 @@ if (( rebuild )); then
 <key>NSAppleEventsUsageDescription</key><string>点击本机文件链接时，恢复对应的访达窗口并选中文件。</string>
 </dict></plist>
 PLIST
-    "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 \
-        -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache \
+    bailong_compile "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 \
+        -target "$target_arch-apple-macosx14.0" -module-cache-path .build/module-cache \
         $swift_sources -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 \
-        -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker .build/dev/Info.plist \
+        -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$dev_dir/Info.plist" \
         -o "$binary.next"
     mv "$binary.next" "$binary"
-    print -r -- "$source_manifest" > .build/dev/sources.txt
-    print -r -- "$bailong_build_environment" > .build/dev/environment.txt
-    } > "$bailong_phase_log" 2>&1
+    print -r -- "$source_manifest" > "$dev_dir/sources.txt"
+    print -r -- "$bailong_build_environment" > "$dev_dir/environment.txt"
     bailong_phase_end
 else
     print "源码与构建环境未变化，复用上次编译结果。"
 fi
 
 bailong_artifact "开发程序" "$binary"
-if [[ "${1:-}" == "--build-only" ]]; then
+if (( bailong_build_only )); then
     print "编译完成 · 总用时 $((SECONDS-bailong_started)) 秒"
     exit 0
 fi
-[[ -f "local-assets/native-hevc/catalog/素材清单.json" ]] || { print -u2 "请先按 README 准备 local-assets/native-hevc/catalog 原生素材。"; exit 1; }
 print "启动开发程序，按 Ctrl+C 停止。"
 export BAILONG_DEV_RUN=1
+[[ -z "$bailong_diagnostic_dir" ]] || rm -rf "$bailong_diagnostic_dir"
+bailong_diagnostic_dir=""
 exec "$binary"
