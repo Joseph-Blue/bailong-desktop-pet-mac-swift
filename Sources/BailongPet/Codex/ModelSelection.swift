@@ -184,7 +184,7 @@ final class ModelSelectorContent: NSViewController {
     private let settings: ChatModelSettings
     private let heading = label("模型与推理强度",bold:true)
     private let picker = NSPopUpButton(frame:.zero,pullsDown:false)
-    private let effort = NSTextField(labelWithString:"")
+    private let effort = NSTextField(wrappingLabelWithString:"")
     private let explanation = NSTextField(wrappingLabelWithString:"")
     private let slider = NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil)
     private let sync = ActionButton("与 Codex 同步") {}
@@ -194,6 +194,7 @@ final class ModelSelectorContent: NSViewController {
     private var effortMarks = [NSTextField]()
     private let scroll = GutterScrollView(), body = TopDownView()
     private let scale:CGFloat, maximumSize:NSSize
+    private var layingOut = false
     init(_ settings: ChatModelSettings,fontSize:CGFloat = 13,maximumSize:NSSize = NSSize(width:900,height:700)) {
         self.settings = settings; scale = fontSize/13; self.maximumSize = maximumSize
         super.init(nibName:nil,bundle:nil)
@@ -230,26 +231,51 @@ final class ModelSelectorContent: NSViewController {
         slider.integerValue = options.firstIndex(where:{$0.reasoningEffort == settings.currentEffort}) ?? 0
         effortMarks.forEach {$0.removeFromSuperview()}
         effortMarks = options.map {option in
-            let mark = NSTextField(labelWithString:ChatModelSettings.effortName(option.reasoningEffort))
+            let mark = NSTextField(wrappingLabelWithString:ChatModelSettings.effortName(option.reasoningEffort))
             mark.font = .systemFont(ofSize:11*scale); mark.alignment = .center
             mark.textColor = option.reasoningEffort == settings.currentEffort ? AppAccent.color : .secondaryLabelColor
             body.addSubview(mark); return mark
         }
         effort.stringValue = "推理强度 · "+settings.effortTitle
         effort.textColor = AppAccent.color
-        explanation.stringValue = settings.loading ? "正在读取可用模型…" : settings.error != nil ? "模型列表暂不可用，请点击刷新模型重试。" : options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation
+        if settings.loading {explanation.stringValue = "正在读取可用模型…"}
+        else if let error = settings.error {explanation.stringValue = "模型读取失败："+error}
+        else {explanation.stringValue = options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation}
         explanation.hoverHelp = settings.error
+        picker.hoverHelp = picker.title
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading
         luna.isEnabled = !settings.loading && settings.lunaMinimum != nil
         luna.hoverHelp = settings.lunaMinimum == nil ? "当前模型列表未提供 GPT-5.6 Luna。" : "切换到 GPT-5.6 Luna 支持的最低推理强度，并记住选择。"
         layoutControls()
     }
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        guard !layingOut, view.bounds.width > 0 else {return}
+        // AppKit 会按锚点和屏幕空间调整弹窗，正文必须使用最终视口重新换行。
+        resizeContent(width:view.bounds.width)
+    }
     private func layoutControls() {
+        let margin = 16*scale, gap = 8*scale
+        let footerWidth = [refresh,luna,sync].reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+2*gap
+        let menuWidth = picker.itemTitles.map {($0 as NSString).size(withAttributes:[.font:picker.font!]).width}.max() ?? 0
+        let effortWidth = (effort.stringValue as NSString).size(withAttributes:[.font:effort.font!]).width
+        let marksWidth = effortMarks.map {($0.stringValue as NSString).size(withAttributes:[.font:$0.font!]).width+gap}.max() ?? 0
+        let contentWidth = max(428*scale,menuWidth+28*scale,footerWidth,effortWidth,marksWidth*CGFloat(options.count))
+        resizeContent(width:min(maximumSize.width,contentWidth+2*margin+GutterScrollView.gutter))
+    }
+    private func resizeContent(width:CGFloat) {
+        guard !layingOut else {return}
+        layingOut = true
+        defer {layingOut = false}
+        let height = layoutBody(width:width)
+        let size = NSSize(width:width,height:min(height,maximumSize.height))
+        if view.frame.size != size {view.setFrameSize(size)}
+        if preferredContentSize != size {preferredContentSize = size; onResize(size)}
+    }
+    @discardableResult private func layoutBody(width:CGFloat) -> CGFloat {
         let margin = 16*scale, gap = 8*scale
         let buttons = [refresh,luna,sync]
         let footerWidth = buttons.reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+2*gap
-        let menuWidth = picker.itemTitles.map {($0 as NSString).size(withAttributes:[.font:picker.font!]).width}.max() ?? 0
-        let width = min(maximumSize.width,max(460*scale,menuWidth+60*scale,footerWidth+2*margin)+GutterScrollView.gutter)
         let documentWidth = GutterScrollView.documentWidth(for:width), contentWidth = max(1,documentWidth-2*margin)
         var y = margin
         func place(_ control:NSView,_ height:CGFloat,_ spacing:CGFloat) {
@@ -258,16 +284,23 @@ final class ModelSelectorContent: NSViewController {
         // 从顶部布局，不依赖弹窗上一次高度；只按当前可见内容计算新尺寸。
         place(heading,22*scale,gap)
         place(picker,28*scale,12*scale)
-        place(effort,22*scale,gap)
+        func textHeight(_ text:NSTextField,width:CGFloat,minimum:CGFloat) -> CGFloat {
+            max(minimum,text.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
+        }
+        place(effort,textHeight(effort,width:contentWidth,minimum:22*scale),gap)
         if !slider.isHidden {
             slider.frame = NSRect(x:margin,y:y,width:contentWidth,height:32*scale)
+            var marksHeight:CGFloat = 18*scale
             for (index,mark) in effortMarks.enumerated() {
                 let tick = slider.rectOfTickMark(at:index)
-                let width = max(32*scale,mark.fittingSize.width+8*scale)
-                mark.frame = NSRect(x:max(margin,min(margin+tick.midX-width/2,documentWidth-margin-width)),y:y+32*scale,width:width,height:18*scale)
-                mark.isHidden = false
+                let previous = index == 0 ? CGFloat(0) : (slider.rectOfTickMark(at:index-1).midX+tick.midX)/2
+                let next = index == effortMarks.count-1 ? contentWidth : (tick.midX+slider.rectOfTickMark(at:index+1).midX)/2
+                let width = max(1,next-previous-4*scale)
+                let height = textHeight(mark,width:width,minimum:18*scale)
+                mark.frame = NSRect(x:margin+previous+2*scale,y:y+32*scale,width:width,height:height)
+                mark.isHidden = false; marksHeight = max(marksHeight,height)
             }
-            y += 56*scale
+            y += 32*scale+marksHeight+gap
         } else {effortMarks.forEach {$0.isHidden = true}}
         for text in [explanation] where !text.isHidden {
             let height = text.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:contentWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up)
@@ -286,9 +319,9 @@ final class ModelSelectorContent: NSViewController {
             for button in buttons {place(button,buttonHeight,gap)}
             y += margin-gap
         }
-        body.setFrameSize(NSSize(width:documentWidth,height:y))
-        let size = NSSize(width:width,height:min(y,maximumSize.height))
-        view.setFrameSize(size); preferredContentSize = size; onResize(size)
+        let bodySize = NSSize(width:documentWidth,height:y)
+        if body.frame.size != bodySize {body.setFrameSize(bodySize)}
+        return y
     }
     @objc private func modelChanged() {settings.chooseModel(picker.selectedItem?.representedObject as? String)}
     @objc private func effortChanged() {guard options.indices.contains(slider.integerValue) else{return}; settings.chooseEffort(options[slider.integerValue].reasoningEffort)}

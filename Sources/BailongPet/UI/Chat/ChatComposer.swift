@@ -32,7 +32,7 @@ final class ChatComposer: NSObject {
     private var inputHeight:NSLayoutConstraint!
     private var modes:ChatModeControl!
     private let recentReply = ChatReplyPreview()
-    private let inputStatus = label("")
+    private let inputStatus = ComposerStatusView()
     private var openCodex:ActionButton!, retrySettings:ActionButton!
     private let conversationPicker = ConversationPicker()
     private let workspace = WorkspaceLinkButton()
@@ -100,12 +100,8 @@ final class ChatComposer: NSObject {
         retrySettings = ActionButton("重新读取") { [weak self] in self?.onRetrySettings() }
         let connectionRow = ChatMetadataRow("模型",content:composerInheritedSettings,accessory:retrySettings)
         composerInheritedSettings.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        inputStatus.font = .systemFont(ofSize:11); inputStatus.textColor = .secondaryLabelColor
-        inputStatus.maximumNumberOfLines = 2; inputStatus.alignment = .right
-        inputStatus.setContentHuggingPriority(.required,for:.horizontal)
         let modelFields = NSStackView(views:[modelRow,connectionRow]); modelFields.orientation = .vertical; modelFields.alignment = .leading; modelFields.spacing = 0
         for row in [modelRow,connectionRow] {row.widthAnchor.constraint(equalTo:modelFields.widthAnchor).isActive = true}
-        let modelStatusRow = NSStackView(views:[modelFields,inputStatus]); modelStatusRow.distribution = .fill; modelStatusRow.alignment = .centerY; modelStatusRow.spacing = 12
         workspace.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let workspaceRow = ChatMetadataRow("工作区",content:workspace,expandsContent:true)
         let targetCaption = NSTextField(labelWithString:"会话")
@@ -117,14 +113,14 @@ final class ChatComposer: NSObject {
         conversationPicker.widthAnchor.constraint(lessThanOrEqualToConstant:240).isActive = true
         let modeRow = NSStackView(views:[modes!,NSView(),targetCaption,conversationPicker])
         modeRow.alignment = .centerY; modeRow.distribution = .fill; modeRow.spacing = 8
-        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelStatusRow,footer])
+        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelFields,inputStatus,footer])
         body.orientation = .vertical; body.alignment = .leading; body.spacing = 8
         let stack = NSStackView(views:[header,modeRow,body]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         contentStack = stack
         c.body.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:c.body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:c.body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:c.body.topAnchor,constant:16)])
         [header,modeRow,body].forEach {$0.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
-        [composerInput!,recovery,workspaceRow,recentReply,modelStatusRow,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
+        [composerInput!,recovery,workspaceRow,recentReply,modelFields,inputStatus,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
         inputHeight = composerInput.heightAnchor.constraint(equalToConstant:140); inputHeight.isActive = true
         composerEditor.onTextChange = { [weak self] in self?.updateLayout() }
         composerEditor.send = { [weak self] in guard let self else{return}; self.onSubmit() }
@@ -214,6 +210,7 @@ final class ChatComposer: NSObject {
         let width = max(540,footerWidth,modes.intrinsicContentSize.width+196)
         // 先确定正文宽度再测量换行；只有编辑区随草稿增长，元信息和操作区按内容排版。
         if abs(content.bounds.width-width)>0.5 {composerMotion.resize(to:NSSize(width:width,height:composerMotion.frame.height))}
+        inputStatus.measure(width:width-32)
         content.layoutSubtreeIfNeeded()
         if let container = composerEditor.textContainer,let layout = composerEditor.layoutManager {
             layout.ensureLayout(for:container)
@@ -252,7 +249,7 @@ final class ChatComposer: NSObject {
         retrySettings.isEnabled = !state.sending
         openCodex.isEnabled = state.conversation?.threadID != nil
         recentReply.update(turn:state.conversation?.turns.max(by:{$0.date < $1.date}))
-        inputStatus.stringValue = state.note; inputStatus.hoverHelp = state.replyNote ?? state.note; inputStatus.isHidden = state.note.isEmpty
+        inputStatus.update(state.note)
         stopButton.isHidden = !state.ownsRunningTask
         stopButton.isEnabled = !state.stopping
         stopButton.title = state.stopping ? "正在停止…" : "停止任务"

@@ -279,16 +279,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         leading.addArrangedSubview(caption)
         return searchable(alignedRow(leading:leading,control:controls),title:title)
     }
-    private func identityLabel(_ title:String,token:String?) -> NSTextField {
-        let caption = label(title)
-        if let token {
-            let value = NSMutableAttributedString(string:title+"  "+token,attributes:[.font:NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor])
-            SettingsTemplateTokens.ranges(in:value.string) {range,color in
-                value.addAttributes([.font:NSFont.systemFont(ofSize:11),.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],range:range)
-            }
-            caption.attributedStringValue = value
-        }
-        return caption
+    private func identityLabel(_ title:String,token:String?) -> NSView {
+        guard let token,let item = SettingsTemplateTokens.items.first(where:{$0.token == token}) else {return label(title)}
+        let row = NSStackView(views:[label(title),SettingsTokenBadge(token:token,color:item.color)])
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 6
+        return row
     }
     func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20) -> NSView {
         let icon:NSImage?

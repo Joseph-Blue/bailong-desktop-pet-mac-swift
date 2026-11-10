@@ -179,7 +179,7 @@ final class PetController: NSObject, NSMenuDelegate {
         status.button?.imageScaling = .scaleProportionallyDown
         status.button?.hoverHelp = preferences.appName; refreshMenu()
         bubble.onClose = { [weak self] in self?.quotaActive = false }
-        settings.petSymbol = { [weak self] in self?.status.button?.image }
+        settings.petSymbol = {AppIcons.petAvatarTemplate}
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
         settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose) }
         settings.onPreviewDetails = { [weak self] in self?.onHistory(nil) }

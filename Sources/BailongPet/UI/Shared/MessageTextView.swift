@@ -8,6 +8,7 @@ final class MessageTextView: LinkTextView {
     private var measuredWidth:CGFloat = -1
     private var measuredHeight:CGFloat = 0
     private var codeToolbars = [Int:CodeBlockToolbar]()
+    private var transcriptToolbars = [Int:TranscriptActionBar]()
     private var codeLayoutDirty = true
     private var codeLayoutWidth:CGFloat = -1
     private func invalidateCodeLayout() {codeLayoutDirty = true; needsLayout = true}
@@ -34,6 +35,22 @@ final class MessageTextView: LinkTextView {
                 y:line.midY+textContainerOrigin.y-side/2,width:side,height:side)
         }
         for key in Array(codeToolbars.keys) where !seen.contains(key) {codeToolbars.removeValue(forKey:key)?.removeFromSuperview()}
+        var seenActions = Set<Int>()
+        storage.enumerateAttribute(.transcriptActions,in:NSRange(location:0,length:storage.length)) {value,range,_ in
+            guard let content = value as? TranscriptActions else {return}
+            seenActions.insert(range.location)
+            let toolbar = transcriptToolbars[range.location] ?? TranscriptActionBar(content)
+            toolbar.content = content
+            if toolbar.superview == nil {addSubview(toolbar); transcriptToolbars[range.location] = toolbar}
+            manager.ensureLayout(forCharacterRange:range)
+            let glyphs = manager.glyphRange(forCharacterRange:range,actualCharacterRange:nil)
+            guard glyphs.length > 0 else {return}
+            let line = manager.lineFragmentRect(forGlyphAt:glyphs.location,effectiveRange:nil)
+            toolbar.frame = NSRect(x:line.minX+textContainerOrigin.x+(textContainer?.lineFragmentPadding ?? 0),
+                y:line.minY+textContainerOrigin.y,width:content.side*2+8,height:content.side)
+            toolbar.needsLayout = true
+        }
+        for key in Array(transcriptToolbars.keys) where !seenActions.contains(key) {transcriptToolbars.removeValue(forKey:key)?.removeFromSuperview()}
     }
 
     var linkBaseDirectory: (() -> URL?)?
@@ -56,6 +73,8 @@ final class MessageTextView: LinkTextView {
         typingAttributes = [.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor]
         for toolbar in codeToolbars.values {toolbar.removeFromSuperview()}
         codeToolbars.removeAll()
+        for toolbar in transcriptToolbars.values {toolbar.removeFromSuperview()}
+        transcriptToolbars.removeAll()
         // 清空正文不足以回收长文本的字形容量；保留容器和视图，替换只属于显示层的排版器。
         let manager = NSLayoutManager()
         if let previous = layoutManager {

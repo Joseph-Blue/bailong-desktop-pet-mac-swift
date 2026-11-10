@@ -6,10 +6,10 @@ final class TranscriptRenderer {
     func invalidate() {transcriptCache.removeAll()}
     func style(_ conversation:Conversation) -> [String] {
         let preferences = PetPreferences.shared
-        return [preferences.statusLine("conversationEmptyTemplate"),preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external)]
+        return [preferences.statusLine("conversationEmptyTemplate"),preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external),conversation.threadID ?? ""]
     }
     func turnSignature(_ turn:Turn) -> [String] {
-        [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970)]
+        [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970),turn.completedAt.map {String($0.timeIntervalSince1970)} ?? ""]
     }
     func content(_ conversation: Conversation, turns:[Turn]? = nil) -> NSAttributedString {
         let turns = turns ?? conversation.turns
@@ -39,12 +39,21 @@ final class TranscriptRenderer {
             let body = turn.bodyReference.value()
             let accumulated = result
             result = NSMutableAttributedString()
+            let bodyFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
+            let headingFont = NSFont.systemFont(ofSize:bodyFont.pointSize+2,weight:.semibold)
             if !body.input.isEmpty {
+                result.append(TranscriptIcon.render(NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:"用户"),font:headingFont,description:"用户"))
                 append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
                 result.append(MarkdownText.renderUserInput(body.input,font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))))
-                result.append(NSAttributedString(string:"\n"))
+                // 消息之间保留空行；分隔符使用正文样式，不继承末尾链接或行内代码属性。
+                let separator = NSMutableParagraphStyle(); separator.lineSpacing = 2
+                let lineBreaks = result.string.hasSuffix("\n\n") ? "" : result.string.hasSuffix("\n") ? "\n" : "\n\n"
+                result.append(NSAttributedString(string:lineBreaks,attributes:[
+                    .font:NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),
+                    .foregroundColor:NSColor.labelColor,.paragraphStyle:separator]))
             }
-            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
+            result.append(TranscriptIcon.render(AppIcons.petAvatarTemplate,font:headingFont,description:PetPreferences.shared.petName))
+            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:headingFont,color:AppAccent.color,after:6)
             // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。
             let steps = conversation.external && body.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : body.steps
             for (heading,text) in [("公开思考摘要",body.summary),("执行记录",steps)] where !text.isEmpty {
@@ -58,13 +67,26 @@ final class TranscriptRenderer {
             if !body.final.isEmpty && !body.messages.contains(body.final) {appendMarkdown(body.final)}
             result.append(FileEditRendering.render(body.fileEdits ?? [],font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),id:turn.key))
             if !body.error.isEmpty {let failure = AppFailure.codex(body.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
-            append(" ",font:.systemFont(ofSize:4),after:12)
+            if let ended = endLabel(turn.status) {
+                let time = turn.completedAt.map { $0.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)) } ?? "时间未提供"
+                append(ended+" · "+time,font:.systemFont(ofSize:max(11,bodyFont.pointSize-1)),color:AppAccent.color,after:4)
+            }
+            var reply = [body.messages]
+            if !body.final.isEmpty && !body.messages.contains(body.final) {reply.append(body.final)}
+            if !body.error.isEmpty {
+                let failure = AppFailure.codex(body.error)
+                reply.append(failure.title+"\n"+failure.message)
+            }
+            result.append(TranscriptActions(id:turn.key,text:reply.filter {!$0.isEmpty}.joined(separator:"\n\n"),threadID:conversation.threadID,font:bodyFont).placeholder())
             transcriptCache[turn.key] = (signature,result)
             accumulated.append(result); result = accumulated
         }
         return result
     }
+    private func endLabel(_ status:String) -> String? {
+        ["completed":"完成","failed":"失败","interrupted":"中断","cancelled":"停止","canceled":"停止"][status]
+    }
     private func turnStatus(_ value: String) -> String {
-        ["pending":"准备中","running":"处理中","inProgress":"处理中","completed":"已完成","failed":"未完成","interrupted":"已停止","waitingForApproval":"等待批准","waitingForInput":"等待补充","unknown":"状态待确认"][value] ?? "状态待确认"
+        ["pending":"准备中","running":"处理中","inProgress":"处理中","completed":"已完成","failed":"未完成","interrupted":"已中断","cancelled":"已停止","canceled":"已停止","waitingForApproval":"等待批准","waitingForInput":"等待补充","unknown":"状态待确认"][value] ?? "状态待确认"
     }
 }
