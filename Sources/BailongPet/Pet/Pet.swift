@@ -52,6 +52,7 @@ final class SpriteView: NSView {
 }
 
 final class PetController: NSObject, NSMenuDelegate {
+    static let defaultCanvasSize:CGFloat = 256
     let catalog: Catalog
     let window: PetWindow
     let view = SpriteView()
@@ -94,6 +95,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var dockProgress = 0.0, dockFrom = 0.0, dockTarget = 0.0, dockBegan = 0.0
     var dockAnimating = false {didSet {updateMotionDisplayLink()}}
     var dockRestore = CGPoint.zero
+    var dockRecallOrigin = CGPoint.zero
     var notchDockArea:CGRect?
     var notchDockDisplayID:String?
     var motion: (CGPoint, CGPoint)? {didSet {updateMotionDisplayLink()}}
@@ -143,9 +145,9 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     var transform: CGAffineTransform {
         guard let dock, let baseBounds else { return .identity }
-        if dock == "notch",let notch = notchDockArea {
+        if dock == "notch",notchDockArea != nil {
             let reference = CGRect(x:baseBounds.minX*size/512,y:baseBounds.minY*size/512,width:baseBounds.width*size/512,height:baseBounds.height*size/512)
-            return NotchDockGeometry.transform(reference:reference,size:size,notchWidth:notch.width,progress:dockProgress)
+            return NotchDockGeometry.transform(reference:reference,size:size,maximumSize:Self.defaultCanvasSize,exposure:preferences.number("notchExposurePercent")/100,progress:dockProgress)
         }
         let center = CGPoint(x: size/2, y: size/2)
         let rotation = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: (dock == "left" ? 1 : -1) * .pi/4 * dockProgress).translatedBy(x: -center.x, y: -center.y)
@@ -158,7 +160,7 @@ final class PetController: NSObject, NSMenuDelegate {
         self.defaults = defaults; self.catalog = catalog; current = catalog.idle
         preferences = defaults === SettingsStorage.defaults ? .shared : PetPreferences(defaults:defaults)
         settings = SettingsPanel(preferences:preferences,catalog:catalog)
-        window = PetWindow(contentRect: NSRect(x: 0,y: 0,width: 256,height: 256), styleMask: [.borderless,.nonactivatingPanel], backing: .buffered, defer: false)
+        window = PetWindow(contentRect: NSRect(x: 0,y: 0,width: Self.defaultCanvasSize,height: Self.defaultCanvasSize), styleMask: [.borderless,.nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
         decoder.configure(bufferCapacity: preferences.animationBufferFrames, resolution: preferences.animationResolution, preloadWhole: preferences.bool("preloadWholeAnimation"))
         // 脚本与打包版共用初始化；首次将两个 100% 写入偏好，之后保留用户选择。
@@ -169,7 +171,7 @@ final class PetController: NSObject, NSMenuDelegate {
         window.level = .floating; window.hidesOnDeactivate = false
         window.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .fullScreenNone]
         window.contentView = view; view.pet = self
-        window.setContentSize(NSSize(width: 256 * Double(petPercent)/100, height: 256 * Double(petPercent)/100))
+        window.setContentSize(NSSize(width: Self.defaultCanvasSize * Double(petPercent)/100, height: Self.defaultCanvasSize * Double(petPercent)/100))
         let target = NSScreen.screens.first {PetPreferences.displayID($0) == preferences.string("preferredDisplay")} ?? screen
         let a = target.visibleFrame
         let remember = preferences.bool("rememberPosition")
@@ -325,6 +327,12 @@ final class PetController: NSObject, NSMenuDelegate {
             let t = min(1, (now-dockBegan)/0.3)
             // 作者展开公式：起始进度 × (1 - 时间进度)^3，连续衰减到零。
             dockProgress = dockTarget == 1 ? dockFrom + (1-dockFrom)*(1-pow(1-t,3)) : dockFrom*pow(1-t,3)
+            if dockTarget == 0 {
+                // 窗口位置与展开变换一起回到原位，不能等最后一帧才切换坐标。
+                let target = constrained(dockRestore,screen:screen), remaining = pow(1-t,3)
+                move(CGPoint(x:target.x+(dockRecallOrigin.x-target.x)*remaining,
+                             y:target.y+(dockRecallOrigin.y-target.y)*remaining))
+            }
             if t >= 1 { dockAnimating = false; dockProgress = dockTarget
                 if dockTarget == 0 { dock = nil; notchDockArea = nil; notchDockDisplayID = nil; move(constrained(dockRestore,screen:screen))
                     savePosition()
@@ -436,7 +444,7 @@ final class PetController: NSObject, NSMenuDelegate {
         dockProgress = 0; dockFrom = 0; dockTarget = 1; dockBegan = now; dockAnimating = true
         play(catalog.idle,"idle"); return true
     }
-    func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
+    func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockRecallOrigin = position; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
     func preview(_ clip: Clip, taskOverview:Bool = false) {
         interaction(); soundOnce()
         let wasHidden = hidden
@@ -501,7 +509,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func resize(_ p: Int, _ b: Int) {
         let old = window.frame
         petPercent = p; bubblePercent = b; interaction()
-        let side = 256 * Double(p)/100
+        let side = Self.defaultCanvasSize * Double(p)/100
         window.setFrame(NSRect(x:old.midX-side/2,y:old.minY,width:side,height:side),display:true)
         keepOnScreen()
         activityOrigin = position; savePosition()
@@ -667,6 +675,10 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
+        if keys.contains("notchExposurePercent") {
+            if dock == "notch" {view.needsDisplay = true; placeBubble()}
+            if keys.count == 1 {return}
+        }
         if keys.contains("notchDockEnabled"),!preferences.bool("notchDockEnabled"),dock == "notch" {undock()}
         if keys.contains("petShadow") {
             window.hasShadow = preferences.bool("petShadow")

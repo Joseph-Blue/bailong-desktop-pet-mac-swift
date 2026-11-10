@@ -20,16 +20,16 @@ enum NotchDockGeometry {
     static func origin(notch:CGRect,size:CGFloat,desktopTop:CGFloat) -> CGPoint {
         CGPoint(x:notch.midX-size/2,y:desktopTop-notch.minY)
     }
-    static func transform(reference:CGRect,size:CGFloat,notchWidth:CGFloat,progress:CGFloat) -> CGAffineTransform {
+    static func transform(reference:CGRect,size:CGFloat,maximumSize:CGFloat,exposure:CGFloat,progress:CGFloat) -> CGAffineTransform {
         guard !reference.isEmpty else {return .identity}
-        let scale = 1+(min(1,max(1,notchWidth-12)/reference.width)-1)*progress
+        let scale = 1+(min(1,maximumSize/size)-1)*progress
         let angle = .pi*progress,center = size/2
         let a = cos(angle)*scale,b = sin(angle)*scale,c = -sin(angle)*scale,d = cos(angle)*scale
         let rotation = CGAffineTransform(a:a,b:b,c:c,d:d,tx:center-a*center-c*center,ty:center-b*center-d*center)
         let bounds = reference.applying(rotation)
-        // 完全收纳时倒挂，头到上胸约半身留在窗口顶边下方，身体裁到刘海方向。
+        // 完全收纳时倒挂，按露出比例留在窗口顶边下方，身体裁到刘海方向。
         return rotation.concatenating(CGAffineTransform(translationX:(center-bounds.midX)*progress,
-            y:(-bounds.minY-bounds.height*0.5)*progress))
+            y:(-bounds.minY-bounds.height*(1-exposure))*progress))
     }
 }
 

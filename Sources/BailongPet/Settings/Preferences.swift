@@ -13,7 +13,7 @@ enum SettingsSection: Int, CaseIterable {
         switch self {
         case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
-        case .activity: return ["notchDockEnabled","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
+        case .activity: return ["notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
         case .messages: return ["taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
         case .appearance: return ["petPercent","petShadow","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
         case .advanced: return ["defaultWorkspace"]
@@ -77,7 +77,7 @@ final class PetPreferences {
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
-        "notchDockEnabled":false,"singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat",
+        "notchDockEnabled":true,"notchExposurePercent":55.0,"singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat",
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
         "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"favorites":[String](),"taskOpening":true,"taskCelebration":true,
         "sendShortcut":"commandReturn","taskBubbles":true,"progressBubbles":true,"resultBubbles":true,"interactionBubbles":true,
@@ -88,7 +88,7 @@ final class PetPreferences {
     ].merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
         "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
-        "glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
+        "notchExposurePercent":40...85,"glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"bubbleAspectRatio":0.6...3,"messageFontSize":11...20
     ]

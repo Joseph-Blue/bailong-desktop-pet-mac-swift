@@ -9,7 +9,7 @@ struct TaskActivity:Equatable {
     var finished = false
     var templateKey:String? = nil
     var toolOperation:ToolOperation = .tool
-    // 工具进展只展示简短摘要；完整命令、参数及文件清单留在 Codex。
+    // 保留命令入口、子命令和参数；长命令及文件清单使用有界摘要。
     var displayDetail:String {
         guard kind == .tool else {return detail}
         let lines = detail.split(whereSeparator:{$0.isNewline}).map(String.init)
@@ -22,14 +22,16 @@ struct TaskActivity:Equatable {
         let line = text.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         return line.count > 120 ? String(line.prefix(120))+"…" : line
     }
-    private static func commandName(_ command:String?) -> String {
-        guard let token = command?.split(maxSplits:1,whereSeparator:{$0.isWhitespace}).first else {return ""}
-        let name = (String(token).trimmingCharacters(in:CharacterSet(charactersIn:"\"'")) as NSString).lastPathComponent
-        return "命令："+short(name)
+    private static func commandSummary(_ command:String?) -> String {
+        guard let command = command?.trimmingCharacters(in:.whitespacesAndNewlines),!command.isEmpty else {return ""}
+        // 多行脚本只取入口行；不把脚本正文压成一整条跑马灯或 hover。
+        let end = command.firstIndex(where:{$0.isNewline}) ?? command.endIndex
+        let firstLine = short(String(command[..<end]))
+        return firstLine+(end == command.endIndex ? "" : " …（多行命令）")
     }
     var symbolName:String {
         switch kind {
-        case .reasoning:return "brain"
+        case .reasoning:return "ellipsis.bubble"
         case .reply:return "text.bubble"
         case .tool:
             switch toolOperation {
@@ -81,7 +83,7 @@ struct TaskActivity:Equatable {
                 operation = ["read":.read,"search":.search,"listFiles":.listFiles][actionType] ?? .command
             }
         }
-        var detail = type == "commandExecution" ? commandName(command) : tool ?? ""
+        var detail = type == "commandExecution" ? commandSummary(command) : tool ?? ""
         if type == "commandExecution",!actions.isEmpty {
             detail = actions.map { action in
                 let path = action["path"] as? String ?? ""
@@ -91,7 +93,7 @@ struct TaskActivity:Equatable {
                 case "search":
                     let query = action["query"] as? String ?? ""
                     return (ended ? "已搜索" : "正在搜索")+(query.isEmpty ? "" : "「"+query+"」")+(path.isEmpty ? "" : " · "+path)
-                default: return commandName(action["command"] as? String ?? command)
+                default: return commandSummary(action["command"] as? String ?? command)
                 }
             }.filter {!$0.isEmpty}.joined(separator:"\n")
         }
