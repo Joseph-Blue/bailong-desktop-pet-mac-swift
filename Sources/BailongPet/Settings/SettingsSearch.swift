@@ -82,8 +82,11 @@ struct SettingsSearchEntry {
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
         add(.about,"关于",["关于","来源与致谢"],"开源致谢 来源 作者 许可证 技术栈 AppKit macOS UI skill")
         for index in entries.indices {
-            if ["液态玻璃跟随系统设定","玻璃不透明度"].contains(entries[index].title) {
-                entries[index].condition = "选择液态玻璃材质后显示"
+            if entries[index].section == .appearance && entries[index].title == "消息窗口材质" {
+                entries[index].keywords += " SDK 兼容构建 普通材质"
+                entries[index].condition = PetPreferences.glassAvailabilityDescription
+            } else if ["液态玻璃跟随系统设定","玻璃不透明度"].contains(entries[index].title) {
+                entries[index].condition = PetPreferences.glassAvailable ? "选择液态玻璃材质后显示" : PetPreferences.glassAvailabilityDescription
             } else if entries[index].section == .appearance && entries[index].title == "自定义" {
                 entries[index].condition = "选择自定义强调色后显示"
             } else if entries[index].section == .appearance && entries[index].title == "宽 : 高" {

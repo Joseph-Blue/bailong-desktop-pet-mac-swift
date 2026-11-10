@@ -117,10 +117,15 @@ final class Decoder: @unchecked Sendable {
         }
     }
     func cancel() {
+        cancelLoad(keepingStream: false)
+    }
+    private func cancelLoad(keepingStream: Bool) {
         let (pending, streaming) = lock.withLock { () -> (Task<Void, Never>?, StreamingAnimation?) in
             generation += 1; preloadProgress = nil
-            let oldStream = stream; stream = nil
-            return (worker, oldStream)
+            let oldStream = keepingStream ? nil : stream
+            if !keepingStream { stream = nil }
+            let pending = worker; worker = nil
+            return (pending, oldStream)
         }
         streaming?.stop(); pending?.cancel()
     }
@@ -131,7 +136,8 @@ final class Decoder: @unchecked Sendable {
     }
     private func current(_ token: Int) -> Bool { lock.withLock { generation == token } }
     func load(_ clip: Clip, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
-        cancel()
+        // 新片段准备期间继续供应当前片段的帧；只取消上一份尚未完成的加载。
+        cancelLoad(keepingStream: true)
         let (token, capacity, side, preload) = lock.withLock { (generation, bufferCapacity, resolution, preloadWhole) }
         group.enter()
         lock.withLock { worker = Task.detached(priority: .userInitiated) { [self] in
@@ -157,30 +163,36 @@ final class Decoder: @unchecked Sendable {
                     guard let frames = try streaming.preload(isCurrent: { self.current(token) }, progress: { count in
                         self.lock.withLock { if self.generation == token { self.preloadProgress = (clip.id, count, streaming.frameCount) } }
                     }), current(token) else { return }
-                    guard let firstFrame = frames.first else { throw PetFailure(message: "「\(clip.title)」没有可播放的帧。") }
+                    guard !frames.isEmpty else { throw PetFailure(message: "「\(clip.title)」没有可播放的帧。") }
                     let animation = Animation(frames,fps:Double(rate))
-                    lock.withLock { if generation == token { resident[clip.id] = WeakAnimation(animation) } }
-                    DispatchQueue.main.async {
-                        if self.current(token) { first(firstFrame); completion(.success(animation)) }
-                    }
+                    publish(animation, clip: clip, token: token, first: first, completion: completion)
                     return
                 }
-                let firstFrame = try streaming.prime()
+                guard let firstFrame = try streaming.prepareForPlayback(isCurrent: { self.current(token) }) else { return }
                 let animation = Animation([firstFrame], stream: streaming,fps:Double(rate))
-                let accepted = lock.withLock { () -> Bool in
-                    guard generation == token else { return false }
-                    stream = streaming; resident[clip.id] = WeakAnimation(animation); return true
-                }
-                guard accepted else { streaming.stop(); return }
-                DispatchQueue.main.async {
-                    if self.current(token) {
-                        first(firstFrame); completion(.success(animation)); streaming.request(0)
-                    }
-                }
+                publish(animation, clip: clip, token: token, first: first, completion: completion)
             } catch {
                 DispatchQueue.main.async { if self.current(token) { completion(.failure(error)) } }
             }
         } }
+    }
+    private func publish(_ animation: Animation, clip: Clip, token: Int, first: @escaping (Frame) -> Void,
+                         completion: @escaping (Result<Animation, Error>) -> Void) {
+        DispatchQueue.main.async {
+            guard self.current(token) else { animation.stream?.stop(); return }
+            let previous = self.lock.withLock { () -> StreamingAnimation? in
+                let previous = self.stream
+                self.stream = animation.stream
+                self.resident[clip.id] = WeakAnimation(animation)
+                return previous
+            }
+            first(animation.frames[0])
+            // 首次显示的回调能触发新动作；已被替换时不再发布旧加载结果。
+            guard self.current(token) else { previous?.stop(); return }
+            completion(.success(animation))
+            previous?.stop()
+            animation.stream?.request(0)
+        }
     }
 }
 

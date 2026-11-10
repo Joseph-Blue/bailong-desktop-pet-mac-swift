@@ -3,7 +3,9 @@ import AppKit
 extension NSMenu {
     func showProvidedImages() {
         for item in items {
+            #if BAILONG_SDK_MENU_IMAGES
             if #available(macOS 27.0, *), item.image != nil {item.preferredImageVisibility = .visible}
+            #endif
             item.submenu?.showProvidedImages()
         }
     }
@@ -207,6 +209,7 @@ final class BubbleBackgroundView: NSView {
     @objc private func updateMaterial() {
         let enabled = preferences.usesGlass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let next: CGFloat = enabled ? 0 : 1
+        #if BAILONG_SDK_GLASS
         if #available(macOS 26.0, *), enabled {
             if glass == nil {
                 let effect = NSGlassEffectView(frame:bounds)
@@ -219,6 +222,7 @@ final class BubbleBackgroundView: NSView {
             effect.style = preferences.bool("glassFollowsSystem") ? .regular : .clear
             glassBacking.opacity = preferences.bool("glassFollowsSystem") ? 0 : CGFloat(preferences.number("glassOpacity"))
         }
+        #endif
         let animate = preferences.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && window?.isVisible == true
         if next == targetOpacity && fade != nil && animate {return}
         fade?.invalidate(); fade = nil; targetOpacity = next

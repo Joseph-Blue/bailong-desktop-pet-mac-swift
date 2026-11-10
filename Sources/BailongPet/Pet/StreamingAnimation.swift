@@ -46,6 +46,26 @@ final class StreamingAnimation: @unchecked Sendable {
         lock.withLock { displayed = first }
         return first.frame
     }
+    // 交接前在加载任务中填好起播队列；此时尚未向播放队列发布 reader。
+    func prepareForPlayback(isCurrent: () -> Bool) throws -> Frame? {
+        var prepared = false
+        defer {
+            if !prepared { reader?.cancelReading(); reader = nil; output = nil }
+        }
+        guard isCurrent() else { return nil }
+        let first = try prime()
+        for _ in 0..<capacity {
+            guard isCurrent() else { return nil }
+            guard let entry = try readFrame() else {
+                ended = true; totalFrames = nextIndex
+                break
+            }
+            buffered.append(entry)
+        }
+        guard isCurrent() else { return nil }
+        prepared = true
+        return first
+    }
     // 后台整段预加载复用同一透明图像转换；尚未发布给串行流队列。
     func preload(isCurrent: () -> Bool, progress: (Int) -> Void) throws -> [Frame]? {
         try openReader()

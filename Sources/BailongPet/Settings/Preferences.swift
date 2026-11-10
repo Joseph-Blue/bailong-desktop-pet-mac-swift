@@ -92,7 +92,19 @@ final class PetPreferences {
         "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"bubbleAspectRatio":0.6...3,"messageFontSize":11...20
     ]
-    static var glassAvailable: Bool {if #available(macOS 26.0, *) {return true}; return false}
+    static var glassAvailable: Bool {
+        #if BAILONG_SDK_GLASS
+        if #available(macOS 26.0, *) {return true}
+        #endif
+        return false
+    }
+    static var glassAvailabilityDescription: String {
+        #if BAILONG_SDK_GLASS
+        return "macOS 26 起支持液态玻璃材质。"
+        #else
+        return "此构建未包含液态玻璃，使用普通材质。"
+        #endif
+    }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
     static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]

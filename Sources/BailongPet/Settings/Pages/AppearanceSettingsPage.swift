@@ -56,7 +56,7 @@ final class AppearanceSettingsPage {
             themeRows.append(form.row("自定义",control:well))
         }
         form.group("主题",themeRows)
-        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:"macOS 26 起支持液态玻璃材质。") { [weak self] in self?.reload(); self?.showPreview() }
+        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:PetPreferences.glassAvailabilityDescription) { [weak self] in self?.reload(); self?.showPreview() }
         var materialRows = [material]
         if preferences.usesGlass {
             let follow = AccentSwitch(); follow.state = preferences.bool("glassFollowsSystem") ? .on : .off; glassFollowSwitch = follow

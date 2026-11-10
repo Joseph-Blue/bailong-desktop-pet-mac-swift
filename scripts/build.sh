@@ -12,18 +12,24 @@ case "$target_arch" in
     *) print -u2 "不支持的架构：$target_arch"; exit 2 ;;
 esac
 bailong_header "构建应用包" "$target_arch"
+source scripts/swift-environment.sh
+bailong_show_build_environment
 assets="local-assets/native-hevc/catalog"
 [[ -f "$assets/素材清单.json" ]] || { print -u2 "缺少原生素材清单。请按 README 的资源获取说明准备 local-assets/native-hevc/catalog。"; exit 1; }
 version="$(<VERSION)"
-output="dist/native-hevc/$version/$target_arch"
+output="dist/$version/$target_arch"
+# 显式对比档位独立存放；无参构建继续使用默认目录。
+if [[ "${BAILONG_BUILD_PROFILE:-auto}" != auto ]]; then
+    output="$output/$bailong_build_profile"
+fi
 mkdir -p ".build/$target_arch" .build/module-cache "$output"
 bailong_phase_begin "1/4" "编译主程序"
-xcrun swiftc -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
+"$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache $swift_sources \
     -o ".build/$target_arch/BailongPet" -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 > "$bailong_phase_log" 2>&1
 bailong_phase_end
 bailong_phase_begin "2/4" "编译跟随助手"
-xcrun swiftc -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
+"$bailong_swiftc" $bailong_sdk_flags -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
     -module-cache-path .build/module-cache Sources/BailongPet/Infrastructure/FollowMonitor.swift Tools/FollowHelper/main.swift \
     -framework AppKit -o ".build/$target_arch/BailongFollow" > "$bailong_phase_log" 2>&1
 bailong_phase_end

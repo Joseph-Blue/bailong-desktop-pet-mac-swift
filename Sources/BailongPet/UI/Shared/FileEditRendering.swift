@@ -55,7 +55,9 @@ enum FileEditRendering {
         func cell(_ content:NSAttributedString,row:Int,column:Int) {
             let block = NSTextTableBlock(table:table,startingRow:row,rowSpan:1,startingColumn:column,columnSpan:1)
             if column == 1 {block.setContentWidth(countWidth,type:.absoluteValueType)}
-            block.setWidth(5,type:.absoluteValueType,for:.padding); block.verticalAlignment = .top
+            block.setWidth(5,type:.absoluteValueType,for:.padding)
+            // 顶部对齐在 SDK 26/27 中的 Swift 名称不同，原始值均为 0。
+            block.verticalAlignment = NSTextBlock.VerticalAlignment(rawValue:0)!
             if row == 1 {
                 block.setWidth(0.5,type:.absoluteValueType,for:.border,edge:.minY)
                 block.setBorderColor(.separatorColor)

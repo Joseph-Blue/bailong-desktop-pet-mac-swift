@@ -10,13 +10,16 @@ fi
 
 bailong_header "开发程序 · 不打包 .app" "arm64"
 source scripts/swift-sources.sh
+source scripts/swift-environment.sh
+bailong_show_build_environment
 binary=".build/dev/BailongPetDev"
 mkdir -p .build/dev .build/module-cache
 rebuild=0
 [[ -x "$binary" ]] || rebuild=1
 source_manifest="${(F)swift_sources}"
 [[ -f .build/dev/sources.txt && "$(<.build/dev/sources.txt)" == "$source_manifest" ]] || rebuild=1
-for source in $swift_sources VERSION scripts/swift-sources.sh "${0:A}"; do
+[[ -f .build/dev/environment.txt && "$(<.build/dev/environment.txt)" == "$bailong_build_environment" ]] || rebuild=1
+for source in $swift_sources VERSION scripts/swift-sources.sh scripts/swift-environment.sh "${0:A}"; do
     if [[ "$source" -nt "$binary" ]]; then rebuild=1; break; fi
 done
 
@@ -39,17 +42,18 @@ if (( rebuild )); then
 <key>NSAppleEventsUsageDescription</key><string>点击本机文件链接时，恢复对应的访达窗口并选中文件。</string>
 </dict></plist>
 PLIST
-    xcrun swiftc -O -whole-module-optimization -swift-version 5 \
+    "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 \
         -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache \
         $swift_sources -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 \
         -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker .build/dev/Info.plist \
         -o "$binary.next"
     mv "$binary.next" "$binary"
     print -r -- "$source_manifest" > .build/dev/sources.txt
+    print -r -- "$bailong_build_environment" > .build/dev/environment.txt
     } > "$bailong_phase_log" 2>&1
     bailong_phase_end
 else
-    print "源码未变化，复用上次编译结果。"
+    print "源码与构建环境未变化，复用上次编译结果。"
 fi
 
 bailong_artifact "开发程序" "$binary"

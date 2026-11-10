@@ -3,8 +3,9 @@ set -eu
 cd "${0:A:h:h}"
 # 仅复现和回归启动崩溃，不访问真实会话、模型服务或桌宠资源。
 source scripts/swift-sources.sh
+source scripts/swift-environment.sh
 [[ -f Tests/HistorySelectionRegression.swift ]] || { print -u2 "本地回归夹具不存在：Tests/HistorySelectionRegression.swift（Tests 不随公开仓库提供）。"; exit 1; }
 mkdir -p .build/module-cache
-xcrun swiftc -O -whole-module-optimization -swift-version 5 -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache \
+"$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 -target arm64-apple-macosx14.0 -module-cache-path .build/module-cache \
     $swift_library_sources Tests/HistorySelectionRegression.swift -o .build/HistorySelectionRegression -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3
 .build/HistorySelectionRegression "$@"

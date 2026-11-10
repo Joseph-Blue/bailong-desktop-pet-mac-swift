@@ -239,7 +239,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id)
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
                 self.configureAnimationTimer()
-                self.pauseTime = self.hidden || self.press != nil && !self.dragged ? self.now : nil
+                self.pauseTime = self.hidden ? self.now : nil
                 self.view.needsDisplay = true
                 if clip.id == self.catalog.idle.id {
                     let icon = NSImage(cgImage: animation.frames[0].image, size: NSSize(width: 128,height: 128))
@@ -319,9 +319,10 @@ final class PetController: NSObject, NSMenuDelegate {
             // 作者展开公式：起始进度 × (1 - 时间进度)^3，连续衰减到零。
             dockProgress = dockTarget == 1 ? dockFrom + (1-dockFrom)*(1-pow(1-t,3)) : dockFrom*pow(1-t,3)
             if t >= 1 { dockAnimating = false; dockProgress = dockTarget
-                if dockTarget == 0 { dock = nil; move(constrained(dockRestore,screen:screen)); play(catalog.idle,"idle")
+                if dockTarget == 0 { dock = nil; move(constrained(dockRestore,screen:screen))
                     savePosition()
                     if let pending { self.pending = nil; play(pending.0,pending.1) }
+                    else { play(catalog.idle,"idle") }
                 }
             }
         }
@@ -344,9 +345,9 @@ final class PetController: NSObject, NSMenuDelegate {
         if let deadline = dockRecallAt, now >= deadline, press == nil {
             dockRecallAt = nil; undock()
         }
-        if !hidden && (press == nil || dragged), let animation {
+        if !hidden, let animation {
             let elapsed = (now-began)*playbackRate, duration = current.durationMs/1000
-            if elapsed >= duration && !loading {
+            if elapsed >= duration && !loading && (press == nil || dragged) {
                 if motion != nil {updateMovement(at:elapsed); movementReady = now + 10; motion = nil}
                 if mode == "drag" { began = now; selectFrame(at: 0, animation: animation) }
                 else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:nil,selection:.task) { play(clip,"working") }
@@ -382,7 +383,7 @@ final class PetController: NSObject, NSMenuDelegate {
         interaction()
         if motion != nil { idle() }
         press = NSEvent.mouseLocation; pressOrigin = position; dragged = false; dragFromDock = dock != nil
-        pauseTime = now
+        // 按下仅进入点击／拖拽判定，素材画面继续播放。
         if dockDoubleClick {performGesture(preferences.string("doubleClickAction"))}
         updateMotionDisplayLink()
     }
@@ -391,7 +392,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let p = NSEvent.mouseLocation, delta = CGPoint(x:p.x-press.x,y:press.y-p.y)
         if !dragged && abs(delta.x)+abs(delta.y) >= 8 {
             leftDoubleClick = false; dockDoubleClick = false
-            dragged = true; pauseTime = nil
+            dragged = true
             if dragFromDock {
                 // 吸边拖动与召回一致，不切换到跟随鼠标的拖拽动作。
                 undock(); return
@@ -406,7 +407,6 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func mouseUp(_ event: NSEvent) {
         guard press != nil else {return}; press = nil; interaction()
-        if !dragged, let pauseTime {began += now-max(pauseTime,began)}; pauseTime = nil
         if dragged {
             dragged = false
             if !dragFromDock && !snap() {play(catalog.landingAnimation,"landing")}
@@ -430,10 +430,13 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
     func preview(_ clip: Clip, taskOverview:Bool = false) {
-        interaction(); soundOnce(); manualHidden = false; applyVisibility()
-        say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:taskOverview && preferences.bool("showTaskOverview"))
+        interaction(); soundOnce()
+        let wasHidden = hidden
+        manualHidden = false
+        if wasHidden != hidden { applyVisibility() }
         let mode = catalog.movementAnimations.contains(where:{$0.id == clip.id}) ? "move" : "interaction"
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
+        say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:taskOverview && preferences.bool("showTaskOverview"))
     }
     func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)

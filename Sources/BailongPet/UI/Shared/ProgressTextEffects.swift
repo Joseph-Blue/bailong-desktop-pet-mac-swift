@@ -88,7 +88,8 @@ final class ProgressMarqueeView:NSView {
         first.frame = NSRect(x:0,y:(bounds.height-h)/2,width:width,height:h)
         repeated.frame = first.frame.offsetBy(dx:cycle,dy:0); repeated.isHidden = !animate
         fade.frame = bounds; fade.colors = [NSColor.black.cgColor,NSColor.black.cgColor,NSColor.clear.cgColor]
-        fade.locations = [0,NSNumber(value:max(0,1-16/max(1,bounds.width))),1]
+        let fadeStart = max(0,1-16/max(1,Double(bounds.width)))
+        fade.locations = [0,NSNumber(value:fadeStart),1]
         layer?.mask = overflow ? fade : nil
         setAccessibilityValue(stringValue)
         if animate {
