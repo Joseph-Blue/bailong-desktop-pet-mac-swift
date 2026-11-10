@@ -9,7 +9,7 @@ final class TranscriptRenderer {
         return [preferences.statusLine("conversationEmptyTemplate"),preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external),conversation.threadID ?? ""]
     }
     func turnSignature(_ turn:Turn) -> [String] {
-        [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970),turn.completedAt.map {String($0.timeIntervalSince1970)} ?? ""]
+        [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970),turn.completedAt.map {String($0.timeIntervalSince1970)} ?? "",turn.tokenUsage?.signature ?? "",turn.tokenUsageError ?? ""]
     }
     func content(_ conversation: Conversation, turns:[Turn]? = nil) -> NSAttributedString {
         let turns = turns ?? conversation.turns
@@ -34,6 +34,7 @@ final class TranscriptRenderer {
         let keys = Set(turns.map(\.key))
         transcriptCache = transcriptCache.filter {keys.contains($0.key)}
         for turn in turns {
+            if result.length > 0 {result.append(NSAttributedString(string:"\n",attributes:[.font:NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))]))}
             let signature = style + turnSignature(turn)
             if let cached = transcriptCache[turn.key],cached.0 == signature {result.append(cached.1); continue}
             let body = turn.bodyReference.value()
@@ -67,24 +68,17 @@ final class TranscriptRenderer {
             if !body.final.isEmpty && !body.messages.contains(body.final) {appendMarkdown(body.final)}
             result.append(FileEditRendering.render(body.fileEdits ?? [],font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),id:turn.key))
             if !body.error.isEmpty {let failure = AppFailure.codex(body.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
-            if let ended = endLabel(turn.status) {
-                let time = turn.completedAt.map { $0.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)) } ?? "时间未提供"
-                append(ended+" · "+time,font:.systemFont(ofSize:max(11,bodyFont.pointSize-1)),color:AppAccent.color,after:4)
-            }
             var reply = [body.messages]
             if !body.final.isEmpty && !body.messages.contains(body.final) {reply.append(body.final)}
             if !body.error.isEmpty {
                 let failure = AppFailure.codex(body.error)
                 reply.append(failure.title+"\n"+failure.message)
             }
-            result.append(TranscriptActions(id:turn.key,text:reply.filter {!$0.isEmpty}.joined(separator:"\n\n"),threadID:conversation.threadID,font:bodyFont).placeholder())
+            result.append(TranscriptActions(id:turn.key,text:reply.filter {!$0.isEmpty}.joined(separator:"\n\n"),threadID:conversation.threadID,font:bodyFont,status:turn.status,completedAt:turn.completedAt,usage:turn.tokenUsage,usageError:turn.tokenUsageError).placeholder())
             transcriptCache[turn.key] = (signature,result)
             accumulated.append(result); result = accumulated
         }
         return result
-    }
-    private func endLabel(_ status:String) -> String? {
-        ["completed":"完成","failed":"失败","interrupted":"中断","cancelled":"停止","canceled":"停止"][status]
     }
     private func turnStatus(_ value: String) -> String {
         ["pending":"准备中","running":"处理中","inProgress":"处理中","completed":"已完成","failed":"未完成","interrupted":"已中断","cancelled":"已停止","canceled":"已停止","waitingForApproval":"等待批准","waitingForInput":"等待补充","unknown":"状态待确认"][value] ?? "状态待确认"

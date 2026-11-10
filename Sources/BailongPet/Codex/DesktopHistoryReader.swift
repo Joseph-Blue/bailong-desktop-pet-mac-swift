@@ -29,6 +29,30 @@ final class ReadDatabase {
     }
 }
 enum DesktopHistoryReader {
+    struct UsageResult {
+        var usage:TokenUsage?
+        var error:String?
+    }
+    static func tokenUsages(thread:String,turns:[String]) throws -> [String:UsageResult] {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
+        let state = try ReadDatabase(root+"/state_5.sqlite")
+        guard let row = try state.rows("SELECT rollout_path FROM threads WHERE id=?",[thread]).first else {return [:]}
+        let path = row["rollout_path"] ?? ""
+        let pattern = try NSRegularExpression(pattern:"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+        let actual = pattern.matches(in:path,range:NSRange(path.startIndex...,in:path)).last
+            .flatMap {Range($0.range,in:path)}.map {String(path[$0])} ?? thread
+        let history = try ReadDatabase(root+"/thread_history_1.sqlite")
+        var result = [String:UsageResult]()
+        for turn in turns.prefix(HistoryPageWindow.size) {
+            guard let record = try history.rows("SELECT status,rollout_byte_offset,rollout_end_byte_offset FROM thread_turns WHERE thread_id=? AND turn_id=?",[actual,turn]).first,
+                  !activeStatuses.contains(record["status"] ?? "") else {continue}
+            do {
+                result[turn] = UsageResult(usage:try TurnTokenReader.read(path:path,turn:turn,
+                    start:record["rollout_byte_offset"].flatMap(UInt64.init),end:record["rollout_end_byte_offset"].flatMap(UInt64.init)))
+            } catch {result[turn] = UsageResult(error:error.localizedDescription)}
+        }
+        return result
+    }
     // 接收卡片只读本轮首条普通用户消息；问卷回执整条排除，不取答案或图片数据。
     // SQL 限制输出长度，避免把超长输入载入持续刷新的任务投影。
     static func receivedText(_ history:ReadDatabase,thread:String,turn:String) throws -> String? {
@@ -134,10 +158,10 @@ enum DesktopHistoryReader {
             let match = pattern.matches(in:path,range:NSRange(path.startIndex...,in:path)).last
             let actual = match.flatMap{Range($0.range,in:path)}.map{String(path[$0])} ?? logical
             if excluded.contains(logical) || excluded.contains(actual) {continue}
-            var turns = try history.rows("SELECT turn_id,status,error_json,started_at,completed_at FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 3",[actual])
+            var turns = try history.rows("SELECT turn_id,status,error_json,started_at,completed_at,rollout_byte_offset,rollout_end_byte_offset FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 3",[actual])
             let latestTurn = turns.first?["turn_id"]
             for old in watched where old.actual == actual && !turns.contains(where:{$0["turn_id"] == old.turn}) {
-                turns += try history.rows("SELECT turn_id,status,error_json,started_at,completed_at FROM thread_turns WHERE thread_id=? AND turn_id=?",[actual,old.turn])
+                turns += try history.rows("SELECT turn_id,status,error_json,started_at,completed_at,rollout_byte_offset,rollout_end_byte_offset FROM thread_turns WHERE thread_id=? AND turn_id=?",[actual,old.turn])
             }
             // 回答会写入后续 userMessage；跨轮次只取问题 ID，不读取答案正文。
             let answeredRows = try history.rows("""
@@ -226,6 +250,12 @@ enum DesktopHistoryReader {
                 alert = attention?.body ?? ""
                 result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion))
                 result[result.count-1].agentMessages = agentMessages
+                if !activeStatuses.contains(turn["status"] ?? "") {
+                    do {
+                        result[result.count-1].tokenUsage = try TurnTokenReader.read(path:path,turn:turn["turn_id"]!,
+                            start:turn["rollout_byte_offset"].flatMap(UInt64.init),end:turn["rollout_end_byte_offset"].flatMap(UInt64.init))
+                    } catch {result[result.count-1].tokenUsageError = error.localizedDescription}
+                }
                 // 修改摘要读取完整轮次，不受上方近期 200 条进展／消息窗口限制。
                 let edits = try history.rows("SELECT json_extract(item_json,'$.changes') changes FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type='fileChange' AND json_extract(item_json,'$.status')='completed' ORDER BY rollout_ordinal",[actual,turn["turn_id"]!])
                 var fileEdits = [FileEditSummary]()

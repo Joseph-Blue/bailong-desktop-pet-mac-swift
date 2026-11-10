@@ -76,6 +76,9 @@ struct AppFailure {
 struct QuotaRow {
     let title: String, value: String, detail: String?
     let remaining: Double?
+    var retry = false
+    var wrapsValue = false
+    var loading = false
 }
 struct QuotaOverview {
     let plan: String

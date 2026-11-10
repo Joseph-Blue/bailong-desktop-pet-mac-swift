@@ -29,6 +29,7 @@ final class SpriteView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let pet, let frame = pet.currentFrame else { return }
         NSGraphicsContext.saveGraphicsState()
+        if pet.dock == "notch" {NSBezierPath(rect:bounds).addClip()}
         let transform = NSAffineTransform(); transform.transformStruct = NSAffineTransformStruct(m11: pet.transform.a, m12: pet.transform.b, m21: pet.transform.c, m22: pet.transform.d, tX: pet.transform.tx, tY: pet.transform.ty)
         transform.concat()
         NSImage(cgImage: frame.image, size: NSSize(width: 512, height: 512)).draw(in: pet.drawRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
@@ -93,6 +94,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var dockProgress = 0.0, dockFrom = 0.0, dockTarget = 0.0, dockBegan = 0.0
     var dockAnimating = false {didSet {updateMotionDisplayLink()}}
     var dockRestore = CGPoint.zero
+    var notchDockArea:CGRect?
+    var notchDockDisplayID:String?
     var motion: (CGPoint, CGPoint)? {didSet {updateMotionDisplayLink()}}
     var activeTasks = Set<String>()
     var quotaActive = false
@@ -140,6 +143,10 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     var transform: CGAffineTransform {
         guard let dock, let baseBounds else { return .identity }
+        if dock == "notch",let notch = notchDockArea {
+            let reference = CGRect(x:baseBounds.minX*size/512,y:baseBounds.minY*size/512,width:baseBounds.width*size/512,height:baseBounds.height*size/512)
+            return NotchDockGeometry.transform(reference:reference,size:size,notchWidth:notch.width,progress:dockProgress)
+        }
         let center = CGPoint(x: size/2, y: size/2)
         let rotation = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: (dock == "left" ? 1 : -1) * .pi/4 * dockProgress).translatedBy(x: -center.x, y: -center.y)
         let reference = CGRect(x: baseBounds.minX * size/512, y: baseBounds.minY * size/512, width: baseBounds.width * size/512, height: baseBounds.height * size/512)
@@ -195,7 +202,7 @@ final class PetController: NSObject, NSMenuDelegate {
         observationTokens.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }; self.sleeping = false; self.motion = nil; self.interaction(); self.keepOnScreen(); self.checkDesktop(); self.applyVisibility(); self.idle()
         })
-        observationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.keepOnScreen(); self?.applyPreferredDisplay() })
+        observationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in guard let self else {return}; self.keepOnScreen(); if self.dock != "notch" {self.applyPreferredDisplay()} })
         let startup = NSPanel(contentRect:NSRect(x:0,y:0,width:440,height:108),styleMask:[.titled],backing:.buffered,defer:false)
         startup.title = preferences.appName; startup.isReleasedWhenClosed = false; startup.hidesOnDeactivate = false
         let heading = label(preferences.fixedText("主人，等我整理好裙摆和小翅膀，马上就来…")); heading.frame = NSRect(x:24,y:60,width:392,height:24)
@@ -319,7 +326,7 @@ final class PetController: NSObject, NSMenuDelegate {
             // 作者展开公式：起始进度 × (1 - 时间进度)^3，连续衰减到零。
             dockProgress = dockTarget == 1 ? dockFrom + (1-dockFrom)*(1-pow(1-t,3)) : dockFrom*pow(1-t,3)
             if t >= 1 { dockAnimating = false; dockProgress = dockTarget
-                if dockTarget == 0 { dock = nil; move(constrained(dockRestore,screen:screen))
+                if dockTarget == 0 { dock = nil; notchDockArea = nil; notchDockDisplayID = nil; move(constrained(dockRestore,screen:screen))
                     savePosition()
                     if let pending { self.pending = nil; play(pending.0,pending.1) }
                     else { play(catalog.idle,"idle") }
@@ -421,6 +428,7 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func snap() -> Bool {
         guard !composerVisible else { return false }
+        if snapToNotch(on:screen) {return true}
         let a = area(screen), p = position, left = abs(p.x-a.minX), right = abs(a.maxX-p.x-size)
         guard min(left,right) <= 24 else { return false }
         dockRestore = p; dock = left <= right ? "left" : "right"
@@ -438,7 +446,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if dock != nil { pending = (clip,mode); undock() } else { play(clip,mode) }
         say(preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate"),kind:"interaction",personalizeTitle:false,taskOverview:taskOverview && preferences.bool("showTaskOverview"))
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TranscriptActions? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -457,7 +465,7 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput),select:selectCard)
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter),select:selectCard)
         }
         placeBubble()
     }
@@ -508,7 +516,12 @@ final class PetController: NSObject, NSMenuDelegate {
         bubble.purpose = purpose
         placeBubble()
     }
-    func keepOnScreen() { motion = nil; move(constrained(position,screen:screen)); if dock != nil { let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y)) } }
+    func keepOnScreen() {
+        motion = nil
+        if dock == "notch" {repositionNotchDock(); return}
+        move(constrained(position,screen:screen))
+        if dock != nil {let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y))}
+    }
     func taskStarted(_ key: String) { let first = activeTasks.isEmpty; activeTasks.insert(key); interaction()
         if preferences.bool("taskOpening") && first && !hidden && dock == nil && press == nil, let clip = catalog.work.first(where:{$0.id == "work01"}) { play(clip,"opening") }
     }
@@ -627,11 +640,14 @@ final class PetController: NSObject, NSMenuDelegate {
     func makeMenu() -> NSMenu {PetMenu.make(for:self,random:{ [weak self] in self?.randomAnimation() })}
     func savePosition() {
         guard preferences.bool("rememberPosition") else {return}
-        defaults.set(window.frame.minX,forKey:"x"); defaults.set(window.frame.minY,forKey:"y")
+        // 刘海收纳不作为下次启动位置，保存正常展开时的位置。
+        defaults.set(dock == "notch" ? dockRestore.x : window.frame.minX,forKey:"x")
+        defaults.set(dock == "notch" ? top-dockRestore.y-size : window.frame.minY,forKey:"y")
     }
     func applyPreferredDisplay() {
         guard let display = NSScreen.screens.first(where:{PetPreferences.displayID($0) == preferences.string("preferredDisplay")}) else {return}
         dock = nil; dockProgress = 0; dockAnimating = false; motion = nil
+        notchDockArea = nil; notchDockDisplayID = nil; view.needsDisplay = true
         move(constrained(position,screen:display)); activityOrigin = position; savePosition()
     }
     func showSettings(section:SettingsSection? = nil) { settingsOpen = true; interaction(); settings.show(section:section)}
@@ -651,6 +667,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
+        if keys.contains("notchDockEnabled"),!preferences.bool("notchDockEnabled"),dock == "notch" {undock()}
         if keys.contains("petShadow") {
             window.hasShadow = preferences.bool("petShadow")
             view.needsDisplay = true

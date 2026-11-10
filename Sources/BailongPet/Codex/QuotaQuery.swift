@@ -20,7 +20,7 @@ final class QuotaQuery {
             switch result {
             case .success(let value):
                 self.value = value
-                update(.success(Snapshot(value:value,account:account)))
+                publish()
             case .failure(let error): update(.failure(error))
             }
         }
@@ -29,7 +29,11 @@ final class QuotaQuery {
                   let account = response["account"] as? [String:Any] else {return}
             self.account = account
             // 账号晚到只补齐同一次查询的套餐，不等待它，也不重放加载动画。
-            if let value {update(.success(Snapshot(value:value,account:account)))}
+            publish()
         }
+    }
+
+    private func publish() {
+        if let value {update(.success(Snapshot(value:value,account:account)))}
     }
 }

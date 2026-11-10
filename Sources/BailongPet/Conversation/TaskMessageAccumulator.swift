@@ -47,7 +47,7 @@ final class TaskMessageAccumulator {
                 updateActivity(item)
             }
         }
-        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",templateKey:"taskUpdateTemplate")
+        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",templateKey:"taskUpdateTemplate",toolOperation:.plan)
         default:return false
         }
         return true

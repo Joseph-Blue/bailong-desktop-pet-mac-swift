@@ -39,9 +39,14 @@ final class SubscriptionManagementButton:NSButton {
     required init?(coder:NSCoder) {fatalError()}
     @objc private func openMenu() {
         let menu = NSMenu()
-        for (label,url) in management.destinations {
+        func add(_ label:String,_ url:String) {
             let item = NSMenuItem(title:label,action:#selector(openDestination(_:)),keyEquivalent:"")
             item.target = self; item.representedObject = url; menu.addItem(item)
+        }
+        for (label,url) in management.destinations {add(label,url)}
+        if management == .personal || management == .organization {
+            menu.addItem(.separator())
+            add("ChatGPT Token 用量","https://chatgpt.com/profile")
         }
         menu.popUp(positioning:nil,at:NSPoint(x:0,y:bounds.maxY),in:self)
     }

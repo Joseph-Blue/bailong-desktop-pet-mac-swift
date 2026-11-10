@@ -10,6 +10,8 @@ final class Turn: Codable {
     var effort: String? = nil
     var date: Date = Date()
     var completedAt: Date? = nil
+    var tokenUsage:TokenUsage?
+    var tokenUsageError:String?
     var lastMessageAt: Date? = nil
     var owned: Bool = true
     var finished: Bool = false
@@ -54,7 +56,7 @@ final class Turn: Codable {
         set {var body = bodyReference.value(); guard body.notices != newValue else {return}; body.notices = newValue; bodyReference = HistoryBodyReference(body)}
     }
     init() {}
-    private enum CodingKeys:String,CodingKey {case id,key,status,model,effort,date,completedAt,lastMessageAt,owned,finished,bodyID}
+    private enum CodingKeys:String,CodingKey {case id,key,status,model,effort,date,completedAt,lastMessageAt,owned,finished,bodyID,tokenUsage,tokenUsageError}
     init(from decoder:Swift.Decoder) throws {
         let c = try decoder.container(keyedBy:CodingKeys.self)
         id = try c.decodeIfPresent(String.self,forKey:.id)
@@ -64,6 +66,8 @@ final class Turn: Codable {
         effort = try c.decodeIfPresent(String.self,forKey:.effort)
         date = try c.decode(Date.self,forKey:.date)
         completedAt = try c.decodeIfPresent(Date.self,forKey:.completedAt)
+        tokenUsage = try c.decodeIfPresent(TokenUsage.self,forKey:.tokenUsage)
+        tokenUsageError = try c.decodeIfPresent(String.self,forKey:.tokenUsageError)
         lastMessageAt = try c.decodeIfPresent(Date.self,forKey:.lastMessageAt)
         owned = try c.decode(Bool.self,forKey:.owned)
         finished = try c.decode(Bool.self,forKey:.finished)
@@ -81,6 +85,8 @@ final class Turn: Codable {
         try c.encodeIfPresent(effort,forKey:.effort)
         try c.encode(date,forKey:.date)
         try c.encodeIfPresent(completedAt,forKey:.completedAt)
+        try c.encodeIfPresent(tokenUsage,forKey:.tokenUsage)
+        try c.encodeIfPresent(tokenUsageError,forKey:.tokenUsageError)
         try c.encodeIfPresent(lastMessageAt,forKey:.lastMessageAt)
         try c.encode(owned,forKey:.owned)
         try c.encode(finished,forKey:.finished)
@@ -96,6 +102,7 @@ final class Turn: Codable {
         t.effort = effort
         t.date = date
         t.completedAt = completedAt
+        t.tokenUsage = tokenUsage; t.tokenUsageError = tokenUsageError
         t.lastMessageAt = lastMessageAt
         t.owned = owned
         t.finished = finished

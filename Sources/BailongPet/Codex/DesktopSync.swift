@@ -24,6 +24,8 @@ struct PublicSnapshot {
     var hasSensitiveQuestion = false
     var agentMessages = [PublicAgentMessage]()
     var fileEdits = [FileEditSummary]()
+    var tokenUsage:TokenUsage?
+    var tokenUsageError:String?
     var isLatest = true
     var receivedText:String?
     var steeringMessages = [PublicUserMessage]()
@@ -32,6 +34,7 @@ struct PublicSnapshot {
     var fingerprint:[String] {
         var result = steeringMessages.flatMap {[$0.id,$0.text]}
         result += fileEdits.flatMap(\.signature)
+        result += [tokenUsage?.signature ?? "",tokenUsageError ?? ""]
         result += agentMessages.flatMap {[$0.id,$0.text]}
         result += [status,messages,final,alert,step,error,receivedText ?? "",approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""]
         for question in attention?.questions ?? [] {
@@ -173,6 +176,9 @@ final class DesktopSync {
                     let enriched = GeneratedImageLink.appending(value.agentMessages.filter(\.isImage).map(\.text),to:turn.messages)
                     if enriched != turn.messages {turn.messages = enriched; changed = true}
                     if turn.fileEdits != value.fileEdits {turn.fileEdits = value.fileEdits; changed = true}
+                    if chat.store.canEnrichInput(turn,in:conversation),turn.tokenUsage != value.tokenUsage || turn.tokenUsageError != value.tokenUsageError {
+                        turn.tokenUsage = value.tokenUsage; turn.tokenUsageError = value.tokenUsageError; changed = true
+                    }
                 }
                 continue
             }
@@ -214,6 +220,7 @@ final class DesktopSync {
                     turn.lastMessageAt = Date(timeIntervalSince1970:time)
                 }
                 turn.fileEdits = value.fileEdits
+                turn.tokenUsage = value.tokenUsage; turn.tokenUsageError = value.tokenUsageError
                 turn.status = value.status; turn.messages = value.messages; turn.final = value.final; turn.steps = value.attention?.isSensitive == true ? "" : value.alert.isEmpty ? value.step : value.alert; turn.error = value.error; changed = true
             }
             if different {
@@ -259,9 +266,9 @@ final class DesktopSync {
                 }
             } else if ["completed","failed","interrupted"].contains(value.status) {
                 running.remove(key)
-                if !turn.finished || (previous != nil && previous?.fileEdits != value.fileEdits) {
+                if !turn.finished || (previous != nil && (previous?.fileEdits != value.fileEdits || previous?.tokenUsage != value.tokenUsage || previous?.tokenUsageError != value.tokenUsageError)) {
                     if !turn.finished {turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)}
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits)
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits,completionFooter:TranscriptActions(id:turn.key,text:value.resultText,threadID:conversation.threadID,font:.systemFont(ofSize:13),status:turn.status,completedAt:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},usage:turn.tokenUsage,usageError:turn.tokenUsageError))
                 }
             }
         }

@@ -5,6 +5,11 @@ struct TaskTiming {
     var key:String? = nil
     var finished:Date? = nil
     var status:String? = nil
+    // 内置任务的调度键为 own，显示进展仍使用真实轮次 key。
+    var activityKey:String? = nil
+    func matchesActivity(key:String,start:Date) -> Bool {
+        finished == nil && key == (activityKey ?? self.key) && self.start == start
+    }
     static func elapsed(start:Date,end:Date = Date()) -> String {
         let seconds = max(0,Int(end.timeIntervalSince(start)))
         return seconds >= 3600 ? String(format:"%d:%02d:%02d",seconds/3600,(seconds/60)%60,seconds%60) : String(format:"%02d:%02d",seconds/60,seconds%60)
@@ -33,6 +38,7 @@ struct BubbleCard {
     var fileEdits = [FileEditSummary]()
     var showsTaskOverview = false
     var isUserInput = false
+    var completionFooter:TranscriptActions? = nil
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
     var priority:Priority {

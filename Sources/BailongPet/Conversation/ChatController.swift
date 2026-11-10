@@ -18,6 +18,7 @@ final class ChatController {
     private var clearingWorkspace = false
     var cancelled = false, closing = false
     private var messagesState = TaskMessageAccumulator()
+    private var tokenAccumulator = TurnTokenAccumulator()
     var reminderClock:TaskReminderClock?
     private var interruptInFlight = false
     var currentActivity:TaskActivity? {messagesState.currentActivity}
@@ -236,27 +237,39 @@ final class ChatController {
         let page = [conversation.key]+turns.map(\.key)
         guard page != historyInputPage else {return}
         historyInputPage = page; historyInputRequest = UUID()
-        guard conversation.external,let thread = conversation.threadID else {return}
-        let missing = turns.filter {$0.input.isEmpty && store.canEnrichInput($0,in:conversation)}.compactMap(\.id)
-        guard !missing.isEmpty else {return}
+        guard let thread = conversation.threadID else {return}
+        let missing = turns.filter {conversation.external && $0.input.isEmpty && store.canEnrichInput($0,in:conversation)}.compactMap(\.id)
+        let missingUsage = turns.filter {!activeStatuses.contains($0.status) && $0.tokenUsage == nil && store.canEnrichInput($0,in:conversation)}.compactMap(\.id)
+        guard !missing.isEmpty || !missingUsage.isEmpty else {return}
         let request = historyInputRequest, key = conversation.key
         // 复用已有只读队列，只补当前一页，不新增轮询或全库回填。
         titleQueue.async { [weak self] in
-            let result = Result {try DesktopHistoryReader.userInputs(thread:thread,turns:missing)}
+            let inputs = Result {try missing.isEmpty ? [:] : DesktopHistoryReader.userInputs(thread:thread,turns:missing)}
+            let usages = Result {try missingUsage.isEmpty ? [:] : DesktopHistoryReader.tokenUsages(thread:thread,turns:missingUsage)}
             DispatchQueue.main.async {
                 guard let self,!self.closing,self.historyInputRequest == request,
                       self.ui.history.isVisible,!self.ui.history.isMiniaturized,
                       let current = self.store.conversations.first(where:{$0.key == key}) else {return}
-                switch result {
+                var changed = false
+                switch inputs {
                 case .success(let inputs):
-                    var changed = false
                     for turn in current.turns where missing.contains(turn.id ?? "") && turn.input.isEmpty && self.store.canEnrichInput(turn,in:current) {
                         if let id = turn.id,let input = inputs[id] {turn.input = input; changed = true}
                     }
-                    if changed {self.persist()}
                 case .failure(let error):
                     self.ui.historyStatus.stringValue = "用户消息读取失败："+error.localizedDescription
                 }
+                switch usages {
+                case .success(let values):
+                    for turn in current.turns where self.store.canEnrichInput(turn,in:current) {
+                        guard let id = turn.id,let value = values[id],turn.tokenUsage == nil else {continue}
+                        if turn.tokenUsage != value.usage || turn.tokenUsageError != value.error {
+                            turn.tokenUsage = value.usage; turn.tokenUsageError = value.error; changed = true
+                        }
+                    }
+                case .failure(let error):self.ui.historyStatus.stringValue = "Token 用量读取失败："+error.localizedDescription
+                }
+                if changed {self.persist()}
             }
         }
     }
@@ -368,11 +381,12 @@ final class ChatController {
         let turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
+        tokenAccumulator = TurnTokenAccumulator()
         running = (c,turn); cancelled = false; interruptInFlight = false; messagesState = TaskMessageAccumulator()
         reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); showUserMessage(text,in:c,timing:.init(start:turn.date,key:"own"),messageID:"task-received",select:true); persist()
+        pet.taskStarted("own"); showUserMessage(text,in:c,timing:.init(start:turn.date,key:"own",activityKey:turn.key),messageID:"task-received",select:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}
@@ -407,6 +421,9 @@ final class ChatController {
         if let id = p["turnId"] as? String, let current = t.id, id != current {return}
         switch method {
         case "turn/started": t.id = (p["turn"] as? [String:Any])?["id"] as? String; t.status = "running"; if cancelled {interrupt()}
+        case "thread/tokenUsage/updated":
+            guard let current = t.id,p["turnId"] as? String == current else {return}
+            tokenAccumulator.receive(p["tokenUsage"]); t.tokenUsage = tokenAccumulator.usage; return
         case "turn/completed":
             guard let turn = p["turn"] as? [String:Any], t.id == nil || t.id == turn["id"] as? String else{return}
             for item in turn["items"] as? [[String:Any]] ?? [] {messagesState.record(item)}
@@ -437,7 +454,7 @@ final class ChatController {
     private func presentAgentMessages(conversation:Conversation,turn:Turn) {
         for message in messagesState.takeChangedMessages() {
             pet.say(pet.preferences.statusLine(message.isImage ? "taskUpdateTemplate" : "taskReplyTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
-                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:message.id)
+                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status,activityKey:turn.key),messageID:message.id)
             reminderClock?.lastNotice = Date().timeIntervalSince1970
         }
     }
@@ -469,7 +486,7 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [])}
+        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],completionFooter:TranscriptActions(id:t.key,text:t.final,threadID:c.threadID,font:.systemFont(ofSize:13),status:t.status,completedAt:t.completedAt,usage:t.tokenUsage,usageError:t.tokenUsageError))}
         messagesState = TaskMessageAccumulator()
         if closing {finishShutdown()}
     }

@@ -2,20 +2,61 @@ import Foundation
 
 struct TaskActivity:Equatable {
     enum Kind {case reasoning, tool, reply}
+    enum ToolOperation {case tool, command, read, search, listFiles, edit, webSearch, imageGeneration, imageView, compaction, plan}
     let title:String
     var detail:String = ""
     var kind:Kind = .tool
     var finished = false
     var templateKey:String? = nil
-    var text:String {detail.isEmpty ? title : title+"\n\n"+detail}
+    var toolOperation:ToolOperation = .tool
+    // 工具进展只展示简短摘要；完整命令、参数及文件清单留在 Codex。
+    var displayDetail:String {
+        guard kind == .tool else {return detail}
+        let lines = detail.split(whereSeparator:{$0.isNewline}).map(String.init)
+        var result = lines.prefix(3).map {Self.short($0)}
+        if lines.count > 3 {result.append("另有 \(lines.count-3) 项")}
+        return result.joined(separator:"\n")
+    }
+    var text:String {displayDetail.isEmpty ? title : title+"\n\n"+displayDetail}
+    private static func short(_ text:String) -> String {
+        let line = text.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
+        return line.count > 120 ? String(line.prefix(120))+"…" : line
+    }
+    private static func commandName(_ command:String?) -> String {
+        guard let token = command?.split(maxSplits:1,whereSeparator:{$0.isWhitespace}).first else {return ""}
+        let name = (String(token).trimmingCharacters(in:CharacterSet(charactersIn:"\"'")) as NSString).lastPathComponent
+        return "命令："+short(name)
+    }
+    var symbolName:String {
+        switch kind {
+        case .reasoning:return "brain"
+        case .reply:return "text.bubble"
+        case .tool:
+            switch toolOperation {
+            case .command:return "terminal"
+            case .read:return "doc.text"
+            case .search:return "magnifyingglass"
+            case .listFiles:return "folder"
+            case .edit:return "square.and.pencil"
+            case .webSearch:return "globe"
+            case .imageGeneration:return "photo.badge.plus"
+            case .imageView:return "photo"
+            case .compaction:return "arrow.down.right.and.arrow.up.left"
+            case .plan:return "list.bullet.clipboard"
+            case .tool:return "wrench.and.screwdriver"
+            }
+        }
+    }
     var displayTitle:String {
         if let templateKey {return PetPreferences.shared.statusLine(templateKey)}
         return finished || kind == .reply ? title : PetPreferences.shared.statusLine(kind == .reasoning ? "taskThinkingTemplate" : "taskToolTemplate")
     }
     var actionTitle:String {kind == .tool && !finished && templateKey == nil ? title : ""}
     var line:String {
-        let prefix = displayTitle
-        let parts = [prefix,actionTitle,detail].filter {!$0.isEmpty}
+        // 跑马灯使用公开摘要和操作状态，不使用气泡标题的个性台词。
+        let detail = displayDetail
+        let detailOnly = !detail.isEmpty && (kind == .reasoning || (kind == .tool && [.read,.search,.listFiles].contains(toolOperation)))
+        let parts = (detailOnly ? [detail] : [title,detail]).filter {!$0.isEmpty}
         return parts.joined(separator:" · ").replacingOccurrences(of:"**",with:"").split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
     }
     var visible:Bool {kind == .reasoning ? PetPreferences.shared.bool("showThinkingProgress") : kind == .tool ? PetPreferences.shared.bool("showToolProgress") : true}
@@ -32,7 +73,15 @@ struct TaskActivity:Equatable {
             "imageView":("正在查看图片","已查看图片"),"contextCompaction":("正在压缩上下文","上下文压缩已结束")]
         guard let labels = labels[type] else {return nil}
         let ended = ["completed","failed","interrupted","cancelled","canceled","declined"].contains(status ?? "")
-        var detail = type == "commandExecution" ? command ?? "" : tool ?? ""
+        var operation:ToolOperation = ["commandExecution":.command,"fileChange":.edit,"webSearch":.webSearch,
+            "imageGeneration":.imageGeneration,"imageView":.imageView,"contextCompaction":.compaction][type] ?? .tool
+        if type == "commandExecution",!actions.isEmpty {
+            let types = Set(actions.compactMap {$0["type"] as? String})
+            if types.count == 1,let actionType = types.first {
+                operation = ["read":.read,"search":.search,"listFiles":.listFiles][actionType] ?? .command
+            }
+        }
+        var detail = type == "commandExecution" ? commandName(command) : tool ?? ""
         if type == "commandExecution",!actions.isEmpty {
             detail = actions.map { action in
                 let path = action["path"] as? String ?? ""
@@ -42,14 +91,14 @@ struct TaskActivity:Equatable {
                 case "search":
                     let query = action["query"] as? String ?? ""
                     return (ended ? "已搜索" : "正在搜索")+(query.isEmpty ? "" : "「"+query+"」")+(path.isEmpty ? "" : " · "+path)
-                default: return action["command"] as? String ?? command ?? ""
+                default: return commandName(action["command"] as? String ?? command)
                 }
             }.filter {!$0.isEmpty}.joined(separator:"\n")
         }
         if type == "fileChange" {detail = paths.joined(separator:"\n")}
         if status == "failed" {detail = [labels.1,detail,"本次调用失败，任务尚未报告结束。"].filter {!$0.isEmpty}.joined(separator:" · ")}
         return .init(title:ended ? labels.1 : labels.0,detail:detail,finished:ended,
-                     templateKey:status == "failed" ? "taskWarningTemplate" : type == "commandExecution" ? (ended ? "taskCommandCompletedTemplate" : "taskCommandTemplate") : nil)
+                     templateKey:status == "failed" ? "taskWarningTemplate" : type == "commandExecution" ? (ended ? "taskCommandCompletedTemplate" : "taskCommandTemplate") : nil,toolOperation:operation)
     }
     static func from(item:[String:Any]) -> TaskActivity? {
         var status = item["status"] as? String

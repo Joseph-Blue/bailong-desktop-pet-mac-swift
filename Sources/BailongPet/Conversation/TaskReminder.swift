@@ -20,15 +20,15 @@ extension ChatController {
             reminderClock = TaskReminderClock(now:now); return
         }
         guard let clock = reminderClock,clock.isDue(now:now,interval:pet.preferences.number("taskReminderMinutes")*60) else {return}
-        if showTaskReminder(conversation:conversation,start:turn.date,key:"own") {reminderClock?.lastNotice = now}
+        if showTaskReminder(conversation:conversation,start:turn.date,key:"own",activityKey:turn.key) {reminderClock?.lastNotice = now}
     }
     @discardableResult
-    func showTaskReminder(conversation:Conversation,start:Date,key:String) -> Bool {
+    func showTaskReminder(conversation:Conversation,start:Date,key:String,activityKey:String? = nil) -> Bool {
         guard pet.preferences.bool("taskReminderEnabled"),pet.preferences.allows(.progress),
               !pet.hidden,!pet.quotaActive,!pet.bubble.kind.hasPrefix("quota"),
               pet.bubble.purpose != .attention,!ui.composerVisible else {return false}
         pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:"已经有一会儿没有新进度，任务尚未报告完成。",kind:"task",thread:conversation.key,
-                purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:start,key:key),messageID:"progress-reminder")
+                purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:start,key:key,activityKey:activityKey),messageID:"progress-reminder")
         return true
     }
 }

@@ -23,7 +23,7 @@ enum CodexProtocol {
     // 工具输出、原始思考和图像数据不进入主线程等待队列。
     static func delivery(_ message:[String:Any]) -> [String:Any]? {
         guard message["id"] == nil,let method = message["method"] as? String else {return message}
-        guard ["thread/closed","turn/started","turn/completed","error","item/agentMessage/delta",
+        guard ["thread/closed","thread/tokenUsage/updated","turn/started","turn/completed","error","item/agentMessage/delta",
                "item/reasoning/summaryTextDelta","item/started","item/completed","turn/plan/updated"].contains(method) else {return nil}
         guard var params = message["params"] as? [String:Any] else {return message}
         if let item = params["item"] as? [String:Any] {params["item"] = publicItem(item)}

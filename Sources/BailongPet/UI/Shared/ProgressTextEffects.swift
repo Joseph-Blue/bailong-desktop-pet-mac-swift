@@ -5,9 +5,11 @@ import CoreText
 enum ProgressTextEffects {
     static var enabled:Bool {PetPreferences.shared.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion}
     static let speed:CGFloat = 28
+    static let marqueeDelay:CFTimeInterval = 0.5
     static func heading(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double,frame:String) -> NSAttributedString {
         let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:appearance))!
-        let value = NSMutableAttributedString(string:frame+" ",attributes:[.font:font,.foregroundColor:accent])
+        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(frame,font:font,color:accent))
+        value.append(NSAttributedString(string:" ",attributes:[.font:font]))
         value.append(title(text,font:font,appearance:appearance,elapsed:elapsed))
         return value
     }
@@ -33,22 +35,33 @@ enum ProgressTextEffects {
 }
 
 // 完整文本双图层循环，避免移动 NSTextField 时出现可见区域裁切空段。
+private final class ProgressLineLayer:CALayer {
+    var text:NSAttributedString = NSAttributedString()
+    var baseline:CGFloat = 0
+    override func draw(in context:CGContext) {
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x:0,y:baseline)
+        CTLineDraw(CTLineCreateWithAttributedString(text),context)
+    }
+}
+
 final class ProgressMarqueeView:NSView {
-    private let content = CALayer(), first = CATextLayer(), repeated = CATextLayer(), fade = CAGradientLayer()
+    private let content = CALayer(), first = ProgressLineLayer(), repeated = ProgressLineLayer(), fade = CAGradientLayer()
     private var signature = ""
     private var offset:CGFloat = 0, cycle:CGFloat = 0
     private var startedAt:CFTimeInterval?
+    private var delayRemaining = ProgressTextEffects.marqueeDelay
     private var active = false
     var stringValue = "" {didSet {
         guard oldValue != stringValue else {return}
-        pauseMotion(); offset = 0; signature = ""; needsLayout = true
+        pauseMotion(); offset = 0; delayRemaining = ProgressTextEffects.marqueeDelay; signature = ""; needsLayout = true
     }}
     var font:NSFont? {didSet {needsLayout = true}}
     var textColor:NSColor? {didSet {needsLayout = true}}
     override init(frame:NSRect) {
         super.init(frame:frame); wantsLayer = true
         layer?.masksToBounds = true; layer?.addSublayer(content)
-        for label in [first,repeated] {label.isWrapped = false; label.truncationMode = .none; label.alignmentMode = .left; content.addSublayer(label)}
+        for label in [first,repeated] {content.addSublayer(label)}
         fade.startPoint = CGPoint(x:0,y:0.5); fade.endPoint = CGPoint(x:1,y:0.5)
         setAccessibilityElement(true); setAccessibilityRole(.staticText)
         NotificationCenter.default.addObserver(self,selector:#selector(settingsChanged),name:AppAccent.didChange,object:nil)
@@ -64,7 +77,11 @@ final class ProgressMarqueeView:NSView {
     func start() {active = true; refresh()}
     func stop() {active = false; pauseMotion(); signature = ""}
     private func pauseMotion() {
-        if let startedAt,cycle > 0 {offset = (offset+CGFloat(CACurrentMediaTime()-startedAt)*ProgressTextEffects.speed).truncatingRemainder(dividingBy:cycle)}
+        if let startedAt,cycle > 0 {
+            let elapsed = CACurrentMediaTime()-startedAt
+            delayRemaining = max(0,-elapsed)
+            offset = (offset+CGFloat(max(0,elapsed))*ProgressTextEffects.speed).truncatingRemainder(dividingBy:cycle)
+        }
         startedAt = nil; content.removeAnimation(forKey:"progress-marquee")
     }
     func refresh() {
@@ -83,9 +100,12 @@ final class ProgressMarqueeView:NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         content.transform = CATransform3DIdentity
         content.frame = NSRect(x:0,y:0,width:max(bounds.width,cycle+width),height:bounds.height)
-        let h = ceil(font.ascender-font.descender+font.leading)+2
-        for label in [first,repeated] {label.string = text; label.contentsScale = scale}
-        first.frame = NSRect(x:0,y:(bounds.height-h)/2,width:width,height:h)
+        for label in [first,repeated] {
+            label.text = text; label.contentsScale = scale
+            label.baseline = InlineStatusLayout.lineBaseline(font:font,height:bounds.height)
+            label.setNeedsDisplay()
+        }
+        first.frame = NSRect(x:0,y:0,width:width,height:bounds.height)
         repeated.frame = first.frame.offsetBy(dx:cycle,dy:0); repeated.isHidden = !animate
         fade.frame = bounds; fade.colors = [NSColor.black.cgColor,NSColor.black.cgColor,NSColor.clear.cgColor]
         let fadeStart = max(0,1-16/max(1,Double(bounds.width)))
@@ -97,7 +117,7 @@ final class ProgressMarqueeView:NSView {
             animation.fromValue = 0; animation.toValue = -cycle
             animation.duration = Double(cycle/ProgressTextEffects.speed); animation.repeatCount = .infinity
             animation.timingFunction = CAMediaTimingFunction(name:.linear)
-            startedAt = CACurrentMediaTime()
+            startedAt = CACurrentMediaTime()+delayRemaining
             animation.beginTime = content.convertTime(startedAt!,from:nil)-Double(offset/ProgressTextEffects.speed)
             content.add(animation,forKey:"progress-marquee")
         }
