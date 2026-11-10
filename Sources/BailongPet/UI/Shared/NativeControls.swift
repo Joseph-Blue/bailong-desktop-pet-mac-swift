@@ -138,6 +138,9 @@ final class BubbleCloseButton: HoverIconButton {
 final class TopDownView: NSView {override var isFlipped: Bool {true}}
 class ContentCursorPanel:NSPanel {
     var tracksContentCursor = false
+    override func performKeyEquivalent(with event:NSEvent) -> Bool {
+        TextContextMenu.performKeyEquivalent(event,in:self) || super.performKeyEquivalent(with:event)
+    }
     override func sendEvent(_ event:NSEvent) {
         super.sendEvent(event)
         guard [.mouseMoved,.mouseEntered,.cursorUpdate,.scrollWheel,.leftMouseUp].contains(event.type) else {return}

@@ -4,11 +4,13 @@ import AppKit
 protocol TemplateContextMenu {}
 
 enum TextContextMenu {
+    private static let commands = [("剪切",#selector(NSText.cut(_:)),"x","scissors"),("拷贝",#selector(NSText.copy(_:)),"c","doc.on.doc"),("粘贴",#selector(NSText.paste(_:)),"v","doc.on.clipboard"),("全选",#selector(NSResponder.selectAll(_:)),"a","")]
     static func menu(for target: NSTextView) -> NSMenu {
         let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
-        for (title,action,symbol) in [("剪切",#selector(NSText.cut(_:)),"scissors"),("拷贝",#selector(NSText.copy(_:)),"doc.on.doc"),("粘贴",#selector(NSText.paste(_:)),"doc.on.clipboard"),("全选",#selector(NSResponder.selectAll(_:)),"")] {
+        for (title,action,key,symbol) in commands {
             if action == #selector(NSResponder.selectAll(_:)) {menu.addItem(.separator())}
-            let item = NSMenuItem(title:title,action:action,keyEquivalent:"")
+            let item = NSMenuItem(title:title,action:action,keyEquivalent:key)
+            item.keyEquivalentModifierMask = .command
             if !symbol.isEmpty {
                 item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
             }
@@ -16,6 +18,15 @@ enum TextContextMenu {
         }
         menu.showProvidedImages()
         return menu
+    }
+    static func performKeyEquivalent(_ event:NSEvent,in window:NSWindow) -> Bool {
+        guard window.isKeyWindow,
+              event.modifierFlags.intersection([.command,.control,.option,.shift]) == .command,
+              let text = window.firstResponder as? NSTextView,text.isSelectable || text.isEditable,
+              let command = commands.first(where:{$0.2 == event.charactersIgnoringModifiers?.lowercased()}) else {return false}
+        let item = NSMenuItem(title:command.0,action:command.1,keyEquivalent:command.2)
+        if text.validateUserInterfaceItem(item) {NSApp.sendAction(command.1,to:text,from:item)}
+        return true
     }
     private static var monitor: Any?
     static func install() {

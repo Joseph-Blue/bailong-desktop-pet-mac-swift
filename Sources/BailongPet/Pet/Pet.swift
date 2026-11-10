@@ -368,7 +368,9 @@ final class PetController: NSObject, NSMenuDelegate {
                 else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:nil,selection:.task) { play(clip,"working") }
                 else { idle() }
             } else {
-                let playback = max(0,elapsed).truncatingRemainder(dividingBy:duration)
+                // 落地是一次性动作；下一段准备期间停在末帧，不绕回下蹲的开头。
+                let playback = mode == "landing" ? min(max(0,elapsed),duration)
+                    : max(0,elapsed).truncatingRemainder(dividingBy:duration)
                 selectFrame(at: playback, animation: animation)
             }
         }

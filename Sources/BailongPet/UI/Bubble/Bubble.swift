@@ -208,6 +208,7 @@ final class Bubble {
         window = PetWindow(contentRect:NSRect(x:0,y:0,width:320,height:100),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = true
         window.level = .floating; window.hidesOnDeactivate = false
+        window.becomesKeyOnlyIfNeeded = true
         window.worksWhenModal = true; window.acceptsMouseMovedEvents = true
         window.tracksContentCursor = true
         window.collectionBehavior = [.canJoinAllSpaces,.ignoresCycle,.fullScreenNone]
@@ -459,7 +460,7 @@ final class Bubble {
         }
         else {window.styleMask.remove(.resizable)}
         previousQuestion.isHidden = true; skipQuestion.isHidden = true
-        window.allowsInput = approval != nil || (!questions.isEmpty && onQuestionSubmit != nil)
+        window.allowsInput = kind == "task" || approval != nil || (!questions.isEmpty && onQuestionSubmit != nil)
         approvalReject.isHidden = approval == nil; approvalAllow.isHidden = approval == nil
         approvalReject.keyEquivalent = ""
         approvalAllow.keyEquivalent = ""
@@ -855,7 +856,7 @@ final class Bubble {
         placementObstacles = avoiding
         let preferred:[BubblePlacement.Side]
         if kind == "progressToast" {preferred = [.above,.below,.right,.left]}
-        else if dock == "notch" {preferred = [.below,.right,.left,.above]}
+        else if dock == "notch" {preferred = [.left,.right,.below,.above]}
         else if dock == "left" {preferred = [.right,.above,.below,.left]}
         else if dock == "right" {preferred = [.left,.above,.below,.right]}
         else if kind.hasPrefix("quota") {preferred = [.right,.left,.above,.below]}
@@ -863,12 +864,16 @@ final class Bubble {
         else {preferred = [.above,.below,.right,.left]}
         let oldSide = placement?.1 == dock ? placementSide : nil
         let result = BubblePlacement.resolve(size:size,pet:rect,screen:screen.visibleFrame,preferred:preferred,previous:oldSide,avoiding:avoiding)
-        // 仅正文高度变化、原位置仍安全时保持位置；拖动、越界和遮挡时重新选边。
+        // 上下方始终重新锚定角色；侧向气泡仅在方向不变且原位置安全时保留原点。
         let current = CGRect(origin:motion.frame.origin,size:size)
-        let keepOrigin = placement.map {$0.0 == rect && $0.1 == dock && $0.2 == area} == true
+        let keepOrigin = (result.side == .left || result.side == .right) && placementSide == result.side
+            && placement.map {$0.0 == rect && $0.1 == dock && $0.2 == area} == true
             && area.contains(current) && !current.intersects(rect.insetBy(dx:-4,dy:-4))
             && !avoiding.contains {current.intersects($0.insetBy(dx:-4,dy:-4))}
-        if !keepOrigin {move(to:result.frame.origin); placementSide = result.side}
+        if !keepOrigin {
+            motion.keepsTopEdge = result.side == .below
+            move(to:result.frame.origin); placementSide = result.side
+        }
         placement = (rect,dock,area,size)
     }
     deinit { countdown.stop(); headingTimer?.invalidate(); quotaLoadingTimer?.invalidate(); elapsedTimer?.invalidate() }

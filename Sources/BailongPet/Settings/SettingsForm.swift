@@ -161,24 +161,28 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
-        if identifier == "animationQuality" {
+        var controlWidth = width
+        if identifier == "animationQuality" || identifier == "sendShortcut" {
             let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
+            let columns = options.map {$0.1.components(separatedBy:"\t")}
+            let tab:CGFloat = identifier == "sendShortcut"
+                ? (columns.map {(($0[0]) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)+24 : 64
             let paragraph = NSMutableParagraphStyle()
-            paragraph.tabStops = [NSTextTab(textAlignment:.left,location:64)]
+            paragraph.tabStops = [NSTextTab(textAlignment:.left,location:tab)]
             for item in menu.itemArray {
                 item.attributedTitle = NSAttributedString(string:item.title,attributes:[.font:font,.paragraphStyle:paragraph])
             }
+            if identifier == "sendShortcut" {
+                let trailingWidth = columns.map {(($0.last!) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
+                controlWidth = max(width,tab+trailingWidth+40)
+            }
         }
-        menu.widthAnchor.constraint(equalToConstant:width).isActive = true; menu.setAccessibilityLabel(title)
+        menu.widthAnchor.constraint(equalToConstant:controlWidth).isActive = true; menu.setAccessibilityLabel(title)
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
         return row(title,detail:detail,control:menu)
     }
     func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil,requires:[String] = []) -> NSView {
-        let width:CGFloat
-        if key == "sendShortcut" {
-            let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
-            width = max(260,(options.map {($0.1 as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)+40)
-        } else {width = ["singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190}
+        let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
         let result = popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail) { [weak self] value in
             self?.preferences.set(value,for:key)
             self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""

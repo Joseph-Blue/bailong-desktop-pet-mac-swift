@@ -4,9 +4,7 @@ enum MessageSettingsPage {
     static func render(form:SettingsForm,onPreview:@escaping (MessagePurpose) -> Void) {
         form.group("历史记录",[form.toggle("记录历史","recordHistory",detail:"关闭后停止新增和更新本机历史，已有记录保留。当前任务上下文暂留运行内存 (RAM)，重新开启不补写关闭期间的内容。Codex 原有记录不受此开关影响。")])
         form.group("气泡窗审批",[form.choice("气泡窗审批按钮顺序","approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")],detail:"仅改变桌宠气泡窗中的审批按钮位置，不改变原生审批对话框或 Codex 界面。红叉表示拒绝，绿对钩表示允许；键盘按键不触发审批。")])
-        form.group("输入快捷键",[
-            form.choice("发送与换行","sendShortcut",SendShortcut.options),
-            form.note(SendShortcut.settingsExplanation)])
+        form.group("输入快捷键",[form.choice("发送与换行","sendShortcut",SendShortcut.options)])
         form.group("任务气泡",[
             form.toggle("显示任务气泡","taskBubbles",detail:"控制任务消息、最终回复和思考与工具进展小气泡。审批、补充输入和失败提示仍会显示。"),
             form.toggle("任务消息","progressBubbles",detail:"显示执行中的助手消息。",requires:["taskBubbles"]),

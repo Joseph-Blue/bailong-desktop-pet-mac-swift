@@ -31,19 +31,14 @@ enum SendShortcut: String, CaseIterable {
     case commandReturn, returnToSend, controlOrCommandReturn
     var sendLabel: String {
         switch self {
-        case .commandReturn:return "⌘ Command + ↩ Enter"
-        case .returnToSend:return "↩ Enter"
-        case .controlOrCommandReturn:return "⌃ Control + ↩ Enter 或 ⌘ Command + ↩ Enter"
+        case .commandReturn:return "⌘↩"
+        case .returnToSend:return "↩"
+        case .controlOrCommandReturn:return "⌃↩ 或 ⌘↩"
         }
     }
-    var newlineLabel: String {self == .returnToSend ? "⇧ Shift + ↩ Enter，或 ⌥ Option + ↩ Enter" : "↩ Enter"}
+    var newlineLabel: String {self == .returnToSend ? "⇧↩ 或 ⌥↩" : "↩"}
     var hint: String {"发送：\(sendLabel)\n换行：\(newlineLabel)"}
-    static var options:[(String,String)] {allCases.map {($0.rawValue,$0.sendLabel+" 发送")}}
-    static var settingsExplanation:String {
-        allCases.enumerated().map {index,value in
-            "\(index == 0 ? "默认" : "备选 \(index)")：\(value.sendLabel) 发送；\(value.newlineLabel) 换行。"
-        }.joined(separator:"\n")+"\n临时对话、历史对话和问卷输入同步生效，中文输入法选词时不会发送。"
-    }
+    static var options:[(String,String)] {allCases.map {($0.rawValue,"发送：\($0.sendLabel)\t换行：\($0.newlineLabel)")}}
     func action(modifiers: NSEvent.ModifierFlags) -> Bool? {
         let flags = modifiers.intersection([.command,.shift,.option,.control])
         switch self {
