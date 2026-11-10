@@ -120,9 +120,9 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         copy = ActionButton("拷贝报告") {}
         copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil); copy.imagePosition = .imageLeading
         CopyFeedback.attach(to:copy) { [weak self] in self?.report.string }
-        let issue = ActionButton("反馈 Issue…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
+        let issue = ActionButton("反馈问题…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
         issue.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil); issue.imagePosition = .imageLeading
-        issue.hoverHelp = "打开项目仓库的新建 Issue 页面"
+        issue.hoverHelp = "打开 GitHub 问题反馈页"
         retry = ActionButton("") { [weak self] in self?.retryRecovery() }; retry.keepsAccentWhenInactive = true; retry.emphasize()
         let quit = SettingsFooterButton(title:"退出程序",target:self,action:#selector(exitApplication))
         quit.hasDestructiveAction = true; quit.isBordered = false

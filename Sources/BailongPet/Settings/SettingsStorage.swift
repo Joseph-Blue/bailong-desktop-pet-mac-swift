@@ -9,7 +9,7 @@ enum SettingsStorage {
     static let defaults:UserDefaults = {
         let result = UserDefaults(suiteName:domain)!
         if result.object(forKey:schemaKey) == nil {
-            let keys = Array(PetPreferences.defaults.keys)+["x","y","petChatModel","petChatEffort"]
+            let keys = Array(PetPreferences.defaults.keys)+["x","y","petChatModel","petChatEffort","favorites"]
             var values = [String:Any]()
             for key in keys {
                 if let value = UserDefaults.standard.object(forKey:key) {values[key] = value}
@@ -18,7 +18,7 @@ enum SettingsStorage {
             result.setPersistentDomain(values,forName:domain)
         }
         if result.integer(forKey:schemaKey) > schemaVersion {
-            compatibilityNotice = "原设置由更新版本保存，已保留。本次使用独立恢复设置，可继续使用桌宠。"
+            compatibilityNotice = "这份设置来自更高版本，当前版本无法读取。原设置已保留，暂时使用另一份设置。"
             let recovery = UserDefaults(suiteName:domain+".recovery")!
             return recovery
         }

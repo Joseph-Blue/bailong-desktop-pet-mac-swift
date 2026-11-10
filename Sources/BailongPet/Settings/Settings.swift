@@ -272,7 +272,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             form.group("动画", [form.choice("画质", "animationQuality", [("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")]),
                 form.choice("素材帧率上限", "animationFPSLimit", [("full", "满帧 (≥ 24 FPS)"), ("20", "20 FPS"), ("15", "15 FPS")]),
                 form.bufferFrames(),
-                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "不推荐开启。播放前提前加载完整动画，但会大幅增加运行内存 (RAM) 占用。")])
+                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "播放前加载整段动画，会占用更多运行内存 (RAM)。")])
             form.group("应用统计", [form.toggle("开启应用性能信息统计浮窗", "showDiagnostics")])
         }
         scroll.contentView.scroll(to:.zero)
@@ -287,11 +287,11 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         form.group("启动",[
             form.row("登录时启动",detail:loginText,control:ActionButton(login == .enabled ? "停用…" : login == .requiresApproval ? "打开登录项…" : "启用…") { [weak self] in self?.configureLogin() }),
             form.row("随 Codex 启动",detail:FollowLauncher.statusText,control:ActionButton("配置…") { [weak self] in FollowLauncher.configure(); self?.render() }),
-            form.toggle("启动后显示桌宠","showOnLaunch"),form.toggle("记住上次位置","rememberPosition")])
+            form.toggle("记住上次位置","rememberPosition")])
         form.group("权限与系统设置",[
-            form.row("访达自动化",detail:"恢复目标文件所在的最小化访达窗口，并选中文件。",control:FinderPermissionControl(frame:.zero)),
-            form.row("文件与文件夹",detail:"访问文稿、桌面、下载等受保护目录时，由系统按需请求。按目录管理，无统一授权状态。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
-            form.row("登录项与后台运行",detail:"管理登录启动及随 Codex 启动；启用状态见上方“启动”。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()}),
+            form.row("访达自动化",detail:"点击文件链接时，在访达中选中文件；对应窗口已最小化时会恢复显示。",control:FinderPermissionControl(frame:.zero)),
+            form.row("文件与文件夹",detail:"首次访问文稿、桌面或下载等目录时，系统会询问是否允许。可在系统设置中按目录调整。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
+            form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()}),
             form.note("本应用不要求辅助功能、输入监控、屏幕录制、摄像头、麦克风或完全磁盘访问权限。")])
         var displays = [("","跟随当前屏幕")] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
         let saved = preferences.string("preferredDisplay")
@@ -299,7 +299,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         form.group("桌面",[form.toggle("全屏时自动隐藏","autoFullscreen"),form.choice("所在显示器","preferredDisplay",displays)])
     }
     private func configureLogin() {
-        guard Bundle.main.bundleURL.pathExtension == "app" else {showError("请从应用包设置登录启动",PetFailure(message:"开发脚本不会注册登录项。请使用构建后的 .app。")); return}
+        guard Bundle.main.bundleURL.pathExtension == "app" else {showError("请使用构建后的应用设置登录启动",PetFailure(message:"请打开构建后的 .app，再启用登录时启动。")); return}
         do {
             switch SMAppService.mainApp.status {
             case .enabled: try LoginLauncher.setEnabled(false)
@@ -335,7 +335,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                     do {try self.onReloadHistory?(); self.render()} catch {showError("历史仍为只读",error)}
                 })])
         }
-        form.group("设置文件",[form.row("导出设置",detail:"导出应用设置，不含聊天记录和模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),form.row("导入设置",detail:"导入前检查全部字段；登录启动项不随设置文件改变。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })])
+        form.group("设置文件",[form.row("导出设置",detail:"导出应用设置，不含聊天记录和模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),form.row("导入设置",detail:"导入应用设置，不改变系统登录项。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })])
         let data = label("正在统计…"), work = label("正在统计…"), cache = label("正在统计…")
         let total = label("正在统计本应用磁盘存储…")
         total.font = .systemFont(ofSize:11); total.textColor = .secondaryLabelColor
@@ -357,7 +357,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 guard let self, self.storageGeneration == generation, self.selected == .advanced else {return}
                 switch result {
                 case .success(let usage):
-                    total.stringValue = "合计 "+ByteCountFormatter.string(fromByteCount:usage.total,countStyle:.file)+" · 以下占比以三项合计为基准"
+                    total.stringValue = "合计 "+ByteCountFormatter.string(fromByteCount:usage.total,countStyle:.file)+" · 占比按以下三项合计计算"
                     data.stringValue = usage.description(usage.data); work.stringValue = usage.description(usage.workspace); cache.stringValue = usage.description(usage.cache)
                 case .failure(let error):
                     total.stringValue = "统计失败："+error.localizedDescription

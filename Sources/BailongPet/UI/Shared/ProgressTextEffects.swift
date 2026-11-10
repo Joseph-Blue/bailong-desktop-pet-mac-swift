@@ -125,3 +125,29 @@ final class ProgressMarqueeView:NSView {
     }
     deinit {NSWorkspace.shared.notificationCenter.removeObserver(self)}
 }
+
+// 连接状态共用语义色；呼吸只作用于图标，不重建正文或增加刷新计时器。
+enum TaskActivityAppearance {
+    static func color(_ activity:TaskActivity?) -> NSColor {
+        switch activity?.statusSymbol {
+        case "wifi.exclamationmark":return .systemOrange
+        case "wifi":return .systemGreen
+        case "wifi.slash":return .systemRed
+        default:return activity?.kind == .status ? .systemRed : .secondaryLabelColor
+        }
+    }
+    static func apply(_ activity:TaskActivity?,icon:NSImageView,text:ProgressMarqueeView,visible:Bool) {
+        let color = color(activity)
+        icon.contentTintColor = color; text.textColor = color
+        if visible && activity?.statusSymbol == "wifi.exclamationmark" && ProgressTextEffects.enabled {
+            icon.wantsLayer = true
+            if icon.layer?.animation(forKey:"connectionBreathing") == nil {
+                let pulse = CABasicAnimation(keyPath:"opacity")
+                pulse.fromValue = 0.4; pulse.toValue = 1; pulse.duration = 1
+                pulse.autoreverses = true; pulse.repeatCount = .infinity
+                icon.layer?.add(pulse,forKey:"connectionBreathing")
+            }
+        } else {stop(icon)}
+    }
+    static func stop(_ icon:NSImageView) {icon.layer?.removeAnimation(forKey:"connectionBreathing")}
+}

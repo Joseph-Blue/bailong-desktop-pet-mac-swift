@@ -152,7 +152,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let center = CGPoint(x: size/2, y: size/2)
         let rotation = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: (dock == "left" ? 1 : -1) * .pi/4 * dockProgress).translatedBy(x: -center.x, y: -center.y)
         let reference = CGRect(x: baseBounds.minX * size/512, y: baseBounds.minY * size/512, width: baseBounds.width * size/512, height: baseBounds.height * size/512)
-        let bounds = reference.applying(rotation), exposure = 1 - 0.45 * dockProgress
+        let bounds = reference.applying(rotation), exposure = 1 - (1-preferences.number("sideExposurePercent")/100) * dockProgress
         let dx = dock == "left" ? exposure * bounds.width - bounds.maxX : size - exposure * bounds.width - bounds.minX
         return rotation.concatenating(CGAffineTransform(translationX: dx * dockProgress, y: 0))
     }
@@ -179,7 +179,7 @@ final class PetController: NSObject, NSMenuDelegate {
         window.setFrameOrigin(CGPoint(x:remember ? defaults.object(forKey:"x") as? Double ?? initial.x : initial.x,
                                       y:remember ? defaults.object(forKey:"y") as? Double ?? initial.y : initial.y))
         move(constrained(position, screen: target)); activityOrigin = position
-        manualHidden = !preferences.bool("showOnLaunch"); playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
+        playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
         bubble.preferences = preferences
         sound = NSSound(contentsOf: Paths.resources.appendingPathComponent("sounds/click.wav"), byReference: true)
         status.button?.image = AppIcons.petTemplate
@@ -439,6 +439,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func snap() -> Bool {
         guard !composerVisible else { return false }
         if snapToNotch(on:screen) {return true}
+        guard preferences.bool("sideDockEnabled") else {return false}
         let a = area(screen), p = position, left = abs(p.x-a.minX), right = abs(a.maxX-p.x-size)
         guard min(left,right) <= 24 else { return false }
         dockRestore = p; dock = left <= right ? "left" : "right"
@@ -460,7 +461,7 @@ final class PetController: NSObject, NSMenuDelegate {
             : preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate")
         say(title,kind:"interaction",personalizeTitle:false,taskOverview:showsOverview)
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TranscriptActions? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -479,7 +480,7 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
                 resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter),select:selectCard)
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter,failure:failure),select:selectCard)
         }
         placeBubble()
     }
@@ -491,11 +492,18 @@ final class PetController: NSObject, NSMenuDelegate {
         let local = stableLocalBounds.applying(transform).intersection(view.bounds)
         return local.isNull ? window.frame : window.convertToScreen(view.convert(local,to:nil))
     }
-    func showProgressToast(_ activity:TaskActivity?,key:String,timing:TaskTiming) {
+    func showProgressToast(_ activity:TaskActivity?,key:String,timing:TaskTiming,thread:String? = nil) {
         guard toastActivities[key] != activity else {return}
         toastActivities[key] = activity
         guard let activity,activity.kind != .reply else {
             if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}; return
+        }
+        if activity.kind == .status {
+            if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
+            guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),preferences.allows(.progress) else {return}
+            if bubble.refreshActivity(timing:timing) {return}
+            say(preferences.statusLine("taskProgressTemplate"),kind:"task",thread:thread,purpose:.progress,personalizeTitle:false,timing:timing,messageID:"connection-status")
+            return
         }
         guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),
               preferences.bool("progressToastEnabled"),activity.visible,preferences.allows(.progress) else {return}
@@ -686,6 +694,11 @@ final class PetController: NSObject, NSMenuDelegate {
             if dock == "notch" {view.needsDisplay = true; placeBubble()}
             if keys.count == 1 {return}
         }
+        if keys.contains("sideExposurePercent") {
+            if dock == "left" || dock == "right" {view.needsDisplay = true; placeBubble()}
+            if keys.count == 1 {return}
+        }
+        if keys.contains("sideDockEnabled"),!preferences.bool("sideDockEnabled"),dock == "left" || dock == "right" {undock()}
         if keys.contains("notchDockEnabled"),!preferences.bool("notchDockEnabled"),dock == "notch" {undock()}
         if keys.contains("petShadow") {
             window.hasShadow = preferences.bool("petShadow")

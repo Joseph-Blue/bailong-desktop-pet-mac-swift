@@ -109,7 +109,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         NSLayoutConstraint.activate([
             leading.leadingAnchor.constraint(equalTo:row.leadingAnchor),
             leading.trailingAnchor.constraint(equalTo:control.leadingAnchor,constant:-24),
-            leading.centerYAnchor.constraint(equalTo:row.centerYAnchor),
+            leading.centerYAnchor.constraint(equalTo:(control as? SettingsSliderControl)?.slider.centerYAnchor ?? row.centerYAnchor),
             leading.topAnchor.constraint(greaterThanOrEqualTo:row.topAnchor),
             leading.bottomAnchor.constraint(lessThanOrEqualTo:row.bottomAnchor),
             control.trailingAnchor.constraint(equalTo:row.trailingAnchor),
@@ -189,12 +189,13 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         return dependent(result,requires:requires)
     }
-    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,changed:(() -> Void)? = nil) -> NSView {
+    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],images:[String:NSImage] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,changed:(() -> Void)? = nil) -> NSView {
         let control = NSSegmentedControl(labels:options.map(\.1),trackingMode:.selectOne,target:nil,action:nil)
         control.selectedSegment = options.firstIndex {$0.0 == (value ?? preferences.string(key))} ?? 0
         control.isEnabled = enabled; control.identifier = .init(key); control.setAccessibilityLabel(title)
         for (index,option) in options.enumerated() {
-            if let symbol = symbols[option.0] {control.setImage(NSImage(systemSymbolName:symbol,accessibilityDescription:nil),forSegment:index)}
+            let image = images[option.0] ?? symbols[option.0].flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)}
+            if let image {control.setImage(image,forSegment:index)}
         }
         attach(control) { [weak self] sender in
             let index = (sender as! NSSegmentedControl).selectedSegment
@@ -302,24 +303,39 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
         return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token) { [weak self] value in self?.preferences.set(value,for:key) }
     }
-    func slider(_ title: String, _ key: String, range: ClosedRange<Double>, step: Double = 1, suffix: String, detail: String? = nil, requires:[String] = []) -> NSView {
-        let slider = NSSlider(value:preferences.number(key),minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
-        slider.isContinuous = true; slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
-        if key == "petPercent" || key == "bubblePercent" {slider.numberOfTickMarks = Int((range.upperBound-range.lowerBound)/25)+1; slider.tickMarkPosition = .below}
-        slider.setAccessibilityLabel(title)
-        let number = NSTextField(string:""); number.alignment = .right; number.widthAnchor.constraint(equalToConstant:54).isActive = true; number.setAccessibilityLabel(title+suffix); (number.cell as? NSTextFieldCell)?.sendsActionOnEndEditing = true
-        let formatter = NumberFormatter(); formatter.minimum = NSNumber(value:range.lowerBound); formatter.maximum = NSNumber(value:range.upperBound); formatter.maximumFractionDigits = step < 1 ? 2 : 0; formatter.usesGroupingSeparator = false; number.formatter = formatter
-        func format(_ value: Double) {number.doubleValue = value}
-        format(slider.doubleValue)
-        attach(slider) { [weak self] sender in
-            let value = ((sender.doubleValue/step).rounded()*step); format(value); self?.preferences.set(value,for:key)
-        }
-        attach(number) { [weak self] sender in let value = max(range.lowerBound,min(range.upperBound,(sender.doubleValue/step).rounded()*step)); slider.doubleValue = value; format(value); self?.preferences.set(value,for:key) }
-        let unit = label(suffix); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
-        unit.widthAnchor.constraint(equalToConstant:22).isActive = true
-        let controls = NSStackView(views:[number,unit,slider]); controls.spacing = 8; controls.alignment = .centerY
-        controls.widthAnchor.constraint(equalToConstant:272).isActive = true
+    func slider(_ title:String,_ key:String,range:ClosedRange<Double>,step:Double = 1,suffix:String,detail:String? = nil,requires:[String] = []) -> NSView {
+        let controls = numericSlider(title,value:preferences.number(key),range:range,step:step,suffix:suffix) { [weak self] value in self?.preferences.set(value,for:key) }
         return dependent(row(title,detail:detail,control:controls),requires:requires)
+    }
+    func animationWeight(_ clip:Clip) -> NSView {
+        let minimum = clip.id == "idle" ? 1.0 : 0.0
+        return numericSlider(clip.title+"随机播放权重",value:preferences.weight(clip.id),range:minimum...12,step:1,suffix:"❤️",limitSuffix:"") { [weak self] value in
+            self?.preferences.setWeight(Int(value),for:clip.id)
+        }
+    }
+    private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,limitSuffix:String? = nil,color:NSColor? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
+        let slider = NSSlider(value:value,minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
+        slider.isContinuous = true; slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
+        slider.setAccessibilityLabel(title)
+        let number = NSTextField(string:""); number.alignment = .right; number.widthAnchor.constraint(equalToConstant:54).isActive = true
+        number.setAccessibilityLabel(title); (number.cell as? NSTextFieldCell)?.sendsActionOnEndEditing = true
+        let formatter = NumberFormatter(); formatter.minimum = NSNumber(value:range.lowerBound); formatter.maximum = NSNumber(value:range.upperBound)
+        formatter.maximumFractionDigits = step < 1 ? 2 : 0; formatter.usesGroupingSeparator = false; number.formatter = formatter
+        number.doubleValue = slider.doubleValue
+        let commit:(Double) -> Void = { value in
+            let value = max(range.lowerBound,min(range.upperBound,(value/step).rounded()*step))
+            number.doubleValue = value; slider.doubleValue = value; changed(value)
+        }
+        attach(slider) {commit($0.doubleValue)}; attach(number) {commit($0.doubleValue)}
+        let unit = label(suffix); unit.font = .systemFont(ofSize:11); unit.textColor = color ?? .secondaryLabelColor
+        if let color {number.textColor = color}
+        unit.widthAnchor.constraint(equalToConstant:22).isActive = true
+        let unitText = limitSuffix ?? suffix
+        let ending = unitText.isEmpty ? "" : " "+unitText
+        let limits:(String,String)? = suffix == "%" && range.lowerBound == 0 && range.upperBound == 100 ? nil :
+            (formatter.string(from:NSNumber(value:range.lowerBound))!+ending,formatter.string(from:NSNumber(value:range.upperBound))!+ending)
+        let steps = Int(((range.upperBound-range.lowerBound)/step).rounded())
+        return SettingsSliderControl(number:number,unit:unit,slider:slider,limits:limits,ticks:steps <= 12 ? steps+1 : 7)
     }
     func bufferFrames() -> NSView {
         let slider = NSSlider(value: Double(preferences.animationBufferFrames), minValue: 6, maxValue: 240, target: nil, action: nil)
@@ -327,16 +343,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         slider.numberOfTickMarks = 7; slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false
         slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
         slider.setAccessibilityLabel("动画缓冲帧数")
-        let minimum = label("6 帧"), maximum = label("240 帧")
-        for label in [minimum, maximum] { label.font = .systemFont(ofSize: 10); label.textColor = .secondaryLabelColor }
-        let limits = NSView()
-        for label in [minimum, maximum] { limits.addSubview(label); label.translatesAutoresizingMaskIntoConstraints = false }
-        NSLayoutConstraint.activate([
-            limits.widthAnchor.constraint(equalToConstant: 180), limits.heightAnchor.constraint(equalToConstant: 14),
-            minimum.leadingAnchor.constraint(equalTo: limits.leadingAnchor), minimum.centerYAnchor.constraint(equalTo: limits.centerYAnchor),
-            maximum.trailingAnchor.constraint(equalTo: limits.trailingAnchor), maximum.centerYAnchor.constraint(equalTo: limits.centerYAnchor)
-        ])
-        let track = NSStackView(views: [slider, limits]); track.orientation = .vertical; track.spacing = 0
         let number = NSTextField(string: String(preferences.animationBufferFrames))
         number.alignment = .right; number.widthAnchor.constraint(equalToConstant: 54).isActive = true
         number.setAccessibilityLabel("输入动画缓冲帧数"); number.delegate = self
@@ -353,10 +359,8 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         attach(slider) { sender in commit(String(Int(sender.doubleValue.rounded()))) }
         let unit = label("帧"); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
         unit.widthAnchor.constraint(equalToConstant:22).isActive = true
-        let controls = NSStackView(views: [number, unit, track]); controls.orientation = .horizontal
-        controls.widthAnchor.constraint(equalToConstant:272).isActive = true
-        controls.alignment = .centerY; controls.spacing = 8
-        let result = row("动画缓冲帧数", detail:"动画播放时，同时缓冲后续帧。帧数越少越省运行内存 (RAM)，但解码延迟时更容易停顿。", control: controls)
+        let controls = SettingsSliderControl(number:number,unit:unit,slider:slider,limits:("6 帧","240 帧"),ticks:7)
+        let result = row("动画缓冲帧数", detail:"缓冲越少，运行内存 (RAM) 占用越低；缓冲不足时动画会停顿。", control: controls)
         bufferControls = [slider, number]; bufferRow = result; updateBufferAvailability()
         return result
     }

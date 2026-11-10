@@ -6,6 +6,7 @@ struct BubbleTaskSummary: Equatable {
     let end:Date?
     var turnID:String? = nil
     var activity:TaskActivity? = nil
+    var connectionFailed = false
     var activityLine:String? {active && activity?.visible == true ? activity?.line : nil}
     var active:Bool {activeStatuses.contains(status)}
 }
@@ -112,13 +113,13 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         activity.stringValue = task.activityLine ?? ""; activity.isHidden = task.activityLine == nil
         activityIcon.isHidden = activity.isHidden
         activityIcon.image = task.activity.flatMap {NSImage(systemSymbolName:$0.symbolName,accessibilityDescription:$0.title)}
-        let symbol = task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
+        let symbol = task.connectionFailed ? "wifi.slash" : task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
         stateIcon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
         hoverHelp = [name.stringValue,task.activity?.text,"在 Codex 中打开"].compactMap {$0}.joined(separator:"\n")
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
     }
-    func stopMotion() {activity.stop(); restoreTitle()}
+    func stopMotion() {activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle()}
     private func restoreTitle() {
         name.attributedStringValue = NSAttributedString(string:name.stringValue,attributes:[.font:name.font!,.foregroundColor:NSColor.labelColor])
     }
@@ -151,13 +152,14 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let hasTime = task.active || task.end != nil
         elapsed.isHidden = !hasTime; watch.isHidden = !hasTime
         elapsed.stringValue = task.end.map {TaskTiming.elapsed(start:task.start,end:$0)} ?? (task.active ? TaskTiming.elapsed(start:task.start) : "")
-        let color:NSColor = task.active ? .secondaryLabelColor : task.status == "completed" ? .systemGreen : task.status == "failed" ? .systemYellow : .systemRed
+        let color:NSColor = task.active ? .secondaryLabelColor : task.connectionFailed ? .systemRed : task.status == "completed" ? .systemGreen : task.status == "failed" ? .systemYellow : .systemRed
         elapsed.textColor = color; watch.contentTintColor = color; stateIcon.contentTintColor = color
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
         let iconSide = 12*scale, progressX = 22*scale
         activityIcon.frame = NSRect(x:progressX,y:32*scale+(20*scale-iconSide)/2,width:iconSide,height:iconSide)
         activity.frame = NSRect(x:progressX+iconSide+6*scale,y:32*scale,width:max(0,bounds.width-progressX-iconSide-10*scale),height:20*scale)
         InlineStatusLayout.align(activityIcon,toLineIn:activity,font:activity.font!,side:iconSide)
+        TaskActivityAppearance.apply(task.activity,icon:activityIcon,text:activity,visible:window?.isVisible == true && !isHiddenOrHasHiddenAncestor)
         activity.start()
         jump.frame = NSRect(x:bounds.width-15*scale,y:(h-11*scale)/2,width:11*scale,height:11*scale)
         let watchX = trailing-width-16*scale
@@ -166,7 +168,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let nameHeight = name.fittingSize.height
         name.frame = NSRect(x:22*scale,y:(h-nameHeight)/2,width:max(0,(hasTime ? watchX-8*scale : trailing)-22*scale),height:nameHeight)
         let baseline = InlineStatusLayout.baseline(of:name)
-        InlineStatusLayout.align(spinner,to:baseline)
+        InlineStatusLayout.alignBraille(spinner,to:baseline)
         InlineStatusLayout.align(stateIcon,to:name,side:14*scale)
         InlineStatusLayout.align(jump,to:name,side:11*scale)
         elapsed.frame = NSRect(x:trailing-width,y:0,width:width,height:elapsed.fittingSize.height)

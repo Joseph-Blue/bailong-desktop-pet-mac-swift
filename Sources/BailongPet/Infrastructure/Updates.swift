@@ -207,69 +207,92 @@ final class UpdateChecker: NSObject {
 }
 
 final class UpdateWindow: NSObject, NSWindowDelegate {
-    private static var current: UpdateWindow?
-    private let window = NSWindow(contentRect:NSRect(x:0,y:0,width:580,height:400),styleMask:[.titled,.closable,.miniaturizable],backing:.buffered,defer:false)
+    private static var current:UpdateWindow?
+    private let window = NSWindow(contentRect:NSRect(x:0,y:0,width:600,height:360),styleMask:[.titled,.closable,.miniaturizable],backing:.buffered,defer:false)
+    private let stack = NSStackView()
     private let status = NSTextField(wrappingLabelWithString:"")
     private let explanation = NSTextField(wrappingLabelWithString:"")
-    private let versions = NSTextField(labelWithString:"")
+    private let versions = NSTextField(wrappingLabelWithString:"")
     private let timestamp = NSTextField(labelWithString:"")
-    private let notes = AppTextView(frame:NSRect(x:0,y:0,width:540,height:220))
+    private let heading = NSStackView()
+    private let spinner = NSProgressIndicator()
+    private let notes = AppTextView(frame:NSRect(x:0,y:0,width:552,height:220))
     private let notesScroll = GutterScrollView()
-    private var notesHeight: NSLayoutConstraint!
-    private let details = AppTextView(frame:NSRect(x:0,y:0,width:540,height:110))
+    private let notesSection = NSStackView()
+    private let details = AppTextView(frame:NSRect(x:0,y:0,width:552,height:110))
     private let detailsScroll = GutterScrollView()
-    private var detailsHeight: NSLayoutConstraint!
-    private let detailsRow = NSStackView()
-    private let disclosure = ActionButton("▸ 技术详情") {}
+    private let detailsSection = NSStackView()
+    private let disclosure = NSButton()
     private let copyDetails = ActionButton("拷贝详情") {}
     private var detailsExpanded = false
-    private let spinner = NSProgressIndicator()
+    private var displayedFailure:String?
     private let retry = ActionButton("重新检查") {UpdateChecker.shared.check()}
-    private let download = ActionButton("打开 GitHub 发布页") {}
+    private let download = ActionButton("查看发布页") {}
     private let close = ActionButton("关闭") {}
-    private let disableAutomatic = ActionButton("😡 不许打扰我，禁用自动更新检查") {}
+    private let disableAutomatic = ActionButton("禁用自动更新检查") {}
     private let buttons = NSStackView()
     private let spacer = NSView()
-    private var failedLayout: Bool?
     private var automaticPresentation = false
-    private var automaticWindowWidth: CGFloat = 580
-    static func show(check: Bool = true, activate: Bool = true, automaticallyPresented: Bool = false) {
+
+    static func show(check:Bool = true,activate:Bool = true,automaticallyPresented:Bool = false) {
         if current == nil {current = UpdateWindow()}
         guard let current else {return}
         current.automaticPresentation = automaticallyPresented
         if check {UpdateChecker.shared.check()}
         current.refresh()
         InterfaceWindows.shared.opened(current.window)
+        if !current.window.isVisible && !current.window.isMiniaturized {current.window.center()}
         if activate && current.window.isMiniaturized {current.window.deminiaturize(nil)}
-        if activate {if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; current.window.makeKeyAndOrderFront(nil)}
-        else if !current.window.isVisible && !current.window.isMiniaturized {current.window.orderFront(nil)}
+        if activate {
+            if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}
+            current.window.makeKeyAndOrderFront(nil)
+        } else if !current.window.isVisible && !current.window.isMiniaturized {current.window.orderFront(nil)}
     }
     override private init() {
         super.init()
         window.title = "检查更新"; window.isReleasedWhenClosed = false; window.delegate = self
-        window.collectionBehavior = [.fullScreenNone]; window.standardWindowButton(.zoomButton)?.isEnabled = false
+        window.collectionBehavior = [.fullScreenNone]
         let root = NSView(); window.contentView = root
-        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
-        status.font = .systemFont(ofSize:18,weight:.semibold)
+        stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16; stack.distribution = .fill; stack.detachesHiddenViews = true
+        status.font = .systemFont(ofSize:17,weight:.semibold)
         explanation.font = .systemFont(ofSize:13); explanation.textColor = .secondaryLabelColor
         versions.font = .systemFont(ofSize:12); timestamp.font = .systemFont(ofSize:11); timestamp.textColor = .secondaryLabelColor
+        for field in [status,explanation,versions,timestamp] {field.isSelectable = true}
         spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
-        let heading = NSStackView(views:[spinner,status]); heading.spacing = 8
+        spinner.widthAnchor.constraint(equalToConstant:16).isActive = true
+        spinner.heightAnchor.constraint(equalToConstant:16).isActive = true
+        spinner.setAccessibilityLabel("正在检查更新")
+        heading.alignment = .centerY; heading.spacing = 8; heading.distribution = .fill; heading.detachesHiddenViews = true
+        heading.addArrangedSubview(spinner); heading.addArrangedSubview(status)
+        let metadata = NSStackView(views:[versions,timestamp])
+        metadata.orientation = .vertical; metadata.distribution = .fill; metadata.alignment = .leading; metadata.spacing = 4
         for (scroll,text) in [(notesScroll,notes),(detailsScroll,details)] {
-            scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
+            scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false; scroll.borderType = .noBorder
             text.isEditable = false; text.isSelectable = true; text.drawsBackground = false
             text.minSize = .zero; text.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
             text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = [.width]
-            text.textContainer?.widthTracksTextView = true
-            text.textContainer?.containerSize = NSSize(width:540,height:CGFloat.greatestFiniteMagnitude)
-            text.textContainerInset = NSSize(width:4,height:4); scroll.documentView = text
+            text.textContainer?.widthTracksTextView = true; text.textContainer?.lineFragmentPadding = 0; text.textContainerInset = NSSize(width:0,height:4)
+            scroll.documentView = text
         }
+        notesScroll.heightAnchor.constraint(equalToConstant:220).isActive = true
+        detailsScroll.heightAnchor.constraint(equalToConstant:110).isActive = true
         details.font = .monospacedSystemFont(ofSize:11,weight:.regular)
-        detailsRow.spacing = 10
-        for view in [disclosure,NSView(),copyDetails] {detailsRow.addArrangedSubview(view)}
-        disclosure.callback = { [weak self] in guard let self else {return}; self.detailsExpanded.toggle(); self.refresh() }
+        let notesTitle = NSTextField(labelWithString:"更新说明"); notesTitle.font = .systemFont(ofSize:13,weight:.semibold)
+        notesSection.orientation = .vertical; notesSection.distribution = .fill; notesSection.alignment = .leading; notesSection.spacing = 8
+        notesSection.addArrangedSubview(notesTitle); notesSection.addArrangedSubview(notesScroll)
+        notesScroll.widthAnchor.constraint(equalTo:notesSection.widthAnchor).isActive = true
+        disclosure.setButtonType(.pushOnPushOff); disclosure.bezelStyle = .disclosure
+        disclosure.title = ""; disclosure.target = self; disclosure.action = #selector(toggleDetails)
+        disclosure.setAccessibilityLabel("显示技术详情")
+        let detailTitle = NSTextField(labelWithString:"技术详情"); detailTitle.font = .systemFont(ofSize:12)
+        let detailsRow = NSStackView(views:[disclosure,detailTitle,NSView(),copyDetails])
+        detailsRow.alignment = .centerY; detailsRow.distribution = .fill; detailsRow.spacing = 6; detailsRow.detachesHiddenViews = true
+        detailsSection.orientation = .vertical; detailsSection.distribution = .fill; detailsSection.alignment = .leading; detailsSection.spacing = 8; detailsSection.detachesHiddenViews = true
+        detailsSection.addArrangedSubview(detailsRow); detailsSection.addArrangedSubview(detailsScroll)
+        for view in [detailsRow,detailsScroll] {view.widthAnchor.constraint(equalTo:detailsSection.widthAnchor).isActive = true}
         CopyFeedback.attach(to:copyDetails) {UpdateChecker.shared.technicalDetails}
         close.callback = { [weak self] in self?.window.performClose(nil) }
+        close.keyEquivalent = "\u{1b}"
         download.callback = {
             let url = UpdateChecker.shared.releaseURL ?? UpdateChecker.releases
             if !NSWorkspace.shared.open(url) {showError("无法打开发布页",PetFailure(message:url.absoluteString))}
@@ -278,63 +301,55 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
             PetPreferences.shared.set(false,for:"automaticallyCheckUpdates")
             self?.window.performClose(nil)
         }
-        buttons.spacing = 10
-        automaticWindowWidth = max(580,[retry,disableAutomatic,close,download].reduce(CGFloat(80)) {$0 + $1.fittingSize.width})
-        for view in [heading,explanation,versions,timestamp,notesScroll,detailsRow,detailsScroll,buttons] {stack.addArrangedSubview(view)}
+        buttons.spacing = 8; buttons.distribution = .fill; buttons.alignment = .centerY; buttons.detachesHiddenViews = true
+        spacer.setContentHuggingPriority(.defaultLow,for:.horizontal)
+        for view in [heading,explanation,metadata,notesSection,detailsSection,buttons] {stack.addArrangedSubview(view)}
         root.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:20), stack.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-20),
-            stack.topAnchor.constraint(equalTo:root.topAnchor,constant:20), stack.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-16)
+            stack.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24),
+            stack.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24),
+            stack.topAnchor.constraint(equalTo:root.topAnchor,constant:24)
         ])
-        for view in [heading,explanation,notesScroll,detailsRow,detailsScroll,buttons] {
-            view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true
-        }
-        notesHeight = notesScroll.heightAnchor.constraint(equalToConstant:220)
-        detailsHeight = detailsScroll.heightAnchor.constraint(equalToConstant:110)
+        for view in [heading,explanation,metadata,notesSection,detailsSection,buttons] {view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
         NotificationCenter.default.addObserver(self,selector:#selector(refresh),name:UpdateChecker.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshAutomaticOption),name:PetPreferences.didChange,object:nil)
-        window.center()
     }
-    @objc private func refreshAutomaticOption() {
-        disableAutomatic.isEnabled = PetPreferences.shared.bool("automaticallyCheckUpdates")
-    }
+    @objc private func toggleDetails() {detailsExpanded.toggle(); refresh()}
+    @objc private func refreshAutomaticOption() {disableAutomatic.isEnabled = PetPreferences.shared.bool("automaticallyCheckUpdates")}
     @objc private func refresh() {
         let checker = UpdateChecker.shared, failed = checker.failure != nil
-        if failedLayout != failed {
-            for view in buttons.arrangedSubviews {buttons.removeArrangedSubview(view); view.removeFromSuperview()}
-            let views = failed ? [spacer,close,download,retry] : [retry,disableAutomatic,spacer,close,download]
-            for view in views {buttons.addArrangedSubview(view)}
-            failedLayout = failed; detailsExpanded = false
-        }
-        disableAutomatic.isHidden = !automaticPresentation
-        refreshAutomaticOption()
-        let width = automaticPresentation && !failed ? automaticWindowWidth : 580
+        if displayedFailure != checker.failure?.detail {detailsExpanded = false; displayedFailure = checker.failure?.detail}
         status.stringValue = checker.headline
+        spinner.isHidden = !checker.checking
+        if checker.checking {spinner.startAnimation(nil)} else {spinner.stopAnimation(nil)}
         explanation.stringValue = checker.explanation; explanation.isHidden = checker.explanation.isEmpty
         let hasNotes = checker.release != nil && !failed
-        notesHeight.isActive = hasNotes; notesScroll.isHidden = !hasNotes
-        detailsRow.isHidden = !failed
-        let showDetails = failed && detailsExpanded
-        detailsHeight.isActive = showDetails; detailsScroll.isHidden = !showDetails
-        copyDetails.isHidden = !showDetails
-        disclosure.title = detailsExpanded ? "▾ 技术详情" : "▸ 技术详情"
+        notesSection.isHidden = !hasNotes; detailsSection.isHidden = !failed
+        detailsScroll.isHidden = !detailsExpanded; copyDetails.isHidden = !detailsExpanded
+        disclosure.state = detailsExpanded ? .on : .off
+        disclosure.setAccessibilityLabel(detailsExpanded ? "收起技术详情" : "显示技术详情")
         details.string = checker.technicalDetails
-        let headingHeight = (checker.headline as NSString).boundingRect(with:NSSize(width:width-70,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:status.font!]).height
-        let messageHeight = checker.explanation.isEmpty ? 0 : max(18,(checker.explanation as NSString).boundingRect(with:NSSize(width:width-40,height:1000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:explanation.font!]).height.rounded(.up))+12
-        let height = max(24,headingHeight.rounded(.up)) + 136 + messageHeight + (hasNotes ? 232 : 0) + (failed ? 40 : 0) + (showDetails ? 122 : 0)
-        let top = window.frame.maxY
-        window.setContentSize(NSSize(width:width,height:height))
-        window.setFrameOrigin(NSPoint(x:window.frame.minX,y:top-window.frame.height))
-        versions.stringValue = "当前版本 \(Paths.version)" + (hasNotes ? " · 最新正式发布 \(checker.release!.tag_name)" : "")
-        timestamp.stringValue = "上次检查时间：" + checker.lastCheckText
+        versions.stringValue = "当前版本：\(Paths.version)" + (hasNotes ? "    最新正式版：\(checker.release!.tag_name)" : "")
+        timestamp.stringValue = "上次检查："+checker.lastCheckText
         retry.title = failed ? "重试" : "重新检查"; retry.isEnabled = !checker.checking; retry.emphasize(failed)
-        download.title = failed ? "查看发布页" : "打开 GitHub 发布页"; download.emphasize(!failed)
+        download.emphasize(!failed && !checker.checking)
+        retry.keyEquivalent = failed ? "\r" : ""; download.keyEquivalent = !failed && !checker.checking ? "\r" : ""
         close.title = checker.checking ? "取消检查" : "关闭"
-        if checker.checking {spinner.startAnimation(nil)} else {spinner.stopAnimation(nil)}
+        disableAutomatic.isHidden = !automaticPresentation; refreshAutomaticOption()
+        for view in buttons.arrangedSubviews {buttons.removeArrangedSubview(view); view.removeFromSuperview()}
+        let actions = failed ? [disableAutomatic,spacer,download,close,retry] : [disableAutomatic,spacer,retry,close,download]
+        for view in actions {buttons.addArrangedSubview(view)}
         let body = checker.release?.body?.trimmingCharacters(in:.whitespacesAndNewlines)
-        notes.textStorage?.setAttributedString(MarkdownText.render(body?.isEmpty == false ? body! : checker.release == nil ? "" : "此版本未提供更新说明。",font:.systemFont(ofSize:13)))
+        notes.textStorage?.setAttributedString(MarkdownText.render(body?.isEmpty == false ? body! : "此版本未提供更新说明。",font:.systemFont(ofSize:13)))
+        let width = window.contentView!.bounds.width-48
+        status.preferredMaxLayoutWidth = width-(checker.checking ? 24 : 0)
+        explanation.preferredMaxLayoutWidth = width; versions.preferredMaxLayoutWidth = width
+        window.contentView?.layoutSubtreeIfNeeded()
+        let top = window.frame.maxY
+        window.setContentSize(NSSize(width:600,height:ceil(stack.fittingSize.height)+44))
+        window.setFrameOrigin(NSPoint(x:window.frame.minX,y:top-window.frame.height))
     }
-    func windowWillClose(_ notification: Notification) {
+    func windowWillClose(_ notification:Notification) {
         NotificationCenter.default.removeObserver(self)
         Self.current = nil; UpdateChecker.shared.cancel()
     }

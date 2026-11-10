@@ -69,7 +69,7 @@ if (( bailong_build_only )); then
     print "编译完成 · 总用时 $((SECONDS-bailong_started)) 秒"
     exit 0
 fi
-print "启动开发程序，按 Ctrl+C 停止。"
+print "开发程序已启动，按 ^C 停止"
 export BAILONG_DEV_RUN=1
 [[ -z "$bailong_diagnostic_dir" ]] || rm -rf "$bailong_diagnostic_dir"
 bailong_diagnostic_dir=""

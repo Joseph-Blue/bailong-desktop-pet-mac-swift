@@ -122,7 +122,7 @@ final class DesktopSync {
                     self.reading = false; guard !self.stopped else {return}
                     self.chat.desktopTaskReadStatus = nil
                     self.chat.desktopTasks = values.filter {$0.isLatest && $0.started > self.clearedBefore && !self.chat.store.deletedThreads.contains($0.logical)}.map {
-                        BubbleTaskSummary(key:$0.key,title:$0.title,threadID:$0.logical,status:$0.status,start:Date(timeIntervalSince1970:$0.started),end:$0.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},turnID:$0.turn,activity:$0.attention.map {TaskActivity(title:$0.kind == .approval ? "等待批准" : "等待回答",kind:.reply)} ?? $0.activity)
+                        BubbleTaskSummary(key:$0.key,title:$0.title,threadID:$0.logical,status:$0.status,start:Date(timeIntervalSince1970:$0.started),end:$0.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},turnID:$0.turn,activity:$0.attention.map {TaskActivity(title:$0.kind == .approval ? "等待批准" : "等待回答",kind:.reply)} ?? $0.activity,connectionFailed:!activeStatuses.contains($0.status) && $0.status != "completed" && CodexErrorMessage($0.error)?.category == .network)
                     }
                     if !titleIDs.isEmpty {self.lastTitleSync = Date()}
                     var changed = false
@@ -131,7 +131,7 @@ final class DesktopSync {
                             conversation.title = title; changed = true
                         }
                     }
-                    let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint}
+                    let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint || self.tracked[$0.key]?.activity != $0.activity}
                     let recordsChanged = self.accept(values)
                     if let approvalError {
                         self.diagnostics += " · 审批同步失败："+approvalError
@@ -245,7 +245,7 @@ final class DesktopSync {
             }
             if active {
                 if value.attention == nil,previous?.activity != value.activity {
-                    chat.pet.showProgressToast(value.activity,key:key,timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key))
+                    chat.pet.showProgressToast(value.activity,key:key,timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key),thread:conversation.key)
                 }
                 if !running.contains(key) {running.insert(key); chat.pet.taskStarted(key)}
                 if value.attention == nil && ["running","inProgress"].contains(value.status),
@@ -268,7 +268,8 @@ final class DesktopSync {
                 running.remove(key)
                 if !turn.finished || (previous != nil && (previous?.fileEdits != value.fileEdits || previous?.tokenUsage != value.tokenUsage || previous?.tokenUsageError != value.tokenUsageError)) {
                     if !turn.finished {turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)}
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits,completionFooter:TranscriptActions(id:turn.key,text:value.resultText,threadID:conversation.threadID,font:.systemFont(ofSize:13),status:turn.status,completedAt:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},usage:turn.tokenUsage,usageError:turn.tokenUsageError))
+                    let failure = value.status != "completed" && CodexErrorMessage(value.error) != nil ? AppFailure.codex(value.error) : nil
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:failure?.message ?? TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits,completionFooter:TranscriptActions(id:turn.key,text:value.resultText,threadID:conversation.threadID,font:.systemFont(ofSize:13),status:turn.status,completedAt:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},usage:turn.tokenUsage,usageError:turn.tokenUsageError),failure:failure)
                 }
             }
         }

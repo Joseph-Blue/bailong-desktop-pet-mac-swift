@@ -8,6 +8,7 @@ final class DesktopApprovalReader {
         var revision:Int
         var projection:[String:Any]
         var updatedAt:Date
+        var resumedTurns = Set<String>()
     }
     private var socket:DesktopSocket?
     private var followed = Set<String>()
@@ -17,8 +18,9 @@ final class DesktopApprovalReader {
     private(set) var unavailableCount = 0
     var knownThreads:Set<String> {Set(states.keys)}
     private(set) var activities = [String:TaskActivity]()
+    private var connections = [String:CodexConnectionProgress]()
 
-    func close() {socket = nil; followed.removeAll(); targetTurns.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll()}
+    func close() {socket = nil; followed.removeAll(); targetTurns.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll(); connections.removeAll()}
 
     func read(_ records:[PublicSnapshot]) throws -> [String:StateApproval] {
         let active = records.filter {$0.isLatest && activeStatuses.contains($0.status)}
@@ -56,9 +58,17 @@ final class DesktopApprovalReader {
             states = states.filter {Date().timeIntervalSince($0.value.updatedAt) < 8}
             unavailableCount = wanted.subtracting(states.keys).count
             var result = [String:StateApproval](); activities.removeAll()
+            let keys = Set(active.map(\.key)); connections = connections.filter {keys.contains($0.key)}
             for record in active {
                 guard let state = states[record.logical] else {continue}
-                if let turn = DesktopRuntimeProjection.findTurn(state.projection,record.turn),let activity = TaskActivity.current(items:turn["items"] as? [[String:Any]] ?? [],replyTemplateKey:"taskUpdateTemplate") {activities[record.key] = activity}
+                if let turn = DesktopRuntimeProjection.findTurn(state.projection,record.turn) {
+                    let items = turn["items"] as? [[String:Any]] ?? []
+                    var connection = connections[record.key] ?? CodexConnectionProgress()
+                    connection.observe(items:items,resumed:state.resumedTurns.contains(record.turn))
+                    connections[record.key] = connection
+                    activities[record.key] = connection.activity ?? TaskActivity.current(items:items,replyTemplateKey:"taskUpdateTemplate")
+                    states[record.logical]?.resumedTurns.remove(record.turn)
+                }
                 let requests = (state.projection["requests"] as? [[String:Any]] ?? []).filter {($0["params"] as? [String:Any])?["turnId"] as? String == record.turn}
                 if let request = requests.first(where:{Self.methods.contains($0["method"] as? String ?? "")}) {
                     if let approval = DesktopApproval(thread:record.logical,turn:record.turn,source:state.source,request:request,conversation:state.projection) {
@@ -99,9 +109,11 @@ final class DesktopApprovalReader {
             states.removeValue(forKey:id); try follow(id,true,socket); return
         }
         for patch in patches {
+            if let turn = DesktopRuntimeProjection.modelProgressTurn(patch,state:state.projection) {state.resumedTurns.insert(turn)}
             guard try DesktopRuntimeProjection.patch(patch,state:&state.projection,keepingTurns:turns) else {
                 states.removeValue(forKey:id); try follow(id,true,socket); return
             }
+            if let turn = DesktopRuntimeProjection.errorProgressTurn(patch,state:state.projection) {state.resumedTurns.remove(turn)}
         }
         state.revision = revision; state.updatedAt = Date(); states[id] = state
     }

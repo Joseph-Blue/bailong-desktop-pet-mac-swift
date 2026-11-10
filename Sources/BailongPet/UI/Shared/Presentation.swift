@@ -48,14 +48,15 @@ struct TaskAttention {
 struct AppFailure {
     let title: String, message: String, detail: String
     var openDesktop = false
+    var statusSymbol:String? = nil
     static func animation(_ error: Error) -> AppFailure {
         AppFailure(title:"这个动作暂时无法播放",message:"桌宠会保留当前画面。可以重试，或从菜单选择其他动作。",detail:error.localizedDescription)
     }
     static func codex(_ raw: String) -> AppFailure {
-        if raw.contains("already has an active writer") {
-            return AppFailure(title:"这条会话已有写入连接",message:"请在 Codex 原会话继续，或在桌宠中开启新对话。",detail:raw,openDesktop:true)
+        guard let error = CodexErrorMessage(raw) else {
+            return AppFailure(title:"Codex 任务未能完成",message:"Codex 未提供错误说明。",detail:raw)
         }
-        return AppFailure(title:"Codex 任务未能完成",message:"请查看技术详情；可返回输入框修改后重新发送。",detail:raw)
+        return AppFailure(title:error.category == .network ? CodexErrorMessage.reconnectStopped : error.title,message:error.category == .network ? CodexErrorMessage.reconnectAdvice : error.body,detail:error.original,openDesktop:error.category == .writer || error.category == .localConnection,statusSymbol:error.symbol)
     }
 
     func showDetails() {

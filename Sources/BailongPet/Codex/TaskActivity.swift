@@ -1,7 +1,7 @@
 import Foundation
 
 struct TaskActivity:Equatable {
-    enum Kind {case reasoning, tool, reply}
+    enum Kind {case reasoning, tool, reply, status}
     enum ToolOperation {case tool, command, read, search, listFiles, edit, webSearch, imageGeneration, imageView, compaction, plan}
     let title:String
     var detail:String = ""
@@ -9,6 +9,7 @@ struct TaskActivity:Equatable {
     var finished = false
     var templateKey:String? = nil
     var toolOperation:ToolOperation = .tool
+    var statusSymbol:String? = nil
     // 保留命令入口、子命令和参数；长命令及文件清单使用有界摘要。
     var displayDetail:String {
         guard kind == .tool else {return detail}
@@ -33,6 +34,7 @@ struct TaskActivity:Equatable {
         switch kind {
         case .reasoning:return "brain"
         case .reply:return "text.bubble"
+        case .status:return statusSymbol ?? "exclamationmark.triangle"
         case .tool:
             switch toolOperation {
             case .command:return "terminal"
@@ -51,7 +53,7 @@ struct TaskActivity:Equatable {
     }
     var displayTitle:String {
         if let templateKey {return PetPreferences.shared.statusLine(templateKey)}
-        return finished || kind == .reply ? title : PetPreferences.shared.statusLine(kind == .reasoning ? "taskThinkingTemplate" : "taskToolTemplate")
+        return finished || kind == .reply || kind == .status ? title : PetPreferences.shared.statusLine(kind == .reasoning ? "taskThinkingTemplate" : "taskToolTemplate")
     }
     var actionTitle:String {kind == .tool && !finished && templateKey == nil ? title : ""}
     var line:String {

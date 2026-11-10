@@ -19,9 +19,26 @@ bailong_prepare_resource_tool() {
     bailong_resource_version="$fields[1]"; bailong_resource_archive="$fields[2]"
     bailong_resource_published="$fields[3]"; bailong_resource_url="$fields[4]"; bailong_resource_bytes="$fields[5]"
 }
+bailong_resource_source() {
+    print -r -- "素材来源：jingh12312-rgb 的《GPT白龙娘动态桌宠》"
+    print -r -- "原作仓库：https://github.com/jingh12312-rgb/bailong-desktop-pet"
+    print -r -- "Mac 版素材由 Joseph Blue（约瑟Blue）整理，完整来源见包内 local-assets/资源来源.md。"
+}
+bailong_resource_download_info() {
+    print -r -- "下载来源：本项目的 GitHub Release · 资源包 $bailong_resource_version"
+    print -r -- "资源包：$bailong_resource_archive · 约 $((bailong_resource_bytes/1048576)) MiB"
+    print -r -- "下载地址：$bailong_resource_url"
+    print -r -- "请确认终端可以访问 GitHub，并检查终端代理设置和所用节点是否可用。"
+}
+bailong_resource_manual_commands() {
+    local entry="${bailong_entry_command:-build.command}" arch="${target_arch:-arm64}"
+    print -r -- "手动下载命令："
+    print -r -- "  curl --fail --location --output ${(q)bailong_resource_archive} ${(q)bailong_resource_url}"
+    print -r -- "下载后导入并继续："
+    print -r -- "  ./$entry $arch --resources-zip ${(q)bailong_resource_archive}"
+}
 bailong_download_resources() {
     setopt localoptions nobgnice
-    print -r -- "原网址：$bailong_resource_url"
     if [[ "$bailong_resource_published" != yes ]]; then
         bailong_error "资源包 $bailong_resource_version 尚未发布。请选择本地 ZIP。"
         return 1
@@ -62,8 +79,8 @@ bailong_download_resources() {
     (( ! bailong_animated )) || print -u "$bailong_ui_fd"
     if (( result != 0 )); then
         bailong_phase_finish "✗" "下载失败（退出码 $result）"
-        print -r -- "重新下载：./build.command --download-resources
-或下载原网址后使用 --resources-zip <文件>。"
+        print -r -- "请检查终端网络、代理设置和节点后重试。"
+        bailong_resource_manual_commands
         return "$result"
     fi
     bytes="$(stat -f '%z' "$partial")"
@@ -97,41 +114,43 @@ bailong_import_resources() {
     bailong_phase_end
 }
 bailong_ensure_resources() {
-    local zip="$1" mode="$2" download="$3" report answer
+    local zip="$1" mode="$2" download="$3" report
+    bailong_resource_source
     bailong_prepare_resource_tool
     if [[ "$download" == 1 ]]; then
+        bailong_resource_download_info
         bailong_download_resources || return $?
         zip="$bailong_download_zip"
     fi
     if [[ -n "$zip" ]]; then bailong_import_resources "$zip" "$mode" || return $?; fi
-    while true; do
-        if report="$("$bailong_resource_tool" check "$bailong_resource_manifest" local-assets 2>&1)"; then
-            bailong_ok "$report"; return 0
-        fi
-        bailong_error "资源不完整"
-        print -r -- "$report"
-        if ! bailong_interactive || [[ "${bailong_check_only:-0}" == 1 ]]; then
-            print -r -- "导入：./build.command --resources-zip /路径/$bailong_resource_archive"
-            return 1
-        fi
-        print -r -- "
-1 下载资源包    2 输入本地 ZIP 路径    回车 退出"
-        read -r "answer?选择："
-        case "$answer" in
-            1) if bailong_download_resources; then zip="$bailong_download_zip"; else continue; fi ;;
-            2)
-                read -r "zip?ZIP 路径（可拖入终端）："
-                # Finder 拖入路径采用 shell 转义；只解引号，不执行输入。
-                zip="${(Q)zip}"
-                [[ -n "$zip" ]] || continue ;;
-            *) return 1 ;;
-        esac
-        mode=missing
-        if [[ -d local-assets ]]; then
-            print -r -- "1 只补齐缺失文件    2 备份后替换包内文件    回车 取消"
-            read -r "answer?选择："
-            case "$answer" in 1) ;; 2) mode=replace ;; *) continue ;; esac
-        fi
-        if bailong_import_resources "$zip" "$mode"; then :; else continue; fi
-    done
+    if report="$("$bailong_resource_tool" check "$bailong_resource_manifest" local-assets 2>&1)"; then
+        bailong_ok "$report"; return 0
+    fi
+    bailong_error "资源不完整"
+    print -r -- "$report"
+    if [[ "$bailong_resource_published" != yes ]]; then
+        print -r -- "资源包尚未发布，请准备本地 ZIP 后导入："
+        print -r -- "  ./${bailong_entry_command:-build.command} ${target_arch:-arm64} --resources-zip /路径/${(q)bailong_resource_archive}"
+        return 1
+    fi
+    if ! bailong_interactive || [[ "${bailong_check_only:-0}" == 1 ]]; then
+        bailong_resource_download_info
+        bailong_resource_manual_commands
+        return 1
+    fi
+    bailong_resource_download_info
+    print -r -- "下载后只补齐缺失文件，已有同名素材保留。"
+    if ! bailong_confirm "现在下载并补齐素材吗？"; then
+        bailong_resource_manual_commands
+        return 1
+    fi
+    bailong_download_resources || return $?
+    bailong_import_resources "$bailong_download_zip" "$mode" || return $?
+    if report="$("$bailong_resource_tool" check "$bailong_resource_manifest" local-assets 2>&1)"; then
+        bailong_ok "$report"; return 0
+    fi
+    bailong_error "$report"
+    print -r -- "更新同名素材并继续（替换前会备份）："
+    print -r -- "  ./${bailong_entry_command:-build.command} ${target_arch:-arm64} --resources-zip ${(q)bailong_download_zip} --replace-resources"
+    return 1
 }

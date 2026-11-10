@@ -3,7 +3,7 @@ import Foundation
 // 只投影 UI 所需字段；明确排除 reasoning.content、工具输出、用户输入和会话设置。
 enum DesktopRuntimeProjection {
     static let requestFields:Set<String> = ["threadId","turnId","itemId","reason","command","cwd","availableDecisions","permissions","additionalPermissions","networkApprovalContext","grantRoot"]
-    static let itemFields:Set<String> = ["id","type","status","completed","completedAtMs","summary","tool","server","namespace","command","commandActions","changes","query"]
+    static let itemFields:Set<String> = ["id","type","status","completed","completedAtMs","summary","tool","server","namespace","command","commandActions","changes","query","message","willRetry","errorInfo"]
     static func request(_ raw:Any) -> [String:Any] {
         guard let value = raw as? [String:Any] else {return [:]}
         var result = value.filter {["id","method"].contains($0.key)}
@@ -35,6 +35,36 @@ enum DesktopRuntimeProjection {
         let history = (state["turnHistory"] as? [String:Any])?["history"] as? [String:Any]
         if let value = (history?["entitiesByKey"] as? [String:[String:Any]])?.values.first(where:{$0["turnId"] as? String == id}) {return value}
         return (state["turns"] as? [[String:Any]])?.first {$0["turnId"] as? String == id}
+    }
+    // 只识别模型正文／公开摘要确实变化的增量；不保留被排除的正文内容。
+    static func modelProgressTurn(_ patch:[String:Any],state:[String:Any]) -> String? {
+        guard let path = patch["path"] as? [Any],patch["op"] as? String != "remove" else {return nil}
+        let offset:Int
+        if path.first as? String == "turns" {offset = 2}
+        else if path.first as? String == "turnHistory" {offset = 4}
+        else {return nil}
+        guard path.count >= offset+2,path[offset] as? String == "items",
+              let rawTurn = try? node(state,path:ArraySlice(path.prefix(offset))),let turn = rawTurn as? [String:Any] else {return nil}
+        let item:[String:Any]
+        if path.count == offset+2 {item = patch["value"] as? [String:Any] ?? [:]}
+        else {
+            guard ["text","summary"].contains(path[offset+2] as? String ?? ""),
+                  let rawItem = try? node(state,path:ArraySlice(path.prefix(offset+2))),let value = rawItem as? [String:Any] else {return nil}
+            item = value
+        }
+        return CodexConnectionProgress.isModelItem(item) ? turn["turnId"] as? String : nil
+    }
+    static func errorProgressTurn(_ patch:[String:Any],state:[String:Any]) -> String? {
+        guard let path = patch["path"] as? [Any],patch["op"] as? String != "remove" else {return nil}
+        let offset:Int
+        if path.first as? String == "turns" {offset = 2}
+        else if path.first as? String == "turnHistory" {offset = 4}
+        else {return nil}
+        guard path.count >= offset+2,path[offset] as? String == "items",
+              let rawTurn = try? node(state,path:ArraySlice(path.prefix(offset))),let turn = rawTurn as? [String:Any],
+              let rawItem = try? node(state,path:ArraySlice(path.prefix(offset+2))),let item = rawItem as? [String:Any],
+              item["type"] as? String == "error",item["willRetry"] is Bool else {return nil}
+        return turn["turnId"] as? String
     }
     // false 表示补丁将已裁剪的轮次改成目标身份，调用方须取得完整快照。
     static func patch(_ patch:[String:Any],state:inout [String:Any],keepingTurns:Set<String>) throws -> Bool {

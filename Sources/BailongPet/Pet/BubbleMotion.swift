@@ -39,6 +39,7 @@ final class BubbleMotion: NSObject {
             startTimerIfNeeded()
         }
         if key {window.makeKeyAndOrderFront(nil)} else {window.orderFrontRegardless()}
+        (window.contentView as? BubbleBackgroundView)?.synchronizeGlassBackdrop()
     }
     func hide() {
         guard presented, let window else {return}
@@ -90,6 +91,7 @@ final class BubbleMotion: NSObject {
         if displayed != window.frame {window.setFrame(displayed,display:true)}
         if sizeChanged {onResize?(displayed.size)}
         if f >= 1 && !presented {window.orderOut(nil); window.alphaValue = 1; window.ignoresMouseEvents = false}
+        (window.contentView as? BubbleBackgroundView)?.synchronizeGlassBackdrop()
         if f >= 1 && resizeFrom == nil {timer?.invalidate(); timer = nil}
         if f >= 1 && !presented && pendingHide {
             pendingHide = false

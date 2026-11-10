@@ -37,7 +37,7 @@ struct SettingsSearchEntry {
         func add(_ section:SettingsSection,_ group:String,_ titles:[String],_ keywords:String = "") {
             entries += titles.map {Self(section:section,group:group,title:$0,keywords:keywords)}
         }
-        add(.general,"启动",["登录时启动","随 Codex 启动","启动后显示桌宠","记住上次位置"],"开机 自启动 跟随 召回")
+        add(.general,"启动",["登录时启动","随 Codex 启动","记住上次位置"],"开机 自启动 跟随 召回")
         add(.general,"权限与系统设置",["访达自动化"],"权限 授权 Finder 文件链接 最小化 恢复 自动化 系统设置")
         add(.general,"权限与系统设置",["文件与文件夹"],"权限 授权 文稿 桌面 下载 隐私 文件访问 系统设置")
         add(.general,"权限与系统设置",["登录项与后台运行"],"权限 批准 开机 自启动 跟随 后台 系统设置")
@@ -54,7 +54,7 @@ struct SettingsSearchEntry {
         for line in ConversationLines.interface {add(.identity,"聊天窗口台词",[line.title],"台词 模板 "+line.text)}
         add(.identity,"额度查询台词",["正在查询"],"额度 台词")
         add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天 查看额度 历史消息 显示任务进度 播放随机动画 单句台词")
-        add(.activity,"吸边",["收进刘海","露出比例"],"刘海 屏幕 顶部 收纳 倒挂 探头 召回 默认开启 内置屏幕 大小 55% 100%")
+        add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 活泼 倍速 待机 吸边 任务 排除上一动作 随机互动")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
         add(.messages,"进展提醒",["久无进展时提醒","提醒间隔"],"任务 执行 无新进度 90秒 5分钟 定时 等待 台词")
@@ -94,6 +94,10 @@ struct SettingsSearchEntry {
                 entries[index].condition = "选择自定义强调色后显示"
             } else if entries[index].section == .appearance && entries[index].title == "宽 : 高" {
                 entries[index].condition = "开启自定义宽高比后生效"
+            } else if entries[index].section == .activity && entries[index].title == "左右露出比例" {
+                entries[index].condition = "开启屏幕左右边缘吸边后可调整"
+            } else if entries[index].section == .activity && entries[index].title == "刘海露出比例" {
+                entries[index].condition = "开启顶部刘海吸边后可调整"
             } else if entries[index].section == .activity && entries[index].title == "活动范围" {
                 entries[index].condition = "开启自主移动后可调整"
             } else if entries[index].section == .messages {
@@ -125,7 +129,7 @@ struct SettingsSearchEntry {
         if let catalog {
             add(.identity,"互动台词",(catalog.variants+catalog.work).filter {$0.line != nil}.map(\.title),"台词 模板")
             for (group,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations),("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation])] {
-                add(.activity,group,clips.map(\.title),"动画 播放速度 倍速 频率 偏爱 预览")
+                add(.activity,group,clips.map(\.title),"动画 播放速度 倍速 频率 偏爱 权重 ❤ ❤️ 爱心 标尺 预览")
             }
         }
         return entries

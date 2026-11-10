@@ -6,12 +6,19 @@ final class TaskMessageAccumulator {
     private var previewedMessages = [String:String]()
     private(set) var finalMessageID:String?
     private var imageMessageIDs = Set<String>()
-    private(set) var currentActivity:TaskActivity?
+    private var taskActivity:TaskActivity?
+    private var connection = CodexConnectionProgress()
+    var currentActivity:TaskActivity? {connection.activity ?? taskActivity}
     private var activityItems = [[String:Any]]()
     private var finalText:String?
     private var editsByItem = [String:[FileEditSummary]](), editOrder = [String]()
     var imageLinks:[String] {messageOrder.filter {imageMessageIDs.contains($0)}.compactMap {messages[$0]}}
-    func clearActivity() {currentActivity = nil; activityItems.removeAll()}
+    func clearActivity() {taskActivity = nil; connection = CodexConnectionProgress(); activityItems.removeAll()}
+    func receiveError(_ params:[String:Any]) {
+        var error = params["error"] as? [String:Any] ?? [:]
+        error["willRetry"] = params["willRetry"]
+        connection.receiveError(error)
+    }
     func finalize(_ turn:Turn) {
         if turn.final.isEmpty {finalMessageID = messageOrder.last(where:{!imageMessageIDs.contains($0)}); turn.final = finalMessageID.flatMap {messages[$0]} ?? ""}
     }
@@ -47,12 +54,19 @@ final class TaskMessageAccumulator {
                 updateActivity(item)
             }
         }
-        case "turn/plan/updated": steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map { "\($0["status"] ?? "") · \($0["step"] ?? "")" }.joined(separator:"\n"); currentActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",templateKey:"taskUpdateTemplate",toolOperation:.plan)
+        case "turn/plan/updated":
+            let labels = ["pending":"待开始","inProgress":"进行中","completed":"已完成"]
+            steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map {step in
+                let state = labels[step["status"] as? String ?? ""] ?? "状态未提供"
+                return state+" · "+(step["step"] as? String ?? "")
+            }.joined(separator:"\n")
+            taskActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",templateKey:"taskUpdateTemplate",toolOperation:.plan)
         default:return false
         }
         return true
     }
     private func updateActivity(_ item:[String:Any]) {
+        if CodexConnectionProgress.isModelItem(item) {connection.receiveProgress()}
         guard let id = item["id"] as? String else {return}
         var projected = DesktopRuntimeProjection.item(item)
         // 文件差异已由 record 统计为摘要；进展只显示路径，不再额外持有整份 diff。
@@ -61,20 +75,20 @@ final class TaskMessageAccumulator {
         }
         if let index = activityItems.firstIndex(where:{$0["id"] as? String == id}) {activityItems[index] = projected}
         else {activityItems.append(projected)}
-        currentActivity = TaskActivity.current(items:activityItems)
+        taskActivity = TaskActivity.current(items:activityItems)
     }
     func record(_ item: [String:Any]) {
         let id = item["id"] as? String ?? UUID().uuidString
         switch item["type"] as? String {
         case "agentMessage":
-            currentActivity = nil
+            taskActivity = nil
             if messages[id] == nil {messageOrder.append(id)}; messages[id] = item["text"] as? String ?? ""
             if item["phase"] as? String == "final_answer" {finalMessageID = id; finalText = item["text"] as? String ?? ""}
         case "imageGeneration":
             if let link = GeneratedImageLink.markdown(status:item["status"] as? String,savedPath:item["savedPath"] as? String) {
                 if messages[id] == nil {messageOrder.append(id)}
                 messages[id] = link; imageMessageIDs.insert(id); steps.removeValue(forKey:id)
-                currentActivity = nil
+                taskActivity = nil
             } else if ["inProgress","running"].contains(item["status"] as? String ?? "") {
                 steps[id] = "正在生成图片"
             } else {steps.removeValue(forKey:id)}

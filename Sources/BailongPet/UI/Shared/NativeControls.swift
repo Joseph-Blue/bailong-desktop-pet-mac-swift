@@ -176,6 +176,7 @@ final class BubbleBackgroundView: NSView {
     let body = NSView()
     private let ordinary = BubbleBackingView(), glassBacking = BubbleBackingView()
     private var glass: NSView?
+    private var glassBackdrop:GlassBackdrop?
     private var fade: Timer?
     private var targetOpacity: CGFloat = 1
     private var cursorTracking:NSTrackingArea?
@@ -191,6 +192,19 @@ final class BubbleBackgroundView: NSView {
         updateMaterial()
     }
     required init?(coder:NSCoder) {fatalError()}
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow(); synchronizeGlassBackdrop()
+    }
+    func synchronizeGlassBackdrop() {
+        guard let glass else {return}
+        if !glass.isHidden,let window {
+            if glassBackdrop == nil {glassBackdrop = GlassBackdrop(host:window,effect:glass)}
+            glassBackdrop?.synchronize()
+        } else if glassBackdrop != nil {
+            glassBackdrop = nil
+            addSubview(glass,positioned:.below,relativeTo:ordinary)
+        }
+    }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let cursorTracking {removeTrackingArea(cursorTracking); self.cursorTracking = nil}
@@ -229,7 +243,8 @@ final class BubbleBackgroundView: NSView {
         let animate = preferences.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && window?.isVisible == true
         if next == targetOpacity && fade != nil && animate {return}
         fade?.invalidate(); fade = nil; targetOpacity = next
-        glass?.isHidden = false
+        glass?.isHidden = next == 1 && ordinary.opacity == 1
+        synchronizeGlassBackdrop()
         guard animate, ordinary.opacity != next else {ordinary.opacity = next; finishMaterial(); return}
         let from = ordinary.opacity, started = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval:1.0/60,repeats:true) { [weak self] timer in
@@ -245,11 +260,13 @@ final class BubbleBackgroundView: NSView {
         // 普通底层始终存在，先铺实再隐藏玻璃，不出现空背景帧。
         ordinary.opacity = targetOpacity; ordinary.displayIfNeeded()
         glass?.isHidden = targetOpacity == 1
+        synchronizeGlassBackdrop()
         window?.invalidateShadow()
     }
     override func layout() {
         super.layout(); glass?.frame = bounds; ordinary.frame = bounds; body.frame = bounds
         glassBacking.frame = bounds
+        synchronizeGlassBackdrop()
     }
     deinit {fade?.invalidate(); NotificationCenter.default.removeObserver(self); NSWorkspace.shared.notificationCenter.removeObserver(self)}
 }

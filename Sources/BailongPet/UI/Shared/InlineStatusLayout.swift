@@ -18,6 +18,18 @@ enum InlineStatusLayout {
         return NSAttributedString(string:frame,attributes:[.font:font,.foregroundColor:color,
             .baselineOffset:font.capHeight/2-bounds.midY])
     }
+    static func brailleFieldSize(font:NSFont) -> NSSize {
+        let cell = NSTextFieldCell(textCell:"")
+        cell.isBordered = false; cell.isBezeled = false; cell.drawsBackground = false
+        cell.font = font
+        cell.attributedStringValue = braille("⣿",font:font,color:.labelColor)
+        let size = cell.cellSize
+        return NSSize(width:ceil(size.width),height:ceil(size.height))
+    }
+    static func alignBraille(_ field:NSTextField,to baseline:CGFloat) {
+        field.frame.size = brailleFieldSize(font:field.font!)
+        field.frame.origin.y += baseline-Self.baseline(of:field)
+    }
     static func baseline(of field:NSTextField) -> CGFloat {
         let rect = field.alignmentRect(forFrame:field.frame)
         return field.superview?.isFlipped == true ? rect.minY+field.firstBaselineOffsetFromTop : rect.maxY-field.firstBaselineOffsetFromTop

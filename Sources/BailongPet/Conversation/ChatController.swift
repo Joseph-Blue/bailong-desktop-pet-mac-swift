@@ -120,9 +120,9 @@ final class ChatController {
                 self.reportHistoryReadFailure(error)
                 return
             }
-            self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史保存失败，请检查磁盘空间。"; self.ui.status.isHidden = false
+            self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史记录未能保存，请查看错误详情。"; self.ui.status.isHidden = false
             guard !self.closing else {return}
-            RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"原文件保留。新记录暂留运行内存 (RAM)，尚未写入磁盘；退出会丢失尚未保存的新记录。处理磁盘空间或写入权限后，可重新保存。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
+            RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"新记录尚未保存到磁盘，退出应用后会丢失。请检查磁盘空间和写入权限，再点“重新保存”。原有记录保留。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
         }
         store.onSaved = { [weak self] in
             guard let self,self.saveError != nil else {return}
@@ -174,7 +174,7 @@ final class ChatController {
         }
         connection.event = { [weak self] method,p in self?.receive(method,p) }
         connection.request = { [weak self] id,method,p in self?.requestCoordinator.enqueue(id,method,p) }
-        connection.disconnected = { [weak self] error in if self?.running != nil {self?.finish("interrupted",error:error.localizedDescription)} }
+        connection.disconnected = { [weak self] error in if self?.running != nil {self?.finish("interrupted",error:CodexErrorMessage.encode(["message":error.localizedDescription,"code":"localConnectionDisconnected"]))} }
         pet.cliDiagnostics = { [weak self] in
             guard let self else { return "连接已关闭" }
             return self.connection.diagnostics + "\n内置任务：" + (self.running?.1.status ?? "空闲")
@@ -201,7 +201,7 @@ final class ChatController {
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
             var tasks = self.desktopTasks.filter {!self.store.deletedThreads.contains($0.threadID ?? "")}.map {task in
                 let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title
-                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity)
+                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed)
             }
             let observed = Set(tasks.compactMap(\.threadID))
             for conversation in self.store.conversations {
@@ -209,7 +209,7 @@ final class ChatController {
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
-                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.messagesState.currentActivity) : nil))
+                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network))
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
@@ -427,8 +427,11 @@ final class ChatController {
         case "turn/completed":
             guard let turn = p["turn"] as? [String:Any], t.id == nil || t.id == turn["id"] as? String else{return}
             for item in turn["items"] as? [[String:Any]] ?? [] {messagesState.record(item)}
-            updateText(); finish(turn["status"] as? String ?? "unknown",error:(turn["error"] as? [String:Any])?["message"] as? String ?? ""); return
-        case "error": t.error = (p["error"] as? [String:Any])?["message"] as? String ?? "Codex 报告错误"
+            let status = turn["status"] as? String ?? "unknown", error = CodexErrorMessage.encode(turn["error"])
+            updateText(); finish(status,error:error.isEmpty && status == "failed" ? t.error : error); return
+        case "error":
+            messagesState.receiveError(p)
+            if p["willRetry"] as? Bool != true {t.error = CodexErrorMessage.encode(p["error"])}
         default:guard messagesState.receive(method,p) else {return}
         }
         reminderClock?.lastProgress = Date().timeIntervalSince1970
@@ -446,7 +449,7 @@ final class ChatController {
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
             if self.messagesState.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
             self.presentAgentMessages(conversation:c,turn:t)
-            self.pet.showProgressToast(self.messagesState.currentActivity,key:"own",timing:.init(start:t.date,key:"own"))
+            self.pet.showProgressToast(self.messagesState.currentActivity,key:"own",timing:.init(start:t.date,key:"own",activityKey:t.key),thread:c.key)
 
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)

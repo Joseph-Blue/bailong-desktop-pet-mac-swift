@@ -147,6 +147,10 @@ final class AboutPageController: NSViewController {
         paragraph("作者：jingh12312-rgb（風-隐）。桌宠的互动方式和台词参考原作 v0.5.1；原作的使用说明与许可信息见仓库 README。",to:text)
         link("原作仓库与说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
 
+        heading("构建兼容性参考 · ruyeli",to:text)
+        paragraph("感谢 ruyeli 在本仓库的英文版本地化分支中分享的 macOS SDK 兼容处理，为本项目改进构建脚本提供了参考。",to:text)
+        link("bailong-desktop-pet-english · GitHub",url:"https://github.com/ruyeli/bailong-desktop-pet-english",to:text)
+
         heading("角色动画与应用图标",to:text)
         paragraph("角色动画来自原作 v0.5.1 发布包，应用图标取自角色画面。",to:text)
 

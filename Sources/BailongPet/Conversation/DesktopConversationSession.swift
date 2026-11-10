@@ -115,9 +115,9 @@ final class DesktopConversationSession {
         let key = conversation.key
         guard desktopUnconfirmed.contains(key) else {return}
         CodexConnection.openConversation(conversation.threadID)
-        let alert = NSAlert(); alert.messageText = "检查 Codex 中的发送结果"
-        alert.informativeText = "请查看“\(conversation.title)”是否已收到这条消息。草稿仍保留；确认未发送后才重新启用发送。"
-        alert.addButton(withTitle:"保留待确认状态"); alert.addButton(withTitle:"已确认未发送"); alert.applyAccent()
+        let alert = NSAlert(); alert.messageText = "确认消息是否已发送"
+        alert.informativeText = "请在 Codex 的“\(conversation.title)”中查看这条消息。确认未发送后，才能再次发送。草稿已保留。"
+        alert.addButton(withTitle:"稍后确认"); alert.addButton(withTitle:"确认未发送，重新编辑"); alert.applyAccent()
         alert.beginSheetModal(for:parent) { [weak self] response in
             guard response == .alertSecondButtonReturn,let self,self.store.conversations.contains(where:{$0 === conversation}) else {return}
             self.desktopUnconfirmed.remove(key); self.desktopReplyNotes.removeValue(forKey:key); self.onChange()

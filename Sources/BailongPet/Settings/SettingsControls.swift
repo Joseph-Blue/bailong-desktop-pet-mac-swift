@@ -166,3 +166,42 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
     }
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
 }
+
+// 数值、单位与轨道同轴；范围标签独占轨道下方，不挤动设置标题。
+final class SettingsSliderControl:NSView {
+    let slider:NSSlider
+    init(number:NSTextField,unit:NSTextField,slider:NSSlider,limits:(String,String)?,ticks:Int) {
+        self.slider = slider
+        super.init(frame:.zero)
+        slider.numberOfTickMarks = limits == nil ? 0 : ticks
+        slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false
+        let track = NSStackView(views:[slider]); track.orientation = .vertical; track.distribution = .fill; track.alignment = .leading; track.spacing = 0
+        if let limits {
+            let minimum = NSTextField(labelWithString:limits.0), maximum = NSTextField(labelWithString:limits.1)
+            let labels = NSView()
+            for field in [minimum,maximum] {
+                field.font = .systemFont(ofSize:10); field.textColor = .secondaryLabelColor
+                field.translatesAutoresizingMaskIntoConstraints = false; labels.addSubview(field)
+            }
+            NSLayoutConstraint.activate([
+                labels.widthAnchor.constraint(equalToConstant:180), labels.heightAnchor.constraint(equalToConstant:14),
+                minimum.leadingAnchor.constraint(equalTo:labels.leadingAnchor), minimum.centerYAnchor.constraint(equalTo:labels.centerYAnchor),
+                maximum.trailingAnchor.constraint(equalTo:labels.trailingAnchor), maximum.centerYAnchor.constraint(equalTo:labels.centerYAnchor)
+            ])
+            track.addArrangedSubview(labels)
+        }
+        for view in [number,unit,track] {view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)}
+        // 下方范围文字占用的高度也预留在上方，让主轨道位于整组的中线。
+        let legendHeight:CGFloat = limits == nil ? 0 : 14
+        let height = heightAnchor.constraint(equalTo:track.heightAnchor,constant:legendHeight); height.priority = .defaultLow
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant:272), track.widthAnchor.constraint(equalToConstant:180),
+            number.leadingAnchor.constraint(equalTo:leadingAnchor), unit.leadingAnchor.constraint(equalTo:number.trailingAnchor,constant:8),
+            track.leadingAnchor.constraint(equalTo:unit.trailingAnchor,constant:8), track.trailingAnchor.constraint(equalTo:trailingAnchor),
+            track.topAnchor.constraint(equalTo:topAnchor,constant:legendHeight), track.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor),
+            number.centerYAnchor.constraint(equalTo:slider.centerYAnchor), unit.centerYAnchor.constraint(equalTo:slider.centerYAnchor),
+            heightAnchor.constraint(greaterThanOrEqualTo:number.heightAnchor), height
+        ])
+    }
+    required init?(coder:NSCoder) {fatalError()}
+}

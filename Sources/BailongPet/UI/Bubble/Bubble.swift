@@ -27,6 +27,9 @@ final class Bubble {
     var targetFrame: NSRect {motion.frame}
     func move(to origin: NSPoint) {motion.move(to:origin)}
     private let title = BubbleHeadingField(wrappingLabelWithString:"")
+    private let headingSpinner = NSTextField(labelWithString:"")
+    private let headingIcon = NSImageView()
+    private var headingSymbol:String?
     private let text = MessageTextView()
     private let scroll = BubbleBodyScrollView()
     private let closeButton = BubbleCloseButton()
@@ -62,6 +65,7 @@ final class Bubble {
     private var elapsedTimer: Timer?
     private let taskProgress = ProgressMarqueeView(frame:.zero)
     private let taskProgressIcon = NSImageView()
+    private var displayedFailure:AppFailure?
     private var progressTaskKey:String?
     private var activityTiming:TaskTiming?
     private var taskStartedAt: Date?
@@ -102,7 +106,7 @@ final class Bubble {
         let detail = ([activity.actionTitle,activity.displayDetail].filter {!$0.isEmpty}.joined(separator:"\n"))
             .replacingOccurrences(of:"**",with:"")
         show(title:activity.displayTitle,body:detail,kind:"progressToast",scale:preferences.number("bubblePercent")/100,
-             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:activity.kind == .tool)
+             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:activity.kind == .tool,headingSymbol:activity.symbolName)
         purpose = .progress; text.hoverHelp = activity.text
     }
     func resolveQuestions(taskKey:String? = nil,form:QuestionForm? = nil) {
@@ -184,7 +188,7 @@ final class Bubble {
         updateCardNavigation()
         show(title:card.title,body:card.approval?.body ?? card.body,kind:card.kind,scale:preferences.number("bubblePercent")/100,seconds:preferences.duration(card.purpose,text:card.body),
              details:card.thread != nil,resetText:card.resetText || changedCard,animateHeading:card.animateHeading,
-             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits,isUserInput:card.isUserInput,completionFooter:card.completionFooter)
+             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits,isUserInput:card.isUserInput,completionFooter:card.completionFooter,failure:card.failure)
         relatedConversation = card.thread; purpose = card.purpose
         renderedCardID = card.id
         cardStore.saveForm(questionForm,size:questionSize)
@@ -312,7 +316,8 @@ final class Bubble {
         elapsedIcon.isHidden = true; elapsedLabel.isHidden = true
         taskProgress.isHidden = true; taskProgress.textColor = .secondaryLabelColor
         taskProgressIcon.isHidden = true; taskProgressIcon.contentTintColor = .secondaryLabelColor
-        for v in [title,scroll,closeButton,details,codexButton,retryButton,elapsedIcon,elapsedLabel,taskProgressIcon,taskProgress,previousQuestion!,skipQuestion!,approvalReject!,approvalAllow!,previousCard!,nextCard!,replyButton!,cardCount] as [NSView] { content.body.addSubview(v) }
+        headingSpinner.isHidden = true; headingIcon.isHidden = true
+        for v in [title,headingSpinner,headingIcon,scroll,closeButton,details,codexButton,retryButton,elapsedIcon,elapsedLabel,taskProgressIcon,taskProgress,previousQuestion!,skipQuestion!,approvalReject!,approvalAllow!,previousCard!,nextCard!,replyButton!,cardCount] as [NSView] { content.body.addSubview(v) }
     }
     private var actionButtons:[ActionButton] {[details,codexButton,replyButton,retryButton,previousCard,nextCard,previousQuestion,skipQuestion,approvalReject,approvalAllow]}
     private func configureButtons() {
@@ -352,7 +357,8 @@ final class Bubble {
         let hasElapsed = taskStartedAt != nil
         let elapsedWidth = hasElapsed ? elapsedGroupWidth : 0
         elapsedLayoutWidth = elapsedWidth
-        let headingWidth = w-margin*2-32*scale-(hasElapsed ? elapsedWidth+10*scale : 0)
+        let headingPrefix = headingSymbol == nil ? 0 : InlineStatusLayout.brailleFieldSize(font:title.font!).width+title.font!.pointSize+12*scale
+        let headingWidth = max(1,w-margin*2-32*scale-headingPrefix-(hasElapsed ? elapsedWidth+10*scale : 0))
         let font = title.font!
         let firstLineHeight = (font.ascender-font.descender+font.leading).rounded(.up)+4
         let headingHeight = max(firstLineHeight,title.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
@@ -378,7 +384,15 @@ final class Bubble {
         motion.onResize = { [weak self] size in
             guard let self else {return}
             let height = size.height
-            self.title.frame = NSRect(x:margin+32*scale,y:height-margin-headingHeight,width:headingWidth,height:headingHeight)
+            self.title.frame = NSRect(x:margin+32*scale+headingPrefix,y:height-margin-headingHeight,width:headingWidth,height:headingHeight)
+            if self.headingSymbol != nil {
+                let spinnerWidth = InlineStatusLayout.brailleFieldSize(font:font).width
+                self.headingSpinner.font = font
+                self.headingSpinner.frame = NSRect(x:margin+32*scale,y:self.title.frame.minY,width:spinnerWidth,height:headingHeight)
+                InlineStatusLayout.alignBraille(self.headingSpinner,to:InlineStatusLayout.baseline(of:self.title))
+                self.headingIcon.frame.origin.x = self.headingSpinner.frame.maxX+6*scale
+                InlineStatusLayout.align(self.headingIcon,to:self.title,side:font.pointSize)
+            }
             if hasElapsed {self.layoutElapsed(in:size)}
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSide,height:progressIconSide)
@@ -438,7 +452,7 @@ final class Bubble {
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,truncateBody:Bool = false,completionFooter:TranscriptActions? = nil) {
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,truncateBody:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil,headingSymbol:String? = nil) {
         stopQuotaLoading()
         taskList?.stop(); taskList = nil
         userInputPrefixLength = 0
@@ -448,7 +462,11 @@ final class Bubble {
         if !preserveCountdown {countdown.stop()}
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
         let same = self.kind == kind && scroll.documentView === text
-        self.kind = kind; self.scale = scale
+        self.kind = kind; self.scale = scale; displayedFailure = failure
+        self.headingSymbol = kind == "progressToast" ? headingSymbol : nil
+        headingIcon.isHidden = self.headingSymbol == nil; headingSpinner.isHidden = self.headingSymbol == nil
+        headingIcon.image = self.headingSymbol.flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)}
+        headingIcon.contentTintColor = .secondaryLabelColor
         pendingAttention = attentionAction
         let previousForm = questionTaskKey == taskKey ? questionForm : nil
         let sameQuestions = questionTaskKey == taskKey && questionModels == questions
@@ -483,7 +501,8 @@ final class Bubble {
         title.hoverHelp = kind == "progressToast" ? heading : nil
         setHeading(heading, animated: animateHeading && timing?.finished == nil)
         let bodyFont = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
-        details.title = "查看记录详情"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
+        if let failure {onDetails = {failure.showDetails()}}
+        details.title = failure == nil ? "查看记录详情" : "技术详情…"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
         codexButton.isHidden = !enabled; codexButton.emphasize(attentionAction && approval == nil)
         configureButtons()
         if attentionAction && !questions.isEmpty {
@@ -539,13 +558,14 @@ final class Bubble {
             if changed {scroll.showTop()}
         }
         motion.show()
+        refreshTaskProgress(relayout:false)
         if !taskProgress.isHidden {taskProgress.start()}
         if !preserveCountdown {startCountdown(attentionAction ? 0 : seconds)}
         refreshStandalone = fromCard ? nil : { [weak self] in
             guard let self else {return}
             self.show(title:heading,body:body,kind:kind,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,
                 details:enabled,resetText:false,animateHeading:animateHeading,attentionAction:attentionAction,
-                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput,truncateBody:truncateBody,completionFooter:completionFooter)
+                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput,truncateBody:truncateBody,completionFooter:completionFooter,failure:failure,headingSymbol:headingSymbol)
         }
     }
     private func fitToolProgressBody(height:CGFloat,width:CGFloat) {
@@ -616,9 +636,15 @@ final class Bubble {
         headingTimer = timer; RunLoop.main.add(timer, forMode: .common)
     }
     private func renderAnimatedHeading() {
-        title.attributedStringValue = ProgressTextEffects.heading(plainHeading,
-            font:title.font ?? .systemFont(ofSize:13,weight:.semibold),appearance:title.effectiveAppearance,
-            elapsed:ProcessInfo.processInfo.systemUptime-headingStarted,frame:headingFrames[headingPhase])
+        let font = title.font ?? .systemFont(ofSize:13,weight:.semibold)
+        let elapsed = ProcessInfo.processInfo.systemUptime-headingStarted
+        if headingSymbol != nil {
+            headingSpinner.font = font
+            headingSpinner.attributedStringValue = InlineStatusLayout.braille(headingFrames[headingPhase],font:font,color:AppAccent.color)
+            title.attributedStringValue = ProgressTextEffects.title(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed)
+        } else {
+            title.attributedStringValue = ProgressTextEffects.heading(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed,frame:headingFrames[headingPhase])
+        }
     }
 
     private func configureElapsed(start: Date?, key: String?, finished: Date?, status: String?) {
@@ -636,11 +662,18 @@ final class Bubble {
         }
         elapsedTimer = timer; RunLoop.main.add(timer,forMode:.common)
     }
+    func refreshActivity(timing:TaskTiming) -> Bool {
+        guard visible,kind == "task",!pendingAttention,activityTiming?.finished == nil,
+              activityTiming?.key == timing.key,activityTiming?.start == timing.start else {return false}
+        refreshTaskProgress(); return true
+    }
     private func refreshTaskProgress(relayout:Bool = true) {
         let activity:TaskActivity?
         // 外部 key 包含会话与轮次；内置 activityKey 是真实轮次身份，再核对开始时间。
         // 仅任务主气泡显示，额度、2 秒进展小气泡与审批／问卷不加这一行。
-        if kind == "task",!pendingAttention,taskFinishedAt == nil,
+        if let failure = displayedFailure,let symbol = failure.statusSymbol {
+            activity = TaskActivity(title:failure.title,kind:.status,statusSymbol:symbol)
+        } else if kind == "task",!pendingAttention,taskFinishedAt == nil,
            let timing = activityTiming,
            let task = taskProvider().tasks.first(where:{timing.matchesActivity(key:$0.key,start:$0.start) && $0.active}),
            task.activity?.visible == true {activity = task.activity}
@@ -660,6 +693,7 @@ final class Bubble {
             taskProgressIcon.identifier = symbol.map {NSUserInterfaceItemIdentifier($0)}
             taskProgressIcon.image = symbol.flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:activity?.title)}
         }
+        TaskActivityAppearance.apply(activity,icon:taskProgressIcon,text:taskProgress,visible:visible && !taskProgress.isHidden)
         if taskProgress.isHidden {taskProgress.stop()}
         else if visible {taskProgress.start()}
         if relayout,wasHidden != taskProgress.isHidden,visible {
@@ -713,7 +747,7 @@ final class Bubble {
     func refreshDuration() {if visible {startCountdown(pendingAttention || kind == "error" ? 0 : kind == "progressToast" ? preferences.number("progressToastSeconds") : preferences.duration(purpose,text:currentBody))}}
     func showFailure(_ failure: AppFailure, scale: Double, retry: (() -> Void)? = nil, taskStartedAt: Date? = nil, taskFinishedAt: Date? = nil, taskStatus: String? = nil) {
         onDetails = {failure.showDetails()}
-        show(title:taskStatus.map {preferences.taskResultLine($0)} ?? failure.title, body:failure.message, kind:"error", scale:scale, seconds:0, details:true, timing:.init(start:taskStartedAt,finished:taskFinishedAt,status:taskStatus))
+        show(title:taskStatus.map {preferences.taskResultLine($0)} ?? failure.title, body:failure.message, kind:"error", scale:scale, seconds:0, details:true, timing:.init(start:taskStartedAt,finished:taskFinishedAt,status:taskStatus),failure:failure)
         purpose = .attention
         details.title = "技术详情…"
         codexButton.isHidden = true
@@ -883,11 +917,12 @@ final class Bubble {
         scroll.documentView = nil; taskList = nil
         text.releaseRenderedContent(); text.hoverHelp = nil
         currentBody = ""; plainHeading = ""; title.stringValue = ""; title.hoverHelp = nil
+        headingSymbol = nil; headingSpinner.stringValue = ""; headingSpinner.isHidden = true; headingIcon.image = nil; headingIcon.isHidden = true
         refreshStandalone = nil; renderedCardID = nil
-        taskProgress.stop(); taskProgress.stringValue = ""; taskProgress.hoverHelp = nil; taskProgress.isHidden = true; taskProgressIcon.isHidden = true; progressTaskKey = nil; activityTiming = nil
+        TaskActivityAppearance.stop(taskProgressIcon); displayedFailure = nil; taskProgress.stop(); taskProgress.stringValue = ""; taskProgress.hoverHelp = nil; taskProgress.isHidden = true; taskProgressIcon.isHidden = true; progressTaskKey = nil; activityTiming = nil
         questionForm = nil; questionModels.removeAll(); questionSize = nil; questionTaskKey = nil
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil}
+    func hide() {TaskActivityAppearance.stop(taskProgressIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil}
 }

@@ -9,7 +9,7 @@ enum DesktopReply {
         return nil
     }
     struct OwnerUnavailable:LocalizedError {
-        var errorDescription:String? {"Codex 尚未加载这条会话，请在 Codex 中打开。"}
+        var errorDescription:String? {"请先在 Codex 中打开这条会话。"}
     }
     private static func connect(thread:String,timeout:Int = 8) throws -> (DesktopSocket,String) {
         let connection = try DesktopSocket(timeoutSeconds:timeout)
@@ -47,7 +47,7 @@ enum DesktopReply {
     }
     struct Unconfirmed: LocalizedError {
         let underlying:Error
-        var errorDescription:String? {"发送结果尚未确认。请打开 Codex 检查原会话，确认未发送后再重试。\n\n"+underlying.localizedDescription}
+        var errorDescription:String? {"尚未收到发送确认。请先到 Codex 查看消息是否已发送，确认未发送后再重试。\n\n"+underlying.localizedDescription}
     }
     static func submit(thread:String,previousTurn:String,cwd:String,text:String,mode:Mode,completion:@escaping (Result<Receipt,Error>) -> Void) {
         DispatchQueue.global(qos:.userInitiated).async {

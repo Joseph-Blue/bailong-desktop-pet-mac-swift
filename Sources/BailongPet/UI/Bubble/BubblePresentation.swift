@@ -39,6 +39,7 @@ struct BubbleCard {
     var showsTaskOverview = false
     var isUserInput = false
     var completionFooter:TranscriptActions? = nil
+    var failure:AppFailure? = nil
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
     var priority:Priority {

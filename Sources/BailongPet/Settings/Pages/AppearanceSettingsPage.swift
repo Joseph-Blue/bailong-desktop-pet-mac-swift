@@ -30,7 +30,7 @@ final class AppearanceSettingsPage {
     }
     func render() {
         form.group("大小",[form.slider("桌宠大小","petPercent",range:50...200,suffix:"%"),form.slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),form.slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt")])
-        form.group("桌宠轮廓",[form.toggle("轮廓阴影","petShadow",detail:"在桌宠轮廓外显示柔和阴影。")])
+        form.group("桌宠轮廓",[form.toggle("轮廓阴影","petShadow")])
         form.group("气泡形状",[form.toggle("自定义宽高比","bubbleAspectEnabled"),form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1",requires:["bubbleAspectEnabled"])])
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
@@ -56,7 +56,11 @@ final class AppearanceSettingsPage {
             themeRows.append(form.row("自定义",control:well))
         }
         form.group("主题",themeRows)
-        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:PetPreferences.glassAvailabilityDescription) { [weak self] in self?.reload(); self?.showPreview() }
+        var materialImages = [String:NSImage]()
+        if let image = glassSymbolImage(filled:false) {
+            image.size = NSSize(width:18,height:18); materialImages["glass"] = image
+        }
+        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],symbols:["plain":"rectangle.fill"],images:materialImages,value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:PetPreferences.glassAvailabilityDescription) { [weak self] in self?.reload(); self?.showPreview() }
         var materialRows = [material]
         if preferences.usesGlass {
             let follow = AccentSwitch(); follow.state = preferences.bool("glassFollowsSystem") ? .on : .off; glassFollowSwitch = follow
@@ -79,10 +83,14 @@ final class AppearanceSettingsPage {
         materialRows.append(form.row("气泡效果",control:ActionButton("预览气泡") { [weak self] in self?.showPreview() }))
         form.group("消息窗口",materialRows)
     }
-    private func glassSymbol(filled:Bool) -> NSImageView {
+    private func glassSymbolImage(filled:Bool) -> NSImage? {
         let name = "capsule.on.rectangle.liquid.glass" + (filled ? ".fill" : "")
         let image = NSImage(systemSymbolName:name,accessibilityDescription:nil) ?? NSImage(contentsOf:Paths.resources.appendingPathComponent("glass-symbols/"+name+".pdf"))
         image?.isTemplate = true
+        return image
+    }
+    private func glassSymbol(filled:Bool) -> NSImageView {
+        let image = glassSymbolImage(filled:filled)
         let view = NSImageView(); view.image = image; view.contentTintColor = .secondaryLabelColor
         view.setAccessibilityLabel(filled ? "更不透明" : "更通透")
         view.widthAnchor.constraint(equalToConstant:24).isActive = true; view.heightAnchor.constraint(equalToConstant:24).isActive = true

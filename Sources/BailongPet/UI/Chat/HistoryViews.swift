@@ -71,7 +71,7 @@ final class HistoryConversationCell: NSTableCellView {
         setAccessibilityLabel((symbol == nil ? kind.title+"，" : "")+title+(snippet.map {"，"+$0} ?? ""))
         sourceIcon.translatesAutoresizingMaskIntoConstraints = false; titleLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            sourceIcon.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),sourceIcon.centerYAnchor.constraint(equalTo:titleLabel.centerYAnchor),sourceIcon.widthAnchor.constraint(equalToConstant:18),sourceIcon.heightAnchor.constraint(equalToConstant:18),
+            sourceIcon.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),sourceIcon.centerYAnchor.constraint(equalTo:titleLabel.firstBaselineAnchor,constant:-NSFont.systemFont(ofSize:13).capHeight/2),sourceIcon.widthAnchor.constraint(equalToConstant:18),sourceIcon.heightAnchor.constraint(equalToConstant:18),
             titleLabel.leadingAnchor.constraint(equalTo:sourceIcon.trailingAnchor,constant:8),titleLabel.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-20)
         ])
         if symbol == nil {

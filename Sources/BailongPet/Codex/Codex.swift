@@ -174,7 +174,7 @@ final class CodexConnection {
             if method == "thread/closed",let thread = params["threadId"] as? String {loadedThreads.remove(thread)}
             if let id = value["id"] { request(id,method,params) } else { event(method,params) }
         } else if let id = value["id"] as? Int, let (callback,_) = pending.removeValue(forKey:id) {
-            if let error = value["error"] as? [String:Any] { callback(.failure(PetFailure(message:error["message"] as? String ?? "Codex 请求失败"))) }
+            if let error = value["error"] as? [String:Any] { callback(.failure(PetFailure(message:CodexErrorMessage.encode(error)))) }
             else if let result = value["result"] as? [String:Any] {callback(.success(result))}
             else {callback(.failure(CodexProtocol.Failure.malformed("回复缺少结果对象")))}
         }

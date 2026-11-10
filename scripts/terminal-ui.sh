@@ -1,7 +1,7 @@
 # 共用终端输出；非终端不输出光标控制，NO_COLOR 关闭配色。
 typeset -g bailong_phase="" bailong_phase_log="" bailong_spinner_pid="" bailong_download_pid=""
 typeset -g bailong_temp_dir="" bailong_diagnostic_dir=""
-typeset -gi bailong_started=$SECONDS bailong_phase_started=0 bailong_animated=0
+typeset -gi bailong_started=$SECONDS bailong_phase_started=0 bailong_animated=0 bailong_exit_waited=0
 exec {bailong_ui_fd}>&1
 [[ -t 1 && "${TERM:-dumb}" != dumb ]] && bailong_animated=1
 typeset -g bl_reset="" bl_accent="" bl_dim="" bl_green="" bl_red=""
@@ -10,6 +10,26 @@ if (( bailong_animated )) && [[ -z "${NO_COLOR+x}" ]]; then
     bl_green=$'\e[32m'; bl_red=$'\e[31m'
 fi
 bailong_interactive() { [[ "${BAILONG_INTERACTIVE:-0}" == 1 && -t 0 && -t 1 ]] }
+bailong_confirm() {
+    local answer
+    while true; do
+        if ! read -r "answer?$1 [Y/N]："; then print; return 1; fi
+        case "$answer" in
+            [Yy]) return 0 ;;
+            [Nn]) return 1 ;;
+            *) print -r -- "请输入 Y 或 N。" ;;
+        esac
+    done
+}
+bailong_wait_key() {
+    bailong_interactive || return 0
+    (( ! bailong_exit_waited )) || return 0
+    bailong_exit_waited=1
+    local key
+    print -n -r -- "按任意键继续..."
+    if read -r -s -k 1 key; then :; fi
+    print
+}
 bailong_header() {
     local architecture="$2"
     case "$2" in
@@ -17,7 +37,7 @@ bailong_header() {
         x86_64) architecture="Intel · x86_64" ;;
     esac
     print -ru "$bailong_ui_fd" -- "
-${bl_accent}白龙桌宠Swift${bl_reset}  $(<VERSION)"
+${bl_accent}白龙桌宠Swift${bl_reset}     版本：${bl_accent}$(<VERSION)${bl_reset}"
     print -ru "$bailong_ui_fd" -- "${bl_dim}────────────────────────────────────────${bl_reset}"
     print -ru "$bailong_ui_fd" -- "$1  ·  $architecture
 "
@@ -119,6 +139,8 @@ TRAPZERR() {
     local result=$?
     (( ZSH_SUBSHELL == 0 )) || return "$result"
     bailong_phase_finish "${bl_red}✗${bl_reset}" "失败（退出码 $result）"
+    # 函数内的 errexit 路径在这里停留；显式 exit 交给 EXIT，只等待一次。
+    if [[ -o errexit ]] && (( result != 130 && result != 143 )); then bailong_wait_key; fi
     return "$result"
 }
 TRAPINT() { bailong_phase_finish "■" "已取消"; exit 130 }
@@ -133,8 +155,7 @@ TRAPEXIT() {
     fi
     [[ -z "$bailong_temp_dir" ]] || rm -rf "$bailong_temp_dir"
     [[ -z "$bailong_diagnostic_dir" ]] || rm -rf "$bailong_diagnostic_dir"
-    if (( result != 0 )) && bailong_interactive; then
-        local answer
-        read -r "answer?按回车结束。"
+    if (( result != 0 && result != 130 && result != 143 )) && bailong_interactive; then
+        bailong_wait_key
     fi
 }
