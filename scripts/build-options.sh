@@ -22,7 +22,10 @@ bailong_parse_options() {
   --replace-resources      备份后替换 ZIP 包含的资源
   --download-resources     下载清单指定的资源包
   --help                   显示帮助"
-                [[ "$bailong_entry" != dev ]] || print '  --build-only             仅编译开发程序，不检查运行资源或启动'
+                if [[ "$bailong_entry" == dev ]]; then
+                    print '  --build-only             仅编译开发程序，不检查运行资源或启动'
+                    print '运行时显示 PID；^C 请求退出，5 秒倒计时后强制结束未退出的进程。'
+                fi
                 print '环境变量：BAILONG_BUILD_PROFILE=auto|full|glass|plain；SDKROOT=<SDK 路径>'
                 exit 0 ;;
             *) bailong_error "未知参数：$1；使用 --help 查看用法。"; return 2 ;;

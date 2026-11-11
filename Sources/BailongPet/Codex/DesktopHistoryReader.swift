@@ -178,21 +178,25 @@ enum DesktopHistoryReader {
                 // 只取公开摘要与操作元数据，不读取 reasoning.content、工具 arguments 或输出。
                 let items = try history.rows("""
                 SELECT item_type,json_extract(item_json,'$.id') item_id,json_extract(item_json,'$.phase') phase,
-                CASE WHEN NOT EXISTS (SELECT 1 FROM json_each(item_json,'$.questions') q WHERE json_extract(q.value,'$.isSecret')=1)
+                CASE WHEN item_type='agentMessage' AND NOT EXISTS (SELECT 1 FROM json_each(item_json,'$.questions') q WHERE json_extract(q.value,'$.isSecret')=1)
                     THEN json_extract(item_json,'$.text') END text,
                 json_extract(item_json,'$.status') status,json_extract(item_json,'$.questions') questions,
+                json_extract(item_json,'$.completed') completed,json_extract(item_json,'$.completedAtMs') completed_at_ms,
+                CASE WHEN item_type='dynamicToolCall' THEN json_extract(item_json,'$.success') END success,
+                CASE WHEN item_type='plan' THEN substr(json_extract(item_json,'$.text'),1,8192) END plan_text,
+                CASE WHEN item_type='webSearch' THEN json_extract(item_json,'$.action') END web_action,
                 json_extract(item_json,'$.reason') reason,
                 CASE WHEN item_type='commandExecution' THEN json_extract(item_json,'$.command') END command,
                 CASE WHEN item_type='commandExecution' THEN json_extract(item_json,'$.commandActions') END command_actions,
                 CASE WHEN item_type='fileChange' THEN json_extract(item_json,'$.changes') END changes,
                 CASE WHEN item_type='webSearch' THEN json_extract(item_json,'$.query') END query,
                 CASE WHEN item_type='reasoning' THEN json_extract(item_json,'$.summary') END summary,
-                CASE WHEN item_type IN ('mcpToolCall','dynamicToolCall') THEN json_extract(item_json,'$.tool') END tool,
+                CASE WHEN item_type IN ('mcpToolCall','dynamicToolCall','collabAgentToolCall','collabToolCall') THEN json_extract(item_json,'$.tool') END tool,
                 CASE WHEN item_type='mcpToolCall' THEN json_extract(item_json,'$.server') END server,
                 CASE WHEN item_type='dynamicToolCall' THEN json_extract(item_json,'$.namespace') END namespace,
                 CASE WHEN item_type='imageGeneration' THEN json_extract(item_json,'$.savedPath') END saved_path
                 FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type IN
-                ('agentMessage','userMessage','reasoning','commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageGeneration','imageView','contextCompaction')
+                ('agentMessage','userMessage','reasoning','commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageGeneration','imageView','contextCompaction','plan','collabAgentToolCall','collabToolCall','enteredReviewMode','exitedReviewMode')
                 ORDER BY rollout_ordinal DESC LIMIT 200
                 """,[actual,turn["turn_id"]!]).reversed()
                 var messages = [String](), final = "", alert = ""
@@ -204,7 +208,10 @@ enum DesktopHistoryReader {
                     if item["item_type"] == "userMessage" {continue}
                     var progress:[String:Any] = ["type":item["item_type"] ?? ""]
                     for key in ["status","tool","server","namespace","command","query"] {if let value = item[key],value != "null" {progress[key] = value}}
-                    for (column,field) in [("summary","summary"),("command_actions","commandActions"),("changes","changes")] {
+                    if let text = item["plan_text"],text != "null" {progress["text"] = text}
+                    if let value = item["success"],value != "null" {progress["success"] = value == "1"}
+                    if item["completed"] == "1" || Double(item["completed_at_ms"] ?? "") != nil {progress["completed"] = true}
+                    for (column,field) in [("summary","summary"),("command_actions","commandActions"),("changes","changes"),("web_action","action")] {
                         if let raw = item[column],raw != "null" {progress[field] = try JSONSerialization.jsonObject(with:Data(raw.utf8))}
                     }
                     activityItems.append(progress)

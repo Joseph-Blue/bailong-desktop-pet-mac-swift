@@ -27,7 +27,7 @@ final class WorkspaceSettingsPage:NSObject {
             form.note("“在默认工作区新建”使用此目录；更改后不移动已有会话的文件。"),
             form.row("恢复内置工作区",control:restore),
             form.row("清理内置工作区",detail:"将下方目录中的文件移到废纸篓，保留目录和聊天记录。自定义工作区不受影响。\n"+LocalStorage.workspace.path,control:cleanup)
-        ])
+        ],symbol:"folder")
     }
     private func chooseDirectory() {
         let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true

@@ -306,7 +306,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let index = pet.animation?.stream?.current?.index ?? pet.frameIndex
         let resolution = pet.currentFrame?.image.width ?? pet.animationResolution(for:pet.current)
         let automatic = pet.preferences.usesAutomaticAnimationResolution ? "自动 · " : ""
-        let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧 (≥ 24 FPS)" : pet.preferences.string("animationFPSLimit") + " FPS"
+        let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧" : pet.preferences.string("animationFPSLimit") + " FPS"
         let state = pet.hidden ? "隐藏" : pet.loading ? "解码中" : "播放"
         let preloadEnabled = pet.preferences.bool("preloadWholeAnimation")
         var playback = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(automatic)\(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 图层更新 \(number(reading.draws))/s"
@@ -319,7 +319,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             playback += "\n准备→交接 \(milliseconds(timing.handedAt.map { $0 - timing.readyAt })) · 交接→图层 \(milliseconds(timing.submittedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } }))"
             playback += "\n请求→图层 \(milliseconds(timing.submittedAt.map { $0 - timing.requestedAt }))"
         }
-        let cache = pet.decoder.residentFrameStatistics()
+        let cache = pet.decoder.residentFrameStatistics(additionalImages: pet.view.transitionImage.map { [$0] } ?? [])
         var preloadText: String
         if preloadEnabled {
             if let progress = pet.decoder.preloadingStatistics() {
@@ -346,6 +346,10 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         if pet.preferences.bool("animationOpeningCache"), !preloadEnabled {
             preloadText += "\n开头缓存 \(memoryText(UInt64(cache.openingBytes))) / 24 MiB · \(cache.openingClips) 段 · 累计命中 \(cache.hits) 次"
         }
+        let transition = !pet.preferences.bool("animationSmoothTransition") ? "关闭" :
+            (!pet.preferences.bool("bubbleMotion") || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) ? "动态效果已停用" :
+            pet.view.transitionImage == nil ? "开启 · 等待相近轮廓交接" : "180 ms 淡化中"
+        preloadText += "\n动作平滑过渡：\(transition) · 孤立杂点清理：\(pet.preferences.bool("animationEdgeCleanup") ? "开启" : "关闭")"
         let swapinText = previous.swapins.map { $0 > 0 ? "累计 \(memoryText($0))" : "未观察到换入" }
             ?? previous.memoryError ?? "不可用"
         let swapRateText = swapinRate.map { " · \(memoryText(UInt64($0.rounded())))/s" } ?? ""

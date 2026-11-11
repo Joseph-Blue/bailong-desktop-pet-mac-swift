@@ -19,6 +19,7 @@ final class CodexConnection {
     private var connectionError: String?
     private(set) var executableURL: URL?
     var isConnected:Bool {ready}
+    var connectionGeneration:Int {generation}
     var diagnostics: String {
         let state = ready ? "协议已连接" : process?.isRunning == true ? "正在初始化" : (connectionError.map { "连接失败：" + $0 } ?? "未连接")
         let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"

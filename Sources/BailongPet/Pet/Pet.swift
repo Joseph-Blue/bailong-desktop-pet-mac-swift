@@ -178,6 +178,7 @@ final class PetController: NSObject, NSMenuDelegate {
         bubble.onClose = { [weak self] in self?.quotaActive = false }
         settings.petSymbol = {AppIcons.petAvatarTemplate}
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
+        settings.onLinePreview = { [weak self] clip,line in self?.preview(clip,line:line) }
         settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose) }
         settings.onPreviewDetails = { [weak self] in self?.onHistory(nil) }
         observationTokens.append(NotificationCenter.default.addObserver(forName:PetPreferences.didChange,object:preferences,queue:.main) { [weak self] note in self?.settingsChanged(note.userInfo?["keys"] as? [String] ?? []) })
@@ -226,7 +227,8 @@ final class PetController: NSObject, NSMenuDelegate {
         let cacheOpening = !hidden && (catalog.idles.contains {$0.id == clip.id} ||
             [catalog.dragAnimation.id,catalog.landingAnimation.id,catalog.quotaAnimation.id].contains(clip.id))
         decoder.load(clip,resolution:resolution,fpsLimit:Double(preferences.string("animationFPSLimit")),
-                     playbackRate:preferences.speed(clip.id),cacheOpening:cacheOpening,framesReady: { [weak self] in
+                     playbackRate:preferences.speed(clip.id),cacheOpening:cacheOpening,
+                     cleanIsolatedPixels:preferences.bool("animationEdgeCleanup"),framesReady: { [weak self] in
             guard let self, !self.hidden else { return }
             self.tick()
         },first: { [weak self] frame in
@@ -248,6 +250,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 RecoveryWindow.resolve("animation-initialization")
                 self.startup?.orderOut(nil); self.startup = nil
                 // 像素、时间轴和清单校准一起切换，不能用新动作倍率绘制旧帧。
+                self.view.prepareTransition(to:animation.frames[0],clip:clip)
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id)
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
                 self.configureAnimationTimer()
@@ -490,7 +493,7 @@ final class PetController: NSObject, NSMenuDelegate {
         play(catalog.idle,"idle"); return true
     }
     func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockRecallOrigin = position; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
-    func preview(_ clip: Clip, taskOverview:Bool = false) {
+    func preview(_ clip: Clip, taskOverview:Bool = false, line:String? = nil) {
         interaction(); soundOnce()
         let wasHidden = hidden
         manualHidden = false
@@ -500,7 +503,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let showsOverview = taskOverview && preferences.bool("showTaskOverview")
         let title = showsOverview && bubble.taskProvider().tasks.contains(where:{$0.active})
             ? preferences.workingOverviewLine()
-            : preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate")
+            : line ?? preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate")
         say(title,kind:"interaction",personalizeTitle:false,taskOverview:showsOverview)
     }
     func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil) {
@@ -643,6 +646,7 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func applyVisibility() {
         if hidden {
+            view.cancelTransition()
             animation?.stream?.pauseObservation(); diagnostics?.pausePresentationClock()
             decoder.discardOpeningCache()
             timer?.invalidate(); timer = nil
@@ -765,6 +769,9 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
+        if !Set(keys).isDisjoint(with:["animationSmoothTransition","bubbleMotion"]),
+           !preferences.bool("animationSmoothTransition") || !preferences.bool("bubbleMotion") {view.cancelTransition()}
+        if keys == ["animationSmoothTransition"] {return}
         if keys.contains("notchExposurePercent") {
             if dock == "notch" {view.refreshFrame(); placeBubble()}
             if keys.count == 1 {return}
@@ -787,9 +794,10 @@ final class PetController: NSObject, NSMenuDelegate {
         if keys.contains("showDiagnostics") { updateDiagnostics() }
         if keys.contains("diagnosticsPinned") { diagnostics?.updatePin() }
         if !Set(keys).isDisjoint(with:["animationOpeningCache","preloadWholeAnimation"]) { updateOpeningCachePreference() }
-        if !Set(keys).isDisjoint(with:["animationQuality","animationFPSLimit","playbackSpeed","animationSpeeds"]) { decoder.discardOpeningCache() }
+        if !Set(keys).isDisjoint(with:["animationQuality","animationFPSLimit","playbackSpeed","animationSpeeds","animationEdgeCleanup"]) { decoder.discardOpeningCache() }
         let fixedQualityChanged = keys.contains("animationQuality") && !preferences.usesAutomaticAnimationResolution
-        if fixedQualityChanged || !Set(keys).isDisjoint(with:["animationBufferFrames","preloadWholeAnimation"]) {
+        if fixedQualityChanged || !Set(keys).isDisjoint(with:["animationBufferFrames","preloadWholeAnimation","animationEdgeCleanup"]) {
+            view.cancelTransition()
             let clip = current, playbackMode = mode
             let heldFrame = currentFrame, sourceFPS = animation?.fps ?? 24
             animation = heldFrame.map { Animation([$0],fps:sourceFPS) }; frameIndex = 0
@@ -802,7 +810,7 @@ final class PetController: NSObject, NSMenuDelegate {
             playbackRate = preferences.speed(current.id); began = reference-elapsed/playbackRate
             configureAnimationTimer()
         }
-        if !Set(keys).isDisjoint(with:["animationFPSLimit","animationQuality","animationBufferFrames","preloadWholeAnimation","playbackSpeed","animationSpeeds","animationOpeningCache"]) {
+        if !Set(keys).isDisjoint(with:["animationFPSLimit","animationQuality","animationBufferFrames","preloadWholeAnimation","playbackSpeed","animationSpeeds","animationOpeningCache","animationEdgeCleanup"]) {
             playbackScheduling = PlaybackSchedulingStatistics(); diagnostics?.resetStatistics()
         }
         if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize","bubbleAspectEnabled","bubbleAspectRatio"]) {
@@ -829,6 +837,7 @@ final class PetController: NSObject, NSMenuDelegate {
     deinit {motionDisplayLink?.invalidate()}
     func prepareForExit(_ completion: @escaping () -> Void) {
         exiting = true
+        view.cancelTransition()
         timer?.invalidate(); timer = nil; desktopTimer?.invalidate(); desktopTimer = nil
         motionDisplayLink?.invalidate(); motionDisplayLink = nil
         decoder.cancel(); startup?.orderOut(nil)

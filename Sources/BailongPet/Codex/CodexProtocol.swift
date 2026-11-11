@@ -24,7 +24,7 @@ enum CodexProtocol {
     static func delivery(_ message:[String:Any]) -> [String:Any]? {
         guard message["id"] == nil,let method = message["method"] as? String else {return message}
         guard ["thread/closed","thread/tokenUsage/updated","turn/started","turn/completed","error","item/agentMessage/delta",
-               "item/reasoning/summaryTextDelta","item/started","item/completed","turn/plan/updated"].contains(method) else {return nil}
+               "item/reasoning/summaryTextDelta","item/plan/delta","item/started","item/completed","turn/plan/updated"].contains(method) else {return nil}
         guard var params = message["params"] as? [String:Any] else {return message}
         if let item = params["item"] as? [String:Any] {params["item"] = publicItem(item)}
         if let turn = params["turn"] as? [String:Any] {
@@ -40,6 +40,7 @@ enum CodexProtocol {
         if item["type"] as? String == "agentMessage" {
             result["text"] = item["text"]; result["phase"] = item["phase"]
         } else if item["type"] as? String == "imageGeneration" {result["savedPath"] = item["savedPath"]}
+        else if item["type"] as? String == "plan" {result["text"] = item["text"]}
         return result
     }
     static func validate(_ method:String,_ params:[String:Any]) throws {
@@ -47,7 +48,7 @@ enum CodexProtocol {
             guard let id = value as? String,!id.isEmpty else {throw Failure.malformed("缺少有效标识")}
         }
         switch method {
-        case "item/agentMessage/delta":
+        case "item/agentMessage/delta","item/plan/delta":
             try requireID(params["itemId"])
             guard params["delta"] is String else {throw Failure.malformed("消息增量必须是文本")}
         case "turn/started", "turn/completed":

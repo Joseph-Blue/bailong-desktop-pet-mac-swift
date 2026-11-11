@@ -82,7 +82,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
     let scale:CGFloat
     private let spinner = NSTextField(labelWithString:"⠋"), name = NSTextField(labelWithString:""), elapsed = NSTextField(labelWithString:"00:00")
     private let activity = ProgressMarqueeView(frame:.zero)
-    private let activityIcon = NSImageView()
+    private let activityIcon = TaskActivitySymbolView(frame:.zero)
     private let watch = NSImageView()
     private let stateIcon = NSImageView()
     private let jump = NSImageView()
@@ -100,7 +100,6 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
         activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = .secondaryLabelColor
         activity.isHidden = task.activityLine == nil
-        activityIcon.contentTintColor = .secondaryLabelColor
         for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity] as [NSView] {addSubview(view)}
         jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:"在 Codex 中打开")
         jump.contentTintColor = .tertiaryLabelColor
@@ -112,7 +111,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         activity.stringValue = task.activityLine ?? ""; activity.isHidden = task.activityLine == nil
         activityIcon.isHidden = activity.isHidden
-        activityIcon.image = task.activity.flatMap {NSImage(systemSymbolName:$0.symbolName,accessibilityDescription:$0.title)}
+        activityIcon.update(task.activity,pointSize:15*scale)
         let symbol = task.connectionFailed ? "wifi.slash" : task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
         stateIcon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
         hoverHelp = [name.stringValue,task.activity?.text,"在 Codex 中打开"].compactMap {$0}.joined(separator:"\n")
@@ -146,7 +145,8 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         if task.active && ProgressTextEffects.enabled && window?.isVisible == true && !isHiddenOrHasHiddenAncestor {
             name.attributedStringValue = ProgressTextEffects.title(name.stringValue,font:name.font!,appearance:effectiveAppearance,elapsed:ProcessInfo.processInfo.systemUptime-titleEffectStart)
         } else {restoreTitle()}
-        spinner.isHidden = !task.active; stateIcon.isHidden = task.active
+        let waiting = task.activity?.kind == .attention
+        spinner.isHidden = !task.active || waiting; stateIcon.isHidden = task.active
         if task.active {spinner.attributedStringValue = InlineStatusLayout.braille(["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"][index],font:spinner.font!,color:AppAccent.color)}
         spinner.textColor = AppAccent.color
         let hasTime = task.active || task.end != nil
@@ -155,10 +155,10 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let color:NSColor = task.active ? .secondaryLabelColor : task.connectionFailed ? .systemRed : task.status == "completed" ? .systemGreen : task.status == "failed" ? .systemYellow : .systemRed
         elapsed.textColor = color; watch.contentTintColor = color; stateIcon.contentTintColor = color
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
-        let iconSide = 12*scale, progressX = 22*scale
-        activityIcon.frame = NSRect(x:progressX,y:32*scale+(20*scale-iconSide)/2,width:iconSide,height:iconSide)
-        activity.frame = NSRect(x:progressX+iconSide+6*scale,y:32*scale,width:max(0,bounds.width-progressX-iconSide-10*scale),height:20*scale)
-        InlineStatusLayout.align(activityIcon,toLineIn:activity,font:activity.font!,side:iconSide)
+        let iconSize = activityIcon.layoutSize, progressX = 22*scale
+        activityIcon.frame = NSRect(x:progressX,y:32*scale+(20*scale-iconSize.height)/2,width:iconSize.width,height:iconSize.height)
+        activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:32*scale,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:20*scale)
+        InlineStatusLayout.align(activityIcon,toLineIn:activity,font:activity.font!,side:iconSize.height,width:iconSize.width)
         TaskActivityAppearance.apply(task.activity,icon:activityIcon,text:activity,visible:window?.isVisible == true && !isHiddenOrHasHiddenAncestor)
         activity.start()
         jump.frame = NSRect(x:bounds.width-15*scale,y:(h-11*scale)/2,width:11*scale,height:11*scale)

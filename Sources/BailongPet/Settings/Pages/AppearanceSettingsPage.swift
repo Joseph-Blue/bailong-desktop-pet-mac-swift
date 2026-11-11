@@ -29,9 +29,18 @@ final class AppearanceSettingsPage {
         }
     }
     func render() {
-        form.group("大小",[form.slider("桌宠大小","petPercent",range:50...200,suffix:"%"),form.slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),form.slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt")])
-        form.group("桌宠轮廓",[form.toggle("轮廓阴影","petShadow")])
-        form.group("气泡形状",[form.toggle("自定义宽高比","bubbleAspectEnabled"),form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1",requires:["bubbleAspectEnabled"])])
+        var sizeRows = [
+            form.slider("桌宠大小","petPercent",range:50...200,suffix:"%"),
+            form.slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),
+            form.toggle("气泡自定义宽高比","bubbleAspectEnabled",changed:{ [weak self] in
+                self?.window.makeFirstResponder(nil)
+                self?.reload()
+            })]
+        if preferences.bool("bubbleAspectEnabled") {
+            sizeRows.append(form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1"))
+        }
+        sizeRows.append(form.slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt"))
+        form.group("大小",sizeRows,symbol:"arrow.up.left.and.arrow.down.right")
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
             let dot = AccentSwatch(key:key,name:name)
@@ -55,7 +64,7 @@ final class AppearanceSettingsPage {
             form.attach(well) { [weak self] sender in guard let rgb = (sender as! NSColorWell).color.usingColorSpace(.sRGB) else {return}; self?.preferences.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],for:"accentRGB") }
             themeRows.append(form.row("自定义",control:well))
         }
-        form.group("主题",themeRows)
+        form.group("主题",themeRows,symbol:"paintpalette")
         var materialImages = [String:NSImage]()
         if let image = glassSymbolImage(filled:false) {
             image.size = NSSize(width:18,height:18); materialImages["glass"] = image
@@ -79,9 +88,8 @@ final class AppearanceSettingsPage {
             controls.alphaValue = slider.isEnabled ? 1 : 0.45; glassControls = [controls]
             materialRows.append(form.row("玻璃不透明度",control:controls))
         }
-        materialRows.append(form.toggle("动态效果","bubbleMotion",detail:"控制气泡动画，以及桌宠启动、退出、显示和隐藏时的淡入淡出。"))
         materialRows.append(form.row("气泡效果",control:ActionButton("预览气泡") { [weak self] in self?.showPreview() }))
-        form.group("消息窗口",materialRows)
+        form.group("消息窗口",materialRows,symbol:"macwindow")
     }
     private func glassSymbolImage(filled:Bool) -> NSImage? {
         let name = "capsule.on.rectangle.liquid.glass" + (filled ? ".fill" : "")

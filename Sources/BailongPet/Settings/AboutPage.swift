@@ -151,6 +151,10 @@ final class AboutPageController: NSViewController {
         paragraph("感谢 ruyeli 在本仓库的英文版本地化分支中分享的 macOS SDK 兼容处理，为本项目改进构建脚本提供了参考。",to:text)
         link("bailong-desktop-pet-english · GitHub",url:"https://github.com/ruyeli/bailong-desktop-pet-english",to:text)
 
+        heading("动画优化参考 · moon135246",to:text)
+        paragraph("感谢 moon135246 基于我的白龙桌宠优化分支（原项目 Python + QT 技术栈，非本项目）继续改进，为本项目的动作缓存与性能优化提供了参考。",to:text)
+        link("bailong-desktop-pet-optimization · GitHub",url:"https://github.com/moon135246/bailong-desktop-pet-optimization",to:text)
+
         heading("角色动画与应用图标",to:text)
         paragraph("角色动画来自原作 v0.5.1 发布包，应用图标取自角色画面。",to:text)
 

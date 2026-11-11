@@ -18,6 +18,7 @@ final class CPUFrameConverter {
     }
 
     private let resolution: Int
+    private let cleanIsolatedPixels: Bool
     private let outputSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     private let outputInfo = CGBitmapInfo.byteOrder32Big.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
     private let linear = Workspace(), scaled = Workspace(), scaleWork = Workspace(), conversionWork = Workspace()
@@ -30,7 +31,9 @@ final class CPUFrameConverter {
     private var sourceResizing = false
     private let flags = vImage_Flags(kvImageDoNotTile)
 
-    init(resolution: Int) { self.resolution = resolution }
+    init(resolution: Int, cleanIsolatedPixels: Bool = false) {
+        self.resolution = resolution; self.cleanIsolatedPixels = cleanIsolatedPixels
+    }
 
     func frame(from buffer: CVPixelBuffer, bounds: CGRect?) throws -> Frame {
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
@@ -75,6 +78,10 @@ final class CPUFrameConverter {
         }) else { free(pixels); throw PetFailure(message: "无法创建动画像素源。") }
         var output = vImage_Buffer(data: pixels, height: vImagePixelCount(resolution), width: vImagePixelCount(resolution), rowBytes: rowBytes)
         try convert(resizing ? fromLinear! : converter!, input: &input, output: &output)
+        if cleanIsolatedPixels {
+            IsolatedPixelCleanup.apply(to: pixels.assumingMemoryBound(to: UInt8.self),
+                                       width: resolution, height: resolution, rowBytes: rowBytes)
+        }
         guard let image = CGImage(width: resolution, height: resolution, bitsPerComponent: 8, bitsPerPixel: 32,
                                   bytesPerRow: rowBytes, space: outputSpace, bitmapInfo: outputInfo,
                                   provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {

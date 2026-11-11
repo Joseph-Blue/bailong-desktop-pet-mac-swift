@@ -3,7 +3,8 @@ import Foundation
 // 只投影 UI 所需字段；明确排除 reasoning.content、工具输出、用户输入和会话设置。
 enum DesktopRuntimeProjection {
     static let requestFields:Set<String> = ["threadId","turnId","itemId","reason","command","cwd","availableDecisions","permissions","additionalPermissions","networkApprovalContext","grantRoot"]
-    static let itemFields:Set<String> = ["id","type","status","completed","completedAtMs","summary","tool","server","namespace","command","commandActions","changes","query","message","willRetry","errorInfo"]
+    static let itemFields:Set<String> = ["id","type","status","completed","completedAtMs","summary","tool","server","namespace","command","commandActions","changes","query","message","willRetry","errorInfo","success","action"]
+    private static let webActionFields:Set<String> = ["type","query","queries","url","pattern"]
     static func request(_ raw:Any) -> [String:Any] {
         guard let value = raw as? [String:Any] else {return [:]}
         var result = value.filter {["id","method"].contains($0.key)}
@@ -13,7 +14,12 @@ enum DesktopRuntimeProjection {
         return result
     }
     static func item(_ raw:Any) -> [String:Any] {
-        (raw as? [String:Any] ?? [:]).filter {itemFields.contains($0.key)}
+        let raw = raw as? [String:Any] ?? [:]
+        var result = raw.filter {itemFields.contains($0.key)}
+        // 计划正文是公开进展；不因此保留助手正文、用户输入或审查正文。
+        if raw["type"] as? String == "plan",let text = raw["text"] as? String {result["text"] = String(text.prefix(8192))}
+        if let action = raw["action"] as? [String:Any] {result["action"] = action.filter {webActionFields.contains($0.key)}}
+        return result
     }
     private static func turn(_ raw:Any,keepingTurns:Set<String>) -> [String:Any] {
         let raw = raw as? [String:Any] ?? [:]
@@ -111,7 +117,18 @@ enum DesktopRuntimeProjection {
                 if field == "items" {
                     if path.count == offset+1 {value = (value as? [Any] ?? []).map(item)}
                     else if path.count == offset+2 {value = item(value)}
-                    else if !itemFields.contains(path[offset+2] as? String ?? "") {return true}
+                    else {
+                        let itemField = path[offset+2] as? String ?? ""
+                        if itemField == "text" {
+                            let currentItem = try node(state,path:ArraySlice(path.prefix(offset+2))) as? [String:Any] ?? [:]
+                            guard currentItem["type"] as? String == "plan",path.count == offset+3 else {return true}
+                            if let text = value as? String {value = String(text.prefix(8192))}
+                        } else if !itemFields.contains(itemField) {return true}
+                        if itemField == "action" {
+                            if path.count == offset+3 {value = (value as? [String:Any] ?? [:]).filter {webActionFields.contains($0.key)}}
+                            else if !webActionFields.contains(path[offset+3] as? String ?? "") {return true}
+                        }
+                    }
                 } else if !["turnId","status"].contains(field) {return true}
             }
         }

@@ -1,7 +1,7 @@
 import AppKit
 import QuartzCore
 
-final class SpriteView: NSView {
+final class SpriteView: NSView, CAAnimationDelegate {
     weak var pet: PetController?
     private let imageLayer = CALayer()
     private struct RenderState: Equatable {
@@ -18,6 +18,11 @@ final class SpriteView: NSView {
     }
     private var displayedState: RenderState?
     private var shadowState: RenderState?
+    private(set) var transitionImage: CGImage?
+    private var transitionPending = false
+    private var transitionGeneration = 0
+    // CATransition 忽略自定义 key，系统固定以 kCATransition 保存和移除。
+    private static let transitionKey = kCATransition
 
     override init(frame frameRect: NSRect) {
         super.init(frame:frameRect)
@@ -27,6 +32,8 @@ final class SpriteView: NSView {
         imageLayer.magnificationFilter = .linear
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         wantsLayer = true
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(motionSettingsChanged),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     }
     required init?(coder: NSCoder) {fatalError("init(coder:) has not been implemented")}
     override var isFlipped: Bool {true}
@@ -43,13 +50,51 @@ final class SpriteView: NSView {
     override func viewDidMoveToWindow() {super.viewDidMoveToWindow(); refreshFrame()}
     override func viewDidChangeBackingProperties() {super.viewDidChangeBackingProperties(); refreshFrame()}
 
+    // 只由已通过请求身份校验的动作交接调用；原动画流仍按原时机释放。
+    func prepareTransition(to frame: Frame, clip: Clip) {
+        cancelTransition()
+        guard let pet, !pet.hidden, pet.preferences.bool("animationSmoothTransition"),
+              pet.preferences.bool("bubbleMotion"), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              pet.current.id != clip.id, !pet.dockAnimating, let previous = pet.currentFrame,
+              previous.image !== frame.image,
+              displayedState?.image === previous.image,
+              AnimationTransition.overlap(previous, clip: pet.current, frame, nextClip: clip) >= AnimationTransition.minimumOverlap else { return }
+        transitionImage = previous.image
+        transitionPending = true
+    }
+    @objc private func motionSettingsChanged() {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { cancelTransition() }
+    }
+    func cancelTransition() {
+        transitionGeneration += 1; transitionPending = false; transitionImage = nil
+        imageLayer.removeAnimation(forKey: Self.transitionKey)
+    }
+    func animationDidStop(_ anim: CAAnimation, finished flag: Bool) {
+        guard anim.value(forKey: "generation") as? Int == transitionGeneration else { return }
+        transitionImage = nil
+    }
+    deinit { NSWorkspace.shared.notificationCenter.removeObserver(self) }
+
     func refreshFrame() {
         guard let pet, !pet.hidden, let frame = pet.currentFrame, let layer else {return}
         let state = RenderState(image:frame.image,rect:pet.drawRect,bounds:bounds,transform:pet.transform,
                                 clipped:pet.dock == "notch",backingScale:window?.backingScaleFactor ?? 1)
+        if transitionImage != nil, !transitionPending, let previous = displayedState,
+           previous.bounds != state.bounds || previous.transform != state.transform ||
+           previous.clipped != state.clipped || previous.backingScale != state.backingScale {
+            cancelTransition()
+        }
         if state != displayedState {
             let t = state.transform
             CATransaction.begin(); CATransaction.setDisableActions(true)
+            if transitionPending {
+                transitionPending = false
+                let fade = CATransition()
+                fade.type = .fade; fade.duration = AnimationTransition.duration
+                fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                fade.delegate = self; fade.setValue(transitionGeneration, forKey: "generation")
+                imageLayer.add(fade, forKey: Self.transitionKey)
+            }
             layer.masksToBounds = state.clipped
             imageLayer.bounds = CGRect(origin:.zero,size:state.rect.size)
             // 与原 drawRect → transform 相同：先把图像放进动作矩形，再绕画布变换。
@@ -70,6 +115,7 @@ final class SpriteView: NSView {
         } else {shadowState = nil}
     }
     func releaseDisplayTracking() {
+        cancelTransition()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         imageLayer.contents = nil
         CATransaction.commit()

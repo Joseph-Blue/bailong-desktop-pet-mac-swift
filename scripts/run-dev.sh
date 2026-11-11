@@ -69,8 +69,19 @@ if (( bailong_build_only )); then
     print "编译完成 · 总用时 $((SECONDS-bailong_started)) 秒"
     exit 0
 fi
-print "开发程序已启动，按 ^C 停止"
 export BAILONG_DEV_RUN=1
-[[ -z "$bailong_diagnostic_dir" ]] || rm -rf "$bailong_diagnostic_dir"
-bailong_diagnostic_dir=""
-exec "$binary"
+# 保留父脚本处理 ^C；不再 exec 替换为应用，才能执行超时终止。
+setopt nobgnice
+"$binary" <&0 &
+bailong_dev_pid=$!
+bailong_exit_waited=1
+print "开发程序已启动 · PID $bailong_dev_pid · 按 ^C 停止"
+if wait "$bailong_dev_pid"; then
+    bailong_ok "开发程序已退出 · PID $bailong_dev_pid"
+    bailong_dev_pid=""
+else
+    dev_result=$?
+    bailong_error "开发程序已退出 · PID $bailong_dev_pid · 退出码 $dev_result"
+    bailong_dev_pid=""
+    exit "$dev_result"
+fi

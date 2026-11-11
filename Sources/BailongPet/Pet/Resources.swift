@@ -110,6 +110,7 @@ final class Decoder: @unchecked Sendable {
         let resolution: Int
         let fpsLimit: Double?
         let cappedPlaybackRate: Double?
+        let cleanIsolatedPixels: Bool
     }
     private struct Opening {
         let key: OpeningKey
@@ -130,12 +131,16 @@ final class Decoder: @unchecked Sendable {
     private var preloadProgress: (id: String, frames: Int, total: Int)?
     func preloadingStatistics() -> (id: String, frames: Int, total: Int)? { lock.withLock { preloadProgress } }
     private var resident = [String: WeakAnimation]()
-    func residentFrameStatistics() -> (clips: Int, frames: Int, bytes: Int, openingClips: Int, openingBytes: Int, hits: Int) {
+    func residentFrameStatistics(additionalImages: [CGImage] = []) -> (clips: Int, frames: Int, bytes: Int, openingClips: Int, openingBytes: Int, hits: Int) {
         lock.withLock {
             let live = resident.values.compactMap { $0.value }
             var unique = [ObjectIdentifier:Int]()
             for animation in live { for frame in animation.retainedFrames { unique[ObjectIdentifier(frame.image)] = frame.cost } }
             for opening in openings { for entry in opening.entries { unique[ObjectIdentifier(entry.frame.image)] = entry.frame.cost } }
+            for image in additionalImages {
+                let key = ObjectIdentifier(image)
+                unique[key] = max(unique[key] ?? 0, image.bytesPerRow * image.height)
+            }
             return (live.count,unique.count,unique.values.reduce(0,+),openings.count,openingBytes,openingHits)
         }
     }
@@ -182,14 +187,15 @@ final class Decoder: @unchecked Sendable {
         lock.withLock { resident.removeAll(); clearOpenings() }
     }
     private func current(_ token: Int) -> Bool { lock.withLock { generation == token } }
-    func load(_ clip: Clip, resolution: Int, fpsLimit: Double?, playbackRate: Double, cacheOpening: Bool,
+    func load(_ clip: Clip, resolution: Int, fpsLimit: Double?, playbackRate: Double, cacheOpening: Bool, cleanIsolatedPixels: Bool = false,
               framesReady: @escaping () -> Void, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
         let requestedAt = ProcessInfo.processInfo.systemUptime
         // 新片段准备期间继续供应当前片段的帧；只取消上一份尚未完成的加载。
         cancelLoad(keepingStream: true)
         let (token, capacity, preload, cacheRevision) = lock.withLock { (generation, bufferCapacity, preloadWhole, openingCacheRevision) }
         let file = clip.playbackFile ?? clip.file
-        let key = OpeningKey(file:file,resolution:resolution,fpsLimit:fpsLimit,cappedPlaybackRate:fpsLimit == nil ? nil : playbackRate)
+        let key = OpeningKey(file:file,resolution:resolution,fpsLimit:fpsLimit,cappedPlaybackRate:fpsLimit == nil ? nil : playbackRate,
+                             cleanIsolatedPixels:cleanIsolatedPixels)
         group.enter()
         lock.withLock { worker = Task.detached(priority: .userInitiated) { [self] in
             defer { group.leave() }
@@ -206,6 +212,7 @@ final class Decoder: @unchecked Sendable {
                 let streaming = StreamingAnimation(asset: asset, track: track, capacity: capacity, resolution: resolution,
                     frameCount: max(1, Int((range.duration.seconds * Double(rate)).rounded())),
                     startTime: range.start.seconds, sourceFPS: Double(rate), fpsLimit: fpsLimit, playbackRate: playbackRate,
+                    cleanIsolatedPixels:cleanIsolatedPixels,
                     onFramesReady: { [weak self] source in
                         guard let self, self.lock.withLock({ self.stream === source }) else { return }
                         framesReady()

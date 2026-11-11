@@ -209,7 +209,7 @@ final class ChatController {
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
-                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network))
+                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network))
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
@@ -511,6 +511,7 @@ final class ChatController {
     }
     func shutdown(_ completion: @escaping () -> Void) {
         closing = true; onFinishedShutdown = completion
+        quotaCoordinator.cancel()
         if running != nil {
             stop()
             DispatchQueue.main.asyncAfter(deadline:.now()+2) { [weak self] in if self?.running != nil {self?.finish("interrupted",error:"桌宠退出，任务未确认完成。")} }

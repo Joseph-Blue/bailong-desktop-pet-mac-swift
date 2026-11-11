@@ -62,9 +62,10 @@ final class StreamingAnimation: @unchecked Sendable {
     private(set) var startup: Startup?
     private(set) var firstFramePreparedAt: Double?
     init(asset: AVAsset, track: AVAssetTrack, capacity: Int, resolution: Int, frameCount: Int, startTime: Double,
-         sourceFPS: Double, fpsLimit: Double?, playbackRate: Double,
+         sourceFPS: Double, fpsLimit: Double?, playbackRate: Double, cleanIsolatedPixels: Bool = false,
          onFramesReady: @escaping (StreamingAnimation) -> Void, onFailure: @escaping (Error) -> Void) {
-        self.asset = asset; self.track = track; converter = CPUFrameConverter(resolution: resolution); totalFrames = frameCount
+        self.asset = asset; self.track = track
+        converter = CPUFrameConverter(resolution: resolution, cleanIsolatedPixels: cleanIsolatedPixels); totalFrames = frameCount
         self.startTime = startTime; self.onFailure = onFailure
         self.capacity = capacity; self.resolution = resolution
         self.sourceFPS = sourceFPS

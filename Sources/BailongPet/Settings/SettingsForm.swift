@@ -8,7 +8,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     private var availabilityUpdates = [(PetPreferences) -> Void]()
     private var textActions = [ObjectIdentifier:(String)->Void]()
     private var textEndActions = [ObjectIdentifier:(String)->Void]()
-    var identityPreview:NSTextField?
     private let templateEditor = SettingsTemplateEditor()
     private weak var automaticUpdateSwitch:NSSwitch?, diagnosticsSwitch:NSSwitch?
     private var bufferControls = [NSControl]()
@@ -28,7 +27,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
         actions.removeAll(); textActions.removeAll(); textEndActions.removeAll()
         availabilityUpdates.removeAll()
-        bufferControls.removeAll(); bufferRow = nil; identityPreview = nil
+        bufferControls.removeAll(); bufferRow = nil
     }
     func fieldEditor(for client:Any?) -> Any? {
         guard let field = client as? SettingsTemplateField else {return nil}
@@ -48,7 +47,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() {return}
         textActions[ObjectIdentifier(field)]?(field.stringValue)
         (field as? SettingsTemplateField)?.refreshHighlight()
-        identityPreview?.stringValue = preferences.statusLine("greetingTemplate")
     }
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
@@ -66,9 +64,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         field.identifier = NSUserInterfaceItemIdentifier("settings-explanation")
         return field
     }
-    func group(_ title: String, _ rows: [NSView], action:NSView? = nil) {
+    func group(_ title: String, _ rows: [NSView], symbol:String? = nil, action:NSView? = nil) {
         let section = NSStackView(); section.orientation = .vertical; section.alignment = .leading; section.spacing = 10
-        let heading = label(title,bold:true); heading.font = .systemFont(ofSize:13,weight:.semibold)
+        let text = label(title,bold:true); text.font = .systemFont(ofSize:13,weight:.semibold)
+        let heading:NSView = symbol.map {iconTitle(text,symbol:$0,weight:.semibold)} ?? text
         if let action {fill(alignedRow(leading:heading,control:action),in:section)} else {fill(heading,in:section)}
         let surface = SettingsSectionBackground(), items = NSStackView()
         items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
@@ -81,20 +80,51 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         fill(surface,in:section); fill(section,in:content)
         searchAnchors[title] = section
-        for row in rows {
-            if let key = row.identifier?.rawValue,key.hasPrefix("setting:") {
-                searchAnchors[title+"/"+key.dropFirst("setting:".count)] = row
+        func registerAnchors(in view:NSView) {
+            if let key = view.identifier?.rawValue,key.hasPrefix("setting:") {
+                searchAnchors[title+"/"+key.dropFirst("setting:".count)] = view
             }
+            for child in view.subviews {registerAnchors(in:child)}
         }
+        for row in rows {registerAnchors(in:row)}
     }
     func searchable(_ view:NSView,title:String) -> NSView {
         view.identifier = .init("setting:"+title); return view
     }
-    func row(_ title: String, detail: String? = nil, control: NSView) -> NSView {
+    private func iconTitle(_ text:NSTextField,symbol:String,weight:NSFont.Weight) -> NSView {
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:13,weight:weight))
+        icon.contentTintColor = .secondaryLabelColor
+        icon.setAccessibilityElement(false)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant:16),icon.heightAnchor.constraint(equalToConstant:16)])
+        let titleRow = NSStackView(views:[icon,text])
+        titleRow.orientation = .horizontal; titleRow.alignment = .centerY; titleRow.spacing = 6
+        text.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        return titleRow
+    }
+    func row(_ title: String, detail: String? = nil, symbol:String? = nil, control: NSView) -> NSView {
         let texts = NSStackView(); texts.orientation = .vertical; texts.alignment = .leading; texts.spacing = 4
         fill(label(title),in:texts)
         if let detail {let explanation = label(detail); explanation.font = .systemFont(ofSize:11); explanation.textColor = .secondaryLabelColor; fill(explanation,in:texts)}
-        return searchable(alignedRow(leading:texts,control:control),title:title)
+        let leading:NSView = symbol.map {iconLeading(texts,symbol:$0)} ?? texts
+        return searchable(alignedRow(leading:leading,control:control),title:title)
+    }
+    func iconLeading(_ content:NSView,symbol:String,height:CGFloat = 36) -> NSView {
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:32,weight:.regular))
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.contentTintColor = .secondaryLabelColor
+        icon.setAccessibilityElement(false)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant:44),icon.heightAnchor.constraint(equalToConstant:height)])
+        let row = NSStackView(views:[icon,content])
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 10
+        // 图标宽度固定，文字与控件占满余下宽度，避免按标题长度收缩右边界。
+        row.distribution = .fill
+        row.edgeInsets = NSEdgeInsets(top:0,left:0,bottom:0,right:0)
+        content.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        return row
     }
     func alignedRow(leading: NSView, control: NSView) -> NSView {
         // 显式固定左右两端；多余宽度留给左侧说明，不拉长开关或按钮。
@@ -150,13 +180,16 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         availabilityUpdates.append(update); update(preferences)
         return view
     }
-    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = []) -> NSView {
+    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = [], symbol:String? = nil, changed:(() -> Void)? = nil) -> NSView {
         let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
         if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
         if key == "showDiagnostics" { diagnosticsSwitch = control }
         if key == "automaticallyCheckUpdates" { automaticUpdateSwitch = control }
-        attach(control) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:key) }
-        return dependent(row(title,detail:detail,control:control),requires:requires,unless:unless)
+        attach(control) { [weak self] sender in
+            self?.preferences.set((sender as! NSSwitch).state == .on,for:key)
+            changed?()
+        }
+        return dependent(row(title,detail:detail,symbol:symbol,control:control),requires:requires,unless:unless)
     }
     func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
@@ -185,7 +218,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
         let result = popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail) { [weak self] value in
             self?.preferences.set(value,for:key)
-            self?.identityPreview?.stringValue = self?.preferences.statusLine("greetingTemplate") ?? ""
         }
         return dependent(result,requires:requires)
     }
@@ -204,7 +236,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         return row(title,detail:detail,control:control)
     }
-    func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, changed: @escaping (String)->Void) -> NSView {
+    func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, action:NSView? = nil, changed: @escaping (String)->Void) -> NSView {
         let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
         let field: NSTextField = section == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
         let templateField = field as? SettingsTemplateField
@@ -244,7 +276,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
                 field.stringValue = emptyFallback
                 self.textActions[ObjectIdentifier(field)]?(emptyFallback)
                 (field as? SettingsTemplateField)?.refreshHighlight()
-                self.identityPreview?.stringValue = self.preferences.statusLine("greetingTemplate")
             }
         }
         attach(clear) { [weak self,weak field] _ in
@@ -270,7 +301,17 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             field.cell?.wraps = true; field.cell?.isScrollable = false
             field.heightAnchor.constraint(equalToConstant:52).isActive = true
             let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = 8
-            fill(label(title),in:row); fill(controls,in:row)
+            let caption = label(title)
+            if let action {
+                let heading = NSStackView(views:[caption,action])
+                heading.orientation = .horizontal; heading.alignment = .centerY; heading.distribution = .fill; heading.spacing = 8
+                caption.setContentHuggingPriority(.defaultLow,for:.horizontal)
+                caption.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+                action.setContentHuggingPriority(.defaultHigh,for:.horizontal)
+                action.setContentCompressionResistancePriority(.defaultHigh,for:.horizontal)
+                fill(heading,in:row)
+            } else {fill(caption,in:row)}
+            fill(controls,in:row)
             return searchable(row,title:title)
         }
         field.widthAnchor.constraint(equalToConstant:240).isActive = true
@@ -290,7 +331,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 6
         return row
     }
-    func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20) -> NSView {
+    func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20, action:NSView? = nil) -> NSView {
         let icon:NSImage?
         switch key {
         case "ownerName": icon = NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)
@@ -301,11 +342,19 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let token = ["ownerName":"{用户名}","petName":"{桌宠名}","customAddress":"{特定称呼}"][key]
         let fallback = ["ownerName":"主人","petName":"白龙娘"][key]
             ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
-        return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token) { [weak self] value in self?.preferences.set(value,for:key) }
+        return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token,action:action) { [weak self] value in self?.preferences.set(value,for:key) }
     }
     func slider(_ title:String,_ key:String,range:ClosedRange<Double>,step:Double = 1,suffix:String,detail:String? = nil,requires:[String] = []) -> NSView {
         let controls = numericSlider(title,value:preferences.number(key),range:range,step:step,suffix:suffix) { [weak self] value in self?.preferences.set(value,for:key) }
         return dependent(row(title,detail:detail,control:controls),requires:requires)
+    }
+    func animationPreviewButton(_ title:String,compact:Bool = false,action:@escaping () -> Void) -> ActionButton {
+        let button = ActionButton("播放",action)
+        button.image = NSImage(systemSymbolName:"play.fill",accessibilityDescription:nil)
+        button.imagePosition = .imageLeading
+        button.setAccessibilityLabel("播放"+title)
+        if compact {button.controlSize = .small; button.font = .systemFont(ofSize:11)}
+        return button
     }
     func animationWeight(_ clip:Clip) -> NSView {
         let minimum = clip.id == "idle" ? 1.0 : 0.0

@@ -44,7 +44,7 @@ struct SettingsSearchEntry {
         add(.general,"桌面",["全屏时自动隐藏"],"屏幕 多屏")
         add(.general,"桌面",["所在显示器"],"屏幕 多屏 固定 随拖动切换屏幕")
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
-        add(.identity,"见面时说",["问候语"],"台词 欢迎 预览")
+        add(.identity,"见面时说",["问候语"],"台词 欢迎 动作 播放 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
         for line in ConversationLines.working {add(.identity,"工作中台词",[line.title],"随机 工作中 任务概览 台词 模板 "+line.text)}
         add(.identity,"任务状态台词",["执行任务中"],"台词 模板 我还在留意进展")
@@ -53,9 +53,9 @@ struct SettingsSearchEntry {
         add(.identity,"任务状态台词",["正在思考","正在调用工具","正在运行命令","已运行命令"],"台词 模板 思考摘要 工具调用 执行命令 运行命令 已运行命令 终端 进展小气泡")
         for line in ConversationLines.task {add(.identity,"任务状态台词",[line.title],"台词 模板 "+line.text)}
         for line in ConversationLines.interface {add(.identity,"聊天窗口台词",[line.title],"台词 模板 "+line.text)}
-        add(.identity,"额度查询台词",["正在查询"],"额度 台词")
+        add(.identity,"额度查询台词",["正在查询"],"额度 台词 动作 播放 预览")
         add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天 查看额度 历史消息 显示任务进度 播放随机动画 单句台词")
-        add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
+        add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 活泼 倍速 待机 吸边 任务 排除上一动作 随机互动")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
         add(.messages,"进展提醒",["久无进展时提醒","提醒间隔"],"任务 执行 无新进度 90秒 5分钟 定时 等待 台词")
@@ -72,14 +72,17 @@ struct SettingsSearchEntry {
         add(.messages,"声音",["播放音效"],"声音")
         add(.messages,"安静陪伴",["立即开启安静陪伴","定时开启安静陪伴","开始时间","结束时间"],"安静陪伴模式 启用专注时段 免打扰 时间 夜间 静音")
         add(.appearance,"大小",["桌宠大小","气泡大小","消息文字大小"],"缩放 字号 字体")
-        add(.appearance,"桌宠轮廓",["轮廓阴影"],"桌宠 描边 外发光 阴影 投影 边缘")
-        add(.appearance,"气泡形状",["自定义宽高比","宽 : 高"],"气泡 长宽比 宽高比 比例 宽度 高度 形状 排版")
+        add(.appearance,"大小",["气泡自定义宽高比","宽 : 高"],"气泡形状 长宽比 宽高比 比例 宽度 高度 排版")
         add(.appearance,"主题",["外观模式","强调色","自定义"],"主题 颜色 浅色 深色 跟随系统 分段选择")
-        add(.appearance,"消息窗口",["消息窗口材质","液态玻璃跟随系统设定","玻璃不透明度","动态效果","气泡效果"],"液态玻璃 普通材质 分段选择 玻璃 透明 磨砂 背景 动画 预览 启动 退出 显示 隐藏 淡入 淡出")
+        add(.appearance,"消息窗口",["消息窗口材质","液态玻璃跟随系统设定","玻璃不透明度","气泡效果"],"液态玻璃 普通材质 分段选择 玻璃 透明 磨砂 背景 预览")
         add(.advanced,"设置文件",["导出设置","导入设置"],"备份 恢复")
         add(.advanced,"桌宠对话默认工作区",["默认工作区","恢复内置工作区","清理内置工作区"],"人设 新对话 默认目录 文件夹 Workspace 选择 访达 Finder 废纸篓 清理默认工作区")
         add(.advanced,"本应用所占本机存储",["本应用所占本机数据","内置任务文件夹","磁盘缓存","清空本应用的本机数据","清空磁盘缓存","数据目录"],"存储 磁盘 空间 清理 删除 访达 Finder 默认任务文件夹 清空本机数据 清空数据")
-        add(.developer,"动画",["画质","素材帧率上限","动画缓冲帧数","常用动作开头缓存","整段动画预加载"],"性能 内存 RAM 720 512 384 256 FPS 自动分辨率 缓冲 卡顿 6帧 24 MiB 0.25秒")
+        add(.developer,"动画",["画质","素材帧率上限","动画缓冲帧数","常用动作开头缓存","整段动画预加载"],"性能 运行内存 RAM 720 512 384 256 FPS 满帧 自动分辨率 缓冲 卡顿 6帧 24 MiB 0.25秒")
+        add(.developer,"动画效果改善",["动态效果"],"气泡 动画 启动 退出 显示 隐藏 淡化 淡入 淡出 减少动态效果")
+        add(.developer,"动画效果改善",["动作平滑过渡","孤立杂点清理"],"淡化 淡入淡出 轮廓 边缘净化 透明 残留 动态效果")
+        add(.developer,"动画效果改善",["轮廓阴影"],"桌宠轮廓 桌宠 描边 外发光 阴影 投影 边缘")
+        add(.developer,"额度查询",["额度查询缓存","缓存时长"],"额度 缓存 有效期 秒 15 60 300 5分钟 刷新")
         add(.developer,"应用统计",["开启应用性能信息统计浮窗"],"CPU GPU 内存 RAM Swap 性能监视器")
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
@@ -94,10 +97,14 @@ struct SettingsSearchEntry {
             } else if entries[index].section == .appearance && entries[index].title == "自定义" {
                 entries[index].condition = "选择自定义强调色后显示"
             } else if entries[index].section == .appearance && entries[index].title == "宽 : 高" {
-                entries[index].condition = "开启自定义宽高比后生效"
+                entries[index].condition = "开启气泡自定义宽高比后显示"
+            } else if entries[index].section == .developer && entries[index].title == "动作平滑过渡" {
+                entries[index].condition = "开启动态效果且系统未开启减少动态效果时生效"
+            } else if entries[index].section == .developer && entries[index].title == "缓存时长" {
+                entries[index].condition = "开启额度查询缓存后显示"
             } else if entries[index].section == .activity && entries[index].title == "左右露出比例" {
                 entries[index].condition = "开启屏幕左右边缘吸边后可调整"
-            } else if entries[index].section == .activity && entries[index].title == "刘海露出比例" {
+            } else if entries[index].section == .activity && entries[index].title == "从刘海露出比例" {
                 entries[index].condition = "开启顶部刘海吸边后可调整"
             } else if entries[index].section == .activity && entries[index].title == "活动范围" {
                 entries[index].condition = "开启自主移动后可调整"
@@ -128,7 +135,7 @@ struct SettingsSearchEntry {
             }
         }
         if let catalog {
-            add(.identity,"互动台词",(catalog.variants+catalog.work).filter {$0.line != nil}.map(\.title),"台词 模板")
+            add(.identity,"互动台词",(catalog.variants+catalog.work).filter {$0.line != nil}.map(\.title),"台词 模板 动作 播放 预览")
             for (group,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations),("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation])] {
                 add(.activity,group,clips.map(\.title),"动画 播放速度 倍速 频率 偏爱 权重 ❤ ❤️ 爱心 标尺 预览")
             }

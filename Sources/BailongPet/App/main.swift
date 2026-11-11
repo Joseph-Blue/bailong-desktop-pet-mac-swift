@@ -40,7 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DistributedNotificationCenter.default().postNotificationName(revealName,object:nil,userInfo:nil,deliverImmediately:true)
                     explicitQuit = true; NSApp.terminate(nil); return
                 }
-                ownsInstance = true; unfinishedRun = lifecycle.begin(version:Paths.version)
+                ownsInstance = true
+                unfinishedRun = lifecycle.begin(version:Paths.version)
             }
             FollowSessions.clearManualExit()
             LoginLauncher.refreshExistingRegistration()
@@ -123,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.chat?.toggleComposer() })
         commands.addItem(MenuAction("新对话") { [weak self] in self?.chat?.newConversation(); self?.chat?.showHistory(nil) })
         commands.addItem(MenuAction("选择任务文件夹…") { [weak self] in self?.chat?.chooseFolder() })
-        commands.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.chat?.showHistory(nil) })
+        commands.addItem(MenuAction("历史对话",symbol:"book") { [weak self] in self?.chat?.showHistory(nil) })
         let windowsItem = NSMenuItem(title:"窗口",action:nil,keyEquivalent:"")
         let windows = NSMenu(title:"窗口"); windowsItem.submenu = windows; bar.addItem(windowsItem)
         windows.addItem(MenuAction("应用性能信息统计",symbol:"chart.xyaxis.line") { [weak self] in self?.pet?.showDiagnostics() })
@@ -173,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.pet?.showSettings() })
         menu.addItem(MenuAction("应用性能信息统计") { [weak self] in self?.pet?.showDiagnostics() })
-        menu.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.chat?.showHistory(nil) })
+        menu.addItem(MenuAction("历史对话",symbol:"book") { [weak self] in self?.chat?.showHistory(nil) })
         if RecoveryWindow.hasIssues {menu.addItem(MenuAction("错误与恢复") {RecoveryWindow.revealAll()})}
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.chat?.toggleComposer() })
         return menu

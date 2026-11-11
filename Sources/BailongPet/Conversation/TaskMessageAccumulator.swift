@@ -40,6 +40,10 @@ final class TaskMessageAccumulator {
         case "item/reasoning/summaryTextDelta":
             let key = "\(p["itemId"] ?? ""):\(p["summaryIndex"] ?? 0)"; summaries[key,default:""] += p["delta"] as? String ?? ""
             updateActivity(["id":p["itemId"] as? String ?? "","type":"reasoning","summary":summaries.filter {$0.key.hasPrefix("\(p["itemId"] ?? ""):")}.sorted {$0.key < $1.key}.map(\.value)])
+        case "item/plan/delta":
+            guard let id = p["itemId"] as? String else {return false}
+            steps[id,default:""] += p["delta"] as? String ?? ""
+            updateActivity(["id":id,"type":"plan","text":steps[id] ?? "","status":"inProgress"])
         case "item/started", "item/completed": if let item = p["item"] as? [String:Any] {
             record(item)
             let type = item["type"] as? String ?? ""
@@ -96,6 +100,8 @@ final class TaskMessageAccumulator {
             // 只读取协议公开 summary，不读取 content 或加密推理字段。
             for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {summaries["\(id):\(index)"] = part as? String ?? (part as? [String:Any])?["text"] as? String ?? ""}
         case "commandExecution": steps[id] = CommandSummary.text(item)
+        case "plan":
+            if let text = item["text"] as? String {steps[id] = text}
         case "fileChange":
             if editsByItem[id] == nil {editOrder.append(id)}
             editsByItem[id] = FileEditSummary.read(item)

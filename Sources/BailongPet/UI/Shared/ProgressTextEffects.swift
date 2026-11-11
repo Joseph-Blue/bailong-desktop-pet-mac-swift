@@ -94,18 +94,21 @@ final class ProgressMarqueeView:NSView {
         let next = "\(stringValue)|\(bounds.size)|\(font.fontName)|\(font.pointSize)|\(scale)|\(animate)|\(color.components ?? [])"
         guard next != signature else {return}
         pauseMotion(); signature = next
-        let text = NSAttributedString(string:stringValue,attributes:[NSAttributedString.Key(kCTFontAttributeName as String):font,NSAttributedString.Key(kCTForegroundColorAttributeName as String):color])
-        cycle = width+("   " as NSString).size(withAttributes:[.font:font]).width
+        // 分隔符只用于滚动衔接，不改变原文及辅助功能朗读。
+        let loopingText = stringValue+"　·　"
+        let text = NSAttributedString(string:animate ? loopingText : stringValue,attributes:[NSAttributedString.Key(kCTFontAttributeName as String):font,NSAttributedString.Key(kCTForegroundColorAttributeName as String):color])
+        cycle = ceil((loopingText as NSString).size(withAttributes:[.font:font]).width)
+        let displayWidth = animate ? cycle : width
         if cycle > 0 {offset = offset.truncatingRemainder(dividingBy:cycle)}
         CATransaction.begin(); CATransaction.setDisableActions(true)
         content.transform = CATransform3DIdentity
-        content.frame = NSRect(x:0,y:0,width:max(bounds.width,cycle+width),height:bounds.height)
+        content.frame = NSRect(x:0,y:0,width:max(bounds.width,cycle+displayWidth),height:bounds.height)
         for label in [first,repeated] {
             label.text = text; label.contentsScale = scale
             label.baseline = InlineStatusLayout.lineBaseline(font:font,height:bounds.height)
             label.setNeedsDisplay()
         }
-        first.frame = NSRect(x:0,y:0,width:width,height:bounds.height)
+        first.frame = NSRect(x:0,y:0,width:displayWidth,height:bounds.height)
         repeated.frame = first.frame.offsetBy(dx:cycle,dy:0); repeated.isHidden = !animate
         fade.frame = bounds; fade.colors = [NSColor.black.cgColor,NSColor.black.cgColor,NSColor.clear.cgColor]
         let fadeStart = max(0,1-16/max(1,Double(bounds.width)))
@@ -126,9 +129,61 @@ final class ProgressMarqueeView:NSView {
     deinit {NSWorkspace.shared.notificationCenter.removeObserver(self)}
 }
 
+// 原生 SF Symbol 视图，操作与结果各有自己的位置；结果不遮挡操作轮廓。
+final class TaskActivitySymbolView:NSView {
+    fileprivate let operationIcon = NSImageView(), resultIcon = NSImageView()
+    fileprivate var textColor:NSColor = .labelColor
+    private var renderedSymbol:String?, renderedResult:String?
+    private(set) var activity:TaskActivity?
+    private var pointSize:CGFloat = 15
+    // 固定操作图标槽位；宽符号等比缩放，不再挤占相邻进展文字。
+    private var operationWidth:CGFloat {pointSize}
+    var layoutSize:NSSize {NSSize(width:operationWidth+(activity?.outcome == nil ? 0 : pointSize*0.75+pointSize/5),height:pointSize)}
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        for icon in [operationIcon,resultIcon] {
+            icon.imageScaling = .scaleProportionallyUpOrDown
+            icon.setAccessibilityElement(false); addSubview(icon)
+        }
+        setAccessibilityElement(true); setAccessibilityRole(.image)
+    }
+    required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
+    func update(_ activity:TaskActivity?,pointSize:CGFloat) {
+        let resized = self.pointSize != pointSize
+        self.activity = activity; self.pointSize = pointSize
+        let symbol = activity?.symbolName, result = activity?.outcome?.symbol
+        if resized || renderedSymbol != symbol {
+            renderedSymbol = symbol
+            operationIcon.image = symbol.flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)}?
+                .withSymbolConfiguration(.init(pointSize:pointSize,weight:.semibold))
+        }
+        if resized || renderedResult != result {
+            renderedResult = result
+            resultIcon.image = result.flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)}?
+                .withSymbolConfiguration(.init(pointSize:pointSize*0.75,weight:.semibold))
+        }
+        resultIcon.isHidden = result == nil
+        setAccessibilityLabel(activity?.title ?? "")
+        needsLayout = true
+    }
+    override func layout() {
+        super.layout()
+        operationIcon.frame = NSRect(x:0,y:(bounds.height-pointSize)/2,width:operationWidth,height:pointSize)
+        let side = pointSize*0.75
+        resultIcon.frame = NSRect(x:operationWidth+pointSize/5,y:(bounds.height-side)/2,width:side,height:side)
+    }
+    override func viewDidMoveToWindow() {super.viewDidMoveToWindow(); if window == nil {TaskActivityAppearance.stop(self)}}
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        TaskActivityAppearance.apply(activity,icon:self,visible:window?.isVisible == true && !isHiddenOrHasHiddenAncestor)
+    }
+}
+
 // 连接状态共用语义色；呼吸只作用于图标，不重建正文或增加刷新计时器。
 enum TaskActivityAppearance {
     static func color(_ activity:TaskActivity?) -> NSColor {
+        if activity?.kind == .attention || activity?.outcome == .declined {return .systemOrange}
+        if activity?.outcome == .failed {return .systemRed}
         switch activity?.statusSymbol {
         case "wifi.exclamationmark":return .systemOrange
         case "wifi":return .systemGreen
@@ -136,18 +191,23 @@ enum TaskActivityAppearance {
         default:return activity?.kind == .status ? .systemRed : .secondaryLabelColor
         }
     }
-    static func apply(_ activity:TaskActivity?,icon:NSImageView,text:ProgressMarqueeView,visible:Bool) {
+    static func apply(_ activity:TaskActivity?,icon:TaskActivitySymbolView,text:ProgressMarqueeView? = nil,visible:Bool) {
         let color = color(activity)
-        icon.contentTintColor = color; text.textColor = color
+        if let text {
+            text.textColor = color
+            icon.textColor = color
+        }
+        icon.operationIcon.contentTintColor = activity?.kind == .status || activity?.kind == .attention ? color : icon.textColor
+        icon.resultIcon.contentTintColor = activity?.outcome == .declined ? .systemOrange : .systemRed
         if visible && activity?.statusSymbol == "wifi.exclamationmark" && ProgressTextEffects.enabled {
-            icon.wantsLayer = true
-            if icon.layer?.animation(forKey:"connectionBreathing") == nil {
+            icon.operationIcon.wantsLayer = true
+            if icon.operationIcon.layer?.animation(forKey:"connectionBreathing") == nil {
                 let pulse = CABasicAnimation(keyPath:"opacity")
                 pulse.fromValue = 0.4; pulse.toValue = 1; pulse.duration = 1
                 pulse.autoreverses = true; pulse.repeatCount = .infinity
-                icon.layer?.add(pulse,forKey:"connectionBreathing")
+                icon.operationIcon.layer?.add(pulse,forKey:"connectionBreathing")
             }
         } else {stop(icon)}
     }
-    static func stop(_ icon:NSImageView) {icon.layer?.removeAnimation(forKey:"connectionBreathing")}
+    static func stop(_ icon:TaskActivitySymbolView) {icon.operationIcon.layer?.removeAnimation(forKey:"connectionBreathing")}
 }

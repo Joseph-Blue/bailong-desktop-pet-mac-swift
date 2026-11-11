@@ -1,6 +1,6 @@
 # 共用终端输出；非终端不输出光标控制，NO_COLOR 关闭配色。
 typeset -g bailong_phase="" bailong_phase_log="" bailong_spinner_pid="" bailong_download_pid=""
-typeset -g bailong_temp_dir="" bailong_diagnostic_dir=""
+typeset -g bailong_temp_dir="" bailong_diagnostic_dir="" bailong_dev_pid=""
 typeset -gi bailong_started=$SECONDS bailong_phase_started=0 bailong_animated=0 bailong_exit_waited=0
 exec {bailong_ui_fd}>&1
 [[ -t 1 && "${TERM:-dumb}" != dumb ]] && bailong_animated=1
@@ -143,11 +143,42 @@ TRAPZERR() {
     if [[ -o errexit ]] && (( result != 130 && result != 143 )); then bailong_wait_key; fi
     return "$result"
 }
-TRAPINT() { bailong_phase_finish "■" "已取消"; exit 130 }
-TRAPTERM() { bailong_phase_finish "■" "已终止"; exit 143 }
+# 只终止本次启动的开发程序；正常退出立即收尾，超时才发 SIGKILL。
+bailong_stop_dev() {
+    [[ -n "$bailong_dev_pid" ]] || return 0
+    trap '' INT TERM HUP
+    local pid="$bailong_dev_pid" remaining tick
+    if kill -0 "$pid" 2>/dev/null; then
+        print -ru "$bailong_ui_fd" -- "请求退出 · PID $pid"
+        if ! kill -TERM "$pid"; then
+            if kill -0 "$pid" 2>/dev/null; then return 1; fi
+        fi
+        for remaining in 5 4 3 2 1; do
+            kill -0 "$pid" 2>/dev/null || break
+            print -ru "$bailong_ui_fd" -- "强制结束倒计时：$remaining 秒 · PID $pid"
+            for tick in {1..10}; do
+                kill -0 "$pid" 2>/dev/null || break 2
+                sleep 0.1
+            done
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            print -ru "$bailong_ui_fd" -- "退出超时，强制结束 PID $pid"
+            if ! kill -KILL "$pid"; then
+                if kill -0 "$pid" 2>/dev/null; then return 1; fi
+            fi
+        fi
+    fi
+    # 信号结束的非零状态属预期；wait 回收本次子进程后才宣告退出。
+    if wait "$pid"; then :; else :; fi
+    bailong_dev_pid=""
+    bailong_ok "开发程序已退出 · PID $pid"
+}
+TRAPINT() { bailong_stop_dev; bailong_phase_finish "■" "已取消"; exit 130 }
+TRAPTERM() { bailong_stop_dev; bailong_phase_finish "■" "已终止"; exit 143 }
 TRAPEXIT() {
     local result=$?
     (( ZSH_SUBSHELL == 0 )) || return "$result"
+    bailong_stop_dev
     bailong_stop_spinner
     if [[ -n "$bailong_download_pid" ]]; then
         kill "$bailong_download_pid" 2>/dev/null || true
