@@ -30,7 +30,6 @@ final class BubbleBodyScrollView:GutterScrollView {
         drawsBackground = false
         autohidesScrollers = false
         hasVerticalScroller = false
-        verticalScrollElasticity = .none
     }
     required init?(coder:NSCoder) {fatalError()}
 
@@ -41,13 +40,16 @@ final class BubbleBodyScrollView:GutterScrollView {
     }
 
     func setViewport(_ viewport:NSRect) {
+        // 相同视口的重复排版不钳回正在回弹的阅读位置。
+        guard frame != viewport else {return}
         let origin = contentView.bounds.origin
-        if frame != viewport {frame = viewport}
+        frame = viewport
         updateGeometry()
         restorePosition(origin)
     }
 
     private func updateGeometry() {
+        verticalScrollElasticity = allowsScrolling ? .allowed : .none
         guard let document = documentView else {return}
         let overflow = allowsScrolling && bodyHeight > bounds.height
         if hasVerticalScroller != overflow {hasVerticalScroller = overflow}

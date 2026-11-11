@@ -21,63 +21,6 @@ final class MenuAction: NSMenuItem {
     required init(coder: NSCoder) { fatalError() }
     @objc func run() { callback() }
 }
-final class SpriteView: NSView {
-    weak var pet: PetController?
-    private struct RenderState: Equatable {
-        let image: CGImage
-        let rect: CGRect
-        let bounds: CGRect
-        let transform: CGAffineTransform
-        let clipped: Bool
-        static func == (a: Self, b: Self) -> Bool {
-            a.image === b.image && a.rect == b.rect && a.bounds == b.bounds && a.transform == b.transform && a.clipped == b.clipped
-        }
-    }
-    private var drawnState: RenderState?
-    private var shadowState: RenderState?
-    private func state(_ pet: PetController, _ frame: Frame) -> RenderState {
-        RenderState(image:frame.image,rect:pet.drawRect,bounds:bounds,transform:pet.transform,clipped:pet.dock == "notch")
-    }
-    func refreshFrame() {
-        guard let pet, let frame = pet.currentFrame else { return }
-        if state(pet,frame) != drawnState { needsDisplay = true }
-    }
-    func releaseDisplayTracking() { drawnState = nil; shadowState = nil }
-    override var isFlipped: Bool { true }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
-    override func shouldDelayWindowOrdering(for event:NSEvent) -> Bool {true}
-    override func draw(_ dirtyRect: NSRect) {
-        guard let pet, let frame = pet.currentFrame else { return }
-        let state = state(pet,frame)
-        NSGraphicsContext.saveGraphicsState()
-        if pet.dock == "notch" {NSBezierPath(rect:bounds).addClip()}
-        let transform = NSAffineTransform(); transform.transformStruct = NSAffineTransformStruct(m11: pet.transform.a, m12: pet.transform.b, m21: pet.transform.c, m22: pet.transform.d, tX: pet.transform.tx, tY: pet.transform.ty)
-        transform.concat()
-        NSImage(cgImage: frame.image, size: NSSize(width: 512, height: 512)).draw(in: pet.drawRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
-        NSGraphicsContext.restoreGraphicsState()
-        // 复用当前透明帧更新系统阴影，不创建描边位图或额外帧缓存。
-        if window?.hasShadow == true {
-            if shadowState != state { window?.invalidateShadow(); shadowState = state }
-        } else { shadowState = nil }
-        drawnState = state
-        if let animation = pet.animation, animation.loadTiming?.displayedAt == nil {
-            animation.loadTiming?.displayedAt = ProcessInfo.processInfo.systemUptime
-        }
-        pet.diagnostics?.record(frame.image)
-    }
-    override func mouseDown(with event: NSEvent) {
-        NSApp.preventWindowOrdering()
-        pet?.mouseDown(event)
-    }
-    override func mouseDragged(with event: NSEvent) { pet?.mouseDragged(event) }
-    override func mouseUp(with event: NSEvent) { pet?.mouseUp(event) }
-    override func rightMouseDown(with event: NSEvent) {
-        NSApp.preventWindowOrdering()
-        pet?.rightMouseDown(event)
-    }
-    override func rightMouseUp(with event: NSEvent) {}
-}
-
 final class PetController: NSObject, NSMenuDelegate {
     static let defaultCanvasSize:CGFloat = 256
     let catalog: Catalog
@@ -163,7 +106,17 @@ final class PetController: NSObject, NSMenuDelegate {
     var autoFullscreen: Bool { get { defaults.object(forKey: "autoFullscreen") as? Bool ?? true } set { defaults.set(newValue, forKey: "autoFullscreen") } }
     var now: Double { ProcessInfo.processInfo.systemUptime }
     var size: Double { window.frame.width }
-    var screen: NSScreen { window.screen ?? NSScreen.main ?? NSScreen.screens[0] }
+    var screen: NSScreen {
+        let connected = NSScreen.screens
+        // 屏幕变更通知到达时，窗口仍可保留旧归属；只使用当前连接列表中的屏幕对象。
+        if let current = window.screen,
+           let display = connected.first(where:{PetPreferences.displayID($0) == PetPreferences.displayID(current)}) {return display}
+        return connected.first(where:{$0.frame.intersects(window.frame)}) ?? connected[0]
+    }
+    var preferredScreen: NSScreen? {
+        let id = preferences.string("preferredDisplay")
+        return NSScreen.screens.first {PetPreferences.displayID($0) == id}
+    }
     var hidden: Bool { exiting || manualHidden || fullscreenHidden || sleeping }
     // 控制器采用与作者 Qt 相同的全局向下坐标；只在窗口边界转换成 AppKit 坐标。
     var top: Double { NSScreen.screens[0].frame.maxY }
@@ -207,7 +160,7 @@ final class PetController: NSObject, NSMenuDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .fullScreenNone]
         window.contentView = view; view.pet = self
         window.setContentSize(NSSize(width: Self.defaultCanvasSize * Double(petPercent)/100, height: Self.defaultCanvasSize * Double(petPercent)/100))
-        let target = NSScreen.screens.first {PetPreferences.displayID($0) == preferences.string("preferredDisplay")} ?? screen
+        let target = preferredScreen ?? screen
         let a = target.visibleFrame
         let remember = preferences.bool("rememberPosition")
         let initial = CGPoint(x:a.minX+a.width*0.85-size/2,y:a.minY+a.height*0.23-size/2)
@@ -239,7 +192,7 @@ final class PetController: NSObject, NSMenuDelegate {
         observationTokens.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }; self.sleeping = false; self.motion = nil; self.interaction(); self.keepOnScreen(); self.checkDesktop(); self.applyVisibility(); self.idle()
         })
-        observationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in guard let self else {return}; self.keepOnScreen(); if self.dock != "notch" {self.applyPreferredDisplay()} })
+        observationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.keepOnScreen() })
         let startup = NSPanel(contentRect:NSRect(x:0,y:0,width:440,height:108),styleMask:[.titled],backing:.buffered,defer:false)
         startup.title = preferences.appName; startup.isReleasedWhenClosed = false; startup.hidesOnDeactivate = false
         let heading = label(preferences.fixedText("主人，等我整理好裙摆和小翅膀，马上就来…")); heading.frame = NSRect(x:24,y:60,width:392,height:24)
@@ -281,7 +234,7 @@ final class PetController: NSObject, NSMenuDelegate {
             if clip.id == self.catalog.idle.id && self.baseBounds == nil { self.baseBounds = frame.bounds }
             if self.animation == nil {
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id); self.began = self.now
-                self.animation = Animation([frame]); self.frameIndex = 0; self.view.needsDisplay = true
+                self.animation = Animation([frame]); self.frameIndex = 0; self.view.refreshFrame()
                 if !self.hidden {
                     self.view.displayIfNeeded()
                     self.visibilityFade.setVisible(true)
@@ -299,7 +252,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
                 self.configureAnimationTimer()
                 self.pauseTime = self.hidden ? self.now : nil
-                self.view.needsDisplay = true
+                self.view.refreshFrame()
                 if clip.id == self.catalog.idle.id {
                     let icon = NSImage(cgImage: animation.frames[0].image, size: NSSize(width: 128,height: 128))
                     NSApp.applicationIconImage = AppIcons.application ?? icon
@@ -427,7 +380,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         if wasDockAnimating {
             view.refreshFrame()
-            if bubbleAnchor != BubbleAnchor(frame:visiblePetFrame,screen:screen.visibleFrame,dock:dock) { placeBubble() }
+            if bubbleAnchor != BubbleAnchor(frame:bubbleAttachmentFrame,screen:screen.visibleFrame,dock:dock) { placeBubble() }
         }
     }
     private func updateMovement(at elapsed: Double) {
@@ -464,7 +417,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         if !hidden {
             view.refreshFrame()
-            if bubbleAnchor != BubbleAnchor(frame:visiblePetFrame,screen:screen.visibleFrame,dock:dock) { placeBubble() }
+            if bubbleAnchor != BubbleAnchor(frame:bubbleAttachmentFrame,screen:screen.visibleFrame,dock:dock) { placeBubble() }
             if press != nil { window.ignoresMouseEvents = false }
             else {
                 let point = view.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation),from:nil).applying(transform.inverted())
@@ -506,7 +459,7 @@ final class PetController: NSObject, NSMenuDelegate {
             pending = nil; play(catalog.dragAnimation,"drag")
         }
         if dragged && !dragFromDock {
-            let screen = NSScreen.screens.first(where:{$0.frame.contains(p)}) ?? self.screen
+            let screen = preferredScreen ?? NSScreen.screens.first(where:{$0.frame.contains(p)}) ?? self.screen
             move(constrained(CGPoint(x:pressOrigin.x+delta.x,y:pressOrigin.y+delta.y),screen:screen))
             // 窗口位置跟随鼠标事件；动画画面统一由播放定时器推进，避免绕过 FPS 上限。
         }
@@ -581,6 +534,12 @@ final class PetController: NSObject, NSMenuDelegate {
         let local = stableLocalBounds.applying(transform).intersection(view.bounds)
         return local.isNull ? window.frame : window.convertToScreen(view.convert(local,to:nil))
     }
+    private var bubbleAttachmentFrame: CGRect {
+        guard dock == "notch",dockAnimating,notchDockArea != nil,baseBounds != nil else {return visiblePetFrame}
+        let local = NotchDockGeometry.bubbleAnchor(reference:stableLocalBounds,size:size,
+            maximumSize:Self.defaultCanvasSize,exposure:preferences.number("notchExposurePercent")/100,progress:dockProgress)
+        return window.convertToScreen(view.convert(local,to:nil))
+    }
     func showProgressToast(_ activity:TaskActivity?,key:String,timing:TaskTiming,thread:String? = nil) {
         guard toastActivities[key] != activity else {return}
         toastActivities[key] = activity
@@ -599,14 +558,15 @@ final class PetController: NSObject, NSMenuDelegate {
         progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing); placeBubble()
     }
     func placeBubble() {
-        bubbleAnchor = BubbleAnchor(frame:visiblePetFrame,screen:screen.visibleFrame,dock:dock)
+        let anchor = bubbleAttachmentFrame
+        bubbleAnchor = BubbleAnchor(frame:anchor,screen:screen.visibleFrame,dock:dock)
         // 输入位置先确定；后台到达的消息主动避让，不移动正在编辑的窗口。
         onGeometry()
         let obstacles = composerVisible ? [composerFrame()].compactMap {$0} : []
-        if bubble.visible {bubble.place(near:visiblePetFrame,screen:screen,dock:dock,avoiding:obstacles)}
+        if bubble.visible {bubble.place(near:anchor,screen:screen,dock:dock,avoiding:obstacles)}
         if progressBubble.visible {
             if bubble.blocksProgressToast || composerVisible {progressBubble.hide(); return}
-            progressBubble.place(near:visiblePetFrame,screen:screen,dock:dock)
+            progressBubble.place(near:anchor,screen:screen,dock:dock)
             if bubble.visible && progressBubble.targetFrame.intersects(bubble.targetFrame) {progressBubble.hide()}
         }
     }
@@ -630,6 +590,12 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func keepOnScreen() {
         motion = nil
+        if let display = preferredScreen {
+            let id = PetPreferences.displayID(display)
+            if id != PetPreferences.displayID(screen) || (dock == "notch" && id != notchDockDisplayID) {
+                applyPreferredDisplay(); return
+            }
+        }
         if dock == "notch" {repositionNotchDock(); return}
         move(constrained(position,screen:screen))
         if dock != nil {let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y))}
@@ -677,12 +643,25 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func applyVisibility() {
         if hidden {
-            animation?.stream?.pauseObservation(); diagnostics?.pausePresentationClock(); view.releaseDisplayTracking()
+            animation?.stream?.pauseObservation(); diagnostics?.pausePresentationClock()
             decoder.discardOpeningCache()
             timer?.invalidate(); timer = nil
         }
-        if hidden { dockRecallAt = nil; dockDoubleClick = false; leftDoubleClick = false; press = nil; dragged = false; if pauseTime == nil { pauseTime = now }; window.ignoresMouseEvents = true; visibilityFade.setVisible(false); bubble.hide(); progressBubble.hide(); quotaActive = false; onVisibility(false) }
-        else { if let pauseTime { began += now-pauseTime }; pauseTime = nil; if animation != nil {visibilityFade.setVisible(true)}; interaction() }
+        if hidden {
+            dockRecallAt = nil; dockDoubleClick = false; leftDoubleClick = false; press = nil; dragged = false
+            if pauseTime == nil {pauseTime = now}
+            window.ignoresMouseEvents = true
+            visibilityFade.hide { [weak self] in
+                guard let self, self.hidden else {return}
+                self.view.releaseDisplayTracking()
+            }
+            bubble.hide(); progressBubble.hide(); quotaActive = false; onVisibility(false)
+        } else {
+            if let pauseTime {began += now-pauseTime}
+            pauseTime = nil
+            if animation != nil {view.refreshFrame(); visibilityFade.setVisible(true)}
+            interaction()
+        }
         if !hidden { configureAnimationTimer() }
         updateMotionDisplayLink(); refreshMenu(); greetOnFirstAppearance()
     }
@@ -764,9 +743,9 @@ final class PetController: NSObject, NSMenuDelegate {
         defaults.set(dock == "notch" ? top-dockRestore.y-size : window.frame.minY,forKey:"y")
     }
     func applyPreferredDisplay() {
-        guard let display = NSScreen.screens.first(where:{PetPreferences.displayID($0) == preferences.string("preferredDisplay")}) else {return}
+        guard let display = preferredScreen else {return}
         dock = nil; dockProgress = 0; dockAnimating = false; motion = nil
-        notchDockArea = nil; notchDockDisplayID = nil; view.needsDisplay = true
+        notchDockArea = nil; notchDockDisplayID = nil; view.refreshFrame()
         move(constrained(position,screen:display)); activityOrigin = position; savePosition()
     }
     func showSettings(section:SettingsSection? = nil) { settingsOpen = true; interaction(); settings.show(section:section)}
@@ -787,18 +766,18 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func settingsChanged(_ keys: [String]) {
         if keys.contains("notchExposurePercent") {
-            if dock == "notch" {view.needsDisplay = true; placeBubble()}
+            if dock == "notch" {view.refreshFrame(); placeBubble()}
             if keys.count == 1 {return}
         }
         if keys.contains("sideExposurePercent") {
-            if dock == "left" || dock == "right" {view.needsDisplay = true; placeBubble()}
+            if dock == "left" || dock == "right" {view.refreshFrame(); placeBubble()}
             if keys.count == 1 {return}
         }
         if keys.contains("sideDockEnabled"),!preferences.bool("sideDockEnabled"),dock == "left" || dock == "right" {undock()}
         if keys.contains("notchDockEnabled"),!preferences.bool("notchDockEnabled"),dock == "notch" {undock()}
         if keys.contains("petShadow") {
             window.hasShadow = preferences.bool("petShadow")
-            view.needsDisplay = true
+            view.refreshFrame()
             if keys.count == 1 {return}
         }
         if keys.contains("appearanceMode") {AppAppearance.apply()}
@@ -858,7 +837,7 @@ final class PetController: NSObject, NSMenuDelegate {
         visibilityFade.hide(completion:completion)
     }
     func close() {
-        diagnostics?.stop(); visibilityFade.stop()
+        diagnostics?.stop(); visibilityFade.stop(); view.releaseDisplayTracking()
         motionDisplayLink?.invalidate(); motionDisplayLink = nil
         startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); dockRecallAt = nil; decoder.close(); bubble.hide(); progressBubble.hide(); settings.window.orderOut(nil)
         for token in observationTokens { NSWorkspace.shared.notificationCenter.removeObserver(token); NotificationCenter.default.removeObserver(token) }

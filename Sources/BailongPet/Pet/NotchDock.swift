@@ -31,6 +31,16 @@ enum NotchDockGeometry {
         return rotation.concatenating(CGAffineTransform(translationX:(center-bounds.midX)*progress,
             y:(-bounds.minY-bounds.height*(1-exposure))*progress))
     }
+    // 气泡沿展开与收纳轮廓平滑移动，不跟随旋转中途反复伸缩的外接矩形。
+    static func bubbleAnchor(reference:CGRect,size:CGFloat,maximumSize:CGFloat,exposure:CGFloat,progress:CGFloat) -> CGRect {
+        let canvas = CGRect(x:0,y:0,width:size,height:size)
+        let expanded = reference.intersection(canvas)
+        let docked = reference.applying(transform(reference:reference,size:size,maximumSize:maximumSize,exposure:exposure,progress:1)).intersection(canvas)
+        return CGRect(x:expanded.minX+(docked.minX-expanded.minX)*progress,
+                      y:expanded.minY+(docked.minY-expanded.minY)*progress,
+                      width:expanded.width+(docked.width-expanded.width)*progress,
+                      height:expanded.height+(docked.height-expanded.height)*progress)
+    }
 }
 
 extension PetController {
@@ -56,6 +66,6 @@ extension PetController {
             move(constrained(dockRestore,screen:screen))
             if let pending {self.pending = nil; play(pending.0,pending.1)}
         }
-        view.needsDisplay = true
+        view.refreshFrame()
     }
 }

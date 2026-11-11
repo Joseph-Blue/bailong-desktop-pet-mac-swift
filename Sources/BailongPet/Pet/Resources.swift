@@ -79,7 +79,7 @@ struct AnimationLoadTiming {
     let firstFrameAt: Double
     let readyAt: Double
     var handedAt: Double?
-    var displayedAt: Double?
+    var submittedAt: Double?
 }
 
 // 帧数组构造后不再改变，CGImage 与 Data 均以只读方式跨队列使用。
@@ -87,7 +87,7 @@ final class Animation: NSObject, @unchecked Sendable {
     let frames: [Frame]
     let stream: StreamingAnimation?
     let fps: Double
-    // 发布后仅在主线程记录交接和首次实际绘制，不保留历史帧或逐帧日志。
+    // 发布后仅在主线程记录交接和首次图层更新，不保留历史帧或逐帧日志。
     var loadTiming: AnimationLoadTiming?
     init(_ frames: [Frame], stream: StreamingAnimation? = nil, fps: Double = 24, loadTiming: AnimationLoadTiming? = nil) {
         self.frames = frames; self.stream = stream; self.fps = fps; self.loadTiming = loadTiming

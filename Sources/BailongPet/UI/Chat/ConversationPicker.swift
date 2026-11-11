@@ -45,6 +45,7 @@ private final class ConversationPickerContent:NSViewController,NSTableViewDataSo
         search.placeholderString = "搜索会话标题或工作区"; search.target = self; search.action = #selector(filter)
         search.sendsSearchStringImmediately = true
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        scroll.verticalScrollElasticity = .allowed
         let column = NSTableColumn(identifier:.init("conversation")); table.addTableColumn(column); table.headerView = nil
         table.delegate = self; table.dataSource = self; table.target = self; table.action = #selector(selectRow)
         table.rowHeight = 82; table.style = .plain; table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle

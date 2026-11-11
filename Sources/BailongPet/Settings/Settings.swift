@@ -26,6 +26,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let resetButton = SettingsFooterButton(title:"恢复本页设置为默认值",target:nil,action:nil)
     private weak var updateStatusLabel: NSTextField?
     private weak var updateTimeLabel: NSTextField?
+    private weak var displayMenu: NSPopUpButton?
     private let searchField = NSSearchField()
     private var searchItem:NSSearchToolbarItem?
     private let searchResults = SettingsSearchResults()
@@ -64,6 +65,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let side = NSVisualEffectView(); side.material = .sidebar; side.blendingMode = .behindWindow
         side.state = .followsWindowActiveState
         let sideScroll = NSScrollView(); sideScroll.drawsBackground = false; sideScroll.hasVerticalScroller = true; sideScroll.autohidesScrollers = true
+        sideScroll.verticalScrollElasticity = .allowed
         let column = NSTableColumn(identifier:NSUserInterfaceItemIdentifier("section")); sidebar.addTableColumn(column)
         sidebar.headerView = nil; sidebar.style = .plain; sidebar.rowHeight = 32; sidebar.backgroundColor = .clear
         sidebar.selectionHighlightStyle = .none; sidebar.intercellSpacing = .zero
@@ -74,6 +76,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         sidebar.setAccessibilityLabel("设置分类"); sideScroll.documentView = sidebar
         side.addSubview(sideScroll)
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
+        scroll.verticalScrollElasticity = .allowed
         let detail = NSView(), document = TopDownView(); scroll.documentView = document; detail.addSubview(scroll)
         let aboutView = aboutPage.view; aboutView.isHidden = true; aboutView.translatesAutoresizingMaskIntoConstraints = false
         detail.addSubview(aboutView)
@@ -137,6 +140,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         NotificationCenter.default.addObserver(self,selector:#selector(refreshAccent),name:AppAccent.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshUpdateStatus),name:UpdateChecker.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshDiagnosticsSwitch),name:PetPreferences.didChange,object:preferences)
+        NotificationCenter.default.addObserver(self,selector:#selector(refreshDisplays),name:NSApplication.didChangeScreenParametersNotification,object:nil)
         render()
         window.center()
         hasSavedFrame = window.restoreSavedFrame(named:"BailongSettingsWindow")
@@ -294,10 +298,28 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             form.row("文件与文件夹",detail:"首次访问文稿、桌面或下载等目录时，系统会询问是否允许。可在系统设置中按目录调整。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
             form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()}),
             form.note("本应用不要求辅助功能、输入监控、屏幕录制、摄像头、麦克风或完全磁盘访问权限。")])
-        var displays = [("","跟随当前屏幕")] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
+        let menu = NSPopUpButton(); displayMenu = menu
+        menu.identifier = .init("preferredDisplay"); menu.setAccessibilityLabel("所在显示器")
+        menu.widthAnchor.constraint(equalToConstant:190).isActive = true
+        form.attach(menu) { [weak self] sender in
+            guard let value = (sender as? NSPopUpButton)?.selectedItem?.representedObject as? String else {return}
+            self?.preferences.set(value,for:"preferredDisplay")
+        }
+        refreshDisplays()
+        form.group("桌面",[form.toggle("全屏时自动隐藏","autoFullscreen"),
+            form.row("所在显示器",detail:"选择显示器后，桌宠固定在该屏幕内活动和拖动。",control:menu)])
+    }
+    @objc private func refreshDisplays() {
+        guard selected == .general,let menu = displayMenu else {return}
         let saved = preferences.string("preferredDisplay")
+        var displays = [("","随拖动切换屏幕")] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
         if !displays.contains(where:{$0.0 == saved}) {displays.append((saved,"已断开的显示器（暂用当前屏幕）"))}
-        form.group("桌面",[form.toggle("全屏时自动隐藏","autoFullscreen"),form.choice("所在显示器","preferredDisplay",displays)])
+        menu.removeAllItems()
+        for (id,title) in displays {
+            let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
+            item.representedObject = id; menu.menu?.addItem(item)
+        }
+        menu.selectItem(at:displays.firstIndex {$0.0 == saved} ?? 0)
     }
     private func configureLogin() {
         guard Bundle.main.bundleURL.pathExtension == "app" else {showError("请使用构建后的应用设置登录启动",PetFailure(message:"请打开构建后的 .app，再启用登录时启动。")); return}

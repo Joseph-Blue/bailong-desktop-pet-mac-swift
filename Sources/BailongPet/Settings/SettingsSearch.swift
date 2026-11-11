@@ -41,7 +41,8 @@ struct SettingsSearchEntry {
         add(.general,"权限与系统设置",["访达自动化"],"权限 授权 Finder 文件链接 最小化 恢复 自动化 系统设置")
         add(.general,"权限与系统设置",["文件与文件夹"],"权限 授权 文稿 桌面 下载 隐私 文件访问 系统设置")
         add(.general,"权限与系统设置",["登录项与后台运行"],"权限 批准 开机 自启动 跟随 后台 系统设置")
-        add(.general,"桌面",["全屏时自动隐藏","所在显示器"],"屏幕 多屏")
+        add(.general,"桌面",["全屏时自动隐藏"],"屏幕 多屏")
+        add(.general,"桌面",["所在显示器"],"屏幕 多屏 固定 随拖动切换屏幕")
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
@@ -165,6 +166,7 @@ final class SettingsSearchResults: NSView, NSTableViewDataSource, NSTableViewDel
     init() {
         super.init(frame:.zero)
         let scroll = NSScrollView(); scroll.drawsBackground = false; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        scroll.verticalScrollElasticity = .allowed
         table.addTableColumn(NSTableColumn(identifier:.init("setting")))
         table.headerView = nil; table.style = .plain; table.backgroundColor = .clear; table.rowHeight = 62
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle; table.autoresizingMask = [.width]

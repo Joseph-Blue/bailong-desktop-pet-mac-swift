@@ -21,7 +21,7 @@ struct PlaybackSchedulingStatistics {
 }
 
 // Only collects while the developer window is enabled. Frame changes are counted
-// after SpriteView.draw, not from the playback timer.
+// when SpriteView updates layer contents; this is not screen presentation timing.
 struct PlaybackStatistics {
     private(set) var total = 0
     private var intervalFrames = 0
@@ -157,7 +157,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let container = NSView()
         window.contentView = container
         let rows = [
-            ("FPS", fpsValue), ("CPU 总体", cpuValue), ("运行内存 (RAM)", ramValue),
+            ("更新 FPS", fpsValue), ("CPU 总体", cpuValue), ("运行内存 (RAM)", ramValue),
             ("GPU（应用组）", gpuValue), ("本段缺帧等待", underflowValue)
         ]
         let grid = NSGridView(views: rows.map { name, value in
@@ -309,15 +309,15 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧 (≥ 24 FPS)" : pet.preferences.string("animationFPSLimit") + " FPS"
         let state = pet.hidden ? "隐藏" : pet.loading ? "解码中" : "播放"
         let preloadEnabled = pet.preferences.bool("preloadWholeAnimation")
-        var playback = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(automatic)\(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 绘制 \(number(reading.draws))/s"
+        var playback = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(automatic)\(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 图层更新 \(number(reading.draws))/s"
         func milliseconds(_ value: Double?) -> String { value.map { String(format:"%.1f ms",$0 * 1000) } ?? "—" }
-        playback += "\n最长画面停留（本次统计）\(milliseconds(frames.longestFrameHold))"
+        playback += "\n最长图像更新间隔（本次统计）\(milliseconds(frames.longestFrameHold))"
         let scheduling = pet.playbackScheduling
         playback += "\n调度 \(number(scheduling.callbackRate))/s · 回调延后：平均 \(milliseconds(scheduling.averageDelay)) · 最长 \(milliseconds(scheduling.longestDelay)) · ≥ 一帧 \(scheduling.overdueFrames) 次"
         if let timing = pet.animation?.loadTiming {
             playback += "\n本段加载：请求→首帧 \(milliseconds(timing.firstFrameAt - timing.requestedAt)) · 起播准备 \(milliseconds(timing.readyAt - timing.firstFrameAt))"
-            playback += "\n准备→交接 \(milliseconds(timing.handedAt.map { $0 - timing.readyAt })) · 交接→绘制 \(milliseconds(timing.displayedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } }))"
-            playback += "\n请求→绘制 \(milliseconds(timing.displayedAt.map { $0 - timing.requestedAt }))"
+            playback += "\n准备→交接 \(milliseconds(timing.handedAt.map { $0 - timing.readyAt })) · 交接→图层 \(milliseconds(timing.submittedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } }))"
+            playback += "\n请求→图层 \(milliseconds(timing.submittedAt.map { $0 - timing.requestedAt }))"
         }
         let cache = pet.decoder.residentFrameStatistics()
         var preloadText: String
@@ -359,7 +359,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let desktop = NSWorkspace.shared.runningApplications.filter { ["com.openai.codex", "com.openai.chat"].contains($0.bundleIdentifier ?? "") }
         let desktopText = desktop.isEmpty ? "未运行" : desktop.map { "\($0.localizedName ?? "桌面应用") · PID \($0.processIdentifier)" }.joined(separator: "、")
         let connections = "桌面端  \(desktopText)\n只读同步  \(pet.syncDiagnostics())\nCLI  \(pet.cliDiagnostics())"
-        let frameRates = "FPS \(number(reading.fps)) · HI \(number(frames.high)) · LO \(number(frames.low))"
+        let frameRates = "更新 FPS \(number(reading.fps)) · HI \(number(frames.high)) · LO \(number(frames.low))"
         return [window.title, frameRates, playback, resources, DeviceIdentity.text, connections].joined(separator: "\n\n")
     }
     deinit { timer?.invalidate(); NotificationCenter.default.removeObserver(self) }

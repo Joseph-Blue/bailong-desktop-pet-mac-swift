@@ -38,6 +38,7 @@ class GutterScrollView:NSScrollView {
         automaticallyAdjustsContentInsets = false
         contentInsets = .init(); scrollerInsets = .init()
         hasHorizontalScroller = false; horizontalScrollElasticity = .none
+        verticalScrollElasticity = .allowed
     }
     required init?(coder:NSCoder) {fatalError()}
     override func tile() {
