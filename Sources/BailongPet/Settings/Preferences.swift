@@ -79,7 +79,7 @@ final class PetPreferences {
         "interactionSeconds":5.0,"progressSeconds":10.0,"resultSeconds":20.0,"quotaSeconds":5.0,
         "autoReadTime":true,"pauseOnHover":true,"countAfterReveal":true,"typingEffect":true,"soundEnabled":true,
         "quietCompanion":false,"quietSchedule":false,"quietStart":22*60,"quietEnd":8*60,
-        "petPercent":100,"petShadow":true,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
+        "petPercent":100,"petShadow":false,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
     ].merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
         "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
