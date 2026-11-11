@@ -19,7 +19,7 @@ enum SettingsSection: Int, CaseIterable {
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
         case .updates: return ["automaticallyCheckUpdates"]
-        case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit"]
+        case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit","animationOpeningCache"]
         }
     }
 }
@@ -64,7 +64,7 @@ final class PetPreferences {
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
-        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full",
+        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":false,
         "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),"randomWorkingLines":true,
@@ -101,7 +101,7 @@ final class PetPreferences {
         #endif
     }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
-    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random","randomAnimation"],"doubleClickAction":["none","chat","quota","history","random","randomAnimation"],"rightDoubleClickAction":["none","chat","quota","history","random","randomAnimation"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
+    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random","randomAnimation"],"doubleClickAction":["none","chat","quota","history","random","randomAnimation"],"rightDoubleClickAction":["none","chat","quota","history","random","randomAnimation"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
@@ -153,7 +153,12 @@ final class PetPreferences {
         let path = string("defaultWorkspace")
         return path.isEmpty ? LocalStorage.workspace : URL(fileURLWithPath:path,isDirectory:true).standardizedFileURL
     }
-    var animationResolution: Int { Int(string("animationQuality"))! }
+    var usesAutomaticAnimationResolution: Bool { string("animationQuality") == "auto" }
+    func animationResolution(points: Double, backingScale: Double) -> Int {
+        if !usesAutomaticAnimationResolution { return Int(string("animationQuality"))! }
+        let pixels = points * backingScale
+        return [256,384,512,720].first { Double($0) >= pixels } ?? 720
+    }
     func animationFPS(native: Double) -> Double { string("animationFPSLimit") == "full" ? native : min(native,Double(string("animationFPSLimit"))!) }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
     func set(_ value: Any, for key: String) {defaults.set(TemplateSyntax.migrate([key:value])[key]!,forKey:key); notify([key])}

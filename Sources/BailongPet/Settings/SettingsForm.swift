@@ -135,11 +135,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
     }
     // 只随现有设置通知刷新；离开页面清理回调，不持有旧页面。
-    private func dependent(_ view:NSView, requires keys:[String]) -> NSView {
-        guard !keys.isEmpty else {return view}
+    private func dependent(_ view:NSView, requires keys:[String], unless exclusions:[String] = []) -> NSView {
+        guard !keys.isEmpty || !exclusions.isEmpty else {return view}
         let update:(PetPreferences) -> Void = { [weak view] preferences in
             guard let view else {return}
-            let enabled = keys.allSatisfy {preferences.bool($0)}
+            let enabled = keys.allSatisfy {preferences.bool($0)} && exclusions.allSatisfy {!preferences.bool($0)}
             func apply(_ child:NSView) {
                 if let control = child as? NSControl {control.isEnabled = enabled}
                 else {for child in child.subviews {apply(child)}}
@@ -150,13 +150,13 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         availabilityUpdates.append(update); update(preferences)
         return view
     }
-    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = []) -> NSView {
+    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = []) -> NSView {
         let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
         if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
         if key == "showDiagnostics" { diagnosticsSwitch = control }
         if key == "automaticallyCheckUpdates" { automaticUpdateSwitch = control }
         attach(control) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:key) }
-        return dependent(row(title,detail:detail,control:control),requires:requires)
+        return dependent(row(title,detail:detail,control:control),requires:requires,unless:unless)
     }
     func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
@@ -360,7 +360,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let unit = label("帧"); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
         unit.widthAnchor.constraint(equalToConstant:22).isActive = true
         let controls = SettingsSliderControl(number:number,unit:unit,slider:slider,limits:("6 帧","240 帧"),ticks:7)
-        let result = row("动画缓冲帧数", detail:"缓冲越少，运行内存 (RAM) 占用越低；缓冲不足时动画会停顿。", control: controls)
+        let result = row("动画缓冲帧数", detail:"限制播放中保留的后续帧数；起播准备约四分之一秒。", control: controls)
         bufferControls = [slider, number]; bufferRow = result; updateBufferAvailability()
         return result
     }

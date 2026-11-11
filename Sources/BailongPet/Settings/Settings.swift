@@ -269,9 +269,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .updates: updates()
         case .about: break
         case .developer:
-            form.group("动画", [form.choice("画质", "animationQuality", [("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")]),
+            form.group("动画", [form.choice("画质", "animationQuality", [("auto", "自动\t跟随显示尺寸"), ("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")], detail:"自动画质在下一段动作开始时生效。"),
                 form.choice("素材帧率上限", "animationFPSLimit", [("full", "满帧 (≥ 24 FPS)"), ("20", "20 FPS"), ("15", "15 FPS")]),
                 form.bufferFrames(),
+                form.toggle("常用动作开头缓存", "animationOpeningCache", detail: "保留播放过的常用动作开头，缓存上限 24 MiB。", unless:["preloadWholeAnimation"]),
                 form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "播放前加载整段动画，会占用更多运行内存 (RAM)。")])
             form.group("应用统计", [form.toggle("开启应用性能信息统计浮窗", "showDiagnostics")])
         }

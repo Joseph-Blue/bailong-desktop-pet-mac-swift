@@ -74,15 +74,26 @@ struct Frame {
         return pixels[alphaOnly ? py * image.width + px : py * image.bytesPerRow + px * 4 + 3]
     }
 }
+struct AnimationLoadTiming {
+    let requestedAt: Double
+    let firstFrameAt: Double
+    let readyAt: Double
+    var handedAt: Double?
+    var displayedAt: Double?
+}
+
 // 帧数组构造后不再改变，CGImage 与 Data 均以只读方式跨队列使用。
 final class Animation: NSObject, @unchecked Sendable {
     let frames: [Frame]
     let stream: StreamingAnimation?
     let fps: Double
-    init(_ frames: [Frame], stream: StreamingAnimation? = nil, fps: Double = 24) { self.frames = frames; self.stream = stream; self.fps = fps }
+    // 发布后仅在主线程记录交接和首次实际绘制，不保留历史帧或逐帧日志。
+    var loadTiming: AnimationLoadTiming?
+    init(_ frames: [Frame], stream: StreamingAnimation? = nil, fps: Double = 24, loadTiming: AnimationLoadTiming? = nil) {
+        self.frames = frames; self.stream = stream; self.fps = fps; self.loadTiming = loadTiming
+    }
     var frameCount: Int { stream?.frameCount ?? frames.count }
-    var residentCount: Int { stream.map { $0.statistics(retaining: frames.first).frames } ?? frames.count }
-    var cost: Int { stream?.statistics(retaining: frames.first).bytes ?? frames.reduce(0) { $0 + $1.cost } }
+    var retainedFrames: [Frame] { stream?.retainedFrames(first:frames.first) ?? frames }
 }
 
 private final class WeakAnimation {
@@ -92,28 +103,64 @@ private final class WeakAnimation {
 
 // 可变解码状态由 lock 保护；默认流式读取，CPU 工作区随当前动画复用，整段预加载按偏好启用。
 final class Decoder: @unchecked Sendable {
+    static let openingCacheLimit = 24 * 1024 * 1024
+    private static let openingFrameLimit = 6
+    private struct OpeningKey: Equatable {
+        let file: String
+        let resolution: Int
+        let fpsLimit: Double?
+        let cappedPlaybackRate: Double?
+    }
+    private struct Opening {
+        let key: OpeningKey
+        let entries: [StreamingAnimation.Entry]
+        let bytes: Int
+    }
     private let lock = NSLock()
     private let group = DispatchGroup()
     private var worker: Task<Void, Never>?
     private var stream: StreamingAnimation?
     private var generation = 0
     private var bufferCapacity = 12
-    private var resolution = 512
     private var preloadWhole = false
+    private var openingCacheEnabled = false
+    private var openingCacheRevision = 0
+    private var openings = [Opening]() // 从最近最少使用到最近使用。
+    private var openingBytes = 0, openingHits = 0
     private var preloadProgress: (id: String, frames: Int, total: Int)?
     func preloadingStatistics() -> (id: String, frames: Int, total: Int)? { lock.withLock { preloadProgress } }
     private var resident = [String: WeakAnimation]()
-    func residentFrameStatistics() -> (clips: Int, frames: Int, bytes: Int) {
+    func residentFrameStatistics() -> (clips: Int, frames: Int, bytes: Int, openingClips: Int, openingBytes: Int, hits: Int) {
         lock.withLock {
             let live = resident.values.compactMap { $0.value }
-            return (live.count, live.reduce(0) { $0 + $1.residentCount }, live.reduce(0) { $0 + $1.cost })
+            var unique = [ObjectIdentifier:Int]()
+            for animation in live { for frame in animation.retainedFrames { unique[ObjectIdentifier(frame.image)] = frame.cost } }
+            for opening in openings { for entry in opening.entries { unique[ObjectIdentifier(entry.frame.image)] = entry.frame.cost } }
+            return (live.count,unique.count,unique.values.reduce(0,+),openings.count,openingBytes,openingHits)
         }
     }
-    func configure(bufferCapacity: Int, resolution: Int, preloadWhole: Bool) {
+    func setOpeningCacheEnabled(_ enabled: Bool) {
+        lock.withLock {
+            guard openingCacheEnabled != enabled else { return }
+            openingCacheEnabled = enabled; clearOpenings()
+        }
+    }
+    func discardOpeningCache() { lock.withLock { clearOpenings() } }
+    private func clearOpenings() {
+        openingCacheRevision += 1; openings.removeAll(); openingBytes = 0
+    }
+    private func rememberOpening(key: OpeningKey, entries: [StreamingAnimation.Entry]) {
+        let bytes = entries.reduce(0) { $0 + $1.frame.cost }
+        guard !entries.isEmpty, bytes <= Self.openingCacheLimit else { return }
+        if let index = openings.firstIndex(where:{$0.key == key}) { openingBytes -= openings.remove(at:index).bytes }
+        while openingBytes + bytes > Self.openingCacheLimit { openingBytes -= openings.removeFirst().bytes }
+        openings.append(Opening(key:key,entries:entries,bytes:bytes)); openingBytes += bytes
+    }
+    func configure(bufferCapacity: Int, preloadWhole: Bool) {
         cancel()
         lock.withLock {
-            self.bufferCapacity = bufferCapacity; self.resolution = resolution; self.preloadWhole = preloadWhole
-            resident.removeAll()
+            self.bufferCapacity = bufferCapacity; self.preloadWhole = preloadWhole
+            resident.removeAll(); clearOpenings()
         }
     }
     func cancel() {
@@ -132,18 +179,22 @@ final class Decoder: @unchecked Sendable {
     func close() {
         let activeStream = lock.withLock { stream }
         cancel(); activeStream?.waitUntilStopped(); group.wait()
-        lock.withLock { resident.removeAll() }
+        lock.withLock { resident.removeAll(); clearOpenings() }
     }
     private func current(_ token: Int) -> Bool { lock.withLock { generation == token } }
-    func load(_ clip: Clip, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
+    func load(_ clip: Clip, resolution: Int, fpsLimit: Double?, playbackRate: Double, cacheOpening: Bool,
+              framesReady: @escaping () -> Void, first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
+        let requestedAt = ProcessInfo.processInfo.systemUptime
         // 新片段准备期间继续供应当前片段的帧；只取消上一份尚未完成的加载。
         cancelLoad(keepingStream: true)
-        let (token, capacity, side, preload) = lock.withLock { (generation, bufferCapacity, resolution, preloadWhole) }
+        let (token, capacity, preload, cacheRevision) = lock.withLock { (generation, bufferCapacity, preloadWhole, openingCacheRevision) }
+        let file = clip.playbackFile ?? clip.file
+        let key = OpeningKey(file:file,resolution:resolution,fpsLimit:fpsLimit,cappedPlaybackRate:fpsLimit == nil ? nil : playbackRate)
         group.enter()
         lock.withLock { worker = Task.detached(priority: .userInitiated) { [self] in
             defer { group.leave() }
             do {
-                let asset = AVURLAsset(url: Paths.assets.appendingPathComponent(clip.playbackFile ?? clip.file))
+                let asset = AVURLAsset(url: Paths.assets.appendingPathComponent(file))
                 guard let track = try await asset.loadTracks(withMediaType: .video).first else {
                     throw PetFailure(message: "「\(clip.title)」没有视频轨道。")
                 }
@@ -152,9 +203,14 @@ final class Decoder: @unchecked Sendable {
                 guard rate.isFinite && rate > 0 else {throw PetFailure(message:"「\(clip.title)」缺少有效的素材帧率。")}
                 let range = try await track.load(.timeRange)
                 guard current(token) else { return }
-                let streaming = StreamingAnimation(asset: asset, track: track, capacity: capacity, resolution: side,
+                let streaming = StreamingAnimation(asset: asset, track: track, capacity: capacity, resolution: resolution,
                     frameCount: max(1, Int((range.duration.seconds * Double(rate)).rounded())),
-                    startTime: range.start.seconds, onFailure: { [weak self] error in
+                    startTime: range.start.seconds, sourceFPS: Double(rate), fpsLimit: fpsLimit, playbackRate: playbackRate,
+                    onFramesReady: { [weak self] source in
+                        guard let self, self.lock.withLock({ self.stream === source }) else { return }
+                        framesReady()
+                    },
+                    onFailure: { [weak self] error in
                         if self?.current(token) == true { completion(.failure(error)) }
                     })
                 if preload {
@@ -164,26 +220,42 @@ final class Decoder: @unchecked Sendable {
                         self.lock.withLock { if self.generation == token { self.preloadProgress = (clip.id, count, streaming.frameCount) } }
                     }), current(token) else { return }
                     guard !frames.isEmpty else { throw PetFailure(message: "「\(clip.title)」没有可播放的帧。") }
-                    let animation = Animation(frames,fps:Double(rate))
+                    let readyAt = ProcessInfo.processInfo.systemUptime
+                    let timing = AnimationLoadTiming(requestedAt:requestedAt,firstFrameAt:streaming.firstFramePreparedAt!,readyAt:readyAt)
+                    let animation = Animation(frames,fps:Double(rate),loadTiming:timing)
                     publish(animation, clip: clip, token: token, first: first, completion: completion)
                     return
                 }
-                guard let firstFrame = try streaming.prepareForPlayback(isCurrent: { self.current(token) }) else { return }
-                let animation = Animation([firstFrame], stream: streaming,fps:Double(rate))
-                publish(animation, clip: clip, token: token, first: first, completion: completion)
+                let (canCache, opening) = lock.withLock { () -> (Bool,[StreamingAnimation.Entry]) in
+                    guard cacheOpening, openingCacheEnabled, cacheRevision == openingCacheRevision, generation == token else { return (false,[]) }
+                    guard let index = openings.firstIndex(where:{$0.key == key}) else { return (true,[]) }
+                    let hit = openings.remove(at:index); openings.append(hit)
+                    return (true,hit.entries)
+                }
+                guard let firstFrame = try streaming.prepareForPlayback(playbackRate:playbackRate,opening:opening,isCurrent: { self.current(token) }) else { return }
+                let timing = AnimationLoadTiming(requestedAt:requestedAt,firstFrameAt:streaming.firstFramePreparedAt!,readyAt:ProcessInfo.processInfo.systemUptime)
+                let animation = Animation([firstFrame], stream: streaming,fps:Double(rate),loadTiming:timing)
+                let entries = canCache ? streaming.openingFrames(limit:Self.openingFrameLimit) : []
+                publish(animation,clip:clip,token:token,cache:(key,entries,cacheRevision,!opening.isEmpty),first:first,completion:completion)
             } catch {
                 DispatchQueue.main.async { if self.current(token) { completion(.failure(error)) } }
             }
         } }
     }
-    private func publish(_ animation: Animation, clip: Clip, token: Int, first: @escaping (Frame) -> Void,
-                         completion: @escaping (Result<Animation, Error>) -> Void) {
+    private func publish(_ animation: Animation, clip: Clip, token: Int,
+                         cache: (key: OpeningKey, entries: [StreamingAnimation.Entry], revision: Int, hit: Bool)? = nil,
+                         first: @escaping (Frame) -> Void, completion: @escaping (Result<Animation, Error>) -> Void) {
         DispatchQueue.main.async {
             guard self.current(token) else { animation.stream?.stop(); return }
+            animation.loadTiming?.handedAt = ProcessInfo.processInfo.systemUptime
             let previous = self.lock.withLock { () -> StreamingAnimation? in
                 let previous = self.stream
                 self.stream = animation.stream
                 self.resident[clip.id] = WeakAnimation(animation)
+                if let cache, self.openingCacheEnabled, cache.revision == self.openingCacheRevision {
+                    self.rememberOpening(key:cache.key,entries:cache.entries)
+                    if cache.hit { self.openingHits += 1 }
+                }
                 return previous
             }
             first(animation.frames[0])

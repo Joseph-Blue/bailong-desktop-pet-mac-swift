@@ -2,25 +2,52 @@ import AppKit
 import Darwin
 import Metal
 
+struct PlaybackSchedulingStatistics {
+    private let beganAt = ProcessInfo.processInfo.systemUptime
+    private(set) var callbacks = 0
+    private(set) var overdueFrames = 0
+    private(set) var longestDelay = 0.0
+    private var totalDelay = 0.0
+    var averageDelay: Double? { callbacks > 0 ? totalDelay / Double(callbacks) : nil }
+    var callbackRate: Double? {
+        let elapsed = ProcessInfo.processInfo.systemUptime - beganAt
+        return elapsed > 0 ? Double(callbacks)/elapsed : nil
+    }
+    mutating func record(deadline: Double, actual: Double, frameInterval: Double) {
+        let delay = max(0,actual-deadline)
+        callbacks += 1; totalDelay += delay; longestDelay = max(longestDelay,delay)
+        if delay >= frameInterval { overdueFrames += 1 }
+    }
+}
+
 // Only collects while the developer window is enabled. Frame changes are counted
-// after SpriteView.draw, not from the 30 Hz scheduling timer.
+// after SpriteView.draw, not from the playback timer.
 struct PlaybackStatistics {
     private(set) var total = 0
     private var intervalFrames = 0
     private var intervalDraws = 0
     private var lastImage: ObjectIdentifier?
     private var lastTime: Double
+    private var lastFrameChange: Double?
+    private(set) var longestFrameHold = 0.0
     private(set) var high: Double?
     private(set) var low: Double?
     init(time: Double) { lastTime = time }
     mutating func record(image: ObjectIdentifier) {
         intervalDraws += 1
-        if image != lastImage { total += 1; intervalFrames += 1; lastImage = image }
+        if image != lastImage {
+            let now = ProcessInfo.processInfo.systemUptime
+            if let lastFrameChange { longestFrameHold = max(longestFrameHold, now - lastFrameChange) }
+            lastFrameChange = now
+            total += 1; intervalFrames += 1; lastImage = image
+        }
     }
+    mutating func pausePresentationClock() { lastFrameChange = nil; lastImage = nil }
     mutating func sample(time: Double) -> (fps: Double, draws: Double) {
         let elapsed = max(0.001, time - lastTime)
         let fps = Double(intervalFrames) / elapsed
         let draws = Double(intervalDraws) / elapsed
+        if let lastFrameChange { longestFrameHold = max(longestFrameHold, time - lastFrameChange) }
         high = max(high ?? fps, fps); low = min(low ?? fps, fps)
         intervalFrames = 0; intervalDraws = 0; lastTime = time
         return (fps, draws)
@@ -223,21 +250,27 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     func show(takeFocus: Bool = true) {
         InterfaceWindows.shared.opened(window)
         if timer == nil {
-            sampledAt = ProcessInfo.processInfo.systemUptime; frames = PlaybackStatistics(time: sampledAt)
-            previous = ProcessStatistics.read(); swapinRate = nil; graph.values.removeAll(); graph.needsDisplay = true
-            switch GPUStatistics.read() {
-            case .success(let snapshot): previousGPU = snapshot; gpuStatus = "等待采样"
-            case .failure(let error): previousGPU = nil; gpuStatus = error.message
-            }
-            placeTopLeft(); updateText(fps: nil, draws: nil, cpu: nil, gpu: nil, process: previous)
-            let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.sample() }
-            self.timer = timer; RunLoop.main.add(timer, forMode: .common)
+            beginSampling(); placeTopLeft()
         }
         if takeFocus && window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.addWindowsItem(window, title: window.title, filename: false)
         if takeFocus { if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil) }
         else if !window.isVisible && !window.isMiniaturized { window.orderFront(nil) }
     }
+    private func beginSampling() {
+        timer?.invalidate()
+        sampledAt = ProcessInfo.processInfo.systemUptime; frames = PlaybackStatistics(time:sampledAt)
+        pet?.playbackScheduling = PlaybackSchedulingStatistics()
+        previous = ProcessStatistics.read(); swapinRate = nil; graph.values.removeAll(); graph.needsDisplay = true
+        switch GPUStatistics.read() {
+        case .success(let snapshot): previousGPU = snapshot; gpuStatus = "等待采样"
+        case .failure(let error): previousGPU = nil; gpuStatus = error.message
+        }
+        updateText(fps:nil,draws:nil,cpu:nil,gpu:nil,process:previous)
+        let timer = Timer(timeInterval:1,repeats:true) { [weak self] _ in self?.sample() }
+        self.timer = timer; RunLoop.main.add(timer,forMode:.common)
+    }
+    func resetStatistics() { if timer != nil { beginSampling() } }
     func stop() {
         timer?.invalidate(); timer = nil; previousGPU = nil
         window.orderOut(nil); InterfaceWindows.shared.closed(window)
@@ -276,6 +309,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         guard timer != nil else { return }
         frames.record(image: ObjectIdentifier(image))
     }
+    func pausePresentationClock() { frames.pausePresentationClock() }
     private func placeTopLeft() {
         guard let screen = NSScreen.screens.first else { return }
         let area = screen.visibleFrame
@@ -312,13 +346,23 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         fpsValue.stringValue = number(fps); highValue.stringValue = number(frames.high); lowValue.stringValue = number(frames.low)
         let count = pet.animation?.frameCount ?? 0
         let index = pet.animation?.stream?.current?.index ?? pet.frameIndex
-        let resolution = pet.currentFrame?.image.width ?? pet.preferences.animationResolution
+        let resolution = pet.currentFrame?.image.width ?? pet.animationResolution(for:pet.current)
+        let automatic = pet.preferences.usesAutomaticAnimationResolution ? "自动 · " : ""
         let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧 (≥ 24 FPS)" : pet.preferences.string("animationFPSLimit") + " FPS"
-        let state = pet.hidden ? "隐藏" : pet.loading ? "解码中" : pet.press != nil && !pet.dragged ? "暂停" : "播放"
+        let state = pet.hidden ? "隐藏" : pet.loading ? "解码中" : "播放"
         let preloadEnabled = pet.preferences.bool("preloadWholeAnimation")
-        playback.stringValue = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 绘制 \(number(draws))/s"
+        playback.stringValue = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(automatic)\(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 绘制 \(number(draws))/s"
+        func milliseconds(_ value: Double?) -> String { value.map { String(format:"%.1f ms",$0 * 1000) } ?? "—" }
+        playback.stringValue += "\n最长画面停留（本次统计）\(milliseconds(frames.longestFrameHold))"
+        let scheduling = pet.playbackScheduling
+        playback.stringValue += "\n调度 \(number(scheduling.callbackRate))/s · 回调延后：平均 \(milliseconds(scheduling.averageDelay)) · 最长 \(milliseconds(scheduling.longestDelay)) · ≥ 一帧 \(scheduling.overdueFrames) 次"
+        if let timing = pet.animation?.loadTiming {
+            playback.stringValue += "\n本段加载：请求→首帧 \(milliseconds(timing.firstFrameAt - timing.requestedAt)) · 起播准备 \(milliseconds(timing.readyAt - timing.firstFrameAt))"
+            playback.stringValue += "\n准备→交接 \(milliseconds(timing.handedAt.map { $0 - timing.readyAt })) · 交接→绘制 \(milliseconds(timing.displayedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } }))"
+            playback.stringValue += "\n请求→绘制 \(milliseconds(timing.displayedAt.map { $0 - timing.requestedAt }))"
+        }
         let cache = pet.decoder.residentFrameStatistics()
-        let preloadText: String
+        var preloadText: String
         if preloadEnabled {
             if let progress = pet.decoder.preloadingStatistics() {
                 let title = pet.catalog.all.first { $0.id == progress.id }?.title ?? progress.id
@@ -330,13 +374,23 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             }
         } else if let stream = pet.animation?.stream {
             let buffer = stream.statistics()
-            preloadText = "流式缓冲 \(buffer.buffered)/\(stream.capacity) 帧\n整段预加载：关闭"
+            preloadText = "流式缓冲 \(buffer.buffered)/\(stream.capacity) 帧\n本段缺帧等待 \(buffer.underflows) 次 · 最长 \(milliseconds(buffer.longestUnderflow))\n本段读取 \(buffer.decoded) 帧 · 像素处理 \(buffer.converted) 帧 · 跳过 \(buffer.skipped) 帧\n本段回调跨过可用帧 \(buffer.expired) 帧\n整段预加载：关闭"
+            if let startup = stream.startup {
+                preloadText += "\n起播 \(startup.frames) 帧 · 余量 \(milliseconds(startup.seconds))"
+                if startup.reused > 0 {
+                    let continuation = buffer.continued.map { $0 ? "缺帧前接续" : "缺帧后接续" } ?? "接续准备中"
+                    preloadText += " · 复用 \(startup.reused) 帧 · \(continuation)\n缓存区间重读 \(buffer.replayed) 个样本，跳过像素处理"
+                }
+            }
         } else {
             preloadText = "流式缓冲：准备中"
         }
+        if pet.preferences.bool("animationOpeningCache"), !preloadEnabled {
+            preloadText += "\n开头缓存 \(bytes(UInt64(cache.openingBytes))) / 24 MiB · \(cache.openingClips) 段 · 累计命中 \(cache.hits) 次"
+        }
         let swapinText = process.swapins.map { $0 > 0 ? "累计 \(bytes($0))" : "未观察到换入" } ?? "不可用"
         let swapRateText = swapinRate.map { " · \(bytes(UInt64($0.rounded())))/s" } ?? ""
-        resources.stringValue = "CPU 总体 \(number(cpu.map { $0 / Double(ProcessInfo.processInfo.processorCount) }))% · 单核基准 \(number(cpu))%\n运行内存 (RAM) \(process.footprint.map(bytes) ?? "不可用")\nGPU（应用组）\(gpu.map { String(format: "%.2f%%", $0) } ?? gpuStatus)\n本进程压缩 \(process.compressed.map(bytes) ?? "不可用") · 系统 Swap \(process.systemSwapUsed.map(bytes) ?? "不可用")\n本进程 Swap-in：\(swapinText)\(swapRateText)\n帧缓存 \(bytes(UInt64(cache.bytes))) · \(cache.clips) 段 / \(cache.frames) 帧\n\(preloadText)\n动画磁盘缓存 0 B"
+        resources.stringValue = "CPU 总体 \(number(cpu.map { $0 / Double(ProcessInfo.processInfo.processorCount) }))% · 单核基准 \(number(cpu))%\n运行内存 (RAM) \(process.footprint.map(bytes) ?? "不可用")\nGPU（应用组）\(gpu.map { String(format: "%.2f%%", $0) } ?? gpuStatus)\n本进程压缩 \(process.compressed.map(bytes) ?? "不可用") · 系统 Swap \(process.systemSwapUsed.map(bytes) ?? "不可用")\n本进程 Swap-in：\(swapinText)\(swapRateText)\n帧像素合计 \(bytes(UInt64(cache.bytes))) · \(cache.frames) 帧 · 已发布 \(cache.clips) 段\n\(preloadText)\n动画磁盘缓存 0 B"
         let desktop = NSWorkspace.shared.runningApplications.filter { ["com.openai.codex", "com.openai.chat"].contains($0.bundleIdentifier ?? "") }
         let desktopText = desktop.isEmpty ? "未运行" : desktop.map { "\($0.localizedName ?? "桌面应用") · PID \($0.processIdentifier)" }.joined(separator: "、")
         connections.stringValue = "桌面端  \(desktopText)\n只读同步  \(pet.syncDiagnostics())\nCLI  \(pet.cliDiagnostics())"
