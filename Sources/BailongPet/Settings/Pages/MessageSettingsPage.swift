@@ -10,6 +10,10 @@ enum MessageSettingsPage {
             form.toggle("任务消息","progressBubbles",requires:["taskBubbles"]),
             form.toggle("最终回复","resultBubbles",requires:["taskBubbles"]),
             form.toggle("思考与工具进展小气泡","progressToastEnabled",requires:["taskBubbles","progressBubbles"])],symbol:"bubble.left.and.bubble.right")
+        form.group("工作区状态",[
+            form.toggle("显示工作区状态","gitWindowEnabled"),
+            form.toggle("常驻","gitWindowPinned",requires:["gitWindowEnabled"]),
+            form.slider("显示时长","gitWindowSeconds",range:PetPreferences.ranges["gitWindowSeconds"]!,suffix:"秒",requires:["gitWindowEnabled"],unless:["gitWindowPinned"])],symbol:"arrow.triangle.branch")
         form.group("进展提醒",[
             form.toggle("久无进展时提醒","taskReminderEnabled",detail:"任务连续 90 秒没有新进展后，按下方间隔提醒。等待回答、批准或正在停止时不提醒。",requires:["taskBubbles","progressBubbles"]),
             form.slider("提醒间隔","taskReminderMinutes",range:1...30,suffix:"分钟",requires:["taskBubbles","progressBubbles","taskReminderEnabled"])],symbol:"bell.badge")
@@ -22,21 +26,19 @@ enum MessageSettingsPage {
             form.toggle("互动气泡显示任务概览","showTaskOverview",detail:"鼠标操作设为“显示任务进度、播放随机动画”时，台词下方显示任务列表。点击任务可在 Codex 中打开。"),
             form.slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"每个会话只显示最近一次任务。",requires:["showTaskOverview"])],symbol:"rectangle.stack")
         form.group("停留时间",[
-            form.slider("互动台词","interactionSeconds",range:0...60,suffix:"秒",requires:["interactionBubbles"]),
-            form.slider("任务消息","progressSeconds",range:0...60,suffix:"秒",requires:["taskBubbles","progressBubbles"]),
-            form.slider("最终回复","resultSeconds",range:0...120,suffix:"秒",requires:["taskBubbles","resultBubbles"]),
-            form.slider("额度信息","quotaSeconds",range:0...120,suffix:"秒"),
-            form.note("0 秒表示手动关闭。审批、问题和错误提示不会自动关闭。"),
+            form.slider("互动台词","interactionSeconds",range:0...60,suffix:"秒",requires:["interactionBubbles"],minimumLabel:"手动关闭"),
+            form.slider("任务消息","progressSeconds",range:0...60,suffix:"秒",requires:["taskBubbles","progressBubbles"],minimumLabel:"手动关闭"),
+            form.slider("最终回复","resultSeconds",range:0...120,suffix:"秒",requires:["taskBubbles","resultBubbles"],minimumLabel:"手动关闭"),
+            form.slider("额度信息","quotaSeconds",range:0...120,suffix:"秒",minimumLabel:"手动关闭"),
             form.toggle("长回复自动延长阅读时间","autoReadTime",detail:"最长 120 秒。",requires:["taskBubbles","resultBubbles"]),
             form.toggle("鼠标移入时暂停倒计时","pauseOnHover"),
             form.slider("思考与工具进展小气泡","progressToastSeconds",range:1...10,suffix:"秒",detail:"内容更新后重新计时。",requires:["taskBubbles","progressBubbles","progressToastEnabled"]),
-            form.row("预览最终回复气泡",control:ActionButton("预览…") {onPreview(.result)})],symbol:"timer")
+            form.row("预览最终回复气泡",control:ActionButton("预览…") {onPreview(.result)})],symbol:"timer",detail:"审批、问题和错误提示需手动关闭。")
         form.group("声音",[form.toggle("播放音效","soundEnabled")],symbol:"speaker.wave.2")
         form.group("安静陪伴",[
             form.toggle("立即开启安静陪伴","quietCompanion",detail:"减少活动并停止自动移动，隐藏互动台词和进展气泡，关闭音效。最终回复和待处理通知照常显示。"),
             form.toggle("定时开启安静陪伴","quietSchedule",detail:"手动开启后会一直保持安静，关闭后恢复定时安排。"),
             form.time("开始时间","quietStart",requires:["quietSchedule"]),
-            form.time("结束时间","quietEnd",requires:["quietSchedule"]),
-            form.note("按本机时间执行，可跨天；开始和结束时间相同表示全天。")],symbol:"moon")
+            form.time("结束时间","quietEnd",requires:["quietSchedule"])],symbol:"moon",detail:"按本机时间执行，可跨天；开始和结束时间相同表示全天。")
     }
 }

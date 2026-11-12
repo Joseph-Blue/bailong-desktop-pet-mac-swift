@@ -4,6 +4,7 @@ final class ConversationPicker:NSButton,NSPopoverDelegate {
     var conversations:() -> [Conversation] = {[]}
     var onSelect:(String) -> Void = {_ in}
     private let popover = NSPopover()
+    var isPresented:Bool {popover.isShown}
     init() {
         super.init(frame:.zero)
         title = "选择会话…"; bezelStyle = .rounded
@@ -25,7 +26,7 @@ final class ConversationPicker:NSButton,NSPopoverDelegate {
         if popover.isShown {close(); return}
         let content = ConversationPickerContent(conversations:conversations())
         content.onSelect = { [weak self] key in self?.close(); self?.onSelect(key) }
-        popover.contentViewController = content; popover.behavior = .transient; popover.animates = false
+        popover.contentViewController = content; popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         popover.contentSize = NSSize(width:400,height:320)
         popover.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
         content.view.window?.makeFirstResponder(content.search)

@@ -96,13 +96,13 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
         update(path:"")
     }
     required init?(coder:NSCoder) {fatalError()}
-    func update(path:String) {
+    func update(path:String,displayName:String? = nil) {
         let color = path.isEmpty ? NSColor.secondaryLabelColor : AppAccent.color
-        guard displayedPath != path || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color else {return}
+        let text = path.isEmpty ? "未选择工作区" : displayName ?? (path as NSString).abbreviatingWithTildeInPath
+        guard displayedPath != path || attributedTitle.string != text || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color else {return}
         displayedPath = path
         directory = path.isEmpty ? nil : URL(fileURLWithPath:path,isDirectory:true)
         isEnabled = directory != nil
-        let text = path.isEmpty ? "未选择工作区" : (path as NSString).abbreviatingWithTildeInPath
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingMiddle
         var attributes:[NSAttributedString.Key:Any] = [.font:font!, .foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph]
         if isEnabled {attributes.merge(LinkAppearance.attributes) {_,link in link}}

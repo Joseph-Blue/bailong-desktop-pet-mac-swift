@@ -166,6 +166,14 @@ final class AboutPageController: NSViewController {
         paragraph("使用 macOS 自带的 SQLite 保存本机对话记录、读取 Codex 任务信息。SQLite 的代码和文档属于公有领域。",to:text)
         link("SQLite 官方版权说明",url:"https://www.sqlite.org/copyright.html",to:text)
 
+        heading("Git 图标 · Jason Long",to:text)
+        link("Git 官方图标",url:"https://git-scm.com/community/logos",to:text)
+        link("CC BY 3.0",url:"https://creativecommons.org/licenses/by/3.0/",to:text)
+        paragraph("使用官方黑色图标，将 SVG 路径转换为原生单色模板。",to:text,color:.secondaryLabelColor)
+        heading("GitHub 图标 · Primer Octicons",to:text)
+        link("Primer Octicons · GitHub",url:"https://github.com/primer/octicons",to:text)
+        paragraph(GitIcons.license,to:text,color:.secondaryLabelColor)
+
         heading("macOS 界面设计参考 · macos-golden-gate-design",to:text)
         paragraph("界面设计参考 gambadio 的 macos-golden-gate-design，让设置和窗口更贴近 Mac 的使用习惯。该设计指南采用 MIT 许可证。",to:text)
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)

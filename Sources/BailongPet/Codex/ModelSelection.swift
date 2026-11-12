@@ -174,7 +174,7 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
             guard let self,self.popover.contentSize != size else {return}
             self.popover.contentSize = size
         }
-        popover.contentViewController = controls; popover.behavior = .transient; popover.animates = false
+        popover.contentViewController = controls; popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         _ = controls.view; popover.contentSize = controls.preferredContentSize
         popover.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
     }

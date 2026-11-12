@@ -14,7 +14,7 @@ final class LocalDailyTokenReader {
     private var day:DateInterval?
     private var files = [String:FileState]()
     private var seen = Set<String>()
-    private var total:Int64 = 0
+    private var total = TokenUsage.zero
     private let fractional:ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime,.withFractionalSeconds]; return f
     }()
@@ -30,13 +30,13 @@ final class LocalDailyTokenReader {
                 let database = try ReadDatabase(root+"/state_5.sqlite")
                 // 不按账号、归档、CLI 或子任务过滤，统计当前 Codex 数据目录内已有的本机日志。
                 let paths = try database.rows("SELECT DISTINCT rollout_path FROM threads WHERE rollout_path<>''").compactMap {$0["rollout_path"]}
-                result = .available(tokens:try read(paths:paths))
+                result = .available(usage:try read(paths:paths))
             } catch {reset(); result = .failed(error.localizedDescription)}
             DispatchQueue.main.async {completion(result)}
         }
     }
     // 测试与后台查询共用；调用者须在同一串行队列使用该实例。
-    func read(paths:[String],now:Date = Date(),calendar:Calendar = .current) throws -> Int64 {
+    func read(paths:[String],now:Date = Date(),calendar:Calendar = .current) throws -> TokenUsage {
         let interval = DateInterval(start:calendar.startOfDay(for:now),end:calendar.date(byAdding:.day,value:1,to:calendar.startOfDay(for:now))!)
         if day != interval {reset(); day = interval}
         do {
@@ -66,7 +66,7 @@ final class LocalDailyTokenReader {
             return total
         } catch {reset(); throw error}
     }
-    private func reset() {files.removeAll(); seen.removeAll(); total = 0; day = nil}
+    private func reset() {files.removeAll(); seen.removeAll(); total = .zero; day = nil}
     private func scan(path:String,size:UInt64,state:inout FileState,interval:DateInterval) throws {
         let file = try FileHandle(forReadingFrom:URL(fileURLWithPath:path)); defer {try? file.close()}
         try file.seek(toOffset:state.offset)
@@ -115,6 +115,6 @@ final class LocalDailyTokenReader {
         guard let turn = state.turn else {throw PetFailure(message:"本机用量事件缺少轮次标识。")}
         // 分叉复制保留原轮次、时间和累计值；独立子任务有自己的轮次身份。
         let identity = turn+"\u{001f}"+stamp+"\u{001f}"+cumulative.signature
-        if seen.insert(identity).inserted {total += increment.total}
+        if seen.insert(identity).inserted {total = total.adding(increment)}
     }
 }

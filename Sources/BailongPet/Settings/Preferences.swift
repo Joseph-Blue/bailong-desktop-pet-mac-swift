@@ -14,7 +14,7 @@ enum SettingsSection: Int, CaseIterable {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
-        case .messages: return ["taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .messages: return ["gitWindowEnabled","gitWindowPinned","gitWindowSeconds","taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
@@ -63,6 +63,7 @@ final class PetPreferences {
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
+        "gitWindowEnabled":true,"gitWindowPinned":false,"gitWindowSeconds":20.0,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
@@ -83,7 +84,7 @@ final class PetPreferences {
         "petPercent":100,"petShadow":false,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
     ].merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
-        "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
+        "gitWindowSeconds":1...120,"taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
         "sideExposurePercent":40...85,"notchExposurePercent":40...85,"glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quotaCacheSeconds":15...300,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"bubbleAspectRatio":0.6...3,"messageFontSize":11...20

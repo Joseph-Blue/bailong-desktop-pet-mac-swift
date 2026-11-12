@@ -15,6 +15,9 @@ struct TokenUsage:Codable,Equatable {
         guard input >= earlier.input,cachedInput >= earlier.cachedInput,output >= earlier.output,total >= earlier.total else {return nil}
         return TokenUsage(input:input-earlier.input,cachedInput:cachedInput-earlier.cachedInput,output:output-earlier.output,total:total-earlier.total)
     }
+    func adding(_ other:TokenUsage) -> TokenUsage {
+        TokenUsage(input:input+other.input,cachedInput:cachedInput+other.cachedInput,output:output+other.output,total:total+other.total)
+    }
     static func formatted(_ value:Int64) -> String {value.formatted(.number.locale(Locale(identifier:"en_US")))}
     var signature:String {"\(input):\(cachedInput):\(output):\(total)"}
     var details:String {"输入\t\(Self.formatted(input))\tTokens\n缓存命中\t\(Self.formatted(cachedInput))\tTokens\n输出\t\(Self.formatted(output))\tTokens"}

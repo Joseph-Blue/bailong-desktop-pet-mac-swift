@@ -37,7 +37,8 @@ final class ChatComposer: NSObject {
     private var statusText = "", allowsInlineStatus = false, externalModel = false
     private var openCodex:ActionButton!, retrySettings:ActionButton!
     private let conversationPicker = ConversationPicker()
-    private let workspace = WorkspaceLinkButton()
+    private let workspace = WorkspaceStatusView()
+    private var latestState:ChatInputState?
     private var stopButton:ActionButton!, checkButton:ActionButton!
     var onOpenWorkspace:(URL) -> Void = {_ in}
     var onMode:(ConversationKind) -> Void = {_ in}, onSelect:(String) -> Void = {_ in}
@@ -111,7 +112,7 @@ final class ChatComposer: NSObject {
         let modelStrip = NSStackView(views:[modelFields,inlineStatus])
         modelStrip.alignment = .centerY; modelStrip.spacing = 12
         workspace.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        let workspaceRow = ChatMetadataRow("工作区",content:workspace,expandsContent:true)
+        let workspaceRow = workspace
         let targetCaption = NSTextField(labelWithString:"会话")
         targetCaption.font = .systemFont(ofSize:12); targetCaption.textColor = .secondaryLabelColor
         targetCaption.setContentCompressionResistancePriority(.required,for:.horizontal)
@@ -137,6 +138,7 @@ final class ChatComposer: NSObject {
     func showComposer() {
         updateLayout()
         composerMotion.show(key:true)
+        if let state = latestState {workspace.update(conversation:state.conversation,executing:state.executing,visible:true)}
         composer.makeFirstResponder(composerEditor)
         stopDismissMonitoring()
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown,.rightMouseDown,.otherMouseDown]
@@ -148,13 +150,14 @@ final class ChatComposer: NSObject {
         }
     }
     func hideComposer() {
+        workspace.deactivate()
         stopDismissMonitoring(); composerModel.closeChoices(); conversationPicker.close(); composerMotion.hide(); onHide()
     }
     private func dismissComposerIfOutside(_ event: NSEvent) {
         guard composerVisible, !presentingFolderPicker, composer.attachedSheet == nil else{return}
         if isPetInteraction(event) {return}
         let point = NSEvent.mouseLocation
-        if showingNewMenu || composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) || conversationPicker.containsInteraction(at:point,window:event.window) {return}
+        if workspace.containsInteraction(at:point) || showingNewMenu || composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) || conversationPicker.containsInteraction(at:point,window:event.window) {return}
         hideComposer()
     }
     private func stopDismissMonitoring() {
@@ -239,6 +242,7 @@ final class ChatComposer: NSObject {
     }
 
     func refresh(font:NSFont,state:ChatInputState,conversations:[Conversation]) {
+        latestState = state
         let external = state.kind == .project
         composerEditor.font = font; status.font = font
         composerModel.font = font; composerInheritedSettings.font = font
@@ -255,8 +259,7 @@ final class ChatComposer: NSObject {
         conversationPicker.title = state.conversation?.title ?? "选择会话…"
         conversationPicker.hoverHelp = state.conversation?.title
         conversationPicker.conversations = { [kind = state.kind] in conversations.filter {$0.kind == kind}}
-        let path = state.conversation?.cwd ?? ""
-        workspace.update(path:path)
+        workspace.update(conversation:state.conversation,executing:state.executing,visible:composerVisible)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
         composerInheritedSettings.update(settings:state.modelSettings,error:state.modelNote)
         composerInheritedSettings.superview?.isHidden = !external || state.conversation == nil

@@ -314,7 +314,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         NotificationCenter.default.addObserver(self,selector:#selector(refresh),name:UpdateChecker.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshAutomaticOption),name:PetPreferences.didChange,object:nil)
     }
-    @objc private func toggleDetails() {detailsExpanded.toggle(); refresh()}
+    @objc private func toggleDetails() {DisclosureMotion.update(in:window.contentView!) {detailsExpanded.toggle(); refresh()}}
     @objc private func refreshAutomaticOption() {disableAutomatic.isEnabled = PetPreferences.shared.bool("automaticallyCheckUpdates")}
     @objc private func refresh() {
         let checker = UpdateChecker.shared, failed = checker.failure != nil

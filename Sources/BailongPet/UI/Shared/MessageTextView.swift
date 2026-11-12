@@ -74,16 +74,18 @@ final class MessageTextView: LinkTextView {
             if toolbar.superview == nil {addSubview(toolbar); transcriptToolbars[range.location] = toolbar}
             toolbar.onToggle = { [weak self] in
                 guard let self else {return}
-                if !self.expandedUsage.insert(content.id).inserted {self.expandedUsage.remove(content.id)}
-                self.prepareFooters(width:self.bounds.width)
-                self.measuredWidth = -1; self.invalidateCodeLayout()
-                if self.isVerticallyResizable {self.sizeToFit()}
-                self.onContentLayoutChange?()
-                if self.expandedUsage.contains(content.id),let toolbar = self.transcriptToolbars[range.location] {
-                    self.layoutSubtreeIfNeeded()
-                    // 仅用户展开时显露最后一行，后台更新与收起仍保留阅读位置。
-                    let lastLineHeight = ceil(content.font.ascender-content.font.descender+content.font.leading)+8
-                    self.scrollToVisible(NSRect(x:0,y:max(0,toolbar.frame.maxY-lastLineHeight),width:1,height:lastLineHeight))
+                DisclosureMotion.update(in:self) {
+                    if !self.expandedUsage.insert(content.id).inserted {self.expandedUsage.remove(content.id)}
+                    self.prepareFooters(width:self.bounds.width)
+                    self.measuredWidth = -1; self.invalidateCodeLayout()
+                    if self.isVerticallyResizable {self.sizeToFit()}
+                    self.onContentLayoutChange?()
+                    if self.expandedUsage.contains(content.id),let toolbar = self.transcriptToolbars[range.location] {
+                        self.layoutSubtreeIfNeeded()
+                        // 仅用户展开时显露最后一行，后台更新与收起仍保留阅读位置。
+                        let lastLineHeight = ceil(content.font.ascender-content.font.descender+content.font.leading)+8
+                        self.scrollToVisible(NSRect(x:0,y:max(0,toolbar.frame.maxY-lastLineHeight),width:1,height:lastLineHeight))
+                    }
                 }
             }
             let height = toolbar.arrange(width:footerWidth(width))
@@ -101,7 +103,7 @@ final class MessageTextView: LinkTextView {
     override func clicked(onLink link: Any, at charIndex: Int) {
         if (link as? URL) == FileEditRendering.disclosureLink,
            let section = textStorage?.attribute(.fileEditSection,at:charIndex,effectiveRange:nil) as? FileEditSection {
-            applyDisclosure(fileEditPresentation.toggle(section.id)); return
+            DisclosureMotion.update(in:self) {applyDisclosure(fileEditPresentation.toggle(section.id))}; return
         }
         if MessageFileLink.reveal(link,relativeTo:linkBaseDirectory?()) {return}
         super.clicked(onLink:link,at:charIndex)

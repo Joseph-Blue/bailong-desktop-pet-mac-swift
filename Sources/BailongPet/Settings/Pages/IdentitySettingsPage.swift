@@ -28,7 +28,7 @@ enum IdentitySettingsPage {
         form.group("任务状态台词",ConversationLines.task.map {form.text($0.title,$0.key,limit:ConversationLines.limit($0.key))} + [form.text("执行任务中","taskProgressTemplate",limit:120),form.text("有新进展","taskUpdateTemplate",limit:120),form.text("正在思考","taskThinkingTemplate",limit:120),form.text("正在调用工具","taskToolTemplate",limit:120),form.text("正在运行命令","taskCommandTemplate",limit:120),form.text("已运行命令","taskCommandCompletedTemplate",limit:120),form.text("等待回答","taskAnswerTemplate",limit:120),form.text("等待批准","taskApprovalTemplate",limit:120),form.text("任务成功","taskSuccessTemplate",limit:120),form.text("任务失败","taskFailureTemplate",limit:120),form.text("任务中断或取消","taskInterruptedTemplate",limit:120)],symbol:"checklist")
         form.group("聊天窗口台词",ConversationLines.interface.map {form.text($0.title,$0.key,limit:120)},symbol:"bubble.left.and.bubble.right")
         let quotaPreview = templatePreview("额度查询台词",key:"quotaLoadingTemplate",clip:catalog?.quotaAnimation)
-        form.group("额度查询台词",[form.text("正在查询","quotaLoadingTemplate",limit:120,action:quotaPreview)],symbol:"dollarsign")
+        form.group("额度查询台词",[form.text("正在查询","quotaLoadingTemplate",limit:120,action:quotaPreview)],symbol:AppIcons.quotaSymbol)
         if let catalog {
             let lines = (catalog.variants+catalog.work).filter {$0.line != nil}
             let restore = ActionButton("恢复默认") { [weak window] in

@@ -5,6 +5,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     let content:NSStackView, preferences:PetPreferences
     private unowned let window:NSWindow
     private var actions = [SettingsAction]()
+    private var conditionalRows = [(NSView,(PetPreferences) -> Bool)]()
     private var availabilityUpdates = [(PetPreferences) -> Void]()
     private var textActions = [ObjectIdentifier:(String)->Void]()
     private var textEndActions = [ObjectIdentifier:(String)->Void]()
@@ -26,7 +27,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         searchAnchors.removeAll()
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
         actions.removeAll(); textActions.removeAll(); textEndActions.removeAll()
-        availabilityUpdates.removeAll()
+        availabilityUpdates.removeAll(); conditionalRows.removeAll()
         bufferControls.removeAll(); bufferRow = nil
     }
     func fieldEditor(for client:Any?) -> Any? {
@@ -38,6 +39,19 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         automaticUpdateSwitch?.state = preferences.bool("automaticallyCheckUpdates") ? .on : .off
         updateBufferAvailability()
         for update in availabilityUpdates {update(preferences)}
+        let changed = conditionalRows.filter {$0.0.isHidden == $0.1(preferences)}
+        if !changed.isEmpty {
+            let scroll = content.enclosingScrollView, origin = content.enclosingScrollView?.contentView.bounds.origin
+            DisclosureMotion.update(in:content) {
+                for (view,condition) in changed {view.isHidden = !condition(preferences)}
+                content.layoutSubtreeIfNeeded()
+            }
+            if let scroll,let origin {
+                scroll.contentView.scroll(to:scroll.contentView.constrainBoundsRect(NSRect(origin:origin,size:scroll.contentView.bounds.size)).origin)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+            NSAccessibility.post(element:content,notification:.layoutChanged)
+        }
     }
     func controlTextDidBeginEditing(_ notification:Notification) {
         (notification.object as? SettingsTemplateField)?.refreshHighlight()
@@ -64,18 +78,29 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         field.identifier = NSUserInterfaceItemIdentifier("settings-explanation")
         return field
     }
-    func group(_ title: String, _ rows: [NSView], symbol:String? = nil, action:NSView? = nil) {
+    func conditional(_ view:NSView,when condition:@escaping (PetPreferences) -> Bool) -> NSView {
+        view.isHidden = !condition(preferences); conditionalRows.append((view,condition)); return view
+    }
+    func group(_ title: String, _ rows: [NSView], symbol:String? = nil, action:NSView? = nil,detail:String? = nil) {
         let section = NSStackView(); section.orientation = .vertical; section.alignment = .leading; section.spacing = 10
         let text = label(title,bold:true); text.font = .systemFont(ofSize:13,weight:.semibold)
         let heading:NSView = symbol.map {iconTitle(text,symbol:$0,weight:.semibold)} ?? text
         if let action {fill(alignedRow(leading:heading,control:action),in:section)} else {fill(heading,in:section)}
+        if let detail {
+            section.setCustomSpacing(4,after:section.arrangedSubviews.last!)
+            fill(note(detail),in:section)
+        }
         let surface = SettingsSectionBackground(), items = NSStackView()
         items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
         surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)])
         for (index,row) in rows.enumerated() {
             if index > 0 && row.identifier?.rawValue == "settings-explanation" {items.setCustomSpacing(4,after:rows[index-1])}
-            if index > 0 && row.identifier?.rawValue != "settings-explanation" {let line = NSBox(); line.boxType = .separator; fill(line,in:items)}
+            if index > 0 && row.identifier?.rawValue != "settings-explanation" {
+                let line = NSBox(); line.boxType = .separator
+                if let condition = conditionalRows.first(where:{$0.0 === row})?.1 {_ = conditional(line,when:condition)}
+                fill(line,in:items)
+            }
             fill(row,in:items)
         }
         fill(surface,in:section); fill(section,in:content)
@@ -344,9 +369,9 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
         return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token,action:action) { [weak self] value in self?.preferences.set(value,for:key) }
     }
-    func slider(_ title:String,_ key:String,range:ClosedRange<Double>,step:Double = 1,suffix:String,detail:String? = nil,requires:[String] = []) -> NSView {
-        let controls = numericSlider(title,value:preferences.number(key),range:range,step:step,suffix:suffix) { [weak self] value in self?.preferences.set(value,for:key) }
-        return dependent(row(title,detail:detail,control:controls),requires:requires)
+    func slider(_ title:String,_ key:String,range:ClosedRange<Double>,step:Double = 1,suffix:String,detail:String? = nil,requires:[String] = [],unless:[String] = [],minimumLabel:String? = nil) -> NSView {
+        let controls = numericSlider(title,value:preferences.number(key),range:range,step:step,suffix:suffix,minimumLabel:minimumLabel) { [weak self] value in self?.preferences.set(value,for:key) }
+        return dependent(row(title,detail:detail,control:controls),requires:requires,unless:unless)
     }
     func animationPreviewButton(_ title:String,compact:Bool = false,action:@escaping () -> Void) -> ActionButton {
         let button = ActionButton("播放",action)
@@ -362,7 +387,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             self?.preferences.setWeight(Int(value),for:clip.id)
         }
     }
-    private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,limitSuffix:String? = nil,color:NSColor? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
+    private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,limitSuffix:String? = nil,color:NSColor? = nil,minimumLabel:String? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
         let slider = NSSlider(value:value,minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
         slider.isContinuous = true; slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
         slider.setAccessibilityLabel(title)
@@ -382,7 +407,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let unitText = limitSuffix ?? suffix
         let ending = unitText.isEmpty ? "" : " "+unitText
         let limits:(String,String)? = suffix == "%" && range.lowerBound == 0 && range.upperBound == 100 ? nil :
-            (formatter.string(from:NSNumber(value:range.lowerBound))!+ending,formatter.string(from:NSNumber(value:range.upperBound))!+ending)
+            (minimumLabel ?? formatter.string(from:NSNumber(value:range.lowerBound))!+ending,formatter.string(from:NSNumber(value:range.upperBound))!+ending)
         let steps = Int(((range.upperBound-range.lowerBound)/step).rounded())
         return SettingsSliderControl(number:number,unit:unit,slider:slider,limits:limits,ticks:steps <= 12 ? steps+1 : 7)
     }

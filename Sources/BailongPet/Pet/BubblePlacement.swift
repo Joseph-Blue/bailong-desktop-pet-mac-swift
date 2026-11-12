@@ -5,13 +5,13 @@ import CoreGraphics
 enum BubblePlacement {
     enum Side:CaseIterable {case left,right,above,below}
     struct Result {let frame:CGRect; let side:Side}
-    static func resolve(size:CGSize,pet:CGRect,screen:CGRect,preferred:[Side],previous:Side?,avoiding:[CGRect] = []) -> Result {
+    static func resolve(size:CGSize,pet:CGRect,screen:CGRect,preferred:[Side],previous:Side?,avoiding:[CGRect] = [],allowsSideFallback:Bool = true) -> Result {
         let area = screen.insetBy(dx:8,dy:8)
         let size = CGSize(width:min(size.width,area.width),height:min(size.height,area.height))
         let gap:CGFloat = 10
         var order = preferred
         if let previous {order.removeAll {$0 == previous}; order.insert(previous,at:0)}
-        for side in Side.allCases where !order.contains(side) {order.append(side)}
+        if allowsSideFallback {for side in Side.allCases where !order.contains(side) {order.append(side)}}
         let avoid = pet.insetBy(dx:-4,dy:-4)
         var best:Result?, bestOverlap = CGFloat.greatestFiniteMagnitude
         for side in order {

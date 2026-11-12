@@ -19,6 +19,12 @@ final class FileEditSection:NSObject {
 enum FileEditRendering {
     static let previewCount = 3
     static let disclosureLink = URL(string:"bailong-file-edits:toggle")!
+    static func counts(_ lines:FileEditSummary.Lines,font:NSFont) -> NSAttributedString {
+        let text = "+\(lines.added) -\(lines.removed)"
+        let value = NSMutableAttributedString(string:text,attributes:[.font:NSFont.monospacedSystemFont(ofSize:font.pointSize,weight:.semibold),.foregroundColor:NSColor.systemGreen])
+        value.addAttribute(.foregroundColor,value:NSColor.systemRed,range:(text as NSString).range(of:"-\(lines.removed)",options:.backwards))
+        return value
+    }
     private static func symbol(_ name:String,description:String,font:NSFont,side:CGFloat) -> NSAttributedString? {
         guard let symbol = NSImage(systemSymbolName:name,accessibilityDescription:description)?.withSymbolConfiguration(.init(pointSize:side,weight:.regular)) else {return nil}
         // 文本附件不自动给模板图着色；每次绘制使用当前正文色，不缓存浅色外观。
@@ -43,14 +49,11 @@ enum FileEditRendering {
         table.setContentWidth(100,type:.percentageValueType); table.collapsesBorders = true
         let base:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
         func counts(_ lines:FileEditSummary.Lines) -> NSAttributedString {
-            let text = NSMutableAttributedString(string:"+\(lines.added)",attributes:[.font:NSFont.monospacedDigitSystemFont(ofSize:font.pointSize,weight:.regular),.foregroundColor:NSColor.systemGreen])
-            text.append(NSAttributedString(string:"  −\(lines.removed)",attributes:[.font:NSFont.monospacedDigitSystemFont(ofSize:font.pointSize,weight:.regular),.foregroundColor:NSColor.systemRed]))
-            return text
+            Self.counts(lines,font:font)
         }
         let total = edits.allSatisfy {$0.lines != nil} ? edits.reduce(FileEditSummary.Lines(added:0,removed:0)) {sum,edit in
             FileEditSummary.Lines(added:sum.added+edit.lines!.added,removed:sum.removed+edit.lines!.removed)
         } : nil
-        // 首行总计和文件计数共用右列，以两者最大文字宽度分配空间。
         let countWidth = ceil((edits.compactMap(\.lines)+[total].compactMap {$0}).map {counts($0).size().width}.max() ?? 0)+8
         func cell(_ content:NSAttributedString,row:Int,column:Int) {
             let block = NSTextTableBlock(table:table,startingRow:row,rowSpan:1,startingColumn:column,columnSpan:1)

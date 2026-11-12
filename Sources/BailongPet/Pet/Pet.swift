@@ -41,6 +41,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var onComposer: () -> Void = {}
     var onReply: (String) -> Void = {_ in}
     var onHistory: (String?) -> Void = { _ in }
+    var onWorkspace:() -> Void = {}
+    var workspaceFrame:() -> CGRect? = {nil}
     var onCodex: (String?) -> Void = { _ in CodexConnection.openDesktop() }
     var onQuota: () -> Void = {}
     var onQuit: () -> Void = {}
@@ -565,11 +567,11 @@ final class PetController: NSObject, NSMenuDelegate {
         bubbleAnchor = BubbleAnchor(frame:anchor,screen:screen.visibleFrame,dock:dock)
         // 输入位置先确定；后台到达的消息主动避让，不移动正在编辑的窗口。
         onGeometry()
-        let obstacles = composerVisible ? [composerFrame()].compactMap {$0} : []
+        let obstacles = (composerVisible ? [composerFrame()].compactMap {$0} : []) + [workspaceFrame()].compactMap {$0}
         if bubble.visible {bubble.place(near:anchor,screen:screen,dock:dock,avoiding:obstacles)}
         if progressBubble.visible {
             if bubble.blocksProgressToast || composerVisible {progressBubble.hide(); return}
-            progressBubble.place(near:anchor,screen:screen,dock:dock)
+            progressBubble.place(near:anchor,screen:screen,dock:dock,avoiding:obstacles)
             if bubble.visible && progressBubble.targetFrame.intersects(bubble.targetFrame) {progressBubble.hide()}
         }
     }

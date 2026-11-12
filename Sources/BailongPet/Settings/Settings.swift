@@ -13,7 +13,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return form
     }()
     private lazy var appearancePage = AppearanceSettingsPage(form:form,window:window,
-        reload:{ [weak self] in self?.render() },onPreviewDetails:{ [weak self] in self?.onPreviewDetails() })
+        onPreviewDetails:{ [weak self] in self?.onPreviewDetails() })
     private lazy var activityPage = ActivitySettingsPage(form:form,catalog:catalog,
         reload:{ [weak self] in self?.render() },onPreview:{ [weak self] in self?.onPreview($0) })
     private let aboutPage = AboutPageController()
@@ -287,18 +287,13 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 form.toggle("常用动作开头缓存", "animationOpeningCache", detail: "保留播放过的常用动作开头，运行内存（RAM）缓存上限 24 MiB。", unless:["preloadWholeAnimation"]),
                 form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "播放前加载整段动画，会占用更多运行内存 (RAM)。")],symbol:"film")
             form.group("动画效果改善", [
-                form.toggle("动态效果", "bubbleMotion", detail:"控制气泡动画、桌宠显隐淡化及启用后的动作平滑过渡。"),
+                form.toggle("动态效果", "bubbleMotion", detail:"控制气泡、内容展开、选择弹窗、桌宠显隐及动作平滑过渡。"),
                 form.toggle("动作平滑过渡", "animationSmoothTransition", detail:"轮廓相近的动作交接时短暂淡化。", requires:["bubbleMotion"]),
                 form.toggle("孤立杂点清理", "animationEdgeCleanup", detail:"清除与主体断开的微小低透明度杂点。"),
                 form.toggle("轮廓阴影", "petShadow")],symbol:"sparkles")
-            var quotaRows = [form.toggle("额度查询缓存", "quotaCacheEnabled", detail:"有效期内复用 Codex 额度，可点击“立即刷新”获取最新额度。", changed:{ [weak self] in
-                self?.window.makeFirstResponder(nil)
-                self?.render()
-            })]
-            if preferences.bool("quotaCacheEnabled") {
-                quotaRows.append(form.slider("缓存时长", "quotaCacheSeconds", range:PetPreferences.ranges["quotaCacheSeconds"]!, suffix:"秒"))
-            }
-            form.group("额度查询",quotaRows,symbol:"dollarsign")
+            let quotaRows = [form.toggle("额度查询缓存", "quotaCacheEnabled", detail:"有效期内复用 Codex 额度，可点击“立即刷新”获取最新额度。"),
+                form.conditional(form.slider("缓存时长", "quotaCacheSeconds", range:PetPreferences.ranges["quotaCacheSeconds"]!, suffix:"秒"),when:{$0.bool("quotaCacheEnabled")})]
+            form.group("额度查询",quotaRows,symbol:AppIcons.quotaSymbol)
             form.group("应用统计", [form.toggle("开启应用性能信息统计浮窗", "showDiagnostics")],symbol:"chart.xyaxis.line")
         }
         scroll.contentView.scroll(to:.zero)
@@ -306,7 +301,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func general() {
         if let notice = preferences.compatibilityNotice ?? SettingsStorage.compatibilityNotice {
-            form.group("配置兼容",[form.note(notice),form.row("兼容备份",control:ActionButton("导出…") { [weak self] in self?.exportCompatibilitySettings() })],symbol:"gearshape.2")
+            form.group("配置兼容",[form.row("兼容备份",control:ActionButton("导出…") { [weak self] in self?.exportCompatibilitySettings() })],symbol:"gearshape.2",detail:notice)
         }
         let login = SMAppService.mainApp.status
         let loginText = LoginLauncher.statusText
@@ -317,8 +312,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         form.group("权限与系统设置",[
             form.row("访达自动化",detail:"点击文件链接时，在访达中选中文件；对应窗口已最小化时会恢复显示。",control:FinderPermissionControl(frame:.zero)),
             form.row("文件与文件夹",detail:"首次访问文稿、桌面或下载等目录时，系统会询问是否允许。可在系统设置中按目录调整。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
-            form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()}),
-            form.note("本应用不要求辅助功能、输入监控、屏幕录制、摄像头、麦克风或完全磁盘访问权限。")],symbol:"lock.shield")
+            form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()})],symbol:"lock.shield",detail:"本应用不要求辅助功能、输入监控、屏幕录制、摄像头、麦克风或完全磁盘访问权限。")
         let menu = NSPopUpButton(); displayMenu = menu
         menu.identifier = .init("preferredDisplay"); menu.setAccessibilityLabel("所在显示器")
         menu.widthAnchor.constraint(equalToConstant:190).isActive = true
@@ -372,12 +366,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func advanced() {
         workspacePage.render()
         if let reason = historyRecoveryReason() {
-            form.group("历史恢复",[form.note(reason),
+            form.group("历史恢复",[
                 form.row("导出历史原文件",control:ActionButton("导出…") { [weak self] in self?.exportOriginalHistory() }),
                 form.row("重新读取历史",control:ActionButton("重新读取") { [weak self] in
                     guard let self else {return}
                     do {try self.onReloadHistory?(); self.render()} catch {showError("历史仍为只读",error)}
-                })],symbol:"arrow.counterclockwise")
+                })],symbol:"arrow.counterclockwise",detail:reason)
         }
         form.group("设置文件",[form.row("导出设置",detail:"导出应用设置，不含聊天记录和模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),form.row("导入设置",detail:"导入应用设置，不改变系统登录项。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })],symbol:"doc.badge.gearshape")
         let data = label("正在统计…"), work = label("正在统计…"), cache = label("正在统计…")

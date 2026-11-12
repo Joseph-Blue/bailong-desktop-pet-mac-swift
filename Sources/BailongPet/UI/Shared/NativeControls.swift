@@ -101,6 +101,8 @@ final class ActionButton: NSButton {
     @objc func invokeCallback() { callback() }
 }
 class HoverIconButton: NSButton {
+    var hoverCornerRadius:CGFloat?
+    var horizontalPadding:CGFloat = 0
     private var tracking: NSTrackingArea?
     private var hovering = false
     init(symbol:String,label:String) {
@@ -110,6 +112,10 @@ class HoverIconButton: NSButton {
         setAccessibilityLabel(label)
     }
     required init?(coder: NSCoder) {fatalError()}
+    override var intrinsicContentSize:NSSize {
+        let size = super.intrinsicContentSize
+        return NSSize(width:size.width+2*horizontalPadding,height:size.height)
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
     override func updateTrackingAreas() {
         if let tracking {removeTrackingArea(tracking)}
@@ -121,7 +127,9 @@ class HoverIconButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         if hovering || isHighlighted {
             NSColor.secondaryLabelColor.withAlphaComponent(isHighlighted ? 0.24 : 0.14).setFill()
-            NSBezierPath(ovalIn:bounds.insetBy(dx:1,dy:1)).fill()
+            let rect = bounds.insetBy(dx:1,dy:1)
+            if let radius = hoverCornerRadius {NSBezierPath(roundedRect:rect,xRadius:radius,yRadius:radius).fill()}
+            else {NSBezierPath(ovalIn:rect).fill()}
         }
         super.draw(dirtyRect)
     }

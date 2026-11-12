@@ -455,6 +455,7 @@ final class Bubble {
     }
 
     func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,truncateBody:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil,headingActivity:TaskActivity? = nil) {
+        if kind == "quotaLoading" {quotaUsageExpanded = false}
         stopQuotaLoading()
         taskList?.stop(); taskList = nil
         userInputPrefixLength = 0
@@ -785,20 +786,22 @@ final class Bubble {
         }
         quotaLoadingTimer = timer; RunLoop.main.add(timer,forMode:.common)
     }
-    func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, cachedAt:Date? = nil, retry: (() -> Void)? = nil) {
+    private var quotaUsageExpanded = false
+    func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, cachedAt:Date? = nil, retry: (() -> Void)? = nil,preserveScroll:Bool = false,revealUsage:Bool = false) {
+        let readingOrigin = scroll.contentView.bounds.origin
+        var usageEnd:CGFloat?
         stopQuotaLoading()
+        retryButton.isHidden = true
         let fontScale = scale*preferences.number("messageFontSize")/13
         if let failure {
             purpose = .attention; countdown.stop()
             codexButton.isHidden = true
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
-            if let retry {retryButton.title = "重试"; retryButton.callback = retry; retryButton.isHidden = false}
-        } else if cachedAt != nil,let retry {
-            retryButton.title = "立即刷新"; retryButton.callback = retry; retryButton.isHidden = false
         }
         configureButtons()
         let width = bodyLayout.contentWidth
         let content = TopDownView(frame:NSRect(x:0,y:0,width:width,height:1))
+        content.autoresizesSubviews = false
         var y = 0.0
         @discardableResult func addText(_ value: String, font: NSFont, color: NSColor = .labelColor) -> CGFloat {
             let text = label(value); text.font = font; text.textColor = color
@@ -815,16 +818,39 @@ final class Bubble {
             if index > 0 {
                 let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
             }
+            if let usage = row.usage {
+                let usageView = QuotaTokenUsageView(usage:usage,expanded:quotaUsageExpanded,scale:scale,fontScale:fontScale)
+                let height = usageView.arrange(width:width)
+                usageView.frame.origin.y = y; content.addSubview(usageView)
+                y += height+12*scale
+                usageEnd = y
+                usageView.onToggle = { [weak self] in
+                    guard let self,self.visible,self.kind == "quota" else {return}
+                    // 气泡高度由 BubbleMotion 负责，文档几何不再叠加隐式布局动画。
+                    DisclosureMotion.update(in:self.scroll,animatesLayout:false) {
+                        self.quotaUsageExpanded.toggle()
+                        self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry,preserveScroll:true,revealUsage:self.quotaUsageExpanded)
+                        self.onCardLayout()
+                    }
+                }
+                continue
+            }
             let headingFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
             let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
             // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
             // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
             let heading = NSTextField(labelWithString:row.title); heading.font = headingFont
+            if let subtitle = row.subtitle {
+                heading.usesSingleLineMode = false; heading.maximumNumberOfLines = 0; heading.lineBreakMode = .byWordWrapping
+                let title = NSMutableAttributedString(string:row.title+"\n",attributes:[.font:headingFont])
+                title.append(NSAttributedString(string:subtitle,attributes:[.font:NSFont.systemFont(ofSize:11*fontScale),.foregroundColor:NSColor.secondaryLabelColor]))
+                heading.attributedStringValue = title
+            }
             let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
             let quotaColor: NSColor? = row.remaining.flatMap {$0 <= 5 ? .systemRed : $0 <= 10 ? .systemOrange : nil}
             amount.textColor = quotaColor ?? .labelColor
             if row.loading {quotaLoadingAmount = amount; renderQuotaLoading(); amount.setAccessibilityLabel("本机今日用量加载中")}
-            for field in [heading,amount] {
+            for field in [heading,amount] where field !== heading || row.subtitle == nil {
                 field.maximumNumberOfLines = 1; field.usesSingleLineMode = true
                 field.lineBreakMode = .byTruncatingTail
             }
@@ -850,6 +876,10 @@ final class Bubble {
                 content.addSubview(bar); y += 16*scale
             }
             if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*fontScale),color:.secondaryLabelColor)}
+            if let footnote = row.footnote {
+                y += 4*scale
+                addText(footnote,font:.systemFont(ofSize:11*fontScale),color:.secondaryLabelColor)
+            }
             if row.retry,let retry {
                 let button = ActionButton("重试",retry); button.bezelStyle = .inline
                 button.font = .systemFont(ofSize:12*fontScale)
@@ -860,11 +890,28 @@ final class Bubble {
         }
         if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
         let management = SubscriptionManagementButton(management:overview.management,font:.systemFont(ofSize:12*fontScale))
-        management.frame = NSRect(x:0,y:y,width:min(width,management.intrinsicContentSize.width+12*scale),height:max(24*scale,management.intrinsicContentSize.height))
-        content.addSubview(management); y += management.frame.height+4*scale
+        let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
+        refresh?.bezelStyle = .inline; refresh?.isBordered = false; refresh?.font = .systemFont(ofSize:12*fontScale)
+        let actionHeight = max(24*scale,management.intrinsicContentSize.height,refresh?.intrinsicContentSize.height ?? 0)
+        management.frame = NSRect(x:0,y:y,width:min(width,management.intrinsicContentSize.width+12*scale),height:actionHeight)
+        content.addSubview(management)
+        if let refresh {
+            let refreshWidth = refresh.intrinsicContentSize.width+12*scale
+            refresh.frame = NSRect(x:width-refreshWidth,y:y,width:refreshWidth,height:actionHeight)
+            content.addSubview(refresh)
+        }
+        y += actionHeight+4*scale
         content.frame.size.height = y
         scroll.setBody(content,height:y)
-        layout(bodyHeight:y); scroll.showTop()
+        layout(bodyHeight:y)
+        if preserveScroll {
+            scroll.contentView.scroll(to:scroll.contentView.constrainBoundsRect(NSRect(origin:readingOrigin,size:scroll.contentView.bounds.size)).origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
+        } else {scroll.showTop()}
+        if revealUsage,let usageEnd {
+            let lastLineHeight = 24*fontScale
+            content.scrollToVisible(NSRect(x:0,y:max(0,usageEnd-lastLineHeight),width:1,height:lastLineHeight))
+        }
         refreshQuotaLoading()
         let heading = plainHeading
         refreshStandalone = { [weak self] in

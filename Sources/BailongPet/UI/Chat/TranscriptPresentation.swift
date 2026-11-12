@@ -34,38 +34,6 @@ final class TranscriptActions:NSObject {
     }
 }
 
-// 使用自身 TextKit 排版与选择，避免 NSTextField 切换共享 field editor 时丢失制表位。
-private final class TranscriptTokenText:AppTextView {
-    override init(frame:NSRect) {
-        let storage = NSTextStorage(), manager = NSLayoutManager()
-        let container = NSTextContainer(size:NSSize(width:1,height:CGFloat.greatestFiniteMagnitude))
-        storage.addLayoutManager(manager); manager.addTextContainer(container)
-        super.init(frame:frame,textContainer:container)
-        isEditable = false; isSelectable = true; isRichText = true; drawsBackground = false
-        isVerticallyResizable = false; isHorizontallyResizable = false; autoresizingMask = []
-        textContainerInset = .zero
-        self.textContainer?.lineFragmentPadding = 0
-        self.textContainer?.widthTracksTextView = false
-        self.textContainer?.heightTracksTextView = false
-    }
-    required init?(coder:NSCoder) {fatalError()}
-    var attributedStringValue:NSAttributedString {
-        get {attributedString()}
-        set {if !attributedString().isEqual(to:newValue) {textStorage?.setAttributedString(newValue)}}
-    }
-    func height(for width:CGFloat) -> CGFloat {
-        guard let container = textContainer,let manager = layoutManager else {return 0}
-        container.containerSize = NSSize(width:max(1,width),height:.greatestFiniteMagnitude)
-        manager.ensureLayout(for:container)
-        return ceil(manager.usedRect(for:container).maxY)
-    }
-    var firstLineCenter:CGFloat {
-        guard let manager = layoutManager,manager.numberOfGlyphs > 0 else {return bounds.midY}
-        let line = manager.lineFragmentRect(forGlyphAt:0,effectiveRange:nil)
-        return textContainerOrigin.y+line.minY+manager.location(forGlyphAt:0).y-(font?.capHeight ?? 0)/2
-    }
-}
-
 final class TranscriptActionBar:NSView {
     override var isFlipped:Bool {true}
     var content:TranscriptActions {didSet {configure()}}

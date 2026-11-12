@@ -9,7 +9,7 @@ final class TranscriptRenderer {
         return [preferences.statusLine("conversationEmptyTemplate"),preferences.petName,preferences.address,preferences.taskResultLine("completed"),String(preferences.number("messageFontSize")),String(conversation.external),conversation.threadID ?? ""]
     }
     func turnSignature(_ turn:Turn) -> [String] {
-        [turn.bodyReference.id,turn.status,String(turn.date.timeIntervalSince1970),turn.completedAt.map {String($0.timeIntervalSince1970)} ?? "",turn.tokenUsage?.signature ?? "",turn.tokenUsageError ?? ""]
+        [turn.bodyReference.id,turn.status,String(turn.finished),String(turn.date.timeIntervalSince1970),turn.completedAt.map {String($0.timeIntervalSince1970)} ?? "",turn.tokenUsage?.signature ?? "",turn.tokenUsageError ?? ""]
     }
     func content(_ conversation: Conversation, turns:[Turn]? = nil) -> NSAttributedString {
         let turns = turns ?? conversation.turns
@@ -66,7 +66,9 @@ final class TranscriptRenderer {
             if let notice = body.sensitiveInputNotice {append(notice,color:.secondaryLabelColor)}
             if !body.messages.isEmpty {appendMarkdown(body.messages)}
             if !body.final.isEmpty && !body.messages.contains(body.final) {appendMarkdown(body.final)}
-            result.append(FileEditRendering.render(body.fileEdits ?? [],font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")),id:turn.key))
+            if turn.finished {
+                result.append(FileEditRendering.render(body.fileEdits ?? [],font:bodyFont,id:turn.key))
+            }
             if !body.error.isEmpty {let failure = AppFailure.codex(body.error); append(failure.title+"\n"+failure.message,color:.secondaryLabelColor)}
             var reply = [body.messages]
             if !body.final.isEmpty && !body.messages.contains(body.final) {reply.append(body.final)}

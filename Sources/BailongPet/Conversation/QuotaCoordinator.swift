@@ -137,10 +137,11 @@ final class QuotaCoordinator {
             overview = QuotaPresentation.unavailable(account:quotaAccount)
             failure = AppFailure.codex(error.localizedDescription)
         }
-        overview.rows.append(QuotaRow(title:"今日用量（本机日志）",value:dailyUsage.value,detail:dailyUsage.detail,remaining:nil,retry:dailyUsage.failed,wrapsValue:true,loading:dailyUsage.isLoading))
+        overview.rows.append(QuotaRow(title:"今日用量",value:dailyUsage.value,detail:dailyUsage.detail,remaining:nil,retry:dailyUsage.failed,wrapsValue:true,loading:dailyUsage.isLoading,usage:dailyUsage.usage,subtitle:"（本机日志）"))
         if pet.bubble.kind != "quota" {pet.say("Codex 额度",body:" ",kind:"quota")}
+        let preserveScroll = presented
         presented = true
-        pet.bubble.quotaRows(overview,scale:Double(pet.bubblePercent)/100,failure:failure,cachedAt:cachedAt,retry:{ [weak self] in self?.query(forceRefresh:true) })
+        pet.bubble.quotaRows(overview,scale:Double(pet.bubblePercent)/100,failure:failure,cachedAt:cachedAt,retry:{ [weak self] in self?.query(forceRefresh:true) },preserveScroll:preserveScroll)
         pet.placeBubble()
     }
 }

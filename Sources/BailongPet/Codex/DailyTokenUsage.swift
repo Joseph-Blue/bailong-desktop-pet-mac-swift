@@ -2,16 +2,17 @@ import Foundation
 
 enum DailyTokenUsage {
     case loading
-    case available(tokens:Int64)
+    case available(usage:TokenUsage)
     case failed(String)
 
     var value:String {
         switch self {
         case .loading:return "加载中"
-        case .available(let tokens):return TokenUsage.formatted(tokens)+" Tokens"
+        case .available(let usage):return TokenUsage.formatted(usage.total)+" Tokens"
         case .failed:return "读取失败"
         }
     }
+    var usage:TokenUsage? {if case .available(let usage) = self {return usage}; return nil}
     var detail:String? {
         if case .failed(let message) = self {return message}
         return nil

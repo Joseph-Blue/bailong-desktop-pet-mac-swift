@@ -80,6 +80,9 @@ struct QuotaRow {
     var retry = false
     var wrapsValue = false
     var loading = false
+    var usage:TokenUsage?
+    var subtitle:String?
+    var footnote:String?
 }
 struct QuotaOverview {
     let plan: String
@@ -122,6 +125,7 @@ enum QuotaPresentation {
         if buckets.isEmpty, let legacy = value["rateLimits"] as? [String:Any] {buckets = [legacy]}
         let bucketPlan = buckets.compactMap {string($0["planType"])}.first(where:{$0 != "unknown"})
         var result = QuotaOverview(plan:plan(bucketPlan,account:account),rows:[])
+        var creditNotes = [String]()
         result.management = .forAccount(account,plan:result.plan)
         for (index,bucket) in buckets.enumerated() {
             let name = string(bucket["limitName"]) ?? string(bucket["limitId"]) ?? "额度组 \(index+1)"
@@ -146,17 +150,17 @@ enum QuotaPresentation {
                 let unlimited = credits["unlimited"] as? Bool == true
                 let balance = string(credits["balance"])
                 let amount = unlimited ? "不限额" : balance.map {"剩余 "+$0} ?? (credits["hasCredits"] as? Bool == false ? "无可用点数" : "余额暂未提供")
-                result.rows.append(QuotaRow(title:prefix+"可用点数",value:amount,detail:unlimited ? "点数不限额；其他使用限制仍可能适用。" : nil,remaining:nil))
+                creditNotes.append(prefix+"可用点数 · "+amount)
             }
-            if result.rows.count == before {
+            if result.rows.count == before,bucket["credits"] as? [String:Any] == nil {
                 result.rows.append(QuotaRow(title:prefix+"使用额度",value:"暂未提供",detail:"服务未返回额度窗口或点数信息。",remaining:nil))
             }
             if bucket["spendControlReached"] as? Bool == true {result.notice = "已达到工作区设置的使用限额。"}
             else if string(bucket["rateLimitReachedType"]) != nil {result.notice = "服务报告当前已达到使用限制。"}
         }
-        if result.rows.isEmpty {result.rows = [QuotaRow(title:"使用额度",value:"暂未提供",detail:emptyMessage(account),remaining:nil)]}
+        if result.rows.isEmpty && creditNotes.isEmpty {result.rows = [QuotaRow(title:"使用额度",value:"暂未提供",detail:emptyMessage(account),remaining:nil)]}
         let cards = QuotaResetCards(value)
-        result.rows.append(QuotaRow(title:"额度重置卡",value:cards.amount,detail:cards.detail,remaining:nil))
+        result.rows.append(QuotaRow(title:"额度重置卡",value:cards.amount,detail:cards.detail,remaining:nil,footnote:creditNotes.isEmpty ? nil : creditNotes.joined(separator:"\n")))
         if value["ordinaryUsageAllowed"] as? Bool == false {result.notice = "服务当前未允许使用包含额度。"}
         return result
     }

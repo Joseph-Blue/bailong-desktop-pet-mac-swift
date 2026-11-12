@@ -21,13 +21,13 @@ final class ActivitySettingsPage {
             form.popup("活跃程度",options:[("60","安静"),("15","适中"),("8","活泼"),("custom","自定义")],value:preset) { [weak self] value in if let seconds = Double(value) {self?.preferences.set(seconds,for:"leisureInterval"); self?.reload()} },
             form.slider("活动间隔","leisureInterval",range:5...180,suffix:"秒",detail:"到达间隔后，当前动作播放完再切换。"),
             form.toggle("自主移动","autoMove"),form.choice("活动范围","movementRange",[("still","原地陪伴"),("nearby","小范围活动"),("screen","整个屏幕")],requires:["autoMove"]),form.toggle("减少重复动作","avoidRepeat",detail:"随机互动和自主活动会减少重复，任务动作始终避免连续重复。"),
-            form.slider("整体播放速度","playbackSpeed",range:0.75...1.5,step:0.05,suffix:"×",detail:"同时调整动作和移动速度；与单个动作的速度倍率相乘。")],symbol:"figure.walk")
+            form.slider("整体播放速度","playbackSpeed",range:0.75...1.5,step:0.05,suffix:"×",detail:"同时调整动作和移动速度；与单个动作的速度倍率相乘。")],symbol:"figure.walk.motion")
         form.group("任务动作",[form.toggle("收到任务时播放开场","taskOpening"),form.toggle("完成任务时播放庆祝","taskCelebration")],symbol:"checklist")
         guard let catalog else {return}
         form.fill(form.note("❤️ 越多，随机播放时越常出现，权重越高。"),in:form.content)
         for (title,clips,automatic,symbol) in [("待机动作",catalog.idles+catalog.extras,true,"figure.stand"),("互动动作",catalog.variants,true,"figure.play"),("工作动作",catalog.work,true,"briefcase"),("移动动作",catalog.movementAnimations,true,"figure.walk.motion"),("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation],false,"hand.rays")] {
             form.group(title,clips.map {clip in
-                animationRow(clip,automatic:automatic,symbol:clip.id == catalog.quotaAnimation.id ? "dollarsign" : symbol)
+                animationRow(clip,automatic:automatic,symbol:clip.id == catalog.quotaAnimation.id ? AppIcons.quotaSymbol : symbol)
             },symbol:"film")
         }
     }

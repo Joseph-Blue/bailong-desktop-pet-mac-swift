@@ -24,7 +24,8 @@ enum PetMenu {
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
         menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
-        menu.addItem(MenuAction("查询额度",symbol:"dollarsign") { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
+        menu.addItem(MenuAction("工作区状态",checked:pet.workspaceFrame() != nil,symbol:"arrow.triangle.branch") { [weak pet] in pet?.onWorkspace() })
+        menu.addItem(MenuAction("查询额度",symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
         let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
         codex.image = AppIcons.openAI?.copy() as? NSImage
         codex.image?.size = NSSize(width:16,height:16)
@@ -40,7 +41,7 @@ enum PetMenu {
             item.submenu = group; animations.addItem(item)
         }
         let switches = submenu("快捷开关",symbol:"switch.2")
-        switches.addItem(MenuAction("自主移动",checked:pet.autoMove,symbol:"figure.walk") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
+        switches.addItem(MenuAction("自主移动",checked:pet.autoMove,symbol:"figure.walk.motion") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
         switches.addItem(MenuAction("播放音效",checked:pet.soundEnabled,symbol:"speaker.wave.2") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
         switches.addItem(MenuAction("任务气泡提醒",checked:pet.taskBubbles,symbol:"bell.badge") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
         switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen,symbol:"eye.slash") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })

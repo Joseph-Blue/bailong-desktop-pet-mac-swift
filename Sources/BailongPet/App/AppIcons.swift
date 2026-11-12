@@ -1,6 +1,11 @@
 import AppKit
 
 enum AppIcons {
+    static var quotaSymbol:String {
+        if #available(macOS 15.0, *) {return "dollarsign.gauge.chart.leftthird.topthird.rightthird"}
+        return "dollarsign"
+    }
+
     // 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png；原图随本地资源打包。
     static let openAI: NSImage? = {
         if let image = NSImage(contentsOf:Paths.resources.appendingPathComponent("openai-logo.png")) {
