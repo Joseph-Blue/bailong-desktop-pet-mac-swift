@@ -20,9 +20,16 @@ enum FileEditRendering {
     static let previewCount = 3
     static let disclosureLink = URL(string:"bailong-file-edits:toggle")!
     static func counts(_ lines:FileEditSummary.Lines,font:NSFont) -> NSAttributedString {
-        let text = "+\(lines.added) -\(lines.removed)"
-        let value = NSMutableAttributedString(string:text,attributes:[.font:NSFont.monospacedSystemFont(ofSize:font.pointSize,weight:.semibold),.foregroundColor:NSColor.systemGreen])
-        value.addAttribute(.foregroundColor,value:NSColor.systemRed,range:(text as NSString).range(of:"-\(lines.removed)",options:.backwards))
+        let value = NSMutableAttributedString(attributedString:count(lines.added,added:true,font:font))
+        value.append(NSAttributedString(string:" ",attributes:[.font:NSFont.monospacedSystemFont(ofSize:font.pointSize,weight:.semibold)]))
+        value.append(count(lines.removed,added:false,font:font))
+        return value
+    }
+    static func count(_ number:Int,added:Bool,font:NSFont) -> NSAttributedString {
+        let font = NSFont.monospacedSystemFont(ofSize:font.pointSize,weight:.semibold)
+        let color:NSColor = added ? .systemGreen : .systemRed
+        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.centeredSymbol(added ? "+" : "-",font:font,color:color))
+        value.append(NSAttributedString(string:String(number),attributes:[.font:font,.foregroundColor:color]))
         return value
     }
     private static func symbol(_ name:String,description:String,font:NSFont,side:CGFloat) -> NSAttributedString? {

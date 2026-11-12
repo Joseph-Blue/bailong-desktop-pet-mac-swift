@@ -38,3 +38,20 @@ final class CenteredColorWell:NSColorWell {
         PanelPresentation.center(NSColorPanel.shared,on:target)
     }
 }
+
+// 非激活气泡中的 transient Popover 仍由 AppKit 处理应用内点击，补上其他应用与桌面的点击。
+final class PopoverDismissal {
+    private var outsideClickMonitor:Any?
+    func start(for popover:NSPopover) {
+        stop()
+        guard popover.isShown else {return}
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.otherMouseDown]) { [weak popover] _ in
+            popover?.performClose(nil)
+        }
+    }
+    func stop() {
+        if let outsideClickMonitor {NSEvent.removeMonitor(outsideClickMonitor)}
+        outsideClickMonitor = nil
+    }
+    deinit {stop()}
+}

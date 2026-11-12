@@ -1,5 +1,28 @@
 import AppKit
 
+final class WorkspaceFileTableRow:NSTableRowView {
+    private var tracking:NSTrackingArea?
+    private var hovered = false
+    override var interiorBackgroundStyle:NSView.BackgroundStyle {.normal}
+    override func updateTrackingAreas() {
+        if let tracking {removeTrackingArea(tracking)}
+        let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+        tracking = area; addTrackingArea(area); super.updateTrackingAreas()
+    }
+    override func mouseEntered(with event:NSEvent) {hovered = true; needsDisplay = true}
+    override func mouseExited(with event:NSEvent) {hovered = false; needsDisplay = true}
+    override func drawBackground(in dirtyRect:NSRect) {
+        guard hovered,!isSelected else {return}
+        NSColor.secondaryLabelColor.withAlphaComponent(0.10).setFill()
+        NSBezierPath(roundedRect:bounds.insetBy(dx:2,dy:1),xRadius:5,yRadius:5).fill()
+    }
+    override func drawSelection(in dirtyRect:NSRect) {
+        guard selectionHighlightStyle != .none else {return}
+        AppAccent.selectionColor(for:effectiveAppearance).withAlphaComponent(isEmphasized ? 0.22 : 0.12).setFill()
+        NSBezierPath(roundedRect:bounds.insetBy(dx:2,dy:1),xRadius:5,yRadius:5).fill()
+    }
+}
+
 // 两种文件详情共用原生透明列表；单击选择，双击定位文件，右键提供文件操作。
 final class WorkspaceFileTable:NSTableView {
     var fileURLForRow:(Int) -> URL? = {_ in nil}
@@ -41,7 +64,7 @@ final class WorkspaceFileTable:NSTableView {
 
 // Git 文件状态与本轮修改共用图标槽、文件名和右侧计数列。
 final class WorkspaceFileRow:NSView {
-    init(title:String,symbol:String,color:NSColor,detail:String,lines:FileEditSummary.Lines? = nil,countWidth:CGFloat? = nil) {
+    init(title:String,symbol:String,color:NSColor,detail:String,lines:FileEditSummary.Lines? = nil,countWidths:(added:CGFloat,removed:CGFloat)? = nil) {
         super.init(frame:.zero)
         let icon = NSImageView()
         icon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:13,weight:.semibold))
@@ -50,11 +73,23 @@ final class WorkspaceFileRow:NSView {
         name.lineBreakMode = .byTruncatingMiddle; name.maximumNumberOfLines = 1
         name.setContentHuggingPriority(.defaultLow,for:.horizontal)
         name.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        let row = NSStackView(views:[icon,name]); row.spacing = 8; row.alignment = .centerY
-        if let countWidth {
-            let count = NSTextField(labelWithString:""); count.font = Self.countFont; count.alignment = .right
-            count.attributedStringValue = lines.map {FileEditRendering.counts($0,font:Self.countFont)} ?? NSAttributedString(string:"未提供",attributes:[.font:Self.countFont,.foregroundColor:NSColor.secondaryLabelColor])
-            count.widthAnchor.constraint(equalToConstant:countWidth).isActive = true; row.addArrangedSubview(count)
+        let row = NSStackView(views:[icon,name]); row.spacing = 8; row.alignment = .centerY; row.distribution = .fill
+        if let countWidths {
+            if let lines {
+                let counts = NSStackView(); counts.spacing = 8; counts.alignment = .firstBaseline
+                counts.widthAnchor.constraint(equalToConstant:countWidths.added+8+countWidths.removed).isActive = true
+                counts.setContentHuggingPriority(.required,for:.horizontal)
+                for (number,added,width) in [(lines.added,true,countWidths.added),(lines.removed,false,countWidths.removed)] {
+                    let count = NSTextField(labelWithString:""); count.font = Self.countFont; count.alignment = .right
+                    count.attributedStringValue = FileEditRendering.count(number,added:added,font:Self.countFont)
+                    count.widthAnchor.constraint(equalToConstant:width).isActive = true; counts.addArrangedSubview(count)
+                }
+                row.addArrangedSubview(counts)
+            } else {
+                let count = NSTextField(labelWithString:"未提供"); count.font = Self.countFont; count.textColor = .secondaryLabelColor; count.alignment = .right
+                count.widthAnchor.constraint(equalToConstant:countWidths.added+8+countWidths.removed).isActive = true
+                row.addArrangedSubview(count)
+            }
         }
         addSubview(row); row.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -85,17 +120,19 @@ final class WorkspaceFileRow:NSView {
 final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableViewDelegate {
     private let edits:[FileEditSummary],directory:String
     private let table = WorkspaceFileTable()
-    private let countWidth:CGFloat
+    private let countWidths:(added:CGFloat,removed:CGFloat)
     private let repeatedNames:Set<String>
     init(edits:[FileEditSummary],directory:String) {
         self.edits = edits; self.directory = directory
-        countWidth = ceil(edits.map {$0.lines.map {FileEditRendering.counts($0,font:WorkspaceFileRow.countFont).size().width} ?? ("未提供" as NSString).size(withAttributes:[.font:WorkspaceFileRow.countFont]).width}.max() ?? 0)+4
+        let lines = edits.compactMap(\.lines)
+        let minimum = ceil(("未提供" as NSString).size(withAttributes:[.font:WorkspaceFileRow.countFont]).width/2)
+        countWidths = (max(minimum,ceil(lines.map {FileEditRendering.count($0.added,added:true,font:WorkspaceFileRow.countFont).size().width}.max() ?? 0)),max(minimum,ceil(lines.map {FileEditRendering.count($0.removed,added:false,font:WorkspaceFileRow.countFont).size().width}.max() ?? 0)))
         repeatedNames = Set(Dictionary(grouping:edits,by:{($0.path as NSString).lastPathComponent}).filter {$0.value.count > 1}.keys)
         super.init(nibName:nil,bundle:nil)
     }
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
-        let column = NSTableColumn(identifier:.init("file")); table.addTableColumn(column)
+        let column = NSTableColumn(identifier:.init("file")); column.resizingMask = .autoresizingMask; table.addTableColumn(column)
         table.rowHeight = 32; table.delegate = self; table.dataSource = self
         table.fileURLForRow = { [weak self] row in
             guard let self,self.edits.indices.contains(row) else {return nil}
@@ -109,9 +146,10 @@ final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableV
         preferredContentSize = view.frame.size
     }
     func numberOfRows(in tableView:NSTableView) -> Int {edits.count}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {WorkspaceFileTableRow()}
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         let edit = edits[row], name = (edits[row].path as NSString).lastPathComponent
-        return WorkspaceFileRow(title:repeatedNames.contains(name) ? edit.path : name,symbol:"doc",color:.secondaryLabelColor,detail:edit.path,lines:edit.lines,countWidth:countWidth)
+        return WorkspaceFileRow(title:repeatedNames.contains(name) ? edit.path : name,symbol:"doc",color:.secondaryLabelColor,detail:edit.path,lines:edit.lines,countWidths:countWidths)
     }
 }
 

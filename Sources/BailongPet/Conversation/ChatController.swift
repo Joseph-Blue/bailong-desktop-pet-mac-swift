@@ -181,8 +181,6 @@ final class ChatController {
             return self.connection.diagnostics + "\n内置任务：" + (self.running?.1.status ?? "空闲")
         }
         pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
-        workspacePanel.conversations = { [weak self] in self?.allConversations ?? [] }
-        workspacePanel.onSelect = { [weak self] key in self?.showWorkspace(key) }
         workspacePanel.onShowRequested = { [weak self] in self?.showWorkspace() }
         workspacePanel.onHide = { [weak pet] in pet?.placeBubble() }
         pet.workspaceFrame = { [weak self] in self?.workspacePanel.frame }

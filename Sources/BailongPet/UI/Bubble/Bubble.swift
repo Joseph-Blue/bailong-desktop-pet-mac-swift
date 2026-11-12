@@ -35,8 +35,6 @@ final class Bubble {
     private let workspace = WorkspaceStatusView()
     private var workspaceContextAvailable = false
     private var workspaceAttached = false, workspaceSuppressed = false, preparingDisplay = false
-    private var originalHeading = ""
-    private var originalHeadingAnimated = false
     var workspaceProvider:(String) -> (conversation:Conversation,executing:Bool)? = {_ in nil}
     var onVisibilityChange:() -> Void = {}
     private let closeButton = BubbleCloseButton()
@@ -343,14 +341,9 @@ final class Bubble {
             let fontSize = 11*scale*preferences.number("messageFontSize")/13
             workspace.configure(compact:true,fontSize:fontSize)
             workspaceContextAvailable = true
-            title.maximumNumberOfLines = 1; title.lineBreakMode = .byTruncatingTail
-            setHeading(context.conversation.title,animated:kind == "progressToast" && originalHeadingAnimated)
             workspace.update(conversation:context.conversation,executing:context.executing,visible:true,turnKey:activityTiming?.activityKey ?? activityTiming?.key,turnStart:activityTiming?.start)
         } else {
             workspaceContextAvailable = false; workspace.deactivate()
-            title.maximumNumberOfLines = kind == "progressToast" ? 1 : 0
-            title.lineBreakMode = kind == "progressToast" ? .byTruncatingTail : .byWordWrapping
-            setHeading(originalHeading,animated:originalHeadingAnimated)
         }
         updateWorkspacePresentation(relayout:false)
         if relayout && !preparingDisplay && oldAttached != workspaceAttached {
@@ -369,6 +362,7 @@ final class Bubble {
     private func configureButtons() {
         let fontSize = preferences.number("messageFontSize")*scale
         for button in actionButtons {button.configureFlexible(font:.systemFont(ofSize:fontSize))}
+        details.hoverHelp = questionForm == nil ? nil : preferences.sendShortcut.hint
         cardCount.font = .monospacedDigitSystemFont(ofSize:max(11*scale,fontSize-2*scale),weight:.regular)
     }
     private var buttonHeight:CGFloat {max(28*scale,actionButtons.map {$0.intrinsicContentSize.height}.max() ?? 0)}
@@ -414,7 +408,7 @@ final class Bubble {
         let actionsHeight = details.isHidden && codexButton.isHidden && retryButton.isHidden ? 0 : buttonHeight+gap+(previousQuestion.isHidden ? 0 : buttonHeight+gap)
         let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+gap
         let approvalHeight:CGFloat = approvalReject.isHidden ? 0 : buttonHeight+gap
-        let workspaceHeight = workspaceAttached ? max(24*scale,workspace.fittingSize.height)+2*scale : 0
+        let workspaceHeight = workspaceAttached ? max(20*scale,workspace.fittingSize.height)+2*scale : 0
         let controlsFooter = actionsHeight+navigationHeight+approvalHeight
         let footer = controlsFooter+workspaceHeight
         // 关闭、标题首行与计时同一行；标题按剩余宽度换行，不缩字或截断。
@@ -547,8 +541,7 @@ final class Bubble {
         // 只有任务消息正文允许复制；互动、额度加载及一般提示不参与文本选择。
         text.isSelectable = kind == "task"
         if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
-        currentBody = body; relatedConversation = conversation; originalHeading = heading
-        originalHeadingAnimated = animateHeading && timing?.finished == nil
+        currentBody = body; relatedConversation = conversation
         truncatesProgressBody = kind == "progressToast" && truncateBody
         scroll.allowsScrolling = !truncatesProgressBody
         title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)

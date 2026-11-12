@@ -18,10 +18,10 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 
 - `joseph/dev` 跟踪 `origin/joseph/dev`，保留开发 README、完整 CHANGELOG 与历史索引；跟踪范围以 `.gitignore` 和 [开发分支维护](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发分支.md) 为准。main 保留正式版，不自动合并、变基或推送。
 - 开发线不发布程序 Release 或应用版本标签。素材资源经用户授权可用独立 `dev-assets-*` Pre-release，显式设为非 Latest。提交、推送、跨分支合并和发布分别按当次授权执行。
-- VERSION 是应用与工具版本来源，使用 SemVer 和中文变更记录。文档整理本身不升版本；用户要求进入候选阶段时使用 `rc.1` 等预发布标识，同步 VERSION、README、AGENTS 与 CHANGELOG。候选版仍遵守开发分支的发布边界，汇总不删除开发线历史记录。
+- VERSION 是应用与工具版本来源，使用 SemVer 和中文变更记录。文档整理本身不升版本；用户要求进入候选阶段时使用 `rc.1` 等预发布标识，同步 VERSION、README 与 CHANGELOG，AGENTS 仅更新变化的工作约束。候选版仍遵守开发分支的发布边界，汇总不删除开发线历史记录。
 - 素材、构建产物、用户数据、原始本机实施流水及本地 Tests 不进 Git。资源下载与制作方法维护在 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md)，不将资源包混作程序发行包。
 - 主线 CHANGELOG 只记录相较上一个正式 Release 的最终变化，不搬入开发迭代流水；README 保留功能、安装和升级说明，实施进度与未验证项仅记入本机实施记录，主线不新增 todo。
-- README 面向当前分支读者；现行设计写入 [来源与架构](../../docs/来源与架构.md)，未来计划写入 [开发分支待办](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/todo.md)。本 skill 保留维护入口，精确产品参数与完整交互规则引用 AGENTS，避免再次逐版本追加重复规则。
+- README 面向当前分支读者；现行设计写入 [来源与架构](../../docs/来源与架构.md)，未来计划写入 [开发分支待办](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/todo.md)。本 skill 保留维护入口，精确产品参数与完整交互规则引用 docs/来源与架构.md 的现行主题，避免再次逐版本追加重复规则。
 
 ## 代码职责地图
 
@@ -41,9 +41,11 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 | 输入显示与模型 | `UI/Chat/ChatComposerComponents.swift`、`UI/Chat/ChatViewLayout.swift`、`Codex/ModelSelection.swift` |
 | 窗口生命周期与辅助面板 | `App/InterfaceWindows.swift`、`UI/Shared/PanelPresentation.swift` |
 | 共用显示 | `UI/Shared/MarkdownText.swift`、`MessageTextView.swift`、`CodeBlockRendering.swift`、`ProgressTextEffects.swift`、`InlineStatusLayout.swift`、`CopyFeedback.swift`（后五者同目录） |
+| 工作区与任务信息栏 | `UI/Chat/WorkspaceStatusView.swift`、`WorkspaceStatusPanel.swift`、`WorkspaceFileList.swift`（前三者同目录）、`Infrastructure/GitWorkspace.swift`；实际接入在 `Bubble.swift`、`BubbleTaskList.swift`、`ChatController.swift` |
 | 文件产物与修改统计 | `UI/Shared/CodexFileCitation.swift`、`Conversation/FileEditSummary.swift`、`UI/Shared/FileEditRendering.swift`、`UI/Shared/FileEditPresentation.swift`、`UI/MessageFileLink.swift`、`UI/FinderFileReveal.swift` |
 | 额度 | `Conversation/QuotaCoordinator.swift`、`Codex/QuotaQuery.swift`、`Codex/QuotaResetCards.swift`、`UI/SubscriptionManagement.swift` |
 | Token 统计 | `Conversation/TokenUsage.swift`、`Codex/TurnTokenReader.swift`、`Codex/LocalDailyTokenReader.swift`、`Codex/DailyTokenUsage.swift` |
+| 图标与署名 | `App/GitIcons.swift`、`App/AppIcons.swift`、`Settings/AboutPage.swift` |
 | 设置 | `Settings/Preferences.swift`、`Settings/Settings.swift`、`Settings/SettingsForm.swift`、`Settings/Pages/`、`Settings/SettingsSearch.swift` |
 | 更新、启动项与恢复 | `Infrastructure/Updates.swift`、`Infrastructure/Autostart.swift`、`Infrastructure/FollowMonitor.swift`、`Infrastructure/Recovery.swift` |
 | 构建与 PNG 接入（仓库根目录） | `scripts/swift-sources.sh`、`scripts/build.sh`、`Tools/NativeHEVC/ApplyPNGRepairs.swift` |
@@ -59,7 +61,7 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 - `MessageTextView` 用同一 TextKit 容器测量富文本，只替换变化尾部；未变化文本不重新排版。底栏占位末尾不附加换行，避免 extraLineFragment 重复继承整块高度；轮次分隔由渲染器显式添加，明细展开／收起重新测量。`TranscriptRenderer` 缓存包含全部显示内容，新增结构化字段须同步签名和搜索。
 - 可选择的 Token 表格使用同一 TextKit 管理器测量、显示与选择，显式建立文本存储与容器，避免共享 field editor 丢失制表位。底栏按实际文字／按钮高度排版；用户展开明细时显露末行并计入底部留白，后台刷新不持续追尾。
 - `ProgressTextEffects` 共用标题流水与概览跑马灯；任务列表执行中标题复用纯标题流水和列表已有刷新计时，结束恢复静态，不新增行级定时器。盲文仅在显示层生成。超宽才滚动，同文刷新保留相位；隐藏停止，动态效果关闭或减少动态效果时静态显示。正文打字机当前停用，旧偏好仅保留兼容，不显示控件或搜索条目。
-- 主气泡和概览进展取当前任务真实会话／轮次及开始时间；内置 activityKey 与 own 调度槽分开，不能取全局最新 activity。TaskActivity.line 展示真实公开摘要及操作，个性台词留在标题。主气泡进展单独增高，短进展气泡不追加跑马灯；固定图标由 TaskActivity 统一分类。
+- 主气泡和概览进展取当前任务真实会话／轮次及开始时间；内置 activityKey 与 own 调度槽分开，不能取全局最新 activity。TaskActivity.line 展示真实公开摘要及操作；气泡保留原状态／个性台词标题及动态效果，不因信息栏改成会话名。主气泡进展单独增高，短进展气泡不追加跑马灯；固定图标由 TaskActivity 统一分类。
 - `InlineStatusLayout` 共用文字基线、盲文与秒表定位；盲文按完整单元字形保持各帧中心一致，固定图标不随跑马灯滚动。`CopyFeedback` 共用写入剪贴板及反馈，恢复原标题、图标和 imagePosition，纯图标按钮保持空标题与 imageOnly。
 - 代码块使用原生 NSTextTableBlock，语言标签与拷贝按钮共用 `CodeBlockHeaderLayout`。拷贝与关闭按钮复用 `HoverIconButton` 的悬停和按压反馈；不新增代码执行或远程高亮依赖。
 
@@ -70,6 +72,14 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 工具调用短进展气泡共用 `Bubble.showProgressToast`，按真实正文视口及 TextKit 排版截断，字素边界后追加 `...`；只截显示文本，hover 使用 TaskActivity 同一份有界工具摘要，原始数据保留。该模式关闭正文滚动，尺寸过渡也不出现滚动条；思考摘要沿用原规则。
 
 普通命令摘要保留首行子命令、参数及对象，无“命令：”前缀；多行命令不拼接脚本正文，标记省略。结构化读取／搜索优先使用公开 commandActions，不根据原始脚本猜测意图；不把 raw tool arguments／输出或 reasoning.content 加入进展。摘要限制与图标选择以 AGENTS 和 TaskActivity 为准。
+
+## 任务信息栏与工作区
+
+- 先读 [输入与窗口](../../docs/来源与架构.md#current-windows) 和 [设置与个性](../../docs/来源与架构.md#current-settings)。气泡任务信息栏与独立工作区浮窗使用不同开关，两者默认关闭、保留已有选择和手动入口，暂缓扩展；改动气泡入口不控制历史／临时输入的状态行。
+- 优先复用 `WorkspaceStatusView`、`WorkspaceFileTable` 与既有详情弹窗。气泡信息栏只显示 Git 仓库状态和文件统计，不显示目录；独立小窗去掉会话选择器，项目、Git 与文件统计保持单行，按内容自适应，名称先截断、数字保持完整；同会话主气泡与工具气泡去重，概览按行绑定实际轮次。窗口增高复用 `BubbleMotion`，详情打开及控件按下暂停原倒计时，关闭停止对应查询。
+- Git 仓库状态与本轮文件修改是两种数据：前者只读本机 Git 状态，按打开、切换、任务结束和文件变更触发；后者来自对应轮次已完成的 `fileChange` 累计。不得用 Git 净差异替代本轮累计，也不从“查询失败”推断干净。旧卡片按自己的轮次取数。
+- 两种文件详情单击选择、双击在访达中显示，右键共用访达定位和拷贝路径；不直接用默认应用打开文件，也不增加通过自动操作 Codex 界面跳转 Diff 的链路。详情共用文件行悬停及选中反馈，增删两列分别右对齐，选择摘要时保留富文本属性。状态与统计保留等宽字、字形中心对齐和辅助功能含义；PopoverDismissal 只在详情打开期间补充应用外点击关闭，紧凑按钮不重复加悬停说明。
+- 通用 Git／GitHub 模板由 `GitIcons` 管理；替换图标同时更新 `AboutPage` 的来源与许可。当前使用 Lucide git-branch 与 Primer Octicons，致谢中的来源短句和完整许可分别维护。
 
 ## 会话入口与选择状态
 
@@ -112,13 +122,13 @@ description: 维护白龙桌宠Swift 的 Swift/AppKit 工程，处理气泡与�
 ## 动画、额度与系统集成
 
 - 播放使用透明 HEVC 与 AVFoundation；当前源码的缩放和颜色转换由 CPU／vImage 处理，动作默认选择按原作：普通待机 4:1、吸边 7:3；任务中先排除上一动作，再按 35:65 选工作／待机组，组内默认均匀。手动频率与偏爱按场景权重成比例调整，其他随机互动保留减少重复。PNG 接入仍使用 Core Image、AVAssetWriter 和系统 avconvert。FFmpeg 播放实验暂缓，不能写成已经切换；离线抽帧的任务授权不等于允许修改运行依赖。原素材与修复副本保留在本地。
-- 当前新用户默认 512×512、流式 12 帧缓冲、满帧，已有保存值保留；参数变更同步 AGENTS 与 README。满帧按真实素材帧率调度；整段预加载默认关闭，不预热全素材库。素材解码与几何 displayLink 分离，隐藏和结束释放相应计时器，不以屏幕刷新率增加解码。
+- 当前新用户默认 512×512、流式 12 帧缓冲、满帧，已有保存值保留；参数变更同步现行架构与 README。满帧按真实素材帧率调度；整段预加载默认关闭，不预热全素材库。素材解码与几何 displayLink 分离，隐藏和结束释放相应计时器，不以屏幕刷新率增加解码。
 - 性能窗口关闭即停止统计。产品统一写“运行内存 (RAM)”，不将像素估算、旧版反馈或系统 Swap 写成当前进程实测。
 - 每次额度重新请求，先额度、并行账号，晚到数据仅补同次查询；不缓存旧结果冒充新查询。remaining ≤5% 红色、≤10% 橙色，同时作用于百分比和进度条，无百分比行不套阈值。
 - 本轮 Token 使用会话累计快照的轮次增量，缓存输入已含于输入；不把最后请求或上下文占用当整轮用量。用量持久化与渲染签名同步维护，历史补缺只处理当前页并遵守冻结／只读策略。
 - 今日 Token 来自当前 Codex 目录的本机日志，以本机时区统计累计增量并去重分叉事件，不冒充账号全量。额度先展示，再同次后台懒加载本机统计；晚到结果核对查询身份，不重开已关闭气泡。所有套餐按内容及屏幕边界布局，加载动画只存在于显示层。
 - 刘海位置读取内建屏幕的 safeAreaInsets 与 auxiliary 区域，使用当前逻辑坐标，不按英寸、机型或 Retina 倍率推断。没有有效区域时保留可操作设置与原左右吸边，不伪造顶部收纳。SDK 声明可用性、实际类型检查与硬件验收分开记录。
-- 刘海收纳尺寸与露出比例独立于动作 renderScale；当前参数查看 AGENTS／Preferences。正常顶部安全距离保留，收纳按角色轮廓定位，召回窗口位移与旋转／缩放使用同一过渡，不在末帧才移动原位。偏好改默认值保留显式用户选择。
+- 刘海收纳尺寸与露出比例独立于动作 renderScale；当前参数查看现行架构／Preferences。正常顶部安全距离保留，收纳按角色轮廓定位，召回窗口位移与旋转／缩放使用同一过渡，不在末帧才移动原位。偏好改默认值保留显式用户选择。
 - 不读取凭证、Keychain、auth.json 或修改全局 Codex 配置，不为额度增加登录。启动更新检查默认关闭，仅接收正式 Release，不自动安装应用。
 - 登录／跟随启动只维护用户已启用项，尊重系统撤销许可；不要求安装到 /Applications，不接受 AppTranslocation，跟随仅识别 Codex／ChatGPT 桌面端。
 

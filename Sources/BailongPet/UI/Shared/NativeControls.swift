@@ -37,6 +37,8 @@ final class ActionButton: NSButton {
         if acceptsKeyboardActivation {super.keyDown(with:event)}
     }
     private var prominent = false
+    private var hovering = false
+    private var hoverTracking:NSTrackingArea?
     private var flexibleLayout = false
     var extraHorizontalPadding:CGFloat = 0 {didSet {invalidateIntrinsicContentSize()}}
     var semanticColor:NSColor? {didSet {updateAccent()}}
@@ -47,6 +49,13 @@ final class ActionButton: NSButton {
         NotificationCenter.default.addObserver(self,selector:#selector(updateAccent),name:AppAccent.didChange,object:nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+    override func updateTrackingAreas() {
+        if let hoverTracking {removeTrackingArea(hoverTracking)}
+        let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+        hoverTracking = area; addTrackingArea(area); super.updateTrackingAreas()
+    }
+    override func mouseEntered(with event:NSEvent) {super.mouseEntered(with:event); hovering = true; needsDisplay = true}
+    override func mouseExited(with event:NSEvent) {super.mouseExited(with:event); hovering = false; needsDisplay = true}
     func configureFlexible(font:NSFont) {
         flexibleLayout = true; bezelStyle = .flexiblePush; self.font = font
         symbolConfiguration = .init(pointSize:font.pointSize,weight:.regular)
@@ -74,10 +83,10 @@ final class ActionButton: NSButton {
         let color:NSColor, foreground:NSColor
         if let semanticColor {
             // 实色浅底，文字随系统外观提高对比；不依赖背景玻璃或仅靠颜色区分。
-            color = NSColor.controlBackgroundColor.blended(withFraction:isHighlighted ? 0.26 : 0.13,of:semanticColor) ?? .controlBackgroundColor
+            color = NSColor.controlBackgroundColor.blended(withFraction:isHighlighted ? 0.26 : isEnabled && hovering ? 0.20 : 0.13,of:semanticColor) ?? .controlBackgroundColor
             foreground = isEnabled ? semanticColor.blended(withFraction:0.35,of:.labelColor) ?? .labelColor : .disabledControlTextColor
         } else {
-            color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : AppAccent.color
+            color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : isEnabled && hovering ? AppAccent.color.blended(withFraction:0.08,of:.white) ?? AppAccent.color : AppAccent.color
             foreground = .white
         }
         color.withAlphaComponent(isEnabled ? 1 : 0.45).setFill()

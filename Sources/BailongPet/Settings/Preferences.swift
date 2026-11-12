@@ -63,7 +63,7 @@ final class PetPreferences {
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
-        "taskInfoBarEnabled":true,"gitWindowEnabled":false,"gitWindowPinned":false,"gitWindowSeconds":20.0,
+        "taskInfoBarEnabled":false,"gitWindowEnabled":false,"gitWindowPinned":false,"gitWindowSeconds":20.0,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,

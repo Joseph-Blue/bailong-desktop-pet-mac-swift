@@ -13,7 +13,6 @@ final class QuestionForm: NSView {
     private var radios = [NSButton](), inputs = [MessageEditor](), editors = [MessageInputBox]()
     private var generated = [NSView]()
     private var layoutPage = -1, layoutSkipped = false
-    private var layoutShortcut = ""
     private var needsReflow = true
     private weak var pageLabel:NSTextField?
     private var enabled = true
@@ -92,9 +91,8 @@ final class QuestionForm: NSView {
     }
     func reflow(width:CGFloat) {
         let skippedPage = questions.indices.contains(currentIndex) && skipped.contains(questions[currentIndex].id)
-        let shortcutKey = PetPreferences.shared.sendShortcut.sendLabel + PetPreferences.shared.sendShortcut.newlineLabel
-        guard needsReflow || frame.width != width || layoutPage != currentIndex || layoutSkipped != skippedPage || layoutShortcut != shortcutKey else {return}
-        needsReflow = false; layoutPage = currentIndex; layoutSkipped = skippedPage; layoutShortcut = shortcutKey
+        guard needsReflow || frame.width != width || layoutPage != currentIndex || layoutSkipped != skippedPage else {return}
+        needsReflow = false; layoutPage = currentIndex; layoutSkipped = skippedPage
         for view in generated {view.removeFromSuperview()}; generated.removeAll()
         for button in radios {button.isHidden = true}
         for (i,editor) in editors.enumerated() {editor.isHidden = i != currentIndex}
@@ -138,9 +136,6 @@ final class QuestionForm: NSView {
         input.textContainer?.containerSize.width = editor.contentSize.width
         input.minSize.height = editor.contentSize.height
         input.frame.size.height = max(input.frame.height,editor.contentSize.height); y += editor.frame.height+8*scale
-        let shortcut = PetPreferences.shared.sendShortcut
-        let hint = text(shortcut.hint,11*scale,usable,true)
-        hint.frame.origin = NSPoint(x:inset,y:y); add(hint); y += hint.frame.height+10*scale
         frame.size = NSSize(width:width,height:y+5*scale)
         window?.invalidateCursorRects(for:self)
     }

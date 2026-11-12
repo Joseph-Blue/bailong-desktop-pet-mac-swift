@@ -9,7 +9,10 @@ private enum GitStatusText {
         let text = NSMutableAttributedString(), counts = status.counts
         func append(_ value:String,color:NSColor) {
             if text.length > 0 {text.append(NSAttributedString(string:compact ? " " : " · ",attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor]))}
-            text.append(NSAttributedString(string:value,attributes:[.font:font,.foregroundColor:color]))
+            if compact {
+                text.append(InlineStatusLayout.centeredSymbol(String(value.prefix(1)),font:font,color:color))
+                text.append(NSAttributedString(string:String(value.dropFirst()),attributes:[.font:font,.foregroundColor:color]))
+            } else {text.append(NSAttributedString(string:value,attributes:[.font:font,.foregroundColor:color]))}
         }
         for (group,marker,color) in groups {
             if let count = counts[group],count > 0 {append(compact ? marker+String(count) : group.rawValue+" \(count) 项",color:color)}
@@ -38,21 +41,24 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private let directory = WorkspaceLinkButton()
     private let git = HoverIconButton(symbol:"arrow.triangle.branch",label:"Git 状态"), changes = HoverIconButton(symbol:"doc",label:"本轮文件修改")
     private let popover = NSPopover()
+    private let popoverDismissal = PopoverDismissal()
     private var showsChanges = false, fileEdits = [FileEditSummary]()
     private var path = "", conversationKey:String?, taskKey:String?, wasExecuting = false
     private var editSignature = [String](), snapshot:GitWorkspaceStatus?, failure:String?
     private var request:GitWorkspaceRequest?, pending:DispatchWorkItem?
     private var compact = false
+    private var buttonHeights = [NSLayoutConstraint]()
     private var active = false, windowObserver:NSObjectProtocol?
     var onOpen:(URL) -> Void = {_ in}
     var onStatusChange:() -> Void = {}
-    var hasStatus:Bool {snapshot != nil || failure != nil || !changes.isHidden || (compact && !path.isEmpty)}
+    var hasStatus:Bool {snapshot != nil || failure != nil || !changes.isHidden}
     func configure(compact:Bool,fontSize:CGFloat) {
         self.compact = compact
         spacing = compact ? 6 : 10
         directory.emphasizesLink = !compact
         directory.font = .systemFont(ofSize:fontSize)
         updateDirectory()
+        for constraint in buttonHeights {constraint.constant = compact ? 20*fontSize/11 : 24}
         for button in [git,changes] {button.horizontalPadding = compact ? 2 : 6}
         let font = NSFont.monospacedSystemFont(ofSize:fontSize,weight:.semibold)
         for button in [git,changes] where button.font != font {
@@ -84,7 +90,8 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
             button.hoverHelp = nil
             button.imageHugsTitle = true
             button.font = .monospacedSystemFont(ofSize:11,weight:.semibold)
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant:24).isActive = true
+            let height = button.heightAnchor.constraint(greaterThanOrEqualToConstant:24)
+            height.isActive = true; buttonHeights.append(height)
         }
         git.imagePosition = .imageLeading; git.imageScaling = .scaleProportionallyDown
         git.target = self; git.action = #selector(openDetails); git.setAccessibilityLabel("Git 工作区状态")
@@ -133,7 +140,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private func stop() {pending?.cancel(); pending = nil; request?.cancel(); request = nil}
     deinit {stop(); if let windowObserver {NotificationCenter.default.removeObserver(windowObserver)}}
     private func updateDirectory() {
-        directory.isHidden = compact && path.isEmpty
+        directory.isHidden = compact
         let name = URL(fileURLWithPath:path).lastPathComponent
         let project = snapshot.map {URL(fileURLWithPath:$0.root).lastPathComponent}
         directory.update(path:path,displayName:project.flatMap {$0 == name ? nil : $0+" / "+name} ?? name)
@@ -206,6 +213,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         presentPopoverContent()
         popover.show(relativeTo:anchor.bounds,of:anchor,preferredEdge:.maxY)
+        popoverDismissal.start(for:popover)
     }
     private func presentPopoverContent() {
         let content:NSViewController = showsChanges ? TurnFileEditsDetails(edits:fileEdits,directory:path) : makeDetails()
@@ -216,7 +224,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         content.onRefresh = { [weak self] in self?.popover.close(); self?.refreshGit() }
         return content
     }
-    func popoverDidClose(_ notification:Notification) {popover.contentViewController = nil}
+    func popoverDidClose(_ notification:Notification) {popoverDismissal.stop(); popover.contentViewController = nil}
     func containsInteraction(at point:NSPoint) -> Bool {popover.isShown && popover.contentViewController?.view.window?.frame.contains(point) == true}
 }
 
@@ -241,8 +249,14 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
         let heading = NSTextField(labelWithString:snapshot?.title ?? "Git 工作区")
         heading.font = .systemFont(ofSize:13,weight:.semibold)
+        heading.lineBreakMode = .byTruncatingMiddle
+        heading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        let source = NSImageView(image:snapshot?.isGitHub == true ? GitIcons.github : GitIcons.git)
+        source.imageScaling = .scaleProportionallyDown; source.contentTintColor = .secondaryLabelColor
+        let title = NSStackView(views:[source,heading]); title.alignment = .centerY; title.spacing = 6
+        NSLayoutConstraint.activate([source.widthAnchor.constraint(equalToConstant:16),source.heightAnchor.constraint(equalToConstant:16)])
         let refresh = ActionButton("刷新") { [weak self] in self?.onRefresh() }
-        let top = NSStackView(views:[heading,NSView(),refresh]); top.spacing = 12
+        let top = NSStackView(views:[title,NSView(),refresh]); top.alignment = .centerY; top.spacing = 12
         stack.addArrangedSubview(top)
         let message:String
         if let snapshot {
@@ -258,6 +272,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             message = lines.joined(separator:"\n")
         } else {message = failure ?? (loading ? "正在读取 Git 状态…" : "非 Git 工作区")}
         let note = NSTextField(wrappingLabelWithString:message); note.font = .systemFont(ofSize:11); note.textColor = .secondaryLabelColor; note.isSelectable = true
+        note.allowsEditingTextAttributes = true
         if let snapshot {
             let text = NSMutableAttributedString(string:message,attributes:[.font:note.font!,.foregroundColor:NSColor.secondaryLabelColor])
             let range = NSRange(location:(snapshot.root as NSString).length+1,length:(snapshot.summary as NSString).length)
@@ -290,6 +305,10 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         preferredContentSize = view.fittingSize
     }
     func numberOfRows(in tableView:NSTableView) -> Int {rows.count}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {
+        if case .file = rows[row] {return WorkspaceFileTableRow()}
+        return nil
+    }
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         switch rows[row] {
         case .heading(let group,let count):

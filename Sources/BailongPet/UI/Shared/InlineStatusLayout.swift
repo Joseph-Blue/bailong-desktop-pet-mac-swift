@@ -3,6 +3,12 @@ import CoreText
 
 // 文字以原生第一行基线对齐；图标以相邻文字的大写字高中心对齐。
 enum InlineStatusLayout {
+    static func centeredSymbol(_ symbol:String,font:NSFont,color:NSColor) -> NSAttributedString {
+        let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:color]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string:symbol,attributes:attributes))
+        let bounds = CTLineGetBoundsWithOptions(line,.useGlyphPathBounds)
+        return NSAttributedString(string:symbol,attributes:attributes.merging([.baselineOffset:font.capHeight/2-bounds.midY]) {_,new in new})
+    }
     static func lineBaseline(font:NSFont,height:CGFloat) -> CGFloat {
         (height-font.ascender+font.descender)/2-font.descender
     }

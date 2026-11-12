@@ -92,10 +92,10 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     private let watch = NSImageView()
     private let stateIcon = NSImageView()
     private let jump = NSImageView()
-    private let project = NSTextField(labelWithString:"")
     private let changes = HoverIconButton(symbol:"doc.on.doc",label:"本轮文件修改")
     private let popover = NSPopover()
-    private var metadataHeight:CGFloat {PetPreferences.shared.bool("taskInfoBarEnabled") && (!task.directory.isEmpty || !task.fileEdits.isEmpty) ? 22*scale : 0}
+    private let popoverDismissal = PopoverDismissal()
+    private var metadataHeight:CGFloat {PetPreferences.shared.bool("taskInfoBarEnabled") && !task.fileEdits.isEmpty ? 22*scale : 0}
     var rowHeight:CGFloat {32*scale+(task.activityLine == nil ? 0 : 20*scale)+metadataHeight}
     var hasPresentedDetails:Bool {popover.isShown || changes.isHighlighted}
     private var hoverArea:NSTrackingArea?
@@ -112,14 +112,12 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
         activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = .secondaryLabelColor
         activity.isHidden = task.activityLine == nil
-        project.font = .systemFont(ofSize:11*scale); project.textColor = .secondaryLabelColor
-        project.maximumNumberOfLines = 1; project.lineBreakMode = .byTruncatingMiddle
         changes.font = .monospacedSystemFont(ofSize:11*scale,weight:.semibold)
         changes.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:11*scale,weight:.semibold))
         changes.imagePosition = .imageLeading; changes.imageHugsTitle = true; changes.imageScaling = .scaleProportionallyDown
         changes.hoverHelp = nil; changes.horizontalPadding = 4; changes.hoverCornerRadius = 4
         changes.target = self; changes.action = #selector(showChanges); popover.delegate = self
-        for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity,project,changes] as [NSView] {addSubview(view)}
+        for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity,changes] as [NSView] {addSubview(view)}
         jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:"在 Codex 中打开")
         jump.contentTintColor = .tertiaryLabelColor
         update(task)
@@ -127,8 +125,6 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     func update(_ task:BubbleTaskSummary) {
         if self.task.title != task.title || self.task.active != task.active {titleEffectStart = ProcessInfo.processInfo.systemUptime}
         self.task = task
-        project.stringValue = task.directory.isEmpty ? "" : URL(fileURLWithPath:task.directory).lastPathComponent
-        project.hoverHelp = task.directory
         let editTitle = NSMutableAttributedString(string:"\(task.fileEdits.count)",attributes:[.font:changes.font!,.foregroundColor:NSColor.secondaryLabelColor])
         let lines = task.fileEdits.compactMap(\.lines)
         if !lines.isEmpty {
@@ -163,8 +159,9 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         _ = content.view; popover.contentViewController = content; popover.contentSize = content.preferredContentSize
         popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         popover.show(relativeTo:changes.bounds,of:changes,preferredEdge:.maxY)
+        popoverDismissal.start(for:popover)
     }
-    func popoverDidClose(_ notification:Notification) {popover.contentViewController = nil}
+    func popoverDidClose(_ notification:Notification) {popoverDismissal.stop(); popover.contentViewController = nil}
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea {removeTrackingArea(hoverArea)}
@@ -197,11 +194,9 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         elapsed.textColor = color; watch.contentTintColor = color; stateIcon.contentTintColor = color
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
         let headingY = bounds.height-h, metadataHeight = self.metadataHeight
-        project.isHidden = metadataHeight == 0 || task.directory.isEmpty
         changes.isHidden = metadataHeight == 0 || task.fileEdits.isEmpty
         let changesWidth = changes.isHidden ? 0 : changes.intrinsicContentSize.width
         changes.frame = NSRect(x:bounds.width-changesWidth,y:0,width:changesWidth,height:metadataHeight)
-        project.frame = NSRect(x:22*scale,y:0,width:max(0,bounds.width-changesWidth-30*scale),height:metadataHeight)
         let iconSize = activityIcon.layoutSize, progressX = 22*scale
         activityIcon.frame = NSRect(x:progressX,y:metadataHeight+(20*scale-iconSize.height)/2,width:iconSize.width,height:iconSize.height)
         activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:metadataHeight,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:20*scale)
