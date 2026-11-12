@@ -192,6 +192,10 @@ final class ChatController {
             else if !self.pet.preferences.bool("gitWindowEnabled") {self.pet.preferences.set(true,for:"gitWindowEnabled")}
             else {self.showWorkspace()}
         }
+        pet.workspaceProvider = { [weak self] key in
+            guard let self,let conversation = self.allConversations.first(where:{$0.key == key}) else {return nil}
+            return (conversation,self.running?.0.key == key || self.desktopTasks.contains {conversation.threadID != nil && $0.threadID == conversation.threadID && $0.active})
+        }
         pet.onReply = { [weak self] key in
             guard let self,let conversation = self.store.conversations.first(where:{$0.key == key}) else {return}
             self.selectConversation(conversation.key,entry:.composer)
@@ -221,7 +225,13 @@ final class ChatController {
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
-                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network))
+                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network,directory:conversation.cwd,fileEdits:turn.fileEdits ?? []))
+            }
+            for index in tasks.indices {
+                guard let conversation = self.store.conversations.first(where:{$0.threadID == tasks[index].threadID && tasks[index].threadID != nil}) else {continue}
+                tasks[index].directory = conversation.cwd
+                let task = tasks[index]
+                tasks[index].fileEdits = conversation.turns.first(where:{$0.key == task.key || (task.turnID != nil && $0.id == task.turnID) || $0.date == task.start})?.fileEdits ?? []
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
@@ -288,12 +298,14 @@ final class ChatController {
     }
     func refresh() {
         ui.refresh(allConversations,selected:selected,historyState:inputState(selected,kind:selected.kind),composerState:inputState(composerSelection,kind:composerKind))
+        pet.refreshWorkspaceBars()
         if workspacePanel.visible {
             if let conversation = allConversations.first(where:{$0.key == workspacePanel.conversationKey}) {
                 workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)
             } else {workspacePanel.hide()}
         }
     }
+
     private func inputState(_ conversation:Conversation?,kind:ConversationKind) -> ChatInputState {
         var state = ChatInputState(conversation:conversation,kind:kind)
         state.runningTitle = running?.0.title; state.ownsRunningTask = conversation != nil && running?.0 === conversation

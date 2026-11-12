@@ -43,6 +43,14 @@ final class PetController: NSObject, NSMenuDelegate {
     var onHistory: (String?) -> Void = { _ in }
     var onWorkspace:() -> Void = {}
     var workspaceFrame:() -> CGRect? = {nil}
+    var workspaceProvider:(String) -> (conversation:Conversation,executing:Bool)? = {_ in nil} {
+        didSet {bubble.workspaceProvider = workspaceProvider; progressBubble.workspaceProvider = workspaceProvider}
+    }
+    func refreshWorkspaceBars() {
+        bubble.refreshWorkspace()
+        progressBubble.suppressWorkspace(bubble.visible && bubble.hasWorkspaceContext && bubble.relatedConversation == progressBubble.relatedConversation)
+        progressBubble.refreshWorkspace()
+    }
     var onCodex: (String?) -> Void = { _ in CodexConnection.openDesktop() }
     var onQuota: () -> Void = {}
     var onQuit: () -> Void = {}
@@ -178,6 +186,9 @@ final class PetController: NSObject, NSMenuDelegate {
         status.button?.imageScaling = .scaleProportionallyDown
         status.button?.hoverHelp = preferences.appName; refreshMenu()
         bubble.onClose = { [weak self] in self?.quotaActive = false }
+        bubble.onVisibilityChange = { [weak self] in self?.refreshWorkspaceBars() }
+        progressBubble.onVisibilityChange = { [weak self] in self?.refreshWorkspaceBars() }
+        progressBubble.onCardLayout = { [weak self] in self?.placeBubble() }
         settings.petSymbol = {AppIcons.petAvatarTemplate}
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
         settings.onLinePreview = { [weak self] clip,line in self?.preview(clip,line:line) }
@@ -560,7 +571,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),
               preferences.bool("progressToastEnabled"),activity.visible,preferences.allows(.progress) else {return}
-        progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing); placeBubble()
+        progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing,conversation:thread); placeBubble()
     }
     func placeBubble() {
         let anchor = bubbleAttachmentFrame

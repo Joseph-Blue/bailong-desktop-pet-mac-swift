@@ -44,7 +44,7 @@ final class AboutPageController: NSViewController {
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
         tabs.font = .systemFont(ofSize:13)
-        for (identifier,label,text) in [("about","关于",aboutText()),("credits","来源与致谢",creditsText())] {
+        for (identifier,label,text) in [("about","关于",aboutText()),("credits","来源与致谢",creditsText()),("licenses","开源许可",licensesText())] {
             let item = NSTabViewItem(identifier:identifier)
             item.label = label
             item.view = readingView(text)
@@ -166,20 +166,28 @@ final class AboutPageController: NSViewController {
         paragraph("使用 macOS 自带的 SQLite 保存本机对话记录、读取 Codex 任务信息。SQLite 的代码和文档属于公有领域。",to:text)
         link("SQLite 官方版权说明",url:"https://www.sqlite.org/copyright.html",to:text)
 
-        heading("Git 图标 · Jason Long",to:text)
-        link("Git 官方图标",url:"https://git-scm.com/community/logos",to:text)
-        link("CC BY 3.0",url:"https://creativecommons.org/licenses/by/3.0/",to:text)
-        paragraph("使用官方黑色图标，将 SVG 路径转换为原生单色模板。",to:text,color:.secondaryLabelColor)
-        heading("GitHub 图标 · Primer Octicons",to:text)
-        link("Primer Octicons · GitHub",url:"https://github.com/primer/octicons",to:text)
-        paragraph(GitIcons.license,to:text,color:.secondaryLabelColor)
-
         heading("macOS 界面设计参考 · macos-golden-gate-design",to:text)
         paragraph("界面设计参考 gambadio 的 macos-golden-gate-design，让设置和窗口更贴近 Mac 的使用习惯。该设计指南采用 MIT 许可证。",to:text)
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)
 
         heading("Mac 与 Codex",to:text)
         paragraph("应用用 Swift 和 AppKit 开发，窗口、菜单和设置使用 Mac 原生控件。聊天和任务由本机安装的 Codex 处理。",to:text)
+
+        heading("图标与标识",to:text)
+        link("SF Symbols · Apple",url:"https://developer.apple.com/sf-symbols/",to:text)
+        link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
+        link("GitHub 图标 · Primer Octicons（MIT）",url:"https://github.com/primer/octicons",to:text)
+        link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
+        return text
+    }
+
+    private func licensesText() -> NSAttributedString {
+        let text = NSMutableAttributedString(string:"")
+        heading("Lucide · git-branch",to:text)
+        paragraph(GitIcons.lucideLicense,to:text)
+        link("Lucide 许可",url:"https://lucide.dev/license",to:text)
+        heading("Primer Octicons · GitHub",to:text)
+        paragraph(GitIcons.license,to:text)
         return text
     }
 

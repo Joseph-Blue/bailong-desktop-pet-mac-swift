@@ -9,6 +9,7 @@ enum MessageSettingsPage {
             form.toggle("显示任务气泡","taskBubbles",detail:"关闭后仍会显示审批、待回答的问题和错误提示。"),
             form.toggle("任务消息","progressBubbles",requires:["taskBubbles"]),
             form.toggle("最终回复","resultBubbles",requires:["taskBubbles"]),
+            form.toggle("在气泡中显示任务信息栏","taskInfoBarEnabled",detail:"涵盖项目、Git 仓库状态和本轮文件改动。"),
             form.toggle("思考与工具进展小气泡","progressToastEnabled",requires:["taskBubbles","progressBubbles"])],symbol:"bubble.left.and.bubble.right")
         form.group("工作区状态",[
             form.toggle("显示工作区状态","gitWindowEnabled"),

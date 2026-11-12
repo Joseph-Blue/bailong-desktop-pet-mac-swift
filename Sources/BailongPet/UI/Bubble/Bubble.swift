@@ -32,6 +32,13 @@ final class Bubble {
     private var headingActivity:TaskActivity?
     private let text = MessageTextView()
     private let scroll = BubbleBodyScrollView()
+    private let workspace = WorkspaceStatusView()
+    private var workspaceContextAvailable = false
+    private var workspaceAttached = false, workspaceSuppressed = false, preparingDisplay = false
+    private var originalHeading = ""
+    private var originalHeadingAnimated = false
+    var workspaceProvider:(String) -> (conversation:Conversation,executing:Bool)? = {_ in nil}
+    var onVisibilityChange:() -> Void = {}
     private let closeButton = BubbleCloseButton()
     private var details: ActionButton!
     private var codexButton: ActionButton!
@@ -96,17 +103,18 @@ final class Bubble {
     var onCodex: () -> Void = {CodexConnection.openDesktop()}
     var kind = ""
     var visible: Bool { motion.presented }
+    var hasWorkspaceContext:Bool {workspaceAttached}
     var acceptsTransientInteraction:Bool {
         !visible || (!pendingAttention && questionForm == nil && !submittingQuestion &&
             (cardIndex.map {cards[$0].priority == .companion} ?? (purpose == .interaction || purpose == .preview)))
     }
     var blocksProgressToast:Bool {visible && (pendingAttention || questionForm != nil || submittingQuestion || isBrowsingCards)}
-    func showProgressToast(_ activity:TaskActivity,timing:TaskTiming) {
+    func showProgressToast(_ activity:TaskActivity,timing:TaskTiming,conversation:String? = nil) {
         onQuestionSubmit = nil; onQuestionsSkipped = nil
         let detail = ([activity.actionTitle,activity.displayDetail].filter {!$0.isEmpty}.joined(separator:"\n"))
             .replacingOccurrences(of:"**",with:"")
         show(title:activity.displayTitle,body:detail,kind:"progressToast",scale:preferences.number("bubblePercent")/100,
-             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:activity.kind == .tool,headingActivity:activity)
+             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:activity.kind == .tool,headingActivity:activity,conversation:conversation)
         purpose = .progress; text.hoverHelp = activity.text
     }
     func resolveQuestions(taskKey:String? = nil,form:QuestionForm? = nil) {
@@ -188,7 +196,7 @@ final class Bubble {
         updateCardNavigation()
         show(title:card.title,body:card.approval?.body ?? card.body,kind:card.kind,scale:preferences.number("bubblePercent")/100,seconds:preferences.duration(card.purpose,text:card.body),
              details:card.thread != nil,resetText:card.resetText || changedCard,animateHeading:card.animateHeading,
-             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits,isUserInput:card.isUserInput,completionFooter:card.completionFooter,failure:card.failure)
+             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits,isUserInput:card.isUserInput,completionFooter:card.completionFooter,failure:card.failure,conversation:card.thread)
         relatedConversation = card.thread; purpose = card.purpose
         renderedCardID = card.id
         cardStore.saveForm(questionForm,size:questionSize)
@@ -224,6 +232,10 @@ final class Bubble {
         }
         let content = BubbleBackgroundView()
         window.contentView = content
+        workspace.isHidden = true
+        workspace.onOpen = {FinderFileReveal.openDirectory($0)}
+        workspace.onStatusChange = { [weak self] in self?.updateWorkspacePresentation() }
+        content.body.addSubview(workspace)
         title.isSelectable = false; title.font = .boldSystemFont(ofSize:13)
         title.colorsChanged = { [weak self] in
             guard let self else {return}
@@ -319,6 +331,40 @@ final class Bubble {
         headingSpinner.isHidden = true; headingIcon.isHidden = true
         for v in [title,headingSpinner,headingIcon,scroll,closeButton,details,codexButton,retryButton,elapsedIcon,elapsedLabel,taskProgressIcon,taskProgress,previousQuestion!,skipQuestion!,approvalReject!,approvalAllow!,previousCard!,nextCard!,replyButton!,cardCount] as [NSView] { content.body.addSubview(v) }
     }
+    func suppressWorkspace(_ suppressed:Bool) {
+        guard workspaceSuppressed != suppressed else {return}
+        workspaceSuppressed = suppressed; refreshWorkspace()
+    }
+    func refreshWorkspace(relayout:Bool = true) {
+        guard visible || preparingDisplay else {return}
+        let oldAttached = workspaceAttached
+        let eligible = preferences.bool("taskInfoBarEnabled") && !workspaceSuppressed && !pendingAttention && (kind == "task" || kind == "progressToast")
+        if eligible,let key = relatedConversation,let context = workspaceProvider(key) {
+            let fontSize = 11*scale*preferences.number("messageFontSize")/13
+            workspace.configure(compact:true,fontSize:fontSize)
+            workspaceContextAvailable = true
+            title.maximumNumberOfLines = 1; title.lineBreakMode = .byTruncatingTail
+            setHeading(context.conversation.title,animated:kind == "progressToast" && originalHeadingAnimated)
+            workspace.update(conversation:context.conversation,executing:context.executing,visible:true,turnKey:activityTiming?.activityKey ?? activityTiming?.key,turnStart:activityTiming?.start)
+        } else {
+            workspaceContextAvailable = false; workspace.deactivate()
+            title.maximumNumberOfLines = kind == "progressToast" ? 1 : 0
+            title.lineBreakMode = kind == "progressToast" ? .byTruncatingTail : .byWordWrapping
+            setHeading(originalHeading,animated:originalHeadingAnimated)
+        }
+        updateWorkspacePresentation(relayout:false)
+        if relayout && !preparingDisplay && oldAttached != workspaceAttached {
+            layout(bodyHeight:layoutBodyHeight); onCardLayout()
+        }
+    }
+    private func updateWorkspacePresentation(relayout:Bool = true) {
+        let wasAttached = workspaceAttached
+        workspaceAttached = workspaceContextAvailable && workspace.hasStatus
+        workspace.isHidden = !workspaceAttached
+        if relayout && !preparingDisplay && visible && wasAttached != workspaceAttached {
+            layout(bodyHeight:layoutBodyHeight); onCardLayout()
+        }
+    }
     private var actionButtons:[ActionButton] {[details,codexButton,replyButton,retryButton,previousCard,nextCard,previousQuestion,skipQuestion,approvalReject,approvalAllow]}
     private func configureButtons() {
         let fontSize = preferences.number("messageFontSize")*scale
@@ -368,7 +414,9 @@ final class Bubble {
         let actionsHeight = details.isHidden && codexButton.isHidden && retryButton.isHidden ? 0 : buttonHeight+gap+(previousQuestion.isHidden ? 0 : buttonHeight+gap)
         let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+gap
         let approvalHeight:CGFloat = approvalReject.isHidden ? 0 : buttonHeight+gap
-        let footer = actionsHeight+navigationHeight+approvalHeight
+        let workspaceHeight = workspaceAttached ? max(24*scale,workspace.fittingSize.height)+2*scale : 0
+        let controlsFooter = actionsHeight+navigationHeight+approvalHeight
+        let footer = controlsFooter+workspaceHeight
         // 关闭、标题首行与计时同一行；标题按剩余宽度换行，不缩字或截断。
         let progressFont = taskProgress.font ?? .systemFont(ofSize:11*scale)
         let progressIconSize = taskProgressIcon.layoutSize
@@ -377,11 +425,11 @@ final class Bubble {
         let progressHeight = taskProgress.isHidden ? 0 : progressLineHeight+4*scale
         // 进展与标题为紧凑状态区；有进展时不再叠加原先 12pt 正文分隔。
         let bodyGap = bodyHeight > 0 ? (taskProgress.isHidden ? 12 : 4)*scale : 0
-        let baseChromeHeight = margin*2+headingHeight+bodyGap+footer
-        let chromeHeight = baseChromeHeight+progressHeight
+        let baseChromeHeight = margin*2+headingHeight+bodyGap+controlsFooter
+        let chromeHeight = baseChromeHeight+progressHeight+workspaceHeight
         // 进展独占新增高度，包括启用宽高比时；不从原正文视口扣除。
-        let desiredHeight:CGFloat = (usesCustomAspect ? max(baseChromeHeight+(bodyHeight > 0 ? 24*scale : 0),w/preferences.number("bubbleAspectRatio")) : baseChromeHeight+bodyHeight)+progressHeight
-        let h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
+        let desiredHeight:CGFloat = (usesCustomAspect ? max(baseChromeHeight+(bodyHeight > 0 ? 24*scale : 0),w/preferences.number("bubbleAspectRatio")) : baseChromeHeight+bodyHeight)+progressHeight+workspaceHeight
+        let h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale+workspaceHeight : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
         if truncatesProgressBody {fitToolProgressBody(height:max(0,h-chromeHeight),width:bodyLayout.contentWidth)}
         motion.onResize = { [weak self] size in
             guard let self else {return}
@@ -396,6 +444,7 @@ final class Bubble {
                 InlineStatusLayout.align(self.headingIcon,to:self.title,side:self.headingIcon.layoutSize.height,width:self.headingIcon.layoutSize.width)
             }
             if hasElapsed {self.layoutElapsed(in:size)}
+            self.workspace.frame = NSRect(x:bodyLayout.inset,y:margin,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-2*scale))
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSize.width,height:progressIconSide)
             self.taskProgress.frame = NSRect(x:bodyLayout.inset+progressIconSize.width+6*scale,y:progressY,width:max(0,bodyLayout.contentWidth-progressIconSize.width-6*scale),height:progressLineHeight)
@@ -410,7 +459,7 @@ final class Bubble {
             self.scroll.setViewport(viewport)
             self.scroll.isHidden = bodyHeight <= 0
             // 两列共享边界与控件高度；翻页留在左下，正文高度不影响导航位置。
-            let navigationY = margin, actionY = navigationY+navigationHeight
+            let navigationY = margin+workspaceHeight, actionY = navigationY+navigationHeight
             let allowOnLeft = self.preferences.string("approvalButtonOrder") == "allowLeft"
             self.approvalReject.frame = NSRect(x:allowOnLeft ? margin+columnWidth+gap : margin,y:actionY+actionsHeight,width:columnWidth,height:buttonHeight)
             self.approvalAllow.frame = NSRect(x:allowOnLeft ? margin : margin+columnWidth+gap,y:actionY+actionsHeight,width:columnWidth,height:buttonHeight)
@@ -454,7 +503,9 @@ final class Bubble {
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,truncateBody:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil,headingActivity:TaskActivity? = nil) {
+    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,truncateBody:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil,headingActivity:TaskActivity? = nil,conversation:String? = nil) {
+        preparingDisplay = true
+        defer {preparingDisplay = false; onVisibilityChange()}
         if kind == "quotaLoading" {quotaUsageExpanded = false}
         stopQuotaLoading()
         taskList?.stop(); taskList = nil
@@ -496,7 +547,8 @@ final class Bubble {
         // 只有任务消息正文允许复制；互动、额度加载及一般提示不参与文本选择。
         text.isSelectable = kind == "task"
         if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
-        currentBody = body; relatedConversation = nil
+        currentBody = body; relatedConversation = conversation; originalHeading = heading
+        originalHeadingAnimated = animateHeading && timing?.finished == nil
         truncatesProgressBody = kind == "progressToast" && truncateBody
         scroll.allowsScrolling = !truncatesProgressBody
         title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
@@ -504,6 +556,7 @@ final class Bubble {
         title.lineBreakMode = kind == "progressToast" ? .byTruncatingTail : .byWordWrapping
         title.hoverHelp = kind == "progressToast" ? heading : nil
         setHeading(heading, animated: animateHeading && timing?.finished == nil)
+        refreshWorkspace(relayout:false)
         let bodyFont = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
         if let failure {onDetails = {failure.showDetails()}}
         details.title = failure == nil ? "查看记录详情" : "技术详情…"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
@@ -569,7 +622,7 @@ final class Bubble {
             guard let self else {return}
             self.show(title:heading,body:body,kind:kind,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,
                 details:enabled,resetText:false,animateHeading:animateHeading,attentionAction:attentionAction,
-                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput,truncateBody:truncateBody,completionFooter:completionFooter,failure:failure,headingActivity:headingActivity)
+                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput,truncateBody:truncateBody,completionFooter:completionFooter,failure:failure,headingActivity:headingActivity,conversation:conversation)
         }
     }
     private func fitToolProgressBody(height:CGFloat,width:CGFloat) {
@@ -742,7 +795,7 @@ final class Bubble {
     private func startCountdown(_ seconds:Double) {
         countdown.start(seconds,paused:{ [weak self] in
             guard let self else {return false}
-            return self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation)
+            return self.workspace.hasPresentedDetails || self.taskList?.hasPresentedDetails == true || (self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation))
         },expired:{ [weak self] in self?.hide(); self?.onClose() })
     }
     func refreshDuration() {if visible {startCountdown(pendingAttention || kind == "error" ? 0 : kind == "progressToast" ? preferences.number("progressToastSeconds") : preferences.duration(purpose,text:currentBody))}}
@@ -977,5 +1030,5 @@ final class Bubble {
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil}
+    func hide() {workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
 }

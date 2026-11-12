@@ -22,6 +22,15 @@ private enum GitStatusText {
         }
         return text
     }
+    static func tracking(_ status:GitWorkspaceStatus,font:NSFont) -> NSAttributedString {
+        let text = NSMutableAttributedString(string:"上游："+(status.upstream ?? ""),attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor])
+        for (label,count) in [("领先",status.ahead),("落后",status.behind)] {
+            text.append(NSAttributedString(string:" · ",attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor]))
+            text.append(NSAttributedString(string:label+" \(count)",attributes:[.font:count > 0 ? NSFont.systemFont(ofSize:font.pointSize,weight:.semibold) : font,.foregroundColor:count > 0 ? NSColor.systemBlue : NSColor.secondaryLabelColor]))
+        }
+        text.append(NSAttributedString(string:"（本机记录）",attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor]))
+        return text
+    }
 }
 
 // 一条共用的次级信息行：目录入口、Git 摘要、本轮修改。只查询当前可见会话。
@@ -33,8 +42,36 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private var path = "", conversationKey:String?, taskKey:String?, wasExecuting = false
     private var editSignature = [String](), snapshot:GitWorkspaceStatus?, failure:String?
     private var request:GitWorkspaceRequest?, pending:DispatchWorkItem?
+    private var compact = false
     private var active = false, windowObserver:NSObjectProtocol?
     var onOpen:(URL) -> Void = {_ in}
+    var onStatusChange:() -> Void = {}
+    var hasStatus:Bool {snapshot != nil || failure != nil || !changes.isHidden || (compact && !path.isEmpty)}
+    func configure(compact:Bool,fontSize:CGFloat) {
+        self.compact = compact
+        spacing = compact ? 6 : 10
+        directory.emphasizesLink = !compact
+        directory.font = .systemFont(ofSize:fontSize)
+        updateDirectory()
+        for button in [git,changes] {button.horizontalPadding = compact ? 2 : 6}
+        let font = NSFont.monospacedSystemFont(ofSize:fontSize,weight:.semibold)
+        for button in [git,changes] where button.font != font {
+            button.font = font
+            let text = NSMutableAttributedString(attributedString:button.attributedTitle)
+            text.addAttribute(.font,value:font,range:NSRange(location:0,length:text.length))
+            button.attributedTitle = text
+        }
+        changes.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:fontSize,weight:.semibold))
+        git.image = sourceIcon(github:snapshot?.isGitHub == true)
+    }
+    private func sourceIcon(github:Bool) -> NSImage {
+        let original = github ? GitIcons.github : GitIcons.git
+        guard compact else {return original}
+        let image = original.copy() as! NSImage
+        let side = (git.font?.pointSize ?? 11)+1
+        image.size = NSSize(width:side,height:side)
+        return image
+    }
     var hasPresentedDetails:Bool {popover.isShown || git.isHighlighted || changes.isHighlighted || directory.isHighlighted}
     override init(frame:NSRect) {
         super.init(frame:frame)
@@ -74,7 +111,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
             }
         }
     }
-    func update(conversation:Conversation?,executing:Bool,visible:Bool) {
+    func update(conversation:Conversation?,executing:Bool,visible:Bool,turnKey:String? = nil,turnStart:Date? = nil) {
         let nextPath = conversation?.cwd ?? "", changed = conversationKey != conversation?.key || path != nextPath
         if changed {stop(); snapshot = nil; failure = nil; popover.close(); editSignature = []; taskKey = nil}
         conversationKey = conversation?.key; path = nextPath
@@ -82,7 +119,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         active = visible
         updateDirectory()
         guard visible else {stop(); snapshot = nil; fileEdits = []; return}
-        let turn = conversation?.turns.max(by:{$0.date < $1.date})
+        let turn = turnKey == nil && turnStart == nil ? conversation?.turns.max(by:{$0.date < $1.date}) : conversation?.turns.first {((turnKey != nil && ($0.key == turnKey || $0.id == turnKey)) || (turnStart != nil && $0.date == turnStart))}
         let edits = turn?.fileEdits ?? [], signature = edits.flatMap(\.signature)
         let changedEdits = signature != editSignature || taskKey != turn?.key
         editSignature = signature; taskKey = turn?.key
@@ -90,11 +127,13 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let ended = wasExecuting && !executing; wasExecuting = executing
         if changed || becameActive || ended {refreshGit()}
         else if changedEdits {scheduleRefresh()}
+        onStatusChange()
     }
-    func deactivate() {active = false; stop(); snapshot = nil; fileEdits = []; popover.close()}
+    func deactivate() {active = false; stop(); snapshot = nil; failure = nil; fileEdits = []; git.isHidden = true; changes.isHidden = true; popover.close()}
     private func stop() {pending?.cancel(); pending = nil; request?.cancel(); request = nil}
     deinit {stop(); if let windowObserver {NotificationCenter.default.removeObserver(windowObserver)}}
     private func updateDirectory() {
+        directory.isHidden = compact && path.isEmpty
         let name = URL(fileURLWithPath:path).lastPathComponent
         let project = snapshot.map {URL(fileURLWithPath:$0.root).lastPathComponent}
         directory.update(path:path,displayName:project.flatMap {$0 == name ? nil : $0+" / "+name} ?? name)
@@ -125,7 +164,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         guard active,!path.isEmpty else {git.isHidden = true; return}
         stop(); failure = nil
         let query = GitWorkspaceRequest(); request = query
-        git.isHidden = false; git.image = snapshot?.isGitHub == true ? GitIcons.github : GitIcons.git
+        git.isHidden = false; git.image = sourceIcon(github:snapshot?.isGitHub == true)
         git.title = snapshot.map {$0.title+"  …"} ?? "读取中…"; git.contentTintColor = .secondaryLabelColor
         git.setAccessibilityValue("正在读取 Git 状态")
         query.start(directory:path) { [weak self,weak query] result in
@@ -136,16 +175,17 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
             case .failure(let error):self.snapshot = nil; self.failure = error.localizedDescription
             }
             self.presentStatus(); self.updateDirectory()
+            self.onStatusChange()
             if self.popover.isShown && !self.showsChanges {self.presentPopoverContent()}
         }
     }
     private func presentStatus() {
         git.isHidden = snapshot == nil && failure == nil
         guard let snapshot else {
-            git.image = GitIcons.git; git.title = "读取失败"; git.contentTintColor = .systemOrange
+            git.image = sourceIcon(github:false); git.title = "读取失败"; git.contentTintColor = .systemOrange
             git.setAccessibilityValue(failure ?? "Git 状态读取失败"); return
         }
-        git.image = snapshot.isGitHub ? GitIcons.github : GitIcons.git
+        git.image = sourceIcon(github:snapshot.isGitHub)
         let text = NSMutableAttributedString()
         text.append(NSAttributedString(string:snapshot.title+(snapshot.initial ? " · 首次提交前" : "")))
         if let operation = snapshot.operation {text.append(NSAttributedString(string:" · "+operation))}
@@ -222,6 +262,10 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             let text = NSMutableAttributedString(string:message,attributes:[.font:note.font!,.foregroundColor:NSColor.secondaryLabelColor])
             let range = NSRange(location:(snapshot.root as NSString).length+1,length:(snapshot.summary as NSString).length)
             text.replaceCharacters(in:range,with:GitStatusText.render(snapshot,compact:false,font:.systemFont(ofSize:11,weight:.semibold)))
+            if let upstream = snapshot.upstream {
+                let original = "上游："+upstream+" · 领先 \(snapshot.ahead)，落后 \(snapshot.behind)（本机记录）"
+                text.replaceCharacters(in:(text.string as NSString).range(of:original),with:GitStatusText.tracking(snapshot,font:note.font!))
+            }
             note.attributedStringValue = text
         }
         stack.addArrangedSubview(note)

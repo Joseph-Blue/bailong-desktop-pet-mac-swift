@@ -7,6 +7,8 @@ struct BubbleTaskSummary: Equatable {
     var turnID:String? = nil
     var activity:TaskActivity? = nil
     var connectionFailed = false
+    var directory = ""
+    var fileEdits = [FileEditSummary]()
     var activityLine:String? {active && activity?.visible == true ? activity?.line : nil}
     var active:Bool {activeStatuses.contains(status)}
 }
@@ -23,9 +25,11 @@ final class BubbleTaskList: NSView {
     var onResize:((CGFloat) -> Void)?
     private var timer:Timer?
     private var overview:BubbleTaskOverview?
+    private var showsTaskInfo = false
     private var recentLimit = 0
     private var progressTemplates = [String]()
     private var rows = [BubbleTaskRow]()
+    var hasPresentedDetails:Bool {rows.contains {$0.hasPresentedDetails}}
     private var tick = 0
     private let scale:CGFloat
     init(width:CGFloat,scale:CGFloat,provider:@escaping () -> BubbleTaskOverview) {
@@ -48,11 +52,12 @@ final class BubbleTaskList: NSView {
     private func rebuild() {
         var incoming = provider()
         incoming.tasks = incoming.tasks.map {task in var task = task; if task.activity?.visible != true {task.activity = nil}; return task}
+        let showInfo = PetPreferences.shared.bool("taskInfoBarEnabled")
         let limit = Int(PetPreferences.shared.number("recentTaskCount"))
         let templates = [PetPreferences.shared.statusLine("taskThinkingTemplate"),PetPreferences.shared.statusLine("taskToolTemplate"),PetPreferences.shared.statusLine("taskCommandTemplate"),PetPreferences.shared.statusLine("taskCommandCompletedTemplate")]
-        guard incoming != overview || limit != recentLimit || templates != progressTemplates || subviews.isEmpty else {return}
-        overview = incoming; recentLimit = limit; progressTemplates = templates
-        let records = incoming.tasks; let previousRows = rows; subviews.forEach {$0.removeFromSuperview()}; rows = []
+        guard incoming != overview || limit != recentLimit || templates != progressTemplates || showInfo != showsTaskInfo || subviews.isEmpty else {return}
+        overview = incoming; showsTaskInfo = showInfo; recentLimit = limit; progressTemplates = templates
+        let records = incoming.tasks; let previousRows = rows; subviews.filter {!($0 is BubbleTaskRow)}.forEach {$0.removeFromSuperview()}; rows = []
         var y:CGFloat = 0
         for (index,section) in [("正在执行的任务：",records.filter(\.active)),("近期执行结束的任务：",Array(records.filter {!$0.active}.prefix(limit)))].enumerated() {
             if index > 0 {y += 14*scale}
@@ -67,16 +72,17 @@ final class BubbleTaskList: NSView {
             for task in section.1 {
                 let row = previousRows.first(where:{$0.task.key == task.key && $0.task.start == task.start && $0.task.turnID == task.turnID}) ?? BubbleTaskRow(task:task,scale:scale)
                 row.update(task)
-                row.frame = NSRect(x:0,y:y,width:bounds.width,height:(task.activityLine == nil ? 32 : 52)*scale)
+                row.frame = NSRect(x:0,y:y,width:bounds.width,height:row.rowHeight)
                 addSubview(row); rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height+2*scale
             }
         }
+        for row in previousRows where !rows.contains(where:{$0 === row}) {row.stopMotion(); row.removeFromSuperview()}
         if frame.height != y {frame.size.height = y; onResize?(y)}
     }
     deinit {stop()}
 }
 
-private final class BubbleTaskRow:NSButton,LinkCursorControl {
+private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     override var isFlipped:Bool {false}
     private(set) var task:BubbleTaskSummary
     let scale:CGFloat
@@ -86,6 +92,12 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
     private let watch = NSImageView()
     private let stateIcon = NSImageView()
     private let jump = NSImageView()
+    private let project = NSTextField(labelWithString:"")
+    private let changes = HoverIconButton(symbol:"doc.on.doc",label:"本轮文件修改")
+    private let popover = NSPopover()
+    private var metadataHeight:CGFloat {PetPreferences.shared.bool("taskInfoBarEnabled") && (!task.directory.isEmpty || !task.fileEdits.isEmpty) ? 22*scale : 0}
+    var rowHeight:CGFloat {32*scale+(task.activityLine == nil ? 0 : 20*scale)+metadataHeight}
+    var hasPresentedDetails:Bool {popover.isShown || changes.isHighlighted}
     private var hoverArea:NSTrackingArea?
     private var hovered = false
     private var titleEffectStart = ProcessInfo.processInfo.systemUptime
@@ -100,7 +112,14 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
         activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = .secondaryLabelColor
         activity.isHidden = task.activityLine == nil
-        for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity] as [NSView] {addSubview(view)}
+        project.font = .systemFont(ofSize:11*scale); project.textColor = .secondaryLabelColor
+        project.maximumNumberOfLines = 1; project.lineBreakMode = .byTruncatingMiddle
+        changes.font = .monospacedSystemFont(ofSize:11*scale,weight:.semibold)
+        changes.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:11*scale,weight:.semibold))
+        changes.imagePosition = .imageLeading; changes.imageHugsTitle = true; changes.imageScaling = .scaleProportionallyDown
+        changes.hoverHelp = nil; changes.horizontalPadding = 4; changes.hoverCornerRadius = 4
+        changes.target = self; changes.action = #selector(showChanges); popover.delegate = self
+        for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity,project,changes] as [NSView] {addSubview(view)}
         jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:"在 Codex 中打开")
         jump.contentTintColor = .tertiaryLabelColor
         update(task)
@@ -108,9 +127,20 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
     func update(_ task:BubbleTaskSummary) {
         if self.task.title != task.title || self.task.active != task.active {titleEffectStart = ProcessInfo.processInfo.systemUptime}
         self.task = task
+        project.stringValue = task.directory.isEmpty ? "" : URL(fileURLWithPath:task.directory).lastPathComponent
+        project.hoverHelp = task.directory
+        let editTitle = NSMutableAttributedString(string:"\(task.fileEdits.count)",attributes:[.font:changes.font!,.foregroundColor:NSColor.secondaryLabelColor])
+        let lines = task.fileEdits.compactMap(\.lines)
+        if !lines.isEmpty {
+            editTitle.append(NSAttributedString(string:" ",attributes:[.font:changes.font!]))
+            editTitle.append(FileEditRendering.counts(.init(added:lines.reduce(0){$0+$1.added},removed:lines.reduce(0){$0+$1.removed}),font:changes.font!))
+            if lines.count < task.fileEdits.count {editTitle.append(NSAttributedString(string:" · 部分",attributes:[.font:changes.font!,.foregroundColor:NSColor.secondaryLabelColor]))}
+        }
+        changes.attributedTitle = editTitle
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         activity.stringValue = task.activityLine ?? ""; activity.isHidden = task.activityLine == nil
         activityIcon.isHidden = activity.isHidden
+        if metadataHeight == 0 {popover.close()}
         activityIcon.update(task.activity,pointSize:15*scale)
         let symbol = task.connectionFailed ? "wifi.slash" : task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
         stateIcon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
@@ -118,12 +148,23 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
     }
-    func stopMotion() {activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle()}
+    func stopMotion() {popover.close(); activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle()}
     private func restoreTitle() {
         name.attributedStringValue = NSAttributedString(string:name.stringValue,attributes:[.font:name.font!,.foregroundColor:NSColor.labelColor])
     }
     required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
-    override func hitTest(_ point:NSPoint) -> NSView? {super.hitTest(point) == nil ? nil : self}
+    override func hitTest(_ point:NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else {return nil}
+        return hit === changes || hit.isDescendant(of:changes) ? hit : self
+    }
+    @objc private func showChanges() {
+        if popover.isShown {popover.close(); return}
+        let content = TurnFileEditsDetails(edits:task.fileEdits,directory:task.directory)
+        _ = content.view; popover.contentViewController = content; popover.contentSize = content.preferredContentSize
+        popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
+        popover.show(relativeTo:changes.bounds,of:changes,preferredEdge:.maxY)
+    }
+    func popoverDidClose(_ notification:Notification) {popover.contentViewController = nil}
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea {removeTrackingArea(hoverArea)}
@@ -155,18 +196,24 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let color:NSColor = task.active ? .secondaryLabelColor : task.connectionFailed ? .systemRed : task.status == "completed" ? .systemGreen : task.status == "failed" ? .systemYellow : .systemRed
         elapsed.textColor = color; watch.contentTintColor = color; stateIcon.contentTintColor = color
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
+        let headingY = bounds.height-h, metadataHeight = self.metadataHeight
+        project.isHidden = metadataHeight == 0 || task.directory.isEmpty
+        changes.isHidden = metadataHeight == 0 || task.fileEdits.isEmpty
+        let changesWidth = changes.isHidden ? 0 : changes.intrinsicContentSize.width
+        changes.frame = NSRect(x:bounds.width-changesWidth,y:0,width:changesWidth,height:metadataHeight)
+        project.frame = NSRect(x:22*scale,y:0,width:max(0,bounds.width-changesWidth-30*scale),height:metadataHeight)
         let iconSize = activityIcon.layoutSize, progressX = 22*scale
-        activityIcon.frame = NSRect(x:progressX,y:32*scale+(20*scale-iconSize.height)/2,width:iconSize.width,height:iconSize.height)
-        activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:32*scale,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:20*scale)
+        activityIcon.frame = NSRect(x:progressX,y:metadataHeight+(20*scale-iconSize.height)/2,width:iconSize.width,height:iconSize.height)
+        activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:metadataHeight,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:20*scale)
         InlineStatusLayout.align(activityIcon,toLineIn:activity,font:activity.font!,side:iconSize.height,width:iconSize.width)
         TaskActivityAppearance.apply(task.activity,icon:activityIcon,text:activity,visible:window?.isVisible == true && !isHiddenOrHasHiddenAncestor)
         activity.start()
-        jump.frame = NSRect(x:bounds.width-15*scale,y:(h-11*scale)/2,width:11*scale,height:11*scale)
+        jump.frame = NSRect(x:bounds.width-15*scale,y:headingY+(h-11*scale)/2,width:11*scale,height:11*scale)
         let watchX = trailing-width-16*scale
-        spinner.frame = NSRect(x:0,y:(h-20*scale)/2,width:18*scale,height:20*scale)
-        stateIcon.frame = NSRect(x:1*scale,y:(h-14*scale)/2,width:14*scale,height:14*scale)
+        spinner.frame = NSRect(x:0,y:headingY+(h-20*scale)/2,width:18*scale,height:20*scale)
+        stateIcon.frame = NSRect(x:1*scale,y:headingY+(h-14*scale)/2,width:14*scale,height:14*scale)
         let nameHeight = name.fittingSize.height
-        name.frame = NSRect(x:22*scale,y:(h-nameHeight)/2,width:max(0,(hasTime ? watchX-8*scale : trailing)-22*scale),height:nameHeight)
+        name.frame = NSRect(x:22*scale,y:headingY+(h-nameHeight)/2,width:max(0,(hasTime ? watchX-8*scale : trailing)-22*scale),height:nameHeight)
         let baseline = InlineStatusLayout.baseline(of:name)
         InlineStatusLayout.alignBraille(spinner,to:baseline)
         InlineStatusLayout.align(stateIcon,to:name,side:14*scale)

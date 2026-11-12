@@ -36,42 +36,25 @@ enum GitIcons {
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
     """
-    // Git official black logomark by Jason Long, CC BY 3.0.
-    // https://git-scm.com/community/logos · https://creativecommons.org/licenses/by/3.0/
-    // Original SVG path transformed into native template coordinates; geometry unchanged.
+    static let lucideLicense = """
+    ISC License — Copyright (c) 2026 Lucide Icons and Contributors
+    Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+    """
+    // Lucide git-branch: https://lucide.dev/icons/git-branch (ISC, notice above).
+    // SVG's 24-point geometry, round caps and joins; scaled to a native template.
     static let git:NSImage = {
         let image = NSImage(size:NSSize(width:16,height:16),flipped:true) { _ in
-            let p = NSBezierPath()
-            p.move(to:NSPoint(x:8.725238,y:15.687520))
-            p.curve(to:NSPoint(x:7.274762,y:15.687520),controlPoint1:NSPoint(x:8.324701,y:16.088057),controlPoint2:NSPoint(x:7.675299,y:16.088057))
-            p.line(to:NSPoint(x:0.312480,y:8.725238))
-            p.curve(to:NSPoint(x:0.312480,y:7.274762),controlPoint1:NSPoint(x:-0.088057,y:8.324701),controlPoint2:NSPoint(x:-0.088057,y:7.675299))
-            p.line(to:NSPoint(x:5.099049,y:2.488193))
-            p.line(to:NSPoint(x:6.918531,y:4.307675))
-            p.curve(to:NSPoint(x:7.202239,y:5.606716),controlPoint1:NSPoint(x:6.756438,y:4.744782),controlPoint2:NSPoint(x:6.851006,y:5.255483))
-            p.curve(to:NSPoint(x:7.559702,y:5.855640),controlPoint1:NSPoint(x:7.308869,y:5.713346),controlPoint2:NSPoint(x:7.430198,y:5.796322))
-            p.line(to:NSPoint(x:7.559702,y:10.289407))
-            p.curve(to:NSPoint(x:7.202239,y:10.538332),controlPoint1:NSPoint(x:7.430198,y:10.348726),controlPoint2:NSPoint(x:7.308869,y:10.431702))
-            p.curve(to:NSPoint(x:7.202239,y:12.278903),controlPoint1:NSPoint(x:6.721593,y:11.018978),controlPoint2:NSPoint(x:6.721593,y:11.798257))
-            p.curve(to:NSPoint(x:8.942809,y:12.278903),controlPoint1:NSPoint(x:7.682884,y:12.759548),controlPoint2:NSPoint(x:8.462164,y:12.759548))
-            p.curve(to:NSPoint(x:8.942809,y:10.538332),controlPoint1:NSPoint(x:9.423455,y:11.798257),controlPoint2:NSPoint(x:9.423455,y:11.018978))
-            p.curve(to:NSPoint(x:8.585345,y:10.289407),controlPoint1:NSPoint(x:8.836179,y:10.431702),controlPoint2:NSPoint(x:8.714849,y:10.348726))
-            p.line(to:NSPoint(x:8.585345,y:5.974489))
-            p.line(to:NSPoint(x:10.254626,y:7.643770))
-            p.curve(to:NSPoint(x:10.538333,y:8.942810),controlPoint1:NSPoint(x:10.092533,y:8.080877),controlPoint2:NSPoint(x:10.187101,y:8.591578))
-            p.curve(to:NSPoint(x:12.278904,y:8.942810),controlPoint1:NSPoint(x:11.018979,y:9.423456),controlPoint2:NSPoint(x:11.798259,y:9.423456))
-            p.curve(to:NSPoint(x:12.278904,y:7.202240),controlPoint1:NSPoint(x:12.759550,y:8.462165),controlPoint2:NSPoint(x:12.759550,y:7.682885))
-            p.curve(to:NSPoint(x:10.979864,y:6.918533),controlPoint1:NSPoint(x:11.927673,y:6.851009),controlPoint2:NSPoint(x:11.416971,y:6.756439))
-            p.line(to:NSPoint(x:9.226518,y:5.165186))
-            p.curve(to:NSPoint(x:8.942810,y:3.866146),controlPoint1:NSPoint(x:9.388611,y:4.728080),controlPoint2:NSPoint(x:9.294043,y:4.217379))
-            p.curve(to:NSPoint(x:7.643770,y:3.582439),controlPoint1:NSPoint(x:8.591579,y:3.514915),controlPoint2:NSPoint(x:8.080877,y:3.420346))
-            p.line(to:NSPoint(x:5.824288,y:1.762957))
-            p.line(to:NSPoint(x:7.274764,y:0.312482))
-            p.curve(to:NSPoint(x:8.725239,y:0.312482),controlPoint1:NSPoint(x:7.675301,y:-0.088056),controlPoint2:NSPoint(x:8.324702,y:-0.088056))
-            p.line(to:NSPoint(x:15.687521,y:7.274764))
-            p.curve(to:NSPoint(x:15.687521,y:8.725239),controlPoint1:NSPoint(x:16.088059,y:7.675301),controlPoint2:NSPoint(x:16.088059,y:8.324702))
-            p.close()
-            NSColor.black.setFill(); p.fill(); return true
+            let path = NSBezierPath()
+            path.move(to:NSPoint(x:15,y:6))
+            path.curve(to:NSPoint(x:6,y:15),controlPoint1:NSPoint(x:10.029437,y:6),controlPoint2:NSPoint(x:6,y:10.029437))
+            path.line(to:NSPoint(x:6,y:3))
+            path.appendOval(in:NSRect(x:15,y:3,width:6,height:6))
+            path.appendOval(in:NSRect(x:3,y:15,width:6,height:6))
+            let transform = AffineTransform(scale:2.0/3.0)
+            path.transform(using:transform)
+            path.lineWidth = 4.0/3.0; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            NSColor.black.setStroke(); path.stroke(); return true
         }
         image.isTemplate = true; image.accessibilityDescription = "Git"; return image
     }()

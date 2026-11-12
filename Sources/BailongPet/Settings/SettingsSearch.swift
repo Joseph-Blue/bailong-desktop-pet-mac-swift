@@ -59,7 +59,8 @@ struct SettingsSearchEntry {
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 活泼 倍速 待机 吸边 任务 排除上一动作 随机互动")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
         add(.messages,"进展提醒",["久无进展时提醒","提醒间隔"],"任务 执行 无新进度 90秒 5分钟 定时 等待 台词")
-        add(.messages,"工作区状态",["显示工作区状态","常驻","显示时长"],"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 小窗 常驻 秒")
+        add(.messages,"任务气泡",["在气泡中显示任务信息栏"],"项目 Git 仓库状态 本轮文件改动 状态栏 进度 工具调用")
+        add(.messages,"工作区状态",["显示工作区状态","常驻","显示时长"],"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 独立 小窗 常驻 秒")
         add(.messages,"历史记录",["记录历史"],"聊天 保存 同步")
         add(.messages,"气泡窗审批",["气泡窗审批按钮顺序"],"批准 允许这一次 允许本轮 拒绝 左拒绝 右允许 左允许 右拒绝 左右 位置 红叉 绿对钩")
         add(.messages,"气泡卡片与任务概览",["气泡卡片保留数量","互动气泡显示任务概览","近期结束任务数量"],"消息 历史 上一条 下一条 正在执行 最近 完成")
@@ -88,7 +89,7 @@ struct SettingsSearchEntry {
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
-        add(.about,"关于",["关于","来源与致谢"],"开源致谢 来源 作者 许可证 技术栈 AppKit macOS UI skill")
+        add(.about,"关于",["关于","来源与致谢","开源许可"],"开源致谢 来源 作者 许可证 图标 Lucide SF Symbols GitHub Codex OpenAI 技术栈 AppKit macOS UI skill")
         for index in entries.indices {
             if entries[index].section == .appearance && entries[index].title == "消息窗口材质" {
                 entries[index].keywords += " SDK 兼容构建 普通材质"
