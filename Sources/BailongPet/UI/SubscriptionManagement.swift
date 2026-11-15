@@ -30,8 +30,8 @@ final class SubscriptionManagementButton:NSButton {
         self.management = management
         super.init(frame:.zero)
         title = management.title; isBordered = false; bezelStyle = .inline
-        self.font = font; alignment = .left; contentTintColor = AppAccent.color
-        attributedTitle = NSAttributedString(string:management.title,attributes:[.font:font,.foregroundColor:AppAccent.color])
+        self.font = font; alignment = .left; contentTintColor = AppAccent.foregroundColor
+        attributedTitle = NSAttributedString(string:management.title,attributes:[.font:font,.foregroundColor:AppAccent.foregroundColor])
         image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)
         imagePosition = .imageTrailing; imageScaling = .scaleProportionallyDown
         target = self; action = #selector(openMenu); setAccessibilityLabel(management.title)

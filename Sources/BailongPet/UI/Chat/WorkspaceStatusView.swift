@@ -52,10 +52,11 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     var onOpen:(URL) -> Void = {_ in}
     var onStatusChange:() -> Void = {}
     var hasStatus:Bool {snapshot != nil || failure != nil || !changes.isHidden}
-    func configure(compact:Bool,fontSize:CGFloat) {
+    func configure(compact:Bool,fontSize:CGFloat,monochromeDirectory:Bool = false) {
         self.compact = compact
         spacing = compact ? 6 : 10
         directory.emphasizesLink = !compact
+        directory.usesMonochromeLink = monochromeDirectory
         directory.font = .systemFont(ofSize:fontSize)
         updateDirectory()
         for constraint in buttonHeights {constraint.constant = compact ? 20*fontSize/11 : 24}
@@ -221,7 +222,11 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func makeDetails() -> GitWorkspaceDetails {
         let content = GitWorkspaceDetails(snapshot:snapshot,failure:failure,loading:request != nil)
-        content.onRefresh = { [weak self] in self?.popover.close(); self?.refreshGit() }
+        content.onRefresh = { [weak self] in
+            guard let self else {return}
+            self.refreshGit()
+            if self.popover.isShown && !self.showsChanges {self.presentPopoverContent()}
+        }
         return content
     }
     func popoverDidClose(_ notification:Notification) {popoverDismissal.stop(); popover.contentViewController = nil}
@@ -246,7 +251,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     }
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
-        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
+        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
         let heading = NSTextField(labelWithString:snapshot?.title ?? "Git 工作区")
         heading.font = .systemFont(ofSize:13,weight:.semibold)
         heading.lineBreakMode = .byTruncatingMiddle
@@ -258,33 +263,51 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         let refresh = ActionButton("刷新") { [weak self] in self?.onRefresh() }
         let top = NSStackView(views:[title,NSView(),refresh]); top.alignment = .centerY; top.spacing = 12
         stack.addArrangedSubview(top)
-        let message:String
-        if let snapshot {
-            var lines = [snapshot.root,snapshot.summary]
-            if snapshot.detached {lines.append("HEAD 已分离")}
-            if snapshot.initial {lines.append("尚无提交记录")}
-            if let operation = snapshot.operation {lines.append(operation)}
-            if snapshot.remoteName == "." {lines.append("上游位于本地仓库")}
-            else if let remote = snapshot.remoteName {lines.append("远端："+remote+(snapshot.remoteWebURL == nil ? " · "+[snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}.joined(separator:"/") : ""))}
-            else {lines.append(snapshot.remoteNames.isEmpty ? "本地仓库 · 未配置远端" : "多个远端："+snapshot.remoteNames.joined(separator:"、"))}
-            if let upstream = snapshot.upstream {lines.append("上游："+upstream+" · 领先 \(snapshot.ahead)，落后 \(snapshot.behind)（本机记录）")}
-            else {lines.append("未设置上游")}
-            message = lines.joined(separator:"\n")
-        } else {message = failure ?? (loading ? "正在读取 Git 状态…" : "非 Git 工作区")}
-        let note = NSTextField(wrappingLabelWithString:message); note.font = .systemFont(ofSize:11); note.textColor = .secondaryLabelColor; note.isSelectable = true
-        note.allowsEditingTextAttributes = true
-        if let snapshot {
-            let text = NSMutableAttributedString(string:message,attributes:[.font:note.font!,.foregroundColor:NSColor.secondaryLabelColor])
-            let range = NSRange(location:(snapshot.root as NSString).length+1,length:(snapshot.summary as NSString).length)
-            text.replaceCharacters(in:range,with:GitStatusText.render(snapshot,compact:false,font:.systemFont(ofSize:11,weight:.semibold)))
-            if let upstream = snapshot.upstream {
-                let original = "上游："+upstream+" · 领先 \(snapshot.ahead)，落后 \(snapshot.behind)（本机记录）"
-                text.replaceCharacters(in:(text.string as NSString).range(of:original),with:GitStatusText.tracking(snapshot,font:note.font!))
-            }
-            note.attributedStringValue = text
+        refresh.isEnabled = !loading
+        if loading {refresh.title = "刷新中…"}
+        func label(_ value:String) -> NSTextField {
+            let field = NSTextField(wrappingLabelWithString:value)
+            field.font = .systemFont(ofSize:11); field.textColor = .secondaryLabelColor
+            field.isSelectable = true; return field
         }
-        stack.addArrangedSubview(note)
-        if let url = snapshot?.remoteWebURL {stack.addArrangedSubview(RepositoryLinkButton(url:url))}
+        func metadata(_ title:String,_ value:NSView) {
+            let caption = NSTextField(labelWithString:title)
+            caption.font = .systemFont(ofSize:11); caption.textColor = .secondaryLabelColor
+            caption.widthAnchor.constraint(equalToConstant:40).isActive = true
+            value.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+            let row = NSStackView(views:[caption,value]); row.alignment = .firstBaseline; row.spacing = 6
+            row.distribution = .fill; stack.addArrangedSubview(row)
+            value.setContentHuggingPriority(.defaultLow,for:.horizontal)
+        }
+        if let snapshot {
+            let workspace = WorkspaceLinkButton(); workspace.font = .systemFont(ofSize:11)
+            workspace.update(path:snapshot.root)
+            workspace.onOpen = {FinderFileReveal.openDirectory($0)}
+            metadata("工作区",workspace)
+            if let url = snapshot.remoteWebURL {
+                let repository = [snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}.joined(separator:"/")
+                metadata("远端",RepositoryLinkButton(url:url,label:[snapshot.remoteName,repository.isEmpty ? nil : repository].compactMap {$0}.joined(separator:" · ")))
+            } else if snapshot.remoteName == "." {metadata("远端",label("上游位于本地仓库"))}
+            else if let remote = snapshot.remoteName {
+                metadata("远端",label(([remote]+[snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}).joined(separator:" · ")))
+            } else {metadata("远端",label(snapshot.remoteNames.isEmpty ? "未配置" : snapshot.remoteNames.joined(separator:"、")))}
+            let upstream = label("未设置")
+            if snapshot.upstream != nil {
+                let tracking = GitStatusText.tracking(snapshot,font:upstream.font!)
+                upstream.attributedStringValue = tracking.attributedSubstring(from:NSRange(location:3,length:tracking.length-3))
+            }
+            metadata("上游",upstream)
+            var states = [String]()
+            if snapshot.detached {states.append("HEAD 已分离")}
+            if snapshot.initial {states.append("尚无提交记录")}
+            if let operation = snapshot.operation {states.append(operation)}
+            if snapshot.stashes > 0 {states.append("暂存栈 \(snapshot.stashes) 份")}
+            if !states.isEmpty {stack.addArrangedSubview(label(states.joined(separator:" · ")))}
+            if rows.isEmpty {
+                let clean = label("工作区干净"); clean.textColor = .systemGreen
+                stack.addArrangedSubview(clean)
+            }
+        } else {stack.addArrangedSubview(label(failure ?? (loading ? "正在读取 Git 状态…" : "非 Git 工作区")))}
         if !rows.isEmpty {
             let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
             scroll.contentView.drawsBackground = false
@@ -316,7 +339,9 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             text.textColor = GitStatusText.groups.first {$0.group == group}!.color; return text
         case .file(let entry):
             let (symbol,color) = WorkspaceFileRow.symbol(for:entry)
-            return WorkspaceFileRow(title:entry.change+"  "+entry.path,symbol:symbol,color:color,detail:entry.originalPath.map {$0+" → "+entry.path} ?? entry.path)
+            let parent = (entry.path as NSString).deletingLastPathComponent
+            return WorkspaceFileRow(title:(entry.path as NSString).lastPathComponent,symbol:symbol,color:color,
+                detail:entry.originalPath.map {$0+" → "+entry.path} ?? entry.path,directory:parent,change:entry.change)
         }
     }
     func tableView(_ tableView:NSTableView,shouldSelectRow row:Int) -> Bool {if case .file = rows[row] {return true}; return false}

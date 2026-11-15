@@ -70,7 +70,7 @@ final class TranscriptActionBar:NSView {
         copyButton.isEnabled = !content.text.isEmpty
         completion.font = content.font
         let text = NSMutableAttributedString(string:content.completion,attributes:[.font:content.font,.foregroundColor:NSColor.secondaryLabelColor])
-        if let ended = content.ended {text.addAttribute(.foregroundColor,value:AppAccent.color,range:NSRange(location:0,length:(ended as NSString).length))}
+        if let ended = content.ended {text.addAttribute(.foregroundColor,value:AppAccent.foregroundColor,range:NSRange(location:0,length:(ended as NSString).length))}
         completion.attributedStringValue = text; completion.isHidden = content.ended == nil
         let font = NSFont.monospacedDigitSystemFont(ofSize:content.font.pointSize,weight:.regular)
         let paragraph = NSMutableParagraphStyle()
@@ -150,7 +150,7 @@ enum TranscriptIcon {
         let side = font.pointSize
         let image = NSImage(size:NSSize(width:side,height:side),flipped:false) {rect in
             source.draw(in:rect)
-            AppAccent.color.setFill(); rect.fill(using:.sourceIn)
+            AppAccent.foregroundColor.setFill(); rect.fill(using:.sourceIn)
             return true
         }
         image.cacheMode = .never; image.accessibilityDescription = description
@@ -159,7 +159,7 @@ enum TranscriptIcon {
         let result = NSMutableAttributedString(attributedString:NSAttributedString(attachment:attachment))
         result.append(NSAttributedString(string:" ",attributes:[.font:font]))
         let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 4; paragraph.paragraphSpacing = 6
-        result.addAttributes([.font:font,.foregroundColor:AppAccent.color,.paragraphStyle:paragraph],range:NSRange(location:0,length:result.length))
+        result.addAttributes([.font:font,.foregroundColor:AppAccent.foregroundColor,.paragraphStyle:paragraph],range:NSRange(location:0,length:result.length))
         return result
     }
 }

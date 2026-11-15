@@ -181,7 +181,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         sourceLabel.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let metadata = NSStackView(views:[targetMetadata,NSView(),historyStatus,matchLabel,previousMatch!,nextMatch!]); metadata.spacing = 8; metadata.alignment = .centerY
         [matchLabel,previousMatch!,nextMatch!].forEach {$0.isHidden = true}
-        pageNavigation = NSSegmentedControl(images:[NSImage(systemSymbolName:"chevron.left",accessibilityDescription:"较早记录")!,NSImage(systemSymbolName:"chevron.right",accessibilityDescription:"较新记录")!],trackingMode:.momentary,target:self,action:#selector(changeHistoryPage(_:)))
+        pageNavigation = AccentSegmentedControl(images:[NSImage(systemSymbolName:"chevron.left",accessibilityDescription:"较早记录")!,NSImage(systemSymbolName:"chevron.right",accessibilityDescription:"较新记录")!],trackingMode:.momentary,target:self,action:#selector(changeHistoryPage(_:)))
         pageNavigation.controlSize = .small
         for index in 0...1 {pageNavigation.setWidth(28,forSegment:index)}
         pageNavigation.setToolTip("查看较早的 20 轮记录",forSegment:0)

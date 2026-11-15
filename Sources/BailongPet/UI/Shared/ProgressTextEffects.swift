@@ -7,7 +7,7 @@ enum ProgressTextEffects {
     static let speed:CGFloat = 28
     static let marqueeDelay:CFTimeInterval = 0.5
     static func heading(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double,frame:String) -> NSAttributedString {
-        let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:appearance))!
+        let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.foregroundColor,for:appearance))!
         let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(frame,font:font,color:accent))
         value.append(NSAttributedString(string:" ",attributes:[.font:font]))
         value.append(title(text,font:font,appearance:appearance,elapsed:elapsed))
@@ -15,19 +15,23 @@ enum ProgressTextEffects {
     }
     // 标题可独立扫光，盲文仍由所在视图单独绘制，不改变字宽或位置。
     static func title(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double) -> NSAttributedString {
-        let foreground = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:appearance))!
+        let label = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:appearance))!.withAlphaComponent(1)
+        let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
+        // 留出少量扫光明暗空间，基础文字始终不透明。
+        let foreground = enabled ? label.blended(withFraction:0.08,of:dark ? .black : .white)! : label
         let value = NSMutableAttributedString(string:text,attributes:[.font:font,.foregroundColor:foreground])
         guard enabled else {return value}
         let phase = elapsed.truncatingRemainder(dividingBy:4)
         let center = -0.25+1.5*(phase/1.2)
-        let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
         let count = max(1,text.count-1)
         var offset = 0
         for (index,character) in text.enumerated() {
             let length = (String(character) as NSString).length
             let distance = (Double(index)/Double(count)-center)/0.18
             let strength = phase < 1.2 ? exp(-distance*distance) : 0
-            value.addAttribute(.foregroundColor,value:foreground.withAlphaComponent(dark ? 0.58+0.42*strength : 1-0.55*strength),range:NSRange(location:offset,length:length))
+            // 深色向白、浅色向黑增强扫光；不再让文字透明来制造明暗变化。
+            let highlight = foreground.blended(withFraction:0.65*strength,of:dark ? .white : .black)!
+            value.addAttribute(.foregroundColor,value:highlight,range:NSRange(location:offset,length:length))
             offset += length
         }
         return value

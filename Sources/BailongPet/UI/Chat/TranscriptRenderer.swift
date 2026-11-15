@@ -26,7 +26,7 @@ final class TranscriptRenderer {
         }
         if turns.isEmpty {
             invalidate()
-            append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.color)
+            append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.foregroundColor)
             append(conversation.external ? "在下方输入想做的事。" : PetPreferences.shared.statusLine("conversationEmptyTemplate"),color:.secondaryLabelColor)
             return result
         }
@@ -44,7 +44,7 @@ final class TranscriptRenderer {
             let headingFont = NSFont.systemFont(ofSize:bodyFont.pointSize+2,weight:.semibold)
             if !body.input.isEmpty {
                 result.append(TranscriptIcon.render(NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:"用户"),font:headingFont,description:"用户"))
-                append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.color,after:6)
+                append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.foregroundColor,after:6)
                 result.append(MarkdownText.renderUserInput(body.input,font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))))
                 // 消息之间保留空行；分隔符使用正文样式，不继承末尾链接或行内代码属性。
                 let separator = NSMutableParagraphStyle(); separator.lineSpacing = 2
@@ -54,7 +54,7 @@ final class TranscriptRenderer {
                     .foregroundColor:NSColor.labelColor,.paragraphStyle:separator]))
             }
             result.append(TranscriptIcon.render(AppIcons.petAvatarTemplate,font:headingFont,description:PetPreferences.shared.petName))
-            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:headingFont,color:AppAccent.color,after:6)
+            append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:headingFont,color:AppAccent.foregroundColor,after:6)
             // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。
             let steps = conversation.external && body.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : body.steps
             for (heading,text) in [("公开思考摘要",body.summary),("执行记录",steps)] where !text.isEmpty {

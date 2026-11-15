@@ -102,6 +102,6 @@ final class HistoryConversationCell: NSTableCellView {
         titleLabel.needsLayout = true
         snippetLabel.attributedStringValue = styled(snippetText ?? "",size:11,color:secondary)
         sourceLabel.textColor = secondary
-        sourceIcon.contentTintColor = selected ? .alternateSelectedControlTextColor : AppAccent.color
+        sourceIcon.contentTintColor = selected ? .alternateSelectedControlTextColor : AppAccent.foregroundColor
     }
 }

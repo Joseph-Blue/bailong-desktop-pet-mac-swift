@@ -64,7 +64,7 @@ final class WorkspaceFileTable:NSTableView {
 
 // Git 文件状态与本轮修改共用图标槽、文件名和右侧计数列。
 final class WorkspaceFileRow:NSView {
-    init(title:String,symbol:String,color:NSColor,detail:String,lines:FileEditSummary.Lines? = nil,countWidths:(added:CGFloat,removed:CGFloat)? = nil) {
+    init(title:String,symbol:String,color:NSColor,detail:String,lines:FileEditSummary.Lines? = nil,countWidths:(added:CGFloat,removed:CGFloat)? = nil,directory:String? = nil,change:String? = nil) {
         super.init(frame:.zero)
         let icon = NSImageView()
         icon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:13,weight:.semibold))
@@ -74,6 +74,21 @@ final class WorkspaceFileRow:NSView {
         name.setContentHuggingPriority(.defaultLow,for:.horizontal)
         name.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let row = NSStackView(views:[icon,name]); row.spacing = 8; row.alignment = .centerY; row.distribution = .fill
+        if let directory,!directory.isEmpty {
+            let location = NSTextField(labelWithString:directory)
+            location.font = .systemFont(ofSize:11); location.textColor = .secondaryLabelColor
+            location.lineBreakMode = .byTruncatingMiddle
+            location.setContentCompressionResistancePriority(.init(249),for:.horizontal)
+            location.setContentHuggingPriority(.defaultLow,for:.horizontal)
+            name.setContentCompressionResistancePriority(.defaultHigh,for:.horizontal)
+            row.addArrangedSubview(location)
+        }
+        if let change {
+            let status = NSTextField(labelWithString:change)
+            status.font = .systemFont(ofSize:11); status.textColor = color; status.alignment = .right
+            status.setContentCompressionResistancePriority(.required,for:.horizontal)
+            row.addArrangedSubview(status)
+        }
         if let countWidths {
             if let lines {
                 let counts = NSStackView(); counts.spacing = 8; counts.alignment = .firstBaseline
@@ -96,7 +111,7 @@ final class WorkspaceFileRow:NSView {
             icon.widthAnchor.constraint(equalToConstant:16),icon.heightAnchor.constraint(equalToConstant:16),
             row.leadingAnchor.constraint(equalTo:leadingAnchor,constant:4),row.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-6),row.centerYAnchor.constraint(equalTo:centerYAnchor)
         ])
-        hoverHelp = detail; setAccessibilityLabel(title+(lines.map {"，新增 \($0.added) 行，删除 \($0.removed) 行"} ?? ""))
+        hoverHelp = detail; setAccessibilityLabel((change.map {$0+"，"} ?? "")+detail+(lines.map {"，新增 \($0.added) 行，删除 \($0.removed) 行"} ?? ""))
     }
     required init?(coder:NSCoder) {fatalError()}
     static let countFont = NSFont.monospacedSystemFont(ofSize:12,weight:.semibold)
@@ -155,11 +170,12 @@ final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableV
 
 final class RepositoryLinkButton:NSButton,LinkCursorControl {
     private let url:URL
-    init(url:URL) {
+    init(url:URL,label:String? = nil) {
         self.url = url; super.init(frame:.zero)
         isBordered = false; bezelStyle = .inline; alignment = .left
         let attributes = LinkAppearance.attributes.merging([.font:NSFont.systemFont(ofSize:11)]) {_,new in new}
-        attributedTitle = NSAttributedString(string:url.absoluteString,attributes:attributes)
+        attributedTitle = NSAttributedString(string:label ?? url.absoluteString,attributes:attributes)
+        hoverHelp = url.absoluteString
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         target = self; action = #selector(open); setAccessibilityLabel("打开仓库网页："+url.absoluteString)
     }

@@ -247,7 +247,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         return dependent(result,requires:requires)
     }
     func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],images:[String:NSImage] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,changed:(() -> Void)? = nil) -> NSView {
-        let control = NSSegmentedControl(labels:options.map(\.1),trackingMode:.selectOne,target:nil,action:nil)
+        let control = AccentSegmentedControl(labels:options.map(\.1),trackingMode:.selectOne,target:nil,action:nil)
         control.selectedSegment = options.firstIndex {$0.0 == (value ?? preferences.string(key))} ?? 0
         control.isEnabled = enabled; control.identifier = .init(key); control.setAccessibilityLabel(title)
         for (index,option) in options.enumerated() {

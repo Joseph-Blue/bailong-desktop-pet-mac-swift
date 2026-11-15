@@ -26,6 +26,7 @@ final class WorkspaceStatusPanel {
         let close = BubbleCloseButton(); close.onClose = { [weak self] in self?.hide() }
         close.widthAnchor.constraint(equalToConstant:22).isActive = true
         close.heightAnchor.constraint(equalToConstant:22).isActive = true
+        workspace.configure(compact:false,fontSize:13,monochromeDirectory:true)
         workspace.spacing = 6
         [close,workspace].forEach {stack.addArrangedSubview($0)}
         stack.orientation = .horizontal; stack.alignment = .centerY; stack.spacing = 6; stack.distribution = .fill

@@ -241,7 +241,7 @@ final class Bubble {
             self.refreshQuotaLoading()
             self.refreshTaskProgress()
             if self.userInputPrefixLength > 0,let storage = self.text.textStorage,storage.length >= self.userInputPrefixLength {
-                let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:self.window.effectiveAppearance))!
+                let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.foregroundColor,for:self.window.effectiveAppearance))!
                 storage.addAttribute(.foregroundColor,value:accent,range:NSRange(location:0,length:self.userInputPrefixLength))
             }
         }
@@ -392,6 +392,7 @@ final class Bubble {
         layoutBodyHeight = bodyHeight
         configureButtons()
         let w = layoutWidth, margin = 16*scale
+        let bottomMargin = workspaceAttached ? 8*scale : margin
         let bodyLayout = self.bodyLayout
         if !questionModels.isEmpty {window.minSize = NSSize(width:min(minimumLayoutWidth,placementArea?.width ?? minimumLayoutWidth),height:220*scale)}
         let hasElapsed = taskStartedAt != nil
@@ -408,8 +409,9 @@ final class Bubble {
         let actionsHeight = details.isHidden && codexButton.isHidden && retryButton.isHidden ? 0 : buttonHeight+gap+(previousQuestion.isHidden ? 0 : buttonHeight+gap)
         let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+gap
         let approvalHeight:CGFloat = approvalReject.isHidden ? 0 : buttonHeight+gap
-        let workspaceHeight = workspaceAttached ? max(20*scale,workspace.fittingSize.height)+2*scale : 0
-        let controlsFooter = actionsHeight+navigationHeight+approvalHeight
+        let workspaceHeight = workspaceAttached ? max(20*scale,workspace.fittingSize.height)+4*scale : 0
+        let rawControlsFooter = actionsHeight+navigationHeight+approvalHeight
+        let controlsFooter = rawControlsFooter-(workspaceAttached && rawControlsFooter > 0 ? gap-4*scale : 0)
         let footer = controlsFooter+workspaceHeight
         // 关闭、标题首行与计时同一行；标题按剩余宽度换行，不缩字或截断。
         let progressFont = taskProgress.font ?? .systemFont(ofSize:11*scale)
@@ -419,7 +421,7 @@ final class Bubble {
         let progressHeight = taskProgress.isHidden ? 0 : progressLineHeight+4*scale
         // 进展与标题为紧凑状态区；有进展时不再叠加原先 12pt 正文分隔。
         let bodyGap = bodyHeight > 0 ? (taskProgress.isHidden ? 12 : 4)*scale : 0
-        let baseChromeHeight = margin*2+headingHeight+bodyGap+controlsFooter
+        let baseChromeHeight = margin+bottomMargin+headingHeight+bodyGap+controlsFooter
         let chromeHeight = baseChromeHeight+progressHeight+workspaceHeight
         // 进展独占新增高度，包括启用宽高比时；不从原正文视口扣除。
         let desiredHeight:CGFloat = (usesCustomAspect ? max(baseChromeHeight+(bodyHeight > 0 ? 24*scale : 0),w/preferences.number("bubbleAspectRatio")) : baseChromeHeight+bodyHeight)+progressHeight+workspaceHeight
@@ -438,7 +440,7 @@ final class Bubble {
                 InlineStatusLayout.align(self.headingIcon,to:self.title,side:self.headingIcon.layoutSize.height,width:self.headingIcon.layoutSize.width)
             }
             if hasElapsed {self.layoutElapsed(in:size)}
-            self.workspace.frame = NSRect(x:bodyLayout.inset,y:margin,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-2*scale))
+            self.workspace.frame = NSRect(x:bodyLayout.inset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-4*scale))
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSize.width,height:progressIconSide)
             self.taskProgress.frame = NSRect(x:bodyLayout.inset+progressIconSize.width+6*scale,y:progressY,width:max(0,bodyLayout.contentWidth-progressIconSize.width-6*scale),height:progressLineHeight)
@@ -449,11 +451,11 @@ final class Bubble {
             InlineStatusLayout.align(self.closeButton,to:self.title,side:closeSide)
             self.closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
             let textHeight = max(0,height-chromeHeight)
-            let viewport = bodyLayout.viewport(y:margin+footer,height:ceil(textHeight))
+            let viewport = bodyLayout.viewport(y:bottomMargin+footer,height:ceil(textHeight))
             self.scroll.setViewport(viewport)
             self.scroll.isHidden = bodyHeight <= 0
             // 两列共享边界与控件高度；翻页留在左下，正文高度不影响导航位置。
-            let navigationY = margin+workspaceHeight, actionY = navigationY+navigationHeight
+            let navigationY = bottomMargin, actionY = navigationY+navigationHeight
             let allowOnLeft = self.preferences.string("approvalButtonOrder") == "allowLeft"
             self.approvalReject.frame = NSRect(x:allowOnLeft ? margin+columnWidth+gap : margin,y:actionY+actionsHeight,width:columnWidth,height:buttonHeight)
             self.approvalAllow.frame = NSRect(x:allowOnLeft ? margin : margin+columnWidth+gap,y:actionY+actionsHeight,width:columnWidth,height:buttonHeight)
@@ -589,7 +591,7 @@ final class Bubble {
             let content = NSMutableAttributedString(attributedString:rendered)
             if isUserInput && !body.isEmpty {
                 // 发言人标记仅在气泡排版时添加，原始提问与历史正文保持原文。
-                let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.color,for:window.effectiveAppearance))!
+                let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.foregroundColor,for:window.effectiveAppearance))!
                 let prefix = NSAttributedString(string:preferences.ownerName+"：",attributes:[.font:bodyFont,.foregroundColor:accent])
                 content.insert(prefix,at:0)
                 userInputPrefixLength = prefix.length
@@ -690,7 +692,7 @@ final class Bubble {
         let elapsed = ProcessInfo.processInfo.systemUptime-headingStarted
         if headingActivity != nil {
             headingSpinner.font = font
-            headingSpinner.attributedStringValue = InlineStatusLayout.braille(headingFrames[headingPhase],font:font,color:AppAccent.color)
+            headingSpinner.attributedStringValue = InlineStatusLayout.braille(headingFrames[headingPhase],font:font,color:AppAccent.foregroundColor)
             title.attributedStringValue = ProgressTextEffects.title(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed)
         } else {
             title.attributedStringValue = ProgressTextEffects.heading(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed,frame:headingFrames[headingPhase])
@@ -812,7 +814,7 @@ final class Bubble {
     private func renderQuotaLoading() {
         guard let field = quotaLoadingAmount else {return}
         let font = field.font ?? .systemFont(ofSize:13)
-        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(headingFrames[quotaLoadingPhase],font:font,color:AppAccent.color))
+        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(headingFrames[quotaLoadingPhase],font:font,color:AppAccent.foregroundColor))
         value.append(NSAttributedString(string:" 加载中",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
         let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .right
         value.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:value.length))

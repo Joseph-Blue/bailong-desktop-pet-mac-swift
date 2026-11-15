@@ -34,6 +34,35 @@ enum AppAccent {
     static let choices = [("system","跟随系统"),("blue","蓝色"),("purple","紫色"),("pink","粉色"),("red","红色"),("orange","橙色"),("yellow","黄色"),("green","绿色"),("gray","石墨色"),("custom","自定义")]
     static var selection: String {SettingsStorage.defaults.string(forKey:"accentStyle") ?? "system"}
     static var color: NSColor {color(for:selection)}
+    // 文字使用独立动态色；原取样色继续用于按钮、色点和填充。
+    static var foregroundColor:NSColor {
+        let base = color
+        return NSColor(name:nil) {appearance in foregroundColor(base,for:appearance)}
+    }
+    static func foregroundColor(_ base:NSColor,for appearance:NSAppearance,increasedContrast:Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast) -> NSColor {
+        var source = [CGFloat](), background = [CGFloat]()
+        appearance.performAsCurrentDrawingAppearance {
+            let rgb = base.usingColorSpace(.sRGB)!
+            let backing = NSColor.windowBackgroundColor.usingColorSpace(.sRGB)!
+            source = [rgb.redComponent,rgb.greenComponent,rgb.blueComponent]
+            background = [backing.redComponent,backing.greenComponent,backing.blueComponent]
+        }
+        func linear(_ value:CGFloat) -> CGFloat {value <= 0.04045 ? value/12.92 : pow((value+0.055)/1.055,2.4)}
+        func encoded(_ value:CGFloat) -> CGFloat {value <= 0.0031308 ? value*12.92 : 1.055*pow(value,1/2.4)-0.055}
+        func luminance(_ rgb:[CGFloat]) -> CGFloat {rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722}
+        let components = source.map(linear), light = luminance(components)
+        let backgroundLight = luminance(background.map(linear))
+        let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
+        let contrast:CGFloat = increasedContrast ? 7 : 4.5
+        // 以系统窗口底色建立文字基准，不把它当作玻璃后的实际桌面取样。
+        let required = min(1,max(0,dark ? contrast*(backgroundLight+0.05)-0.05 : (backgroundLight+0.05)/contrast-0.05))
+        let target:CGFloat = dark ? 1 : 0
+        let fraction:CGFloat
+        if dark ? light < required : light > required {fraction = (required-light)/(target-light)}
+        else {fraction = 0}
+        let adjusted = components.map {encoded($0+(target-$0)*fraction)}
+        return NSColor(srgbRed:adjusted[0],green:adjusted[1],blue:adjusted[2],alpha:1)
+    }
     // 用户图三：每个色点中心 19×19 区域的 RGB 众数，排除边缘、双环与阴影。
     static let paletteRGB: [String:(Int,Int,Int)] = [
         "blue":(0,122,255), "purple":(149,61,150), "pink":(247,79,158), "red":(224,56,62),
@@ -53,7 +82,7 @@ enum AppAccent {
     }
     static func selectionColor(for appearance: NSAppearance) -> NSColor {
         guard appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua else {return color}
-        // 只加深选中背景；链接、标题和图标仍用较明亮的强调色。
+        // 选中背景独立加深，不改变文字用色。
         return color.blended(withFraction:0.18,of:.black) ?? color
     }
     static func setCustom(_ color: NSColor) {
@@ -111,6 +140,18 @@ final class AccentSwitch: NSSwitch {
     @objc private func refreshTint() {NativeAccentTint.apply(to:self)}
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshTint()}
     override func viewDidMoveToWindow() {super.viewDidMoveToWindow(); refreshTint()}
+}
+class AccentSegmentedControl:NSSegmentedControl {
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        NotificationCenter.default.addObserver(self,selector:#selector(refreshTint),name:AppAccent.didChange,object:nil)
+        refreshTint()
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    @objc private func refreshTint() {NativeAccentTint.apply(to:self); needsDisplay = true}
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshTint()}
+    override func viewDidMoveToWindow() {super.viewDidMoveToWindow(); refreshTint()}
+    deinit {NotificationCenter.default.removeObserver(self)}
 }
 final class AccentChoiceButton: NSButton {
     init(title:String,type:NSButton.ButtonType) {

@@ -312,7 +312,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         form.group("权限与系统设置",[
             form.row("访达自动化",detail:"点击文件链接时，在访达中选中文件；对应窗口已最小化时会恢复显示。",control:FinderPermissionControl(frame:.zero)),
             form.row("文件与文件夹",detail:"首次访问文稿、桌面或下载等目录时，系统会询问是否允许。可在系统设置中按目录调整。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
-            form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()})],symbol:"lock.shield",detail:"本应用不要求辅助功能、输入监控、屏幕录制、摄像头、麦克风或完全磁盘访问权限。")
+            form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()})],symbol:"lock.shield")
         let menu = NSPopUpButton(); displayMenu = menu
         menu.identifier = .init("preferredDisplay"); menu.setAccessibilityLabel("所在显示器")
         menu.widthAnchor.constraint(equalToConstant:190).isActive = true

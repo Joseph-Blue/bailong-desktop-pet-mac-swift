@@ -6,7 +6,7 @@ protocol LinkCursorControl:AnyObject {var isEnabled:Bool {get}}
 // 仅提供超链接外观与命中区域；导航、文件定位和展开动作仍由调用方处理。
 enum LinkAppearance {
     static var attributes:[NSAttributedString.Key:Any] {
-        [.foregroundColor:AppAccent.color,.underlineStyle:NSUnderlineStyle.single.rawValue,.cursor:NSCursor.pointingHand]
+        [.foregroundColor:AppAccent.foregroundColor,.underlineStyle:NSUnderlineStyle.single.rawValue,.cursor:NSCursor.pointingHand]
     }
     static func attributes(for url:URL) -> [NSAttributedString.Key:Any] {
         var value = attributes; value[.link] = url; return value

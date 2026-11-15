@@ -178,7 +178,7 @@ final class PetWindow:ContentCursorPanel {
     override var canBecomeKey:Bool {allowsInput}
     override var canBecomeMain:Bool {false}
 }
-// 正文与材质分开管理；切换材质不改消息、输入内容或窗口透明度。
+// 正文与衬底保持同一视图树；玻璃通过 contentView 为其中的内容提供原生适配。
 private final class BubbleBackingView: NSView {
     var opacity: CGFloat = 1 {didSet {needsDisplay = true}}
     override var isOpaque: Bool {false}
@@ -191,9 +191,10 @@ private final class BubbleBackingView: NSView {
 final class BubbleBackgroundView: NSView {
     static let cornerRadius:CGFloat = 14
     let body = NSView()
+    private let surface = NSView()
     private let ordinary = BubbleBackingView(), glassBacking = BubbleBackingView()
     private var glass: NSView?
-    private var glassBackdrop:GlassBackdrop?
+    private var usesGlassContent = false
     private var fade: Timer?
     private var targetOpacity: CGFloat = 1
     private var cursorTracking:NSTrackingArea?
@@ -201,26 +202,40 @@ final class BubbleBackgroundView: NSView {
     init(preferences: PetPreferences = .shared) {
         self.preferences = preferences
         super.init(frame:.zero)
-        // 正文永远在固定根视图内；玻璃和普通背景在其下独立过渡。
-        addSubview(ordinary); addSubview(body)
-        for view in [ordinary,body] {view.autoresizingMask = [.width,.height]}
+        addSubview(surface)
+        for view in [glassBacking,ordinary,body] {
+            surface.addSubview(view); view.autoresizingMask = [.width,.height]
+        }
+        surface.autoresizingMask = [.width,.height]
         NotificationCenter.default.addObserver(self,selector:#selector(preferencesChanged(_:)),name:PetPreferences.didChange,object:preferences)
         NSWorkspace.shared.notificationCenter.addObserver(self,selector:#selector(updateMaterial),name:NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,object:nil)
         updateMaterial()
     }
     required init?(coder:NSCoder) {fatalError()}
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow(); synchronizeGlassBackdrop()
-    }
-    func synchronizeGlassBackdrop() {
-        guard let glass else {return}
-        if !glass.isHidden,let window {
-            if glassBackdrop == nil {glassBackdrop = GlassBackdrop(host:window,effect:glass)}
-            glassBackdrop?.synchronize()
-        } else if glassBackdrop != nil {
-            glassBackdrop = nil
-            addSubview(glass,positioned:.below,relativeTo:ordinary)
+    private func setGlassContent(_ enabled:Bool) {
+        guard enabled != usesGlassContent else {return}
+        #if BAILONG_SDK_GLASS
+        if #available(macOS 26.0, *),let effect = glass as? NSGlassEffectView {
+            let host = window
+            let responder = host?.firstResponder as? NSView
+            let contentResponder = responder.flatMap {$0.isDescendant(of:surface) ? $0 : nil}
+            if enabled {
+                effect.isHidden = false
+                effect.contentView = surface
+            } else {
+                effect.contentView = nil
+                surface.translatesAutoresizingMaskIntoConstraints = true
+                addSubview(surface)
+                effect.isHidden = true
+            }
+            usesGlassContent = enabled
+            surface.frame = bounds
+            // 只恢复本窗原有的内容焦点，不激活应用或把窗口变为 key。
+            if let host,let contentResponder,host.firstResponder !== contentResponder {
+                host.makeFirstResponder(contentResponder)
+            }
         }
+        #endif
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -248,20 +263,17 @@ final class BubbleBackgroundView: NSView {
             if glass == nil {
                 let effect = NSGlassEffectView(frame:bounds)
                 effect.autoresizingMask = [.width,.height]; effect.cornerRadius = Self.cornerRadius
-                glassBacking.autoresizingMask = [.width,.height]
-                effect.contentView = glassBacking
-                addSubview(effect,positioned:.below,relativeTo:ordinary); glass = effect
+                addSubview(effect,positioned:.below,relativeTo:surface); glass = effect
             }
             let effect = glass as! NSGlassEffectView
             effect.style = preferences.bool("glassFollowsSystem") ? .regular : .clear
             glassBacking.opacity = preferences.bool("glassFollowsSystem") ? 0 : CGFloat(preferences.number("glassOpacity"))
+            setGlassContent(true)
         }
         #endif
         let animate = preferences.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && window?.isVisible == true
         if next == targetOpacity && fade != nil && animate {return}
         fade?.invalidate(); fade = nil; targetOpacity = next
-        glass?.isHidden = next == 1 && ordinary.opacity == 1
-        synchronizeGlassBackdrop()
         guard animate, ordinary.opacity != next else {ordinary.opacity = next; finishMaterial(); return}
         let from = ordinary.opacity, started = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval:1.0/60,repeats:true) { [weak self] timer in
@@ -274,16 +286,14 @@ final class BubbleBackgroundView: NSView {
         fade = timer; RunLoop.main.add(timer,forMode:.common)
     }
     private func finishMaterial() {
-        // 普通底层始终存在，先铺实再隐藏玻璃，不出现空背景帧。
+        // 实色衬底先铺满，再把同一内容容器移回普通根视图。
         ordinary.opacity = targetOpacity; ordinary.displayIfNeeded()
-        glass?.isHidden = targetOpacity == 1
-        synchronizeGlassBackdrop()
+        if targetOpacity == 1 {setGlassContent(false)}
         window?.invalidateShadow()
     }
     override func layout() {
-        super.layout(); glass?.frame = bounds; ordinary.frame = bounds; body.frame = bounds
-        glassBacking.frame = bounds
-        synchronizeGlassBackdrop()
+        super.layout(); glass?.frame = bounds; surface.frame = bounds
+        for view in [glassBacking,ordinary,body] {view.frame = surface.bounds}
     }
     deinit {fade?.invalidate(); NotificationCenter.default.removeObserver(self); NSWorkspace.shared.notificationCenter.removeObserver(self)}
 }
@@ -322,7 +332,7 @@ enum TaskQuestionLayout {
                 y += 8*scale
                 let padding = 10*scale, numberWidth = 18*scale, gap = 6*scale
                 let contentX = padding+numberWidth+gap, contentWidth = width-contentX-padding
-                let badge = option.recommended ? text("推荐",detailFont,34*scale,color:AppAccent.color) : nil
+                let badge = option.recommended ? text("推荐",detailFont,34*scale,color:AppAccent.foregroundColor) : nil
                 let titleWidth = contentWidth-(badge.map {$0.frame.width+gap} ?? 0)
                 let name = text(option.title,bodyFont,titleWidth)
                 name.frame.origin = NSPoint(x:contentX,y:padding)

@@ -168,7 +168,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
         addTrackingArea(area); hoverArea = area
     }
-    override func mouseEntered(with event:NSEvent) {hovered = true; needsDisplay = true; jump.contentTintColor = AppAccent.color}
+    override func mouseEntered(with event:NSEvent) {hovered = true; needsDisplay = true; jump.contentTintColor = AppAccent.foregroundColor}
     override func mouseExited(with event:NSEvent) {hovered = false; needsDisplay = true; jump.contentTintColor = .tertiaryLabelColor}
     override func resetCursorRects() {super.resetCursorRects(); addCursorRect(bounds,cursor:.pointingHand)}
     override func draw(_ dirtyRect:NSRect) {
@@ -185,8 +185,8 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         } else {restoreTitle()}
         let waiting = task.activity?.kind == .attention
         spinner.isHidden = !task.active || waiting; stateIcon.isHidden = task.active
-        if task.active {spinner.attributedStringValue = InlineStatusLayout.braille(["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"][index],font:spinner.font!,color:AppAccent.color)}
-        spinner.textColor = AppAccent.color
+        if task.active {spinner.attributedStringValue = InlineStatusLayout.braille(["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"][index],font:spinner.font!,color:AppAccent.foregroundColor)}
+        spinner.textColor = AppAccent.foregroundColor
         let hasTime = task.active || task.end != nil
         elapsed.isHidden = !hasTime; watch.isHidden = !hasTime
         elapsed.stringValue = task.end.map {TaskTiming.elapsed(start:task.start,end:$0)} ?? (task.active ? TaskTiming.elapsed(start:task.start) : "")

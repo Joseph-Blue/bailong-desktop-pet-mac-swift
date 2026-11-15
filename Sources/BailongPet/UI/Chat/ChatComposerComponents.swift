@@ -1,7 +1,7 @@
 import AppKit
 
 // 纯展示组件：会话选择、设置与操作由调用方持有。
-final class ChatModeControl: NSSegmentedControl {
+final class ChatModeControl: AccentSegmentedControl {
     var onSelect:(Int) -> Void = {_ in}
     init(labels:[String]) {
         super.init(frame:.zero)
@@ -84,6 +84,7 @@ final class ChatReplyPreview: NSTextField {
 // 链接只负责路径显示和用户点击，打开目录交给调用方，不读取文件或会话数据。
 final class WorkspaceLinkButton: NSButton,LinkCursorControl {
     var emphasizesLink = true
+    var usesMonochromeLink = false
     var onOpen:(URL) -> Void = {_ in}
     private var directory:URL?
     private var displayedPath:String?
@@ -98,15 +99,16 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
     }
     required init?(coder:NSCoder) {fatalError()}
     func update(path:String,displayName:String? = nil) {
-        let color = path.isEmpty || !emphasizesLink ? NSColor.secondaryLabelColor : AppAccent.color
+        let color = path.isEmpty || !emphasizesLink ? NSColor.secondaryLabelColor : usesMonochromeLink ? .labelColor : AppAccent.foregroundColor
         let text = path.isEmpty ? "未选择工作区" : displayName ?? (path as NSString).abbreviatingWithTildeInPath
         guard displayedPath != path || attributedTitle.string != text || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color || attributedTitle.attribute(.font,at:0,effectiveRange:nil) as? NSFont != font else {return}
         displayedPath = path
         directory = path.isEmpty ? nil : URL(fileURLWithPath:path,isDirectory:true)
         isEnabled = directory != nil
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingMiddle
-        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph]
+        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .paragraphStyle:paragraph]
         if isEnabled && emphasizesLink {attributes.merge(LinkAppearance.attributes) {_,link in link}}
+        attributes[.foregroundColor] = color
         attributedTitle = NSAttributedString(string:text,attributes:attributes)
         hoverHelp = path.isEmpty ? nil : path
         setAccessibilityValue(path)
