@@ -22,6 +22,7 @@ struct BubbleBodyLayout {
 // 文档尺寸由内容提供，视口由气泡提供；滚动条只在真正溢出时存在。
 final class BubbleBodyScrollView:GutterScrollView {
     private(set) var bodyHeight:CGFloat = 0
+    private var pendingTop = false
     var allowsScrolling = true {didSet {updateGeometry()}}
     override var documentLayoutWidth:CGFloat {Self.documentWidth(for:bounds.width)}
 
@@ -30,8 +31,24 @@ final class BubbleBodyScrollView:GutterScrollView {
         drawsBackground = false
         autohidesScrollers = false
         hasVerticalScroller = false
+        NotificationCenter.default.addObserver(self,selector:#selector(beginReading),name:NSScrollView.willStartLiveScrollNotification,object:self)
     }
     required init?(coder:NSCoder) {fatalError()}
+
+    override func layout() {
+        super.layout()
+        guard pendingTop else {return}
+        // 新正文的回顶请求要等原生 clip/document 排版完成，不能被随后布局覆盖。
+        contentView.layoutSubtreeIfNeeded()
+        pendingTop = false
+        restorePosition(.zero)
+    }
+
+    @objc private func beginReading() {pendingTop = false}
+    override func scrollWheel(with event:NSEvent) {
+        beginReading()
+        super.scrollWheel(with:event)
+    }
 
     func setBody(_ document:NSView,height:CGFloat) {
         bodyHeight = max(0,ceil(height))
@@ -42,7 +59,7 @@ final class BubbleBodyScrollView:GutterScrollView {
     func setViewport(_ viewport:NSRect) {
         // 相同视口的重复排版不钳回正在回弹的阅读位置。
         guard frame != viewport else {return}
-        let origin = contentView.bounds.origin
+        let origin = pendingTop ? .zero : contentView.bounds.origin
         frame = viewport
         updateGeometry()
         restorePosition(origin)
@@ -60,7 +77,11 @@ final class BubbleBodyScrollView:GutterScrollView {
         (window as? ContentCursorPanel)?.refreshContentCursor()
     }
 
-    func showTop() {restorePosition(.zero)}
+    func showTop() {
+        restorePosition(.zero)
+        pendingTop = true
+        needsLayout = true
+    }
 
     func restorePosition(_ origin:NSPoint) {
         // 本容器中的文档均按从上往下布局；不足一页时只存在顶部位置。
@@ -70,4 +91,6 @@ final class BubbleBodyScrollView:GutterScrollView {
         reflectScrolledClipView(contentView)
         (window as? ContentCursorPanel)?.refreshContentCursor()
     }
+
+    deinit {NotificationCenter.default.removeObserver(self)}
 }

@@ -87,8 +87,14 @@ final class BubbleMotion: NSObject {
             if r >= 1 {resizeFrom = nil}
         }
         let sizeChanged = displayed.size != window.frame.size
-        if displayed != window.frame {window.setFrame(displayed,display:true)}
-        if sizeChanged {onResize?(displayed.size)}
+        if displayed != window.frame {window.setFrame(displayed,display:!sizeChanged)}
+        if sizeChanged {
+            // 先更新玻璃内容容器和正文视口，再绘制这一帧；不能拿旧视口画新尺寸窗口。
+            window.contentView?.layoutSubtreeIfNeeded()
+            // AppKit 会对窗口尺寸取整，正文必须使用实际落地尺寸。
+            onResize?(window.frame.size)
+            window.displayIfNeeded()
+        }
         if f >= 1 && !presented {window.orderOut(nil); window.alphaValue = 1; window.ignoresMouseEvents = false}
         if f >= 1 && resizeFrom == nil {timer?.invalidate(); timer = nil}
         if f >= 1 && !presented && pendingHide {
