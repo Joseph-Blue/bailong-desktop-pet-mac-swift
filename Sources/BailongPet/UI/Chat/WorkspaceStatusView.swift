@@ -26,12 +26,12 @@ private enum GitStatusText {
         return text
     }
     static func tracking(_ status:GitWorkspaceStatus,font:NSFont) -> NSAttributedString {
-        let text = NSMutableAttributedString(string:"上游："+(status.upstream ?? ""),attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor])
+        let text = NSMutableAttributedString(string:"上游："+(status.upstream ?? ""),attributes:[.font:font,.foregroundColor:NSColor.labelColor])
         for (label,count) in [("领先",status.ahead),("落后",status.behind)] {
-            text.append(NSAttributedString(string:" · ",attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor]))
-            text.append(NSAttributedString(string:label+" \(count)",attributes:[.font:count > 0 ? NSFont.systemFont(ofSize:font.pointSize,weight:.semibold) : font,.foregroundColor:count > 0 ? NSColor.systemBlue : NSColor.secondaryLabelColor]))
+            text.append(NSAttributedString(string:" · ",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
+            text.append(NSAttributedString(string:label+" \(count)",attributes:[.font:count > 0 ? NSFont.systemFont(ofSize:font.pointSize,weight:.semibold) : font,.foregroundColor:count > 0 ? NSColor.systemBlue : NSColor.labelColor]))
         }
-        text.append(NSAttributedString(string:"（本机记录）",attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor]))
+        text.append(NSAttributedString(string:"（本机记录）",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
         return text
     }
 }
@@ -337,12 +337,12 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
         func label(_ value:String) -> NSTextField {
             let field = NSTextField(wrappingLabelWithString:value)
-            field.font = .systemFont(ofSize:11); field.textColor = .secondaryLabelColor
+            field.font = .systemFont(ofSize:11); field.textColor = .labelColor
             field.isSelectable = true; return field
         }
         func metadata(_ title:String,_ value:NSView) {
             let caption = NSTextField(labelWithString:title)
-            caption.font = .systemFont(ofSize:11); caption.textColor = .secondaryLabelColor
+            caption.font = .systemFont(ofSize:11); caption.textColor = .labelColor
             caption.widthAnchor.constraint(equalToConstant:40).isActive = true
             value.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
             let row = NSStackView(views:[caption,value]); row.alignment = .firstBaseline; row.spacing = 6

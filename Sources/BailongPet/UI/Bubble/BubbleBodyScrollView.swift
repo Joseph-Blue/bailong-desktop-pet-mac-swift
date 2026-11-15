@@ -1,5 +1,21 @@
 import AppKit
 
+// 工具短气泡展示已截断的摘要；关闭滚动时连原生布局产生的偏移也固定到顶部。
+private final class BubbleReadingClipView:VerticalReadingClipView {
+    var pinsToTop = false {didSet {if pinsToTop {scroll(to:.zero)}}}
+    override func scroll(to newOrigin:NSPoint) {
+        super.scroll(to:pinsToTop ? .zero : newOrigin)
+    }
+    override func setBoundsOrigin(_ newOrigin:NSPoint) {
+        super.setBoundsOrigin(pinsToTop ? .zero : newOrigin)
+    }
+    override func constrainBoundsRect(_ proposedBounds:NSRect) -> NSRect {
+        var result = super.constrainBoundsRect(proposedBounds)
+        if pinsToTop {result.origin.y = 0}
+        return result
+    }
+}
+
 // 一次分配正文边界和原生滚动条轨道；轨道使用右侧边距，不再额外压窄正文。
 struct BubbleBodyLayout {
     let inset:CGFloat, contentWidth:CGFloat
@@ -21,6 +37,7 @@ struct BubbleBodyLayout {
 // 普通消息、审批、问卷、任务列表、额度与短进展共用的正文容器。
 // 文档尺寸由内容提供，视口由气泡提供；滚动条只在真正溢出时存在。
 final class BubbleBodyScrollView:GutterScrollView {
+    private let readingClip = BubbleReadingClipView()
     private(set) var bodyHeight:CGFloat = 0
     private var pendingTop = false
     var allowsScrolling = true {didSet {updateGeometry()}}
@@ -28,6 +45,7 @@ final class BubbleBodyScrollView:GutterScrollView {
 
     override init(frame:NSRect) {
         super.init(frame:frame)
+        readingClip.drawsBackground = false; contentView = readingClip
         drawsBackground = false
         autohidesScrollers = false
         hasVerticalScroller = false
@@ -46,6 +64,7 @@ final class BubbleBodyScrollView:GutterScrollView {
 
     @objc private func beginReading() {pendingTop = false}
     override func scrollWheel(with event:NSEvent) {
+        guard allowsScrolling else {return}
         beginReading()
         super.scrollWheel(with:event)
     }
@@ -66,6 +85,7 @@ final class BubbleBodyScrollView:GutterScrollView {
     }
 
     private func updateGeometry() {
+        readingClip.pinsToTop = !allowsScrolling
         verticalScrollElasticity = allowsScrolling ? .allowed : .none
         guard let document = documentView else {return}
         let overflow = allowsScrolling && bodyHeight > bounds.height

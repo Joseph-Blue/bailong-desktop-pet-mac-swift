@@ -115,7 +115,7 @@ struct SettingsSearchEntry {
                 case ("工作区状态","常驻"):
                     entries[index].condition = "开启显示工作区状态后可调整"
                 case ("工作区状态","显示时长"):
-                    entries[index].condition = "开启显示工作区状态且关闭常驻后可调整"
+                    entries[index].condition = "关闭常驻后显示；开启显示工作区状态后可调整"
                 case (_,"开始时间"),(_,"结束时间"):
                     entries[index].condition = "开启定时安静陪伴后可调整"
                 case ("进展提醒","久无进展时提醒"):

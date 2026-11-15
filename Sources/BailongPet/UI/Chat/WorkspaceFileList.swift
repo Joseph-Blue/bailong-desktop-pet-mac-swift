@@ -76,7 +76,7 @@ final class WorkspaceFileRow:NSView {
         let row = NSStackView(views:[icon,name]); row.spacing = 8; row.alignment = .centerY; row.distribution = .fill
         if let directory,!directory.isEmpty {
             let location = NSTextField(labelWithString:directory)
-            location.font = .systemFont(ofSize:11); location.textColor = .secondaryLabelColor
+            location.font = .systemFont(ofSize:11); location.textColor = .labelColor
             location.lineBreakMode = .byTruncatingMiddle
             location.setContentCompressionResistancePriority(.init(249),for:.horizontal)
             location.setContentHuggingPriority(.defaultLow,for:.horizontal)
