@@ -42,6 +42,7 @@ struct ChatInputState {
     var modelSettings:DesktopReply.Settings?
     var modelNote:String?, replyNote:String?
     var desktopReady = false
+    var desktopPreparing = false
     var canEdit:Bool {conversation != nil && runningTitle == nil && !sending && !readOnly}
     func canSend(models:ChatModelSettings) -> Bool {
         canEdit && !unconfirmed && (kind == .project ? conversation?.threadID != nil && replyMode != nil : !models.loading && models.error == nil)

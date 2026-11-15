@@ -107,6 +107,7 @@ final class ChatComposer: NSObject {
         for row in [modelRow,connectionRow] {row.widthAnchor.constraint(equalTo:modelFields.widthAnchor).isActive = true}
         inlineStatus.font = .systemFont(ofSize:11); inlineStatus.textColor = .secondaryLabelColor
         inlineStatus.isSelectable = true; inlineStatus.isHidden = true
+        inlineStatus.maximumNumberOfLines = 1; inlineStatus.usesSingleLineMode = true
         inlineStatus.setContentCompressionResistancePriority(.required,for:.horizontal)
         inlineStatus.setContentHuggingPriority(.required,for:.horizontal)
         let modelStrip = NSStackView(views:[modelFields,inlineStatus])
@@ -221,7 +222,9 @@ final class ChatComposer: NSObject {
         let width = max(540,footerWidth,modes.intrinsicContentSize.width+196)
         // 先确定正文宽度再测量换行；只有编辑区随草稿增长，元信息和操作区按内容排版。
         if abs(content.bounds.width-width)>0.5 {composerMotion.resize(to:NSSize(width:width,height:composerMotion.frame.height))}
-        let modelWidth = externalModel ? composerInheritedSettings.intrinsicContentSize.width : composerModel.intrinsicContentSize.width
+        let model = externalModel ? composerInheritedSettings : composerModel!
+        // 模型摘要可截断；先为短状态留位置，不按模型完整标题宽度提前另起一行。
+        let modelWidth = min(model.intrinsicContentSize.width,max(120,(model.font?.pointSize ?? 13)*10))
         let retryWidth = retrySettings.isHidden ? 0 : retrySettings.intrinsicContentSize.width+8
         let available = width-32-ChatMetadataRow.captionWidth-16-modelWidth-retryWidth-12
         let noteWidth = ceil((statusText as NSString).size(withAttributes:[.font:inlineStatus.font!]).width)+4
@@ -268,10 +271,10 @@ final class ChatComposer: NSObject {
         openCodex.isEnabled = state.conversation?.threadID != nil
         recentReply.update(turn:state.conversation?.turns.max(by:{$0.date < $1.date}))
         statusText = state.note; externalModel = external
-        allowsInlineStatus = state.conversation != nil && state.replyNote == nil && state.modelNote == nil && !state.readOnly && !state.unconfirmed
-        stopButton.isHidden = !state.ownsRunningTask
+        allowsInlineStatus = state.conversation != nil
+        stopButton.isHidden = !state.ownsRunningTask && !state.desktopPreparing
         stopButton.isEnabled = !state.stopping
-        stopButton.title = state.stopping ? "正在停止…" : "停止任务"
+        stopButton.title = state.desktopPreparing ? "取消发送" : state.stopping ? "正在停止…" : "停止任务"
         checkButton.isHidden = !state.unconfirmed
         status.stringValue = state.composerTitle
     }

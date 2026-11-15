@@ -232,7 +232,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func stopTarget(_ entry:ChatEntry) {
-        guard let state = inputStates[entry],state.ownsRunningTask,!state.stopping,let key = state.conversation?.key else {return}
+        guard let state = inputStates[entry],state.ownsRunningTask || state.desktopPreparing,!state.stopping,let key = state.conversation?.key else {return}
         onStop(key)
     }
     private func checkTarget(_ entry:ChatEntry) {
@@ -452,8 +452,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyRetrySettings.isHidden = !selected.external || historyState.desktopReady || historyState.modelNote == nil
         historyRetrySettings.isEnabled = !historyState.sending
         historyStop.isEnabled = !historyState.stopping
-        historyStop.title = historyState.stopping ? "正在停止…" : "停止任务"
-        historyStop.isHidden = !historyState.ownsRunningTask; historyCheck.isHidden = !historyState.unconfirmed
+        historyStop.title = historyState.desktopPreparing ? "取消发送" : historyState.stopping ? "正在停止…" : "停止任务"
+        historyStop.isHidden = !historyState.ownsRunningTask && !historyState.desktopPreparing; historyCheck.isHidden = !historyState.unconfirmed
         historyStatus.stringValue = historyState.historyNote; historyStatus.hoverHelp = historyState.replyNote ?? historyState.historyNote
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
         resizeHistoryInput(); modelStateChanged()

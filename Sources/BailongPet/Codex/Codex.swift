@@ -76,11 +76,12 @@ final class CodexConnection {
         var url = URLComponents(); url.scheme = "codex"; url.host = "threads"; url.path = "/"+id
         return url.url
     }
-    // 仅用于用户主动发送后的会话准备；失败不降级为打开首页。
-    static func openConversationForReply(_ id:String,completion:@escaping (Error?) -> Void) {
+    // 仅用于用户主动发送后的会话准备；成功值表示本次是否启动了应用，失败不降级到首页。
+    static func openConversationForReply(_ id:String,isCurrent:@escaping () -> Bool,completion:@escaping (Result<Bool,Error>) -> Void) {
         navigationQueue.async {
             let lookup = Result {try DesktopHistoryReader.containsThread(id)}
             DispatchQueue.main.async {
+                guard isCurrent() else {return}
                 do {
                     guard try lookup.get(),let url = threadURL(id) else {throw PetFailure(message:"原 Codex 会话已不存在。")}
                     guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {
@@ -88,10 +89,19 @@ final class CodexConnection {
                     }
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = true
-                    NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration) { _,error in
-                        DispatchQueue.main.async {completion(error)}
+                    let running = NSWorkspace.shared.runningApplications.contains { !$0.isTerminated && $0.bundleURL?.standardizedFileURL == app.standardizedFileURL }
+                    let navigate = {
+                        guard isCurrent() else {return}
+                        NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration) { _,error in
+                            DispatchQueue.main.async {
+                                if let error {completion(.failure(error))}
+                                else {completion(.success(!running))}
+                            }
+                        }
                     }
-                } catch {completion(error)}
+                    // 系统负责启动并投递链接；实际会话就绪由调用方的准备请求确认。
+                    navigate()
+                } catch {completion(.failure(error))}
             }
         }
     }

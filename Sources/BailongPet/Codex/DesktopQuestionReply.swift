@@ -31,6 +31,9 @@ final class DesktopSocket {
     struct Unavailable:LocalizedError {
         var errorDescription:String? {"Codex 本机通信尚未就绪。"}
     }
+    struct Disconnected:LocalizedError {
+        var errorDescription:String? {"Codex 本机连接已断开。"}
+    }
     struct ResponseTimeout:LocalizedError {
         var method:String? = nil
         var errorDescription:String? {method.map {"Codex 请求超时（\($0)）。"} ?? "等待 Codex 响应超时。"}
@@ -81,6 +84,7 @@ final class DesktopSocket {
             let value:[String:Any]
             do {value = try receive(deadline:deadline)}
             catch is ResponseTimeout {throw ResponseTimeout(method:method)}
+            catch is Disconnected {throw Disconnected()}
             catch {throw PetFailure(message:"Codex 本机请求失败（\(method)）："+error.localizedDescription)}
             if try handleControlFrame(value) {continue}
             guard value["type"] as? String == "response",value["requestId"] as? String == id else {continue}
@@ -126,6 +130,7 @@ final class DesktopSocket {
             var offset = 0
             while offset < bytes.count {
                 let sent = Darwin.send(fd,bytes.baseAddress!.advanced(by:offset),bytes.count-offset,0)
+                if sent < 0 && (errno == EPIPE || errno == ECONNRESET) {throw Disconnected()}
                 guard sent > 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}; offset += sent
             }
         }
@@ -143,13 +148,16 @@ final class DesktopSocket {
             while offset < count {
                 let remaining = deadline.timeIntervalSinceNow
                 guard remaining > 0 else {throw ResponseTimeout()}
-                var timeout = timeval(tv_sec:Int(remaining),tv_usec:max(1,Int32((remaining-floor(remaining))*1_000_000)))
-                guard setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout.size(ofValue:timeout))) == 0 else {
-                    throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))
-                }
+                // poll 同时报告数据与连接关闭，避免对已被对端关闭的 socket 设置超时。
+                var descriptor = pollfd(fd:fd,events:Int16(POLLIN),revents:0)
+                let ready = Darwin.poll(&descriptor,1,Int32(max(1,ceil(remaining*1000))))
+                if ready < 0 && errno == EINTR {continue}
+                guard ready >= 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}
+                guard ready > 0 else {throw ResponseTimeout()}
                 let got = recv(fd,bytes.baseAddress!.advanced(by:offset),count-offset,0)
                 if got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) {throw ResponseTimeout()}
-                guard got > 0 else {throw PetFailure(message:got == 0 ? "Codex 本机连接已关闭。" : "Codex 本机通信失败："+String(cString:strerror(errno)))}
+                if got == 0 || (got < 0 && errno == ECONNRESET) {throw Disconnected()}
+                guard got > 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}
                 offset += got
             }
         }

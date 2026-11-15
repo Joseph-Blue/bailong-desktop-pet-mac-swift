@@ -130,7 +130,11 @@ final class ChatController {
             self.saveError = nil; RecoveryWindow.resolve("history-save"); self.refresh()
         }
         ui.onSubmit = { [weak self] key,text,entry in self?.submit(text,to:key,entry:entry) }
-        ui.onStop = { [weak self] key in if self?.running?.0.key == key {self?.stop()} }
+        ui.onStop = { [weak self] key in
+            guard let self else {return}
+            if self.desktopSession.preparing(key) {self.desktopSession.cancelPreparation(key)}
+            else if self.running?.0.key == key {self.stop()}
+        }
         ui.onNew = { [weak self] entry in self?.newConversation(entry:entry) }
         ui.onNewDefault = { [weak self] entry in self?.newDefaultConversation(entry:entry) }
         ui.onFolder = { [weak self] entry in self?.chooseFolder(entry:entry) }
@@ -317,6 +321,7 @@ final class ChatController {
             state.modelSettings = desktopSession.modelSettings(conversation.key)
             state.modelNote = desktopSession.modelNote(conversation.key); state.replyNote = desktopSession.replyNote(conversation.key)
             state.desktopReady = desktopSession.canReply(conversation.key)
+            state.desktopPreparing = desktopSession.preparing(conversation.key)
         }
         return state
     }
