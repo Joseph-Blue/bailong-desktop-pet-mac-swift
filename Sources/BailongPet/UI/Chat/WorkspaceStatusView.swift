@@ -36,7 +36,7 @@ private enum GitStatusText {
     }
 }
 
-// 一条共用的次级信息行：目录入口、Git 摘要、本轮修改。只查询当前可见会话。
+// 一条共用的次级信息行：目录入口、Git 摘要、本轮修改。可见入口与倒计时收起的独立小窗按事件更新。
 final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private let directory = WorkspaceLinkButton()
     private let git = HoverIconButton(symbol:"arrow.triangle.branch",label:"Git 状态"), changes = HoverIconButton(symbol:"doc",label:"本轮文件修改")
@@ -49,6 +49,10 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private var compact = false
     private var buttonHeights = [NSLayoutConstraint]()
     private var active = false, windowObserver:NSObjectProtocol?
+    private let observation = GitWorkspaceObservation()
+    private var refreshAgain = false, hasGitBaseline = false
+    private var observationFailure:String?
+    var onContentChange:() -> Void = {}
     var onOpen:(URL) -> Void = {_ in}
     var onStatusChange:() -> Void = {}
     var hasStatus:Bool {snapshot != nil || failure != nil || !changes.isHidden}
@@ -108,6 +112,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let directoryMinimum = directory.widthAnchor.constraint(greaterThanOrEqualToConstant:60)
         directoryMinimum.priority = .defaultHigh; directoryMinimum.isActive = true
         git.isHidden = true; changes.isHidden = true; popover.delegate = self
+        observation.onChange = { [weak self] in self?.scheduleRefresh() }
     }
     required init?(coder:NSCoder) {fatalError()}
     override func viewDidMoveToWindow() {
@@ -121,24 +126,30 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     func update(conversation:Conversation?,executing:Bool,visible:Bool,turnKey:String? = nil,turnStart:Date? = nil) {
         let nextPath = conversation?.cwd ?? "", changed = conversationKey != conversation?.key || path != nextPath
-        if changed {stop(); snapshot = nil; failure = nil; popover.close(); editSignature = []; taskKey = nil}
+        if changed {stop(); observation.stop(); hasGitBaseline = false; observationFailure = nil; snapshot = nil; failure = nil; popover.close(); editSignature = []; taskKey = nil}
         conversationKey = conversation?.key; path = nextPath
         let becameActive = visible && !active
         active = visible
-        updateDirectory()
-        guard visible else {stop(); snapshot = nil; fileEdits = []; return}
+        if !popover.isShown {updateDirectory()}
+        guard visible else {deactivate(); return}
         let turn = turnKey == nil && turnStart == nil ? conversation?.turns.max(by:{$0.date < $1.date}) : conversation?.turns.first {((turnKey != nil && ($0.key == turnKey || $0.id == turnKey)) || (turnStart != nil && $0.date == turnStart))}
         let edits = turn?.fileEdits ?? [], signature = edits.flatMap(\.signature)
         let changedEdits = signature != editSignature || taskKey != turn?.key
+        let notifyEdits = !changed && !becameActive && changedEdits && (signature != editSignature)
         editSignature = signature; taskKey = turn?.key
-        if changed || changedEdits || becameActive {updateChanges(edits)}
+        if changed || changedEdits || becameActive {
+            updateChanges(edits)
+            if popover.isShown && showsChanges {presentPopoverContent()}
+        }
         let ended = wasExecuting && !executing; wasExecuting = executing
         if changed || becameActive || ended {refreshGit()}
         else if changedEdits {scheduleRefresh()}
-        onStatusChange()
+        if changed || changedEdits || becameActive {notifyLayoutChange()}
+        if notifyEdits {onContentChange()}
     }
-    func deactivate() {active = false; stop(); snapshot = nil; failure = nil; fileEdits = []; git.isHidden = true; changes.isHidden = true; popover.close()}
-    private func stop() {pending?.cancel(); pending = nil; request?.cancel(); request = nil}
+    private func notifyLayoutChange() {if !popover.isShown {onStatusChange()}}
+    func deactivate() {active = false; stop(); observation.stop(); hasGitBaseline = false; observationFailure = nil; snapshot = nil; failure = nil; fileEdits = []; git.isHidden = true; changes.isHidden = true; popover.close()}
+    private func stop() {pending?.cancel(); pending = nil; request?.cancel(); request = nil; refreshAgain = false}
     deinit {stop(); if let windowObserver {NotificationCenter.default.removeObserver(windowObserver)}}
     private func updateDirectory() {
         directory.isHidden = compact
@@ -148,6 +159,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func updateChanges(_ edits:[FileEditSummary]) {
         fileEdits = edits
+        guard !popover.isShown else {return}
         changes.isHidden = edits.isEmpty
         let known = edits.compactMap(\.lines)
         let added = known.reduce(0) {$0+$1.added}, removed = known.reduce(0) {$0+$1.removed}
@@ -161,38 +173,58 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         changes.attributedTitle = text
         let description = "本轮修改 \(edits.count) 个文件。"+(known.isEmpty ? "" : "累计新增 \(added) 行、删除 \(removed) 行。")+(known.count < edits.count ? "\n\(edits.count-known.count) 个文件未提供行数。" : "")
         changes.setAccessibilityValue(description)
-        if popover.isShown && showsChanges {presentPopoverContent()}
     }
     private func scheduleRefresh() {
         pending?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.refreshGit() }
+        let work = DispatchWorkItem { [weak self] in self?.pending = nil; self?.refreshGit() }
         pending = work; DispatchQueue.main.asyncAfter(deadline:.now()+0.4,execute:work)
     }
     func refreshGit() {
         guard active,!path.isEmpty else {git.isHidden = true; return}
-        stop(); failure = nil
+        pending?.cancel(); pending = nil
+        // 合并查询中到达的事件，完成后补查一次，不反复取消同一请求。
+        guard request == nil else {refreshAgain = true; return}
+        let oldSnapshot = snapshot, oldFailure = failure, oldObservationFailure = observationFailure
+        let hadBaseline = hasGitBaseline
         let query = GitWorkspaceRequest(); request = query
-        git.isHidden = false; git.image = sourceIcon(github:snapshot?.isGitHub == true)
-        git.title = snapshot.map {$0.title+"  …"} ?? "读取中…"; git.contentTintColor = .secondaryLabelColor
-        git.setAccessibilityValue("正在读取 Git 状态")
+        if !hasGitBaseline && !popover.isShown {
+            git.isHidden = false; git.image = sourceIcon(github:false)
+            git.title = "读取中…"; git.contentTintColor = .secondaryLabelColor
+        }
+        (popover.contentViewController as? GitWorkspaceDetails)?.setLoading(true)
         query.start(directory:path) { [weak self,weak query] result in
             guard let self,let query,self.active,self.request === query else {return}
             self.request = nil
+            var meaningful = false
             switch result {
-            case .success(let value):self.snapshot = value
-            case .failure(let error):self.snapshot = nil; self.failure = error.localizedDescription
+            case .success(let value):
+                meaningful = self.hasGitBaseline && oldSnapshot != value
+                self.hasGitBaseline = true; self.snapshot = value; self.failure = nil
+                do {
+                    try self.observation.update(paths:value?.observationPaths ?? [])
+                    self.observationFailure = nil
+                } catch {self.observationFailure = error.localizedDescription}
+            case .failure(let error):self.failure = error.localizedDescription
             }
-            self.presentStatus(); self.updateDirectory()
-            self.onStatusChange()
-            if self.popover.isShown && !self.showsChanges {self.presentPopoverContent()}
+            let changed = !hadBaseline || oldSnapshot != self.snapshot || oldFailure != self.failure || oldObservationFailure != self.observationFailure
+            (self.popover.contentViewController as? GitWorkspaceDetails)?.setLoading(false)
+            if self.popover.isShown {
+                if !self.showsChanges && changed {self.presentPopoverContent()}
+            } else {
+                self.presentStatus(); self.updateDirectory()
+                if changed {self.onStatusChange()}
+            }
+            if meaningful {self.onContentChange()}
+            if self.refreshAgain {self.refreshAgain = false; self.scheduleRefresh()}
         }
     }
     private func presentStatus() {
         git.isHidden = snapshot == nil && failure == nil
-        guard let snapshot else {
+        if failure != nil || snapshot == nil {
             git.image = sourceIcon(github:false); git.title = "读取失败"; git.contentTintColor = .systemOrange
             git.setAccessibilityValue(failure ?? "Git 状态读取失败"); return
         }
+        guard let snapshot else {return}
         git.image = sourceIcon(github:snapshot.isGitHub)
         let text = NSMutableAttributedString()
         text.append(NSAttributedString(string:snapshot.title+(snapshot.initial ? " · 首次提交前" : "")))
@@ -217,28 +249,60 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         popoverDismissal.start(for:popover)
     }
     private func presentPopoverContent() {
+        let previous = popover.contentViewController as? GitWorkspaceDetails
         let content:NSViewController = showsChanges ? TurnFileEditsDetails(edits:fileEdits,directory:path) : makeDetails()
-        _ = content.view; popover.contentViewController = content; popover.contentSize = content.preferredContentSize
+        _ = content.view
+        // 已打开时只因真实内容变化替换一次，避免加载态与完成态两次尺寸动画。
+        let animated = popover.animates
+        if popover.isShown {popover.animates = false}
+        popover.contentViewController = content; popover.contentSize = content.preferredContentSize
+        popover.animates = animated
+        if let previous,let updated = content as? GitWorkspaceDetails {updated.restoreReadingPosition(from:previous)}
     }
     private func makeDetails() -> GitWorkspaceDetails {
-        let content = GitWorkspaceDetails(snapshot:snapshot,failure:failure,loading:request != nil)
+        let content = GitWorkspaceDetails(snapshot:snapshot,failure:failure ?? observationFailure,loading:request != nil)
         content.onRefresh = { [weak self] in
             guard let self else {return}
             self.refreshGit()
-            if self.popover.isShown && !self.showsChanges {self.presentPopoverContent()}
         }
         return content
     }
-    func popoverDidClose(_ notification:Notification) {popoverDismissal.stop(); popover.contentViewController = nil}
+    func popoverDidClose(_ notification:Notification) {
+        popoverDismissal.stop(); popover.contentViewController = nil
+        guard active else {return}
+        presentStatus(); updateDirectory(); updateChanges(fileEdits); onStatusChange()
+    }
     func containsInteraction(at point:NSPoint) -> Bool {popover.isShown && popover.contentViewController?.view.window?.frame.contains(point) == true}
 }
 
 private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,NSTableViewDelegate {
     private enum Row {case heading(GitWorkspaceStatus.Group,Int), file(GitWorkspaceStatus.Entry)}
-    private let snapshot:GitWorkspaceStatus?, failure:String?, loading:Bool
+    private let snapshot:GitWorkspaceStatus?, failure:String?
+    private var loading:Bool
+    private var refreshButton:NSButton?
+    func setLoading(_ loading:Bool) {
+        self.loading = loading
+        refreshButton?.isEnabled = !loading
+        refreshButton?.title = loading ? "刷新中…" : "刷新"
+    }
     private var rows = [Row]()
     private let table = WorkspaceFileTable()
     var onRefresh:() -> Void = {}
+    func restoreReadingPosition(from previous:GitWorkspaceDetails) {
+        view.layoutSubtreeIfNeeded()
+        if let origin = previous.table.enclosingScrollView?.contentView.bounds.origin,let scroll = table.enclosingScrollView {
+            scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
+        }
+        let selected = previous.table.selectedRowIndexes.compactMap {index -> GitWorkspaceStatus.Entry? in
+            guard previous.rows.indices.contains(index),case .file(let entry) = previous.rows[index] else {return nil}
+            return entry
+        }
+        let indices = rows.indices.filter {index in
+            guard case .file(let entry) = rows[index] else {return false}
+            return selected.contains {$0.path == entry.path && $0.group == entry.group}
+        }
+        table.selectRowIndexes(IndexSet(indices),byExtendingSelection:false)
+    }
     init(snapshot:GitWorkspaceStatus?,failure:String?,loading:Bool) {
         self.snapshot = snapshot; self.failure = failure; self.loading = loading
         super.init(nibName:nil,bundle:nil)
@@ -261,10 +325,16 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         let title = NSStackView(views:[source,heading]); title.alignment = .centerY; title.spacing = 6
         NSLayoutConstraint.activate([source.widthAnchor.constraint(equalToConstant:16),source.heightAnchor.constraint(equalToConstant:16)])
         let refresh = ActionButton("刷新") { [weak self] in self?.onRefresh() }
+        refreshButton = refresh
+        refresh.widthAnchor.constraint(greaterThanOrEqualToConstant:70).isActive = true
         let top = NSStackView(views:[title,NSView(),refresh]); top.alignment = .centerY; top.spacing = 12
         stack.addArrangedSubview(top)
         refresh.isEnabled = !loading
         if loading {refresh.title = "刷新中…"}
+        if let failure,snapshot != nil {
+            let error = NSTextField(wrappingLabelWithString:failure); error.textColor = .systemOrange
+            error.font = .systemFont(ofSize:11); stack.addArrangedSubview(error)
+        }
         func label(_ value:String) -> NSTextField {
             let field = NSTextField(wrappingLabelWithString:value)
             field.font = .systemFont(ofSize:11); field.textColor = .secondaryLabelColor
@@ -313,20 +383,26 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             scroll.contentView.drawsBackground = false
             scroll.verticalScrollElasticity = .allowed
             let column = NSTableColumn(identifier:.init("file")); column.resizingMask = .autoresizingMask
-            table.addTableColumn(column); table.rowHeight = 26; table.delegate = self; table.dataSource = self
+            table.addTableColumn(column); table.rowHeight = 26; table.intercellSpacing = .zero
+            table.delegate = self; table.dataSource = self
             table.fileURLForRow = { [weak self] row in
                 guard let self,self.rows.indices.contains(row),case .file(let entry) = self.rows[row],let root = self.snapshot?.root else {return nil}
                 return URL(fileURLWithPath:root,isDirectory:true).appendingPathComponent(entry.path)
             }
             table.setAccessibilityLabel("Git 文件状态，双击在访达中显示，右键显示文件操作")
             scroll.documentView = table; stack.addArrangedSubview(scroll)
-            scroll.heightAnchor.constraint(equalToConstant:min(300,CGFloat(rows.count)*28)).isActive = true
+            scroll.heightAnchor.constraint(equalToConstant:min(300,rows.indices.reduce(CGFloat.zero) {$0+rowHeight($1)})).isActive = true
         }
         view = NSView(); view.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:view.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-16),stack.widthAnchor.constraint(equalToConstant:420)])
         for row in stack.arrangedSubviews {row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
         preferredContentSize = view.fittingSize
     }
+    private func rowHeight(_ row:Int) -> CGFloat {
+        if case .heading = rows[row] {return row == 0 ? 22 : 30}
+        return 26
+    }
+    func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {rowHeight(row)}
     func numberOfRows(in tableView:NSTableView) -> Int {rows.count}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {
         if case .file = rows[row] {return WorkspaceFileTableRow()}
@@ -336,7 +412,14 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         switch rows[row] {
         case .heading(let group,let count):
             let text = NSTextField(labelWithString:group.rawValue+" · \(count)"); text.font = .systemFont(ofSize:11,weight:.semibold)
-            text.textColor = GitStatusText.groups.first {$0.group == group}!.color; return text
+            text.textColor = GitStatusText.groups.first {$0.group == group}!.color
+            let cell = TopDownView(); cell.addSubview(text); text.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                text.leadingAnchor.constraint(equalTo:cell.leadingAnchor,constant:4),
+                text.trailingAnchor.constraint(lessThanOrEqualTo:cell.trailingAnchor,constant:-6),
+                text.centerYAnchor.constraint(equalTo:cell.centerYAnchor,constant:row == 0 ? 0 : 3)
+            ])
+            return cell
         case .file(let entry):
             let (symbol,color) = WorkspaceFileRow.symbol(for:entry)
             let parent = (entry.path as NSString).deletingLastPathComponent

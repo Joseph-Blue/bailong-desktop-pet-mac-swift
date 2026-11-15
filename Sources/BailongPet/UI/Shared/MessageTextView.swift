@@ -74,7 +74,9 @@ final class MessageTextView: LinkTextView {
             if toolbar.superview == nil {addSubview(toolbar); transcriptToolbars[range.location] = toolbar}
             toolbar.onToggle = { [weak self] in
                 guard let self else {return}
-                DisclosureMotion.update(in:self) {
+                // TextKit 文档高度须先同步；隐式 frame 动画会让滚动上限停在展开前。
+                // 保留一次淡入，最后一行定位使用更新后的文档与视口。
+                DisclosureMotion.update(in:self,animatesLayout:false) {
                     if !self.expandedUsage.insert(content.id).inserted {self.expandedUsage.remove(content.id)}
                     self.prepareFooters(width:self.bounds.width)
                     self.measuredWidth = -1; self.invalidateCodeLayout()

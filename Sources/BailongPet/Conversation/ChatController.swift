@@ -186,6 +186,10 @@ final class ChatController {
         }
         pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
         workspacePanel.onShowRequested = { [weak self] in self?.showWorkspace() }
+        workspacePanel.onRecallRequested = { [weak self] key in
+            guard let self,self.allConversations.contains(where:{$0.key == key}) else {return}
+            self.showWorkspace(key)
+        }
         workspacePanel.onHide = { [weak pet] in pet?.placeBubble() }
         pet.workspaceFrame = { [weak self] in self?.workspacePanel.frame }
         pet.onWorkspace = { [weak self] in
@@ -301,7 +305,7 @@ final class ChatController {
     func refresh() {
         ui.refresh(allConversations,selected:selected,historyState:inputState(selected,kind:selected.kind),composerState:inputState(composerSelection,kind:composerKind))
         pet.refreshWorkspaceBars()
-        if workspacePanel.visible {
+        if workspacePanel.observesChanges {
             if let conversation = allConversations.first(where:{$0.key == workspacePanel.conversationKey}) {
                 workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)
             } else {workspacePanel.hide()}

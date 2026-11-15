@@ -205,7 +205,10 @@ enum DesktopHistoryReader {
                 var activityItems = [[String:Any]]()
                 var questions = [[String:Any]](), approval:TaskAttention?, hasSensitiveInput = false, hasSensitiveQuestion = false
                 for item in items {
-                    if item["item_type"] == "userMessage" {continue}
+                    if item["item_type"] == "userMessage" {
+                        // 用户插话是客户端工具组边界，只保留类型，不把正文放入进展。
+                        activityItems.append(["type":"userMessage"]); continue
+                    }
                     var progress:[String:Any] = ["type":item["item_type"] ?? ""]
                     for key in ["status","tool","server","namespace","command","query"] {if let value = item[key],value != "null" {progress[key] = value}}
                     if let text = item["plan_text"],text != "null" {progress["text"] = text}

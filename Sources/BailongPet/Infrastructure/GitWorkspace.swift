@@ -1,8 +1,8 @@
 import Foundation
 
-struct GitWorkspaceStatus {
+struct GitWorkspaceStatus:Equatable {
     enum Group:String,CaseIterable {case conflicted = "冲突", staged = "已暂存", unstaged = "未暂存", untracked = "未跟踪"}
-    struct Entry {let path:String, originalPath:String?, group:Group, change:String}
+    struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:String}
     var root = "", branch = "", commit = "", upstream:String?
     var ahead = 0, behind = 0, stashes = 0
     var initial = false, detached = false, operation:String?
@@ -10,6 +10,7 @@ struct GitWorkspaceStatus {
     var remoteName:String?, remoteHost:String?, remoteRepository:String?
     var remoteWebURL:URL?
     var entries = [Entry]()
+    var observationPaths = [String]()
     var isGitHub:Bool {remoteHost?.lowercased() == "github.com"}
     var counts:[Group:Int] {entries.reduce(into:[:]) {$0[$1.group,default:0] += 1}}
     var clean:Bool {entries.isEmpty}
@@ -149,6 +150,8 @@ final class GitWorkspaceRequest {
         var result = try GitWorkspaceStatus.parse(run(directory,["status","--porcelain=v2","-z","--branch","--show-stash","--untracked-files=all","--ignore-submodules=none"]).1)
         result.root = root
         let gitDirectory = try string(["rev-parse","--absolute-git-dir"])!
+        let commonDirectory = try string(["rev-parse","--path-format=absolute","--git-common-dir"])!
+        result.observationPaths = Array(Set([root,gitDirectory,commonDirectory])).sorted()
         let markers = [("rebase-merge","变基中"),("rebase-apply","变基中"),("MERGE_HEAD","合并中"),("CHERRY_PICK_HEAD","拣选中"),("REVERT_HEAD","还原中"),("BISECT_LOG","二分查找中")]
         result.operation = markers.first {FileManager.default.fileExists(atPath:URL(fileURLWithPath:gitDirectory).appendingPathComponent($0.0).path)}?.1
         if result.upstream != nil,!result.detached {

@@ -110,7 +110,7 @@ final class Bubble {
     func showProgressToast(_ activity:TaskActivity,timing:TaskTiming,conversation:String? = nil) {
         onQuestionSubmit = nil; onQuestionsSkipped = nil
         let detail = ([activity.actionTitle,activity.displayDetail].filter {!$0.isEmpty}.joined(separator:"\n"))
-            .replacingOccurrences(of:"**",with:"")
+            .replacingOccurrences(of:"**",with:"").trimmingCharacters(in:.whitespacesAndNewlines)
         show(title:activity.displayTitle,body:detail,kind:"progressToast",scale:preferences.number("bubblePercent")/100,
              seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:activity.kind == .tool,headingActivity:activity,conversation:conversation)
         purpose = .progress; text.hoverHelp = activity.text
@@ -366,7 +366,7 @@ final class Bubble {
         cardCount.font = .monospacedDigitSystemFont(ofSize:max(11*scale,fontSize-2*scale),weight:.regular)
     }
     private var buttonHeight:CGFloat {max(28*scale,actionButtons.map {$0.intrinsicContentSize.height}.max() ?? 0)}
-    private var usesCustomAspect:Bool {preferences.bool("bubbleAspectEnabled") && !kind.hasPrefix("quota") && questionModels.isEmpty}
+    private var usesCustomAspect:Bool {preferences.bool("bubbleAspectEnabled") && kind != "progressToast" && !kind.hasPrefix("quota") && questionModels.isEmpty}
     private var aspectWidth:CGFloat {sqrt(320*240*preferences.number("bubbleAspectRatio"))*scale}
     private var minimumLayoutWidth:CGFloat {
         if kind == "progressToast" {
@@ -728,7 +728,7 @@ final class Bubble {
         } else if kind == "task",!pendingAttention,taskFinishedAt == nil,
            let timing = activityTiming,
            let task = taskProvider().tasks.first(where:{timing.matchesActivity(key:$0.key,start:$0.start) && $0.active}),
-           task.activity?.visible == true {activity = task.activity}
+           let groupActivity = task.activity?.groupActivity,groupActivity.visible {activity = groupActivity}
         else {activity = nil}
         let activityKey = activityTiming?.activityKey ?? activityTiming?.key
         if progressTaskKey != activityKey {

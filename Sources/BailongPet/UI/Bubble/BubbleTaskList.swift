@@ -9,7 +9,7 @@ struct BubbleTaskSummary: Equatable {
     var connectionFailed = false
     var directory = ""
     var fileEdits = [FileEditSummary]()
-    var activityLine:String? {active && activity?.visible == true ? activity?.line : nil}
+    var activityLine:String? {active && activity?.groupActivity.visible == true ? activity?.groupActivity.line : nil}
     var active:Bool {activeStatuses.contains(status)}
 }
 
@@ -51,7 +51,11 @@ final class BubbleTaskList: NSView {
     func stop() {timer?.invalidate(); timer = nil; rows.forEach {$0.stopMotion()}}
     private func rebuild() {
         var incoming = provider()
-        incoming.tasks = incoming.tasks.map {task in var task = task; if task.activity?.visible != true {task.activity = nil}; return task}
+        incoming.tasks = incoming.tasks.map {task in
+            var task = task; task.activity = task.activity?.groupActivity
+            if task.activity?.visible != true {task.activity = nil}
+            return task
+        }
         let showInfo = PetPreferences.shared.bool("taskInfoBarEnabled")
         let limit = Int(PetPreferences.shared.number("recentTaskCount"))
         let templates = [PetPreferences.shared.statusLine("taskThinkingTemplate"),PetPreferences.shared.statusLine("taskToolTemplate"),PetPreferences.shared.statusLine("taskCommandTemplate"),PetPreferences.shared.statusLine("taskCommandCompletedTemplate")]

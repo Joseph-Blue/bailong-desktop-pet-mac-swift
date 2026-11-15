@@ -11,7 +11,10 @@ final class WorkspaceStatusPanel {
     private var conversation:Conversation?, executing = false
     private var placement:(pet:CGRect,screen:CGRect,avoiding:[CGRect])?
     private(set) var conversationKey:String?
+    private var waitingForChange = false
+    var observesChanges:Bool {visible || waitingForChange}
     var visible:Bool {motion.presented}
+    var onRecallRequested:(String) -> Void = {_ in}
     var frame:NSRect? {visible ? motion.frame : nil}
     var onShowRequested:() -> Void = {}
     var onHide:() -> Void = {}
@@ -40,6 +43,12 @@ final class WorkspaceStatusPanel {
             guard let self,self.visible,let placement = self.placement else {return}
             self.position(near:placement.pet,screen:placement.screen,avoiding:placement.avoiding)
         }
+        workspace.onContentChange = { [weak self] in
+            guard let self,self.preferences.bool("gitWindowEnabled") else {return}
+            if self.waitingForChange,let key = self.conversationKey {
+                self.onRecallRequested(key)
+            } else if self.visible {self.startCountdown()}
+        }
         observer = NotificationCenter.default.addObserver(forName:PetPreferences.didChange,object:preferences,queue:.main) { [weak self] note in
             guard let self else {return}
             let keys = Set(note.userInfo?["keys"] as? [String] ?? [])
@@ -51,9 +60,10 @@ final class WorkspaceStatusPanel {
     }
     func update(conversation:Conversation,executing:Bool) {
         self.conversation = conversation; self.executing = executing; conversationKey = conversation.key
-        workspace.update(conversation:conversation,executing:executing,visible:visible)
+        workspace.update(conversation:conversation,executing:executing,visible:observesChanges)
     }
     func show(near pet:CGRect,screen:CGRect,avoiding:[CGRect]) {
+        waitingForChange = false
         position(near:pet,screen:screen,avoiding:avoiding,opening:true)
         // 自动到达的任务仅显示小窗，不抢键盘或激活其他窗口。
         motion.show()
@@ -63,6 +73,7 @@ final class WorkspaceStatusPanel {
     func position(near pet:CGRect,screen:CGRect,avoiding:[CGRect],opening:Bool = false) {
         guard visible || opening else {return}
         placement = (pet,screen,avoiding)
+        guard opening || !workspace.hasPresentedDetails else {return}
         let content = stack.fittingSize
         let size = NSSize(width:min(ceil(content.width)+20,640,screen.width-16),height:ceil(content.height)+16)
         let result = BubblePlacement.resolve(size:size,pet:pet,screen:screen,preferred:[.below,.above],previous:nil,avoiding:avoiding,allowsSideFallback:false)
@@ -73,11 +84,13 @@ final class WorkspaceStatusPanel {
         countdown.start(preferences.bool("gitWindowPinned") ? 0 : preferences.number("gitWindowSeconds"),paused:{ [weak self] in
             guard let self else {return false}
             return self.workspace.hasPresentedDetails || (self.preferences.bool("pauseOnHover") && self.panel.frame.contains(NSEvent.mouseLocation))
-        },expired:{ [weak self] in self?.hide() })
+        },expired:{ [weak self] in self?.hide(waitForChange:true) })
     }
-    func hide() {
+    func hide(waitForChange:Bool = false) {
+        waitingForChange = waitForChange && preferences.bool("gitWindowEnabled")
         placement = nil
-        countdown.stop(); workspace.deactivate()
+        countdown.stop()
+        if !waitingForChange {workspace.deactivate()}
         let wasVisible = visible; motion.hide()
         if wasVisible {onHide()}
     }

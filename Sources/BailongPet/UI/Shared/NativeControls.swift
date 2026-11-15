@@ -192,6 +192,7 @@ final class BubbleBackgroundView: NSView {
     static let cornerRadius:CGFloat = 14
     let body = NSView()
     private let surface = NSView()
+    private let edge = GlassEdgeHighlight()
     private let ordinary = BubbleBackingView(), glassBacking = BubbleBackingView()
     private var glass: NSView?
     private var usesGlassContent = false
@@ -207,6 +208,8 @@ final class BubbleBackgroundView: NSView {
             surface.addSubview(view); view.autoresizingMask = [.width,.height]
         }
         surface.autoresizingMask = [.width,.height]
+        edge.cornerRadius = Self.cornerRadius; edge.autoresizingMask = [.width,.height]
+        edge.isHidden = true; addSubview(edge)
         NotificationCenter.default.addObserver(self,selector:#selector(preferencesChanged(_:)),name:PetPreferences.didChange,object:preferences)
         NSWorkspace.shared.notificationCenter.addObserver(self,selector:#selector(updateMaterial),name:NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,object:nil)
         updateMaterial()
@@ -258,6 +261,8 @@ final class BubbleBackgroundView: NSView {
     @objc private func updateMaterial() {
         let enabled = preferences.usesGlass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let next: CGFloat = enabled ? 0 : 1
+        // 高光仅参与绘制，不跟随 key 状态，也不获取鼠标或键盘焦点。
+        edge.isHidden = !enabled
         #if BAILONG_SDK_GLASS
         if #available(macOS 26.0, *), enabled {
             if glass == nil {
@@ -292,7 +297,7 @@ final class BubbleBackgroundView: NSView {
         window?.invalidateShadow()
     }
     override func layout() {
-        super.layout(); glass?.frame = bounds; surface.frame = bounds
+        super.layout(); glass?.frame = bounds; surface.frame = bounds; edge.frame = bounds
         for view in [glassBacking,ordinary,body] {view.frame = surface.bounds}
     }
     deinit {fade?.invalidate(); NotificationCenter.default.removeObserver(self); NSWorkspace.shared.notificationCenter.removeObserver(self)}

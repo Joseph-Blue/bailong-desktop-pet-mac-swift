@@ -16,6 +16,20 @@ struct TaskActivity:Equatable {
             switch self {case .failed:return "exclamationmark.circle.fill"; case .declined:return "hand.raised.slash.fill"; case .cancelled,.interrupted:return "xmark.circle.fill"}
         }
     }
+    // 折叠进度组标题与逐项短气泡分开；只保存公开标题及其显示身份。
+    struct GroupHeader:Equatable {
+        var title:String
+        var kind:Kind = .tool
+        var operation:ToolOperation = .tool
+        var finished = false
+        var outcome:Outcome? = nil
+    }
+    var groupHeader:GroupHeader? = nil
+    var groupActivity:TaskActivity {
+        guard let header = groupHeader else {return self}
+        return .init(title:header.title,kind:header.kind,finished:header.finished,
+                     toolOperation:header.operation,outcome:header.outcome)
+    }
     let title:String
     var detail:String = ""
     var kind:Kind = .tool
@@ -180,7 +194,9 @@ struct TaskActivity:Equatable {
                 case "search":
                     let query = entry["query"] as? String ?? ""
                     return label("搜索")+(query.isEmpty ? "" : "「"+query+"」")+(path.isEmpty ? "" : " · "+path)
-                default:return commandSummary(entry["command"] as? String ?? command)
+                default:
+                    let reported = commandSummary(entry["command"] as? String)
+                    return reported.isEmpty ? commandSummary(command) : reported
                 }
             }.filter {!$0.isEmpty}.joined(separator:"\n")
         }
@@ -226,6 +242,131 @@ struct TaskActivity:Equatable {
             if next.kind == .reasoning,next.detail.isEmpty,result?.kind == .reasoning,!((result?.detail.isEmpty) ?? true) {continue}
             result = next
         }
-        return runningTool ?? result
+        var activity = runningTool ?? result
+        activity?.groupHeader = currentGroupHeader(items:items)
+        return activity
     }
+    // 本机 Codex 的 NQNw / udV3 / I3PO：reasoning 不断组，独立消息断组；
+    // live 组取最后活动项，无活动项时取探索标题或思考，关闭的组显示整组摘要。
+    // 插件依赖 arguments / result 的自定义呈现不进入此公开投影。
+    private static func currentGroupHeader(items:[[String:Any]]) -> GroupHeader? {
+        var group = [(item:[String:Any],activity:TaskActivity)]()
+        var isOpen = false, heading:String?, closed:GroupHeader?, standalone:GroupHeader?
+        func closeGroup() {
+            if isOpen,!group.isEmpty {closed = completedGroupHeader(group); isOpen = false}
+            // 桌宠按消息边界限制标题归属，不沿用客户端对全轮 reasoning 的回看。
+            heading = nil
+        }
+        for item in items {
+            let type = item["type"] as? String ?? ""
+            if type == "reasoning" {
+                if let next = reasoningHeading(summary(item["summary"] as? [Any] ?? [])) {heading = next}
+                continue
+            }
+            if ["commandExecution","fileChange","mcpToolCall","dynamicToolCall","webSearch"].contains(type) {
+                if type == "webSearch",(item["query"] as? String ?? "").isEmpty,
+                   (item["action"] as? [String:Any] ?? [:]).isEmpty {continue}
+                if !isOpen {group.removeAll(keepingCapacity:true); isOpen = true}
+                // 客户端将 commandActions 展开成独立 exec，活动标题只取最后一个。
+                let actions = item["commandActions"] as? [[String:Any]] ?? []
+                let entries:[[String:Any]]
+                if type == "commandExecution",!actions.isEmpty,item["status"] as? String != "declined" {
+                    entries = actions.map {action in
+                        var value = item; value["commandActions"] = [action]; return value
+                    }
+                } else {entries = [item]}
+                for entry in entries {if let activity = from(item:entry) {group.append((entry,activity))}}
+                standalone = nil
+                continue
+            }
+            // 计划 / 审查标记不属于客户端折叠工具组；不把它们当作工具组边界。
+            if ["plan","enteredReviewMode","exitedReviewMode"].contains(type) {continue}
+            if ["agentMessage","userMessage","steeringUserMessage","hookPrompt","imageGeneration","imageView","contextCompaction",
+                "collabAgentToolCall","collabToolCall","error"].contains(type) {
+                closeGroup()
+                if let activity = from(item:item) {standalone = header(activity)}
+                else if type == "agentMessage",closed == nil {standalone = .init(title:"正在回复",kind:.reply)}
+            }
+        }
+        if isOpen,!group.isEmpty {
+            if let active = group.last(where:{isActive($0.item,$0.activity)}) {return activeGroupHeader(active.item,active.activity)}
+            // EeZ9.G：尾部连续探索段在模型思考期间继续显示探索标题。
+            if let last = group.last,[.read,.search,.listFiles].contains(last.activity.toolOperation) {
+                return activeGroupHeader(last.item,last.activity)
+            }
+            return .init(title:heading ?? "正在思考",kind:.reasoning)
+        }
+        return standalone ?? closed ?? heading.map {GroupHeader(title:$0,kind:.reasoning)}
+    }
+    private static func isActive(_ item:[String:Any],_ activity:TaskActivity) -> Bool {
+        guard !activity.finished else {return false}
+        return ["inProgress","running"].contains(item["status"] as? String ?? "") || item["completed"] as? Bool == false
+    }
+    private static func header(_ activity:TaskActivity) -> GroupHeader {
+        .init(title:activity.line,kind:activity.kind,operation:activity.toolOperation,
+              finished:activity.finished,outcome:activity.outcome)
+    }
+    private static func activeGroupHeader(_ item:[String:Any],_ activity:TaskActivity) -> GroupHeader {
+        if activity.outcome != nil {return header(activity)}
+        let action = (item["commandActions"] as? [[String:Any]])?.last ?? [:]
+        let title:String
+        switch activity.toolOperation {
+        case .read:
+            let path = action["path"] as? String ?? action["name"] as? String ?? ""
+            title = "正在读取"+(path.isEmpty ? "文件" : " "+(path as NSString).lastPathComponent)
+        case .search:
+            let path = action["path"] as? String ?? "",query = action["query"] as? String ?? ""
+            title = !path.isEmpty ? "正在搜索文件夹 "+path : !query.isEmpty ? "正在搜索「"+query+"」" : "正在搜索文件"
+        case .listFiles:
+            let path = action["path"] as? String ?? ""
+            title = path.isEmpty ? "正在列出文件" : "正在列出文件夹 "+path
+        case .edit:title = "正在修改文件"
+        default:return header(activity)
+        }
+        return .init(title:short(title),operation:activity.toolOperation)
+    }
+    private static func completedGroupHeader(_ entries:[(item:[String:Any],activity:TaskActivity)]) -> GroupHeader {
+        var categories = [String:TaskActivity](), failures = [String](), failure:TaskActivity?
+        for entry in entries {
+            let activity = entry.activity
+            if activity.outcome != nil {
+                if !failures.contains(activity.title) {failures.append(activity.title)}
+                failure = activity
+                continue
+            }
+            // 关闭组并不保证每个操作完成；不将尚未完成的工具写成成功。
+            guard activity.finished else {continue}
+            let key:String
+            switch entry.item["type"] as? String {
+            case "fileChange":key = "edit"
+            case "commandExecution":key = [.read,.search,.listFiles].contains(activity.toolOperation) ? "explore" : "command"
+            case "webSearch":key = "web"
+            default:key = "tool"
+            }
+            if categories[key] == nil {categories[key] = activity}
+        }
+        let labels = [("tool","已调用工具"),("edit","已修改文件"),("explore","已读取文件"),("command","已运行命令"),("web","已搜索网页")]
+        let parts = labels.filter {categories[$0.0] != nil}.map(\.1)+failures
+        let first = labels.compactMap {categories[$0.0]}.first ?? failure
+        return .init(title:parts.isEmpty ? "工具活动已结束" : parts.joined(separator:"、"),
+                     operation:first?.toolOperation ?? .tool,finished:true,outcome:failure?.outcome)
+    }
+    private static func reasoningHeading(_ summary:String) -> String? {
+        // 对应客户端 Faus._U 的标题层级：最后一个 Markdown 标题，缺少标题取末行。
+        // 只处理公开 summary，不读取 reasoning.content。
+        var heading:String?, last:String?
+        for raw in summary.components(separatedBy:.newlines) {
+            let line = raw.trimmingCharacters(in:.whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("<!--") {continue}
+            last = line
+            if line.hasPrefix("#"),let space = line.firstIndex(of:" "),line[..<space].allSatisfy({$0 == "#"}) {
+                heading = String(line[line.index(after:space)...]).trimmingCharacters(in:.whitespaces)
+            } else if line.hasPrefix("**"),line.hasSuffix("**"),line.count > 4 {
+                heading = String(line.dropFirst(2).dropLast(2))
+            }
+        }
+        guard let text = heading ?? last,!text.isEmpty else {return nil}
+        return short(text.replacingOccurrences(of:"**",with:""))
+    }
+
 }
