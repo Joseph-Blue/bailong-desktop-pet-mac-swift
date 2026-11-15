@@ -55,7 +55,7 @@ final class DesktopConversationSession {
     func refreshSettings(_ conversation:Conversation,force:Bool = false) {
         guard !isClosing(),let thread = conversation.threadID else {return}
         let key = conversation.key
-        guard desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
+        guard !sending(key),desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
         if force {desktopSettings.removeValue(forKey:key); settingsReady.remove(key); desktopModelNotes.removeValue(forKey:key)}
         let request = UUID(); desktopModelRequests[key] = request; desktopModelChecked[key] = Date()
         DesktopReply.readSettings(thread:thread) { [weak self] result in
@@ -75,13 +75,71 @@ final class DesktopConversationSession {
     }
     func submit(_ text:String,to conversation:Conversation,entry:ChatEntry) {
         let key = conversation.key
-        guard !isClosing(),canSend(),canReply(key),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
+        guard !isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
               let thread = conversation.threadID,let target = target(conversation) else {return}
-        let request = UUID(), started = Date()
-        desktopSending[key] = request; desktopReplyNotes.removeValue(forKey:key); onChange()
-        DesktopReply.submit(thread:thread,previousTurn:target.id,cwd:conversation.cwd,text:text,mode:target.mode) { [weak self,weak conversation] result in
-            guard let self,let conversation,!self.isClosing(),self.desktopSending[key] == request,
-                  self.store.conversations.contains(where:{$0 === conversation}) else {return}
+        let request = UUID()
+        desktopSending[key] = request
+        desktopModelRequests.removeValue(forKey:key)
+        desktopReplyNotes[key] = "正在连接 Codex 原会话…"; onChange()
+        let needsOpen = !settingsReady.contains(key)
+        let send:() -> Void = { [weak self,weak conversation] in
+            guard let self,let conversation else {return}
+            self.sendReply(text,to:conversation,entry:entry,thread:thread,target:target,request:request,openOnMissingOwner:!needsOpen,deadline:Date().addingTimeInterval(20))
+        }
+        if needsOpen {openForReply(conversation,thread:thread,request:request,completion:send)}
+        else {send()}
+    }
+    private func isCurrent(_ conversation:Conversation,thread:String,request:UUID) -> Bool {
+        !isClosing() && desktopSending[conversation.key] == request && conversation.threadID == thread &&
+            store.conversations.contains(where:{$0 === conversation})
+    }
+    private func failBeforeSend(_ conversation:Conversation,error:Error) {
+        let key = conversation.key
+        desktopSending.removeValue(forKey:key)
+        settingsReady.remove(key); desktopSettings.removeValue(forKey:key)
+        desktopModelNotes[key] = error.localizedDescription
+        desktopReplyNotes[key] = "消息未发送，草稿已保留。"; onChange()
+    }
+    private func openForReply(_ conversation:Conversation,thread:String,request:UUID,completion:@escaping () -> Void) {
+        guard isCurrent(conversation,thread:thread,request:request) else {return}
+        let key = conversation.key
+        desktopReplyNotes[key] = "正在打开 Codex 原会话…"; onChange()
+        CodexConnection.openConversationForReply(thread) { [weak self,weak conversation] error in
+            guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
+            if let error {self.failBeforeSend(conversation,error:error); return}
+            completion()
+        }
+    }
+    private func sendReply(_ text:String,to conversation:Conversation,entry:ChatEntry,thread:String,
+                           target:(id:String,mode:DesktopReply.Mode,start:Date),request:UUID,openOnMissingOwner:Bool,deadline:Date) {
+        guard isCurrent(conversation,thread:thread,request:request) else {return}
+        guard canSend(),let latest = self.target(conversation),latest.id == target.id,latest.mode == target.mode else {
+            failBeforeSend(conversation,error:PetFailure(message:"任务状态已变化，消息未发送。请确认后再次发送。")); return
+        }
+        let key = conversation.key, started = Date()
+        desktopReplyNotes[key] = "正在连接，连上后自动发送…"; onChange()
+        DesktopReply.submit(thread:thread,previousTurn:target.id,cwd:conversation.cwd,text:text,mode:target.mode,connectionDeadline:deadline,onConnected:{ [weak self,weak conversation] in
+            guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
+            self.desktopReplyNotes[key] = "正在发送…"; self.onChange()
+        }) { [weak self,weak conversation] result in
+            guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
+            // 只重试未提交消息的连接阶段；真正发送后的任何错误均不进入此分支。
+            if case .failure(let error) = result,error is DesktopReply.ConnectionPending {
+                if openOnMissingOwner {
+                    self.openForReply(conversation,thread:thread,request:request) { [weak self,weak conversation] in
+                        guard let self,let conversation else {return}
+                        self.sendReply(text,to:conversation,entry:entry,thread:thread,target:target,request:request,openOnMissingOwner:false,deadline:Date().addingTimeInterval(20))
+                    }
+                } else if deadline.timeIntervalSinceNow > 0.25 {
+                    DispatchQueue.main.asyncAfter(deadline:.now()+0.25) { [weak self,weak conversation] in
+                        guard let self,let conversation else {return}
+                        self.sendReply(text,to:conversation,entry:entry,thread:thread,target:target,request:request,openOnMissingOwner:false,deadline:deadline)
+                    }
+                } else {
+                    self.failBeforeSend(conversation,error:PetFailure(message:"连接 Codex 原会话超时。"+error.localizedDescription))
+                }
+                return
+            }
             self.desktopSending.removeValue(forKey:key)
             switch result {
             case .success(let receipt):
@@ -99,13 +157,8 @@ final class DesktopConversationSession {
                 self.desktopReplyNotes.removeValue(forKey:key)
                 self.onPersist()
             case .failure(let error):
-                if error is DesktopReply.OwnerUnavailable {
-                    self.settingsReady.remove(key); self.desktopModelNotes[key] = error.localizedDescription
-                    self.desktopReplyNotes.removeValue(forKey:key)
-                } else {
-                    if error is DesktopReply.Unconfirmed {self.desktopUnconfirmed.insert(key)}
-                    self.desktopReplyNotes[key] = error.localizedDescription
-                }
+                if error is DesktopReply.Unconfirmed {self.desktopUnconfirmed.insert(key)}
+                self.desktopReplyNotes[key] = error.localizedDescription
                 // 回执只更新原会话状态。用户已切换或关闭窗口时不弹模态框、激活应用。
                 self.onChange()
             }

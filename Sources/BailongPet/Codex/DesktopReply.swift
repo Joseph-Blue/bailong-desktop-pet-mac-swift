@@ -9,15 +9,15 @@ enum DesktopReply {
         return nil
     }
     struct OwnerUnavailable:LocalizedError {
-        var errorDescription:String? {"请先在 Codex 中打开这条会话。"}
+        var errorDescription:String? {"Codex 尚未加载这条会话。"}
     }
-    private static func connect(thread:String,timeout:Int = 8) throws -> (DesktopSocket,String) {
+    private static func connect(thread:String,timeout:Int = 8,deadline:Date? = nil) throws -> (DesktopSocket,String) {
         let connection = try DesktopSocket(timeoutSeconds:timeout)
-        let initialized = try connection.call("initialize",params:["clientType":"bailong-pet"],version:0)
+        let initialized = try connection.call("initialize",params:["clientType":"bailong-pet"],version:0,deadline:deadline)
         guard let client = (initialized["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:"Codex 未返回本机连接标识。")}
         connection.clientID = client
         let owner:[String:Any]
-        do {owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1)}
+        do {owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1,deadline:deadline)}
         catch let error as DesktopSocket.RequestFailure where error.code == "no-client-found" {throw OwnerUnavailable()}
         guard let target = owner["handledByClientId"] as? String else {throw OwnerUnavailable()}
         return (connection,target)
@@ -27,11 +27,13 @@ enum DesktopReply {
         let effort:String?
         let effortFromHistory:Bool
     }
-    static func readSettings(thread:String,completion:@escaping (Result<Settings,Error>) -> Void) {
+    static func readSettings(thread:String,timeout:Int = 12,completion:@escaping (Result<Settings,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async {
             let result = Result<Settings,Error> {
-                let (connection,target) = try connect(thread:thread)
-                let response = try connection.call("thread-follower-read-model-settings",params:["conversationId":thread],version:1,target:target)
+                let deadline = Date().addingTimeInterval(Double(timeout))
+                // 本机路由发现阶段最多等待 10 秒，须先收到 no-client-found 再分类。
+                let (connection,target) = try connect(thread:thread,timeout:timeout,deadline:deadline)
+                let response = try connection.call("thread-follower-read-model-settings",params:["conversationId":thread],version:1,target:target,deadline:deadline)
                 guard let result = response["result"] as? [String:Any],let settings = result["settings"] as? [String:Any],
                       let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:"Codex 未提供当前会话的模型设置。")}
                 let liveEffort = settings["reasoningEffort"] as? String
@@ -45,16 +47,28 @@ enum DesktopReply {
         let turnID:String
         let status:String
     }
+    // 仅在提交消息之前返回；调用方可继续连接，不会重复发送用户输入。
+    struct ConnectionPending:LocalizedError {
+        let underlying:Error
+        var errorDescription:String? {underlying.localizedDescription}
+    }
     struct Unconfirmed: LocalizedError {
         let underlying:Error
         var errorDescription:String? {"尚未收到发送确认。请先到 Codex 查看消息是否已发送，确认未发送后再重试。\n\n"+underlying.localizedDescription}
     }
-    static func submit(thread:String,previousTurn:String,cwd:String,text:String,mode:Mode,completion:@escaping (Result<Receipt,Error>) -> Void) {
+    static func submit(thread:String,previousTurn:String,cwd:String,text:String,mode:Mode,connectionDeadline:Date,onConnected:@escaping () -> Void,completion:@escaping (Result<Receipt,Error>) -> Void) {
         DispatchQueue.global(qos:.userInitiated).async {
             let result = Result<Receipt,Error> {
-                let (connection,target) = try connect(thread:thread,timeout:30)
+                let connection:DesktopSocket, target:String
+                do {
+                    // 路由发现只看发起时的客户端；短请求让新打开的会话及时参与下一次发现。
+                    (connection,target) = try connect(thread:thread,timeout:30,deadline:min(connectionDeadline,Date().addingTimeInterval(2)))
+                } catch where error is OwnerUnavailable || error is DesktopSocket.ResponseTimeout || error is DesktopSocket.Unavailable {
+                    throw ConnectionPending(underlying:error)
+                }
                 // 紧接发送前重新检查数据库，仅投影身份与状态，不读取对话或凭证。
                 try DesktopHistoryReader.requireReplyConversation(thread,previousTurn:previousTurn,steering:mode == .steer)
+                DispatchQueue.main.async {onConnected()}
                 let messageID = UUID().uuidString
                 let request:[String:Any] = ["threadId":thread,"clientUserMessageId":messageID,
                     "input":[["type":"text","text":text,"text_elements":[]]]]

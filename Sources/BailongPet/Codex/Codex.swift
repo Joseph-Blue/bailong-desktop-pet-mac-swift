@@ -76,6 +76,25 @@ final class CodexConnection {
         var url = URLComponents(); url.scheme = "codex"; url.host = "threads"; url.path = "/"+id
         return url.url
     }
+    // 仅用于用户主动发送后的会话准备；失败不降级为打开首页。
+    static func openConversationForReply(_ id:String,completion:@escaping (Error?) -> Void) {
+        navigationQueue.async {
+            let lookup = Result {try DesktopHistoryReader.containsThread(id)}
+            DispatchQueue.main.async {
+                do {
+                    guard try lookup.get(),let url = threadURL(id) else {throw PetFailure(message:"原 Codex 会话已不存在。")}
+                    guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {
+                        throw PetFailure(message:"未找到 Codex 桌面应用。")
+                    }
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.activates = true
+                    NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration) { _,error in
+                        DispatchQueue.main.async {completion(error)}
+                    }
+                } catch {completion(error)}
+            }
+        }
+    }
     func connect(_ callback: @escaping (Error?) -> Void) {
         if ready { callback(nil); return }
         waiting.append(callback)

@@ -44,7 +44,7 @@ struct ChatInputState {
     var desktopReady = false
     var canEdit:Bool {conversation != nil && runningTitle == nil && !sending && !readOnly}
     func canSend(models:ChatModelSettings) -> Bool {
-        canEdit && !unconfirmed && (kind == .project ? desktopReady && conversation?.threadID != nil && replyMode != nil : !models.loading && models.error == nil)
+        canEdit && !unconfirmed && (kind == .project ? conversation?.threadID != nil && replyMode != nil : !models.loading && models.error == nil)
     }
     var composerTitle:String {
         let preferences = PetPreferences.shared
@@ -61,13 +61,17 @@ struct ChatInputState {
     var note:String {
         if readOnly {return "历史只读：请在设置 → 高级导出原文件或重新读取"}
         if conversation == nil {return "请选择 Codex 项目对话"}
-        if sending {return "正在发送…"}
+        if sending {return replyNote ?? "正在发送…"}
         if unconfirmed {return "发送结果待确认，草稿已保留"}
         if stopping {return PetPreferences.shared.statusLine("taskStoppingTemplate")}
         if ownsRunningTask {return PetPreferences.shared.statusLine("historyBusyTemplate")}
         if let runningTitle {return "桌宠任务正在执行："+runningTitle}
         if let replyNote {return replyNote}
-        if kind == .project {return replyMode == .steer ? "执行中 · 发送后插话" : replyMode == nil ? "当前会话等待处理，请转到 Codex" : ""}
+        if kind == .project {
+            if replyMode == nil {return "当前会话等待处理，请转到 Codex"}
+            if !desktopReady {return "发送时连接原会话；未就绪时打开 Codex"}
+            return replyMode == .steer ? "执行中 · 发送后插话" : ""
+        }
         return ""
     }
 }

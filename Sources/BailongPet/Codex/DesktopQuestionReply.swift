@@ -28,6 +28,13 @@ enum DesktopQuestionReply {
 }
 
 final class DesktopSocket {
+    struct Unavailable:LocalizedError {
+        var errorDescription:String? {"Codex 本机通信尚未就绪。"}
+    }
+    struct ResponseTimeout:LocalizedError {
+        var method:String? = nil
+        var errorDescription:String? {method.map {"Codex 请求超时（\($0)）。"} ?? "等待 Codex 响应超时。"}
+    }
     struct RequestFailure:LocalizedError {
         let method:String, code:String
         var errorDescription:String? {"Codex 请求失败（\(method)）：\(code)"}
@@ -43,7 +50,11 @@ final class DesktopSocket {
         let bytes = Array(path.utf8CString)
         guard bytes.count <= MemoryLayout.size(ofValue:address.sun_path) else {throw PetFailure(message:"Codex 本机通信路径过长。")}
         var info = stat()
-        guard lstat(path,&info) == 0, info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFSOCK else {throw PetFailure(message:"Codex 本机通信尚未就绪，请打开 Codex 后重试。")}
+        if lstat(path,&info) != 0 {
+            if errno == ENOENT {throw Unavailable()}
+            throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))
+        }
+        guard info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFSOCK else {throw PetFailure(message:"Codex 本机通信路径不是当前用户的套接字。")}
         fd = socket(AF_UNIX,SOCK_STREAM,0)
         guard fd >= 0 else {throw PetFailure(message:"无法创建本机通信连接。")}
         var timeout = timeval(tv_sec:timeoutSeconds,tv_usec:0), noSignal:Int32 = 1
@@ -52,31 +63,60 @@ final class DesktopSocket {
         setsockopt(fd,SOL_SOCKET,SO_NOSIGPIPE,&noSignal,socklen_t(MemoryLayout.size(ofValue:noSignal)))
         withUnsafeMutableBytes(of:&address.sun_path) {$0.copyBytes(from:bytes.map {UInt8(bitPattern:$0)})}
         let connected = withUnsafePointer(to:&address) {$0.withMemoryRebound(to:sockaddr.self,capacity:1) {Darwin.connect(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}
-        if connected != 0 {let code = errno; close(fd); throw NSError(domain:NSPOSIXErrorDomain,code:Int(code))}
+        if connected != 0 {
+            let code = errno; close(fd)
+            if code == ENOENT || code == ECONNREFUSED {throw Unavailable()}
+            throw NSError(domain:NSPOSIXErrorDomain,code:Int(code))
+        }
     }
     deinit {close(fd)}
-    func call(_ method:String,params:[String:Any],version:Int,target:String? = nil) throws -> [String:Any] {
+    func call(_ method:String,params:[String:Any],version:Int,target:String? = nil,deadline operationDeadline:Date? = nil) throws -> [String:Any] {
+        let deadline = min(operationDeadline ?? .distantFuture,Date().addingTimeInterval(Double(timeoutSeconds)))
+        guard deadline > Date() else {throw ResponseTimeout(method:method)}
         let id = UUID().uuidString
         var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":(timeoutSeconds-1)*1000]
         if let target {request["targetClientId"] = target}
         try send(request)
-        let deadline = Date().addingTimeInterval(Double(timeoutSeconds))
         while Date() < deadline {
-            let value = try receive()
-            guard value["requestId"] as? String == id else {continue}
+            let value:[String:Any]
+            do {value = try receive(deadline:deadline)}
+            catch is ResponseTimeout {throw ResponseTimeout(method:method)}
+            catch {throw PetFailure(message:"Codex 本机请求失败（\(method)）："+error.localizedDescription)}
+            if try handleControlFrame(value) {continue}
+            guard value["type"] as? String == "response",value["requestId"] as? String == id else {continue}
             guard value["resultType"] as? String == "success" else {throw RequestFailure(method:method,code:value["error"] as? String ?? "请求失败")}
             return value
         }
-        throw PetFailure(message:"Codex 请求超时（\(method)）。")
+        throw ResponseTimeout(method:method)
     }
     func broadcast(_ method:String,params:[String:Any],version:Int) throws {
         try send(["type":"broadcast","method":method,"sourceClientId":clientID,"params":params,"version":version])
     }
     func receiveIfAvailable(milliseconds:Int32) throws -> [String:Any]? {
-        var descriptor = pollfd(fd:fd,events:Int16(POLLIN),revents:0)
-        let result = Darwin.poll(&descriptor,1,milliseconds)
-        guard result >= 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}
-        return result == 0 ? nil : try receive()
+        let deadline = Date().addingTimeInterval(Double(milliseconds)/1000)
+        repeat {
+            var descriptor = pollfd(fd:fd,events:Int16(POLLIN),revents:0)
+            let remaining = Int32(max(0,deadline.timeIntervalSinceNow*1000))
+            let result = Darwin.poll(&descriptor,1,remaining)
+            guard result >= 0 else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}
+            if result == 0 {return nil}
+            let value = try receive(deadline:Date().addingTimeInterval(Double(timeoutSeconds)))
+            if try !handleControlFrame(value) {return value}
+        } while Date() < deadline
+        return nil
+    }
+    // 桌宠只发起请求和订阅广播，不承接其他客户端的会话请求。
+    private func handleControlFrame(_ value:[String:Any]) throws -> Bool {
+        guard let id = value["requestId"] as? String else {return false}
+        switch value["type"] as? String {
+        case "client-discovery-request":
+            try send(["type":"client-discovery-response","requestId":id,"response":["canHandle":false]])
+            return true
+        case "request":
+            try send(["type":"response","requestId":id,"resultType":"error","error":"no-handler-for-request"])
+            return true
+        default:return false
+        }
     }
     private func send(_ value:[String:Any]) throws {
         let json = try JSONSerialization.data(withJSONObject:value)
@@ -90,18 +130,25 @@ final class DesktopSocket {
             }
         }
     }
-    private func receive() throws -> [String:Any] {
-        let header = try read(4), size = header.enumerated().reduce(UInt32(0)) {$0 | UInt32($1.element) << (8*$1.offset)}
+    private func receive(deadline:Date) throws -> [String:Any] {
+        let header = try read(4,deadline:deadline), size = header.enumerated().reduce(UInt32(0)) {$0 | UInt32($1.element) << (8*$1.offset)}
         guard size > 0 && size <= 16*1024*1024 else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
-        guard let value = try JSONSerialization.jsonObject(with:read(Int(size))) as? [String:Any] else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
+        guard let value = try JSONSerialization.jsonObject(with:read(Int(size),deadline:deadline)) as? [String:Any] else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
         return value
     }
-    private func read(_ count:Int) throws -> Data {
+    private func read(_ count:Int,deadline:Date) throws -> Data {
         var result = Data(count:count)
         try result.withUnsafeMutableBytes {bytes in
             var offset = 0
             while offset < count {
+                let remaining = deadline.timeIntervalSinceNow
+                guard remaining > 0 else {throw ResponseTimeout()}
+                var timeout = timeval(tv_sec:Int(remaining),tv_usec:max(1,Int32((remaining-floor(remaining))*1_000_000)))
+                guard setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout.size(ofValue:timeout))) == 0 else {
+                    throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))
+                }
                 let got = recv(fd,bytes.baseAddress!.advanced(by:offset),count-offset,0)
+                if got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) {throw ResponseTimeout()}
                 guard got > 0 else {throw PetFailure(message:got == 0 ? "Codex 本机连接已关闭。" : "Codex 本机通信失败："+String(cString:strerror(errno)))}
                 offset += got
             }
