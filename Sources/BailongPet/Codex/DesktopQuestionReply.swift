@@ -42,6 +42,7 @@ final class DesktopSocket {
         let method:String, code:String
         var errorDescription:String? {"Codex 请求失败（\(method)）：\(code)"}
     }
+    struct WakeupInterrupt:Error {}
     private let fd:Int32
     private let timeoutSeconds:Int
     var clientID = "initializing-client"
@@ -73,11 +74,13 @@ final class DesktopSocket {
         }
     }
     deinit {close(fd)}
-    func call(_ method:String,params:[String:Any],version:Int,target:String? = nil,deadline operationDeadline:Date? = nil) throws -> [String:Any] {
+    func call(_ method:String,params:[String:Any],version:Int,target:String? = nil,deadline operationDeadline:Date? = nil,wakeup:(([String:Any]) -> Bool)? = nil) throws -> [String:Any] {
         let deadline = min(operationDeadline ?? .distantFuture,Date().addingTimeInterval(Double(timeoutSeconds)))
-        guard deadline > Date() else {throw ResponseTimeout(method:method)}
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else {throw ResponseTimeout(method:method)}
         let id = UUID().uuidString
-        var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":(timeoutSeconds-1)*1000]
+        let timeoutMs = max(500,min(max(1000,(timeoutSeconds-1)*1000),Int(ceil(remaining*1000))))
+        var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":timeoutMs]
         if let target {request["targetClientId"] = target}
         try send(request)
         while Date() < deadline {
@@ -87,6 +90,7 @@ final class DesktopSocket {
             catch is Disconnected {throw Disconnected()}
             catch {throw PetFailure(message:"Codex 本机请求失败（\(method)）："+error.localizedDescription)}
             if try handleControlFrame(value) {continue}
+            if value["type"] as? String == "broadcast",wakeup?(value) == true {throw WakeupInterrupt()}
             guard value["type"] as? String == "response",value["requestId"] as? String == id else {continue}
             guard value["resultType"] as? String == "success" else {throw RequestFailure(method:method,code:value["error"] as? String ?? "请求失败")}
             return value

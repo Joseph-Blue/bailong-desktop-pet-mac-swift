@@ -14,6 +14,12 @@ final class DesktopConversationSession {
     private let canSend:() -> Bool, isClosing:() -> Bool
     var onChange:() -> Void = {}, onPersist:() -> Void = {}
     var onSubmitted:(String,String,ChatEntry) -> Void = {_,_,_ in}
+    var openThreadForReply:(String,@escaping () -> Bool,@escaping (Result<Bool,Error>) -> Void) -> Void = CodexConnection.openConversationForReply
+    var reopenThreadForReply:(String,@escaping () -> Bool) -> Void = CodexConnection.reopenConversationForReply
+    var coldReopenOffsets:[TimeInterval] = [2.5,7.5,14.0]
+    var coldDiscoveryTimeout:TimeInterval = 1.5
+    var coldRetryInterval:TimeInterval = 0.25
+    var coldTotalTimeout:TimeInterval = 60
     private var desktopSettings = [String:DesktopReply.Settings]()
     private var desktopModelNotes = [String:String]()
     private var desktopModelChecked = [String:Date]()
@@ -71,42 +77,20 @@ final class DesktopConversationSession {
     func refreshSettings(_ conversation:Conversation,force:Bool = false) {
         guard !isClosing(),let thread = conversation.threadID else {return}
         let key = conversation.key
-        guard (!sending(key) || preparing(key)),desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
-        if let pending = coldPreparing[key],pending.deadline <= Date() {
-            failBeforeSend(conversation,error:PetFailure(message:"等待 Codex 原会话就绪超时。")); return
-        }
+        guard !sending(key),desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
         if force {desktopSettings.removeValue(forKey:key); settingsReady.remove(key); desktopModelNotes.removeValue(forKey:key)}
         let request = UUID(); desktopModelRequests[key] = request; desktopModelChecked[key] = Date()
-        let pending = coldPreparing[key]
-        let timeout = pending.map {max(1,min(12,Int(ceil($0.deadline.timeIntervalSinceNow))))} ?? 12
-        DesktopReply.prepareConnection(thread:thread,timeout:timeout) { [weak self,weak conversation] result in
+        DesktopReply.prepareConnection(thread:thread,timeout:12) { [weak self,weak conversation] result in
             guard let self,let conversation,!self.isClosing(),self.desktopModelRequests[key] == request else {return}
             self.desktopModelRequests.removeValue(forKey:key)
-            guard self.store.conversations.contains(where:{$0.key == key}) else {return}
+            guard self.store.conversations.contains(where:{$0 === conversation}) else {return}
             switch result {
             case .success(let connection):
                 self.desktopSettings[key] = connection.settings; self.desktopModelNotes.removeValue(forKey:key); self.settingsReady.insert(key)
-                if let pending = self.coldPreparing[key] {
-                    self.coldPreparing.removeValue(forKey:key)
-                    guard self.isCurrent(conversation,thread:pending.thread,request:pending.request) else {return}
-                    guard pending.deadline > Date() else {
-                        self.failBeforeSend(conversation,error:PetFailure(message:"等待 Codex 原会话就绪超时。")); return
-                    }
-                    pending.send(connection)
-                }
             case .failure(let error):
                 self.desktopSettings.removeValue(forKey:key)
                 self.settingsReady.remove(key)
                 self.desktopModelNotes[key] = error is DesktopReply.OwnerUnavailable ? error.localizedDescription : "读取会话设置失败："+error.localizedDescription
-                if let pending = self.coldPreparing[key] {
-                    guard self.isCurrent(conversation,thread:pending.thread,request:pending.request) else {return}
-                    if DesktopReply.connectionPending(error),pending.deadline > Date() {
-                        DispatchQueue.main.asyncAfter(deadline:.now()+1) { [weak self,weak conversation] in
-                            guard let self,let conversation,self.coldPreparing[key]?.request == pending.request else {return}
-                            self.refreshSettings(conversation,force:true)
-                        }
-                    } else {self.failBeforeSend(conversation,error:error)}
-                }
             }
             self.onChange()
         }
@@ -150,18 +134,74 @@ final class DesktopConversationSession {
         guard isCurrent(conversation,thread:thread,request:request) else {return}
         let key = conversation.key
         desktopModelRequests.removeValue(forKey:key)
-        coldPreparing[key] = ColdPreparation(request:request,thread:thread,deadline:Date().addingTimeInterval(60)) { [weak self,weak conversation] connection in
+        desktopSettings.removeValue(forKey:key); settingsReady.remove(key)
+        coldPreparing[key] = ColdPreparation(request:request,thread:thread,deadline:Date().addingTimeInterval(coldTotalTimeout)) { [weak self,weak conversation] connection in
             guard let self,let conversation else {return}
             self.sendReply(text,to:conversation,entry:entry,thread:thread,target:target,request:request,recovery:.none,deadline:Date().addingTimeInterval(20),prepared:connection)
         }
         desktopReplyNotes[key] = "正在等待原会话就绪，就绪后自动发送…"; onChange()
-        refreshSettings(conversation,force:true)
+        for offset in coldReopenOffsets {
+            DispatchQueue.main.asyncAfter(deadline:.now()+offset) { [weak self,weak conversation] in
+                guard let self,let conversation,let pending = self.coldPreparing[key],
+                      pending.request == request,pending.deadline > Date(),
+                      !self.settingsReady.contains(key),
+                      self.isCurrent(conversation,thread:thread,request:request) else {return}
+                self.reopenThreadForReply(thread) { [weak self,weak conversation] in
+                    guard let self,let conversation,self.coldPreparing[key]?.request == request else {return false}
+                    return self.isCurrent(conversation,thread:thread,request:request)
+                }
+            }
+        }
+        probeColdReply(conversation,request:request)
+    }
+    private func probeColdReply(_ conversation:Conversation,request:UUID) {
+        let key = conversation.key
+        guard let pending = coldPreparing[key],pending.request == request,
+              isCurrent(conversation,thread:pending.thread,request:request) else {return}
+        let remaining = pending.deadline.timeIntervalSinceNow
+        guard remaining > 0 else {
+            failBeforeSend(conversation,error:PetFailure(message:"等待 Codex 原会话就绪超时。")); return
+        }
+        let timeout = max(2,min(8,Int(ceil(remaining))))
+        let discovery = min(coldDiscoveryTimeout,remaining)
+        DesktopReply.prepareConnection(thread:pending.thread,timeout:timeout,discoveryTimeout:discovery,wakeOnOwnerBroadcast:true,qos:.userInitiated) { [weak self,weak conversation] result in
+            guard let self,let conversation,let current = self.coldPreparing[key],
+                  current.request == request,self.isCurrent(conversation,thread:current.thread,request:request) else {return}
+            switch result {
+            case .success(let connection):
+                self.coldPreparing.removeValue(forKey:key)
+                self.desktopSettings[key] = connection.settings
+                self.desktopModelNotes.removeValue(forKey:key)
+                self.settingsReady.insert(key)
+                self.desktopModelChecked[key] = Date()
+                guard current.deadline > Date() else {
+                    self.failBeforeSend(conversation,error:PetFailure(message:"等待 Codex 原会话就绪超时。")); return
+                }
+                self.onChange()
+                current.send(connection)
+            case .failure(let error):
+                self.desktopSettings.removeValue(forKey:key)
+                self.settingsReady.remove(key)
+                if DesktopReply.connectionPending(error),current.deadline.timeIntervalSinceNow > self.coldRetryInterval {
+                    self.desktopModelNotes[key] = DesktopReply.OwnerUnavailable().localizedDescription
+                    self.onChange()
+                    DispatchQueue.main.asyncAfter(deadline:.now()+self.coldRetryInterval) { [weak self,weak conversation] in
+                        guard let self,let conversation else {return}
+                        self.probeColdReply(conversation,request:request)
+                    }
+                } else if DesktopReply.connectionPending(error) {
+                    self.failBeforeSend(conversation,error:PetFailure(message:"等待 Codex 原会话就绪超时。"+error.localizedDescription))
+                } else {
+                    self.failBeforeSend(conversation,error:error)
+                }
+            }
+        }
     }
     private func openForReply(_ conversation:Conversation,thread:String,request:UUID,completion:@escaping (Bool) -> Void) {
         guard isCurrent(conversation,thread:thread,request:request) else {return}
         let key = conversation.key
         desktopReplyNotes[key] = "正在打开 Codex 原会话…"; onChange()
-        CodexConnection.openConversationForReply(thread,isCurrent:{ [weak self,weak conversation] in
+        openThreadForReply(thread,{ [weak self,weak conversation] in
             guard let self,let conversation else {return false}
             return self.isCurrent(conversation,thread:thread,request:request)
         }) { [weak self,weak conversation] result in

@@ -25,9 +25,12 @@ final class CodexConnection {
         let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"
         return "\(state) · 进程 \(executableURL?.lastPathComponent ?? "codex") · PID \(pid) · 待回复 \(pending.count)\n可执行文件：\(executableURL?.path ?? "尚未启动")"
     }
+    private static func isDesktopApplication(_ app:NSRunningApplication) -> Bool {
+        !app.isTerminated && (app.bundleIdentifier == "com.openai.codex" || ["Codex","ChatGPT"].contains(app.localizedName ?? ""))
+    }
     static func desktopApplications() -> [URL] {
         let running = NSWorkspace.shared.runningApplications.compactMap { app -> URL? in
-            guard ["Codex","ChatGPT"].contains(app.localizedName ?? "") else { return nil }
+            guard isDesktopApplication(app) else { return nil }
             return app.bundleURL
         }
         return running + ["/Applications/Codex.app",NSHomeDirectory()+"/Applications/Codex.app",
@@ -76,7 +79,7 @@ final class CodexConnection {
         var url = URLComponents(); url.scheme = "codex"; url.host = "threads"; url.path = "/"+id
         return url.url
     }
-    // 仅用于用户主动发送后的会话准备；成功值表示本次是否启动了应用，失败不降级到首页。
+    // 仅用于用户主动发送后的会话准备；成功值表示本次是否处于冷启动阶段，失败不降级到首页。
     static func openConversationForReply(_ id:String,isCurrent:@escaping () -> Bool,completion:@escaping (Result<Bool,Error>) -> Void) {
         navigationQueue.async {
             let lookup = Result {try DesktopHistoryReader.containsThread(id)}
@@ -89,21 +92,26 @@ final class CodexConnection {
                     }
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = true
-                    let running = NSWorkspace.shared.runningApplications.contains { !$0.isTerminated && $0.bundleURL?.standardizedFileURL == app.standardizedFileURL }
-                    let navigate = {
-                        guard isCurrent() else {return}
-                        NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration) { _,error in
-                            DispatchQueue.main.async {
-                                if let error {completion(.failure(error))}
-                                else {completion(.success(!running))}
-                            }
+                    let runningApp = NSWorkspace.shared.runningApplications.first { isDesktopApplication($0) && $0.bundleURL?.standardizedFileURL == app.standardizedFileURL }
+                    let coldStart = runningApp == nil || (runningApp?.launchDate.map {Date().timeIntervalSince($0) < 10} == true)
+                    NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration) { _,error in
+                        DispatchQueue.main.async {
+                            if let error {completion(.failure(error))}
+                            else {completion(.success(coldStart))}
                         }
                     }
-                    // 系统负责启动并投递链接；实际会话就绪由调用方的准备请求确认。
-                    navigate()
                 } catch {completion(.failure(error))}
             }
         }
+    }
+    // 冷启动账户窗口替换会清空首窗待发路由；仅对仍在运行的桌面端后台补投递原会话链接。
+    static func reopenConversationForReply(_ id:String,isCurrent:@escaping () -> Bool) {
+        guard isCurrent(),let url = threadURL(id),
+              let app = NSWorkspace.shared.runningApplications.first(where:isDesktopApplication)?.bundleURL else {return}
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration,completionHandler:nil)
     }
     func connect(_ callback: @escaping (Error?) -> Void) {
         if ready { callback(nil); return }

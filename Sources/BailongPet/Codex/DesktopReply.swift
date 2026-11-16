@@ -18,13 +18,31 @@ enum DesktopReply {
         connection.clientID = client
         return connection
     }
-    private static func connect(thread:String,timeout:Int = 8,deadline:Date? = nil) throws -> (DesktopSocket,String) {
-        let connection = try initialize(timeout:timeout,deadline:deadline)
-        let owner:[String:Any]
-        do {owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1,deadline:deadline)}
-        catch let error as DesktopSocket.RequestFailure where error.code == "no-client-found" {throw OwnerUnavailable()}
-        guard let target = owner["handledByClientId"] as? String else {throw OwnerUnavailable()}
-        return (connection,target)
+    private static func isOwnerWakeupBroadcast(_ value:[String:Any],thread:String) -> Bool {
+        guard let method = value["method"] as? String,
+              let params = value["params"] as? [String:Any],
+              params["conversationId"] as? String == thread else {return false}
+        if method == "thread-stream-following-status-requested" {return true}
+        return method == "thread-stream-state-changed" && params["change"] is [String:Any]
+    }
+    private static func connect(thread:String,timeout:Int = 8,deadline:Date? = nil,discoveryDeadline:Date? = nil,wakeOnOwnerBroadcast:Bool = false) throws -> (DesktopSocket,String) {
+        let probeDeadline = discoveryDeadline ?? deadline
+        let connection = try initialize(timeout:timeout,deadline:probeDeadline)
+        func discover(deadline currentDeadline:Date?,allowWakeup:Bool) throws -> String {
+            let owner:[String:Any]
+            do {
+                owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1,
+                    deadline:currentDeadline,wakeup:allowWakeup ? {isOwnerWakeupBroadcast($0,thread:thread)} : nil)
+            } catch let error as DesktopSocket.RequestFailure where error.code == "no-client-found" {throw OwnerUnavailable()}
+            guard let target = owner["handledByClientId"] as? String else {throw OwnerUnavailable()}
+            return target
+        }
+        do {
+            return (connection,try discover(deadline:probeDeadline,allowWakeup:wakeOnOwnerBroadcast))
+        } catch is DesktopSocket.WakeupInterrupt {
+            let retryDeadline = min(deadline ?? .distantFuture,Date().addingTimeInterval(1.5))
+            return (connection,try discover(deadline:retryDeadline,allowWakeup:false))
+        }
     }
     static func connectionPending(_ error:Error) -> Bool {
         if let failure = error as? DesktopSocket.RequestFailure {
@@ -43,12 +61,12 @@ enum DesktopReply {
         fileprivate let socket:DesktopSocket
         fileprivate let owner:String
     }
-    static func prepareConnection(thread:String,timeout:Int = 12,completion:@escaping (Result<PreparedConnection,Error>) -> Void) {
-        DispatchQueue.global(qos:.utility).async {
+    static func prepareConnection(thread:String,timeout:Int = 12,discoveryTimeout:TimeInterval? = nil,wakeOnOwnerBroadcast:Bool = false,qos:DispatchQoS.QoSClass = .utility,completion:@escaping (Result<PreparedConnection,Error>) -> Void) {
+        DispatchQueue.global(qos:qos).async {
             let result = Result<PreparedConnection,Error> {
                 let deadline = Date().addingTimeInterval(Double(timeout))
-                // 本机路由发现阶段最多等待 10 秒，须先收到 no-client-found 再分类。
-                let (connection,target) = try connect(thread:thread,timeout:30,deadline:deadline)
+                let discoveryDeadline = discoveryTimeout.map {min(deadline,Date().addingTimeInterval($0))} ?? deadline
+                let (connection,target) = try connect(thread:thread,timeout:30,deadline:deadline,discoveryDeadline:discoveryDeadline,wakeOnOwnerBroadcast:wakeOnOwnerBroadcast)
                 let response = try connection.call("thread-follower-read-model-settings",params:["conversationId":thread],version:1,target:target,deadline:deadline)
                 guard let result = response["result"] as? [String:Any],let settings = result["settings"] as? [String:Any],
                       let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:"Codex 未提供当前会话的模型设置。")}
@@ -82,7 +100,7 @@ enum DesktopReply {
                         guard prepared.thread == thread else {throw PetFailure(message:"准备连接与发送会话不一致。")}
                         (connection,target) = (prepared.socket,prepared.owner)
                     }
-                    else {(connection,target) = try connect(thread:thread,timeout:30,deadline:min(connectionDeadline,Date().addingTimeInterval(2)))}
+                    else {(connection,target) = try connect(thread:thread,timeout:30,deadline:min(connectionDeadline,Date().addingTimeInterval(2)),wakeOnOwnerBroadcast:true)}
                 } catch where connectionPending(error) {
                     throw ConnectionPending(underlying:error)
                 }
