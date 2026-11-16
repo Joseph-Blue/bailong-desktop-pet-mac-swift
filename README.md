@@ -39,12 +39,14 @@
 双击 `build.command` 可在终端交互完成环境检查、素材下载与打包；也可通过命令行直接执行：
 
 ```sh
-./build.command --resources-zip /绝对路径/bailong-dev-assets-2026-11-10.zip
-./build.command --check           # 仅检查编译环境与运行素材
 ./build.command                   # 构建 Apple Silicon 正式结构 App
 ./build.command x86_64            # 构建 Intel App
-./run-dev.command --build-only    # 仅编译开发可执行文件（无需运行素材）
+./build.command --resources-zip /绝对路径/bailong-dev-assets-2026-11-10.zip
+                                  # 导入指定路径的素材包并构建
+./build.command --check           # 仅检查编译环境与运行素材
 ./run-dev.command                 # 增量编译并直接运行开发程序
+./run-dev.command --build-only    # 仅编译开发可执行文件（无需运行素材）
+
 ```
 
 - **素材导入**：默认仅补齐缺失文件；追加 `--replace-resources` 会先备份同名旧文件至 `.build/resource-import/` 再替换，追加 `--download-resources` 则直接拉取清单指定版本的素材包。
@@ -73,6 +75,9 @@
 
 ## 致谢与问题反馈
 
-- 角色动画、点击音效与交互设计源自 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet)（`v0.5.1 / b102e73`）。
-- 感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 macOS SDK 兼容处理方案，以及 [moon135246/bailong-desktop-pet-optimization](https://github.com/moon135246/bailong-desktop-pet-optimization) 在动作开头缓存与内存预算上的优化参考。完整图标与开源组件许可详见应用内「设置 → 关于」。
+- 感谢原作者 jingh12312-rgb（風-隐）：角色动画、主要交互设计灵感源自 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet)（`v0.5.1 / b102e73`）。
+- 感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 macOS SDK 兼容处理方案。
+- 感谢 [moon135246/bailong-desktop-pet-optimization](https://github.com/moon135246/bailong-desktop-pet-optimization) 在动作开头缓存与内存预算上的优化参考。
+- 完整图标与开源组件许可详见应用内「设置 → 关于」。
 - 提交 [GitHub Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues) 时，请附上应用版本号、macOS 版本与复现步骤；涉及会话同步或发送问题时，请一并说明 Codex 桌面端版本及会话类型（桌宠内置对话／Codex 项目会话）。
+- 欢迎 fork 本仓库，也欢迎提出建议或建设性批评。
