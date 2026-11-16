@@ -2,7 +2,7 @@
 
 本文件完整记录 `joseph/dev` 开发迭代与正式版演进；正式发布说明请查阅 [`main` 分支变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/main/CHANGELOG.md)，各阶段提交快照索引见 [开发变更索引](docs/开发变更索引.md)（其中历史条目保留归档原文，`6.0.1` 为早期后更正为 `0.6.1` 的版本号）。
 
-## [未发布 · joseph/agy-dev] — 2026-11-16
+## [0.8.0-rc.11] — 2026-11-16
 
 - **外部审批协议 v13 兼容**：修复 Codex 桌面端升级至 `26.1111.21308` 后外部任务待批准请求不在桌宠端弹出的问题。`DesktopApprovalReader` 与 `DesktopApproval` 兼容 `thread-stream-state-changed` v11～v13，增量补丁校验同源连接与相同协议版本，命令允许前置条件要求非空命令文本。
 - **开发脚本信号退出修复**：修复 `run-dev.command` 按 `^C` 时因 `NSModalPanelRunLoopMode` 阻塞导致淡出与清理计时器无法触发、耗尽 5 秒超时的问题。菜单与信号退出改为先在常规 RunLoop 完成淡出及连接关闭再调用 `NSApp.terminate`，并将 `WindowFade`、`BubbleMotion` 与 `ChatController` 关闭计时器同步注册至 `.modalPanel`。

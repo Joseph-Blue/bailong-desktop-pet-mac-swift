@@ -1,8 +1,8 @@
 # 白龙桌宠Swift · Dev
 
-本分支（`joseph/dev` 及其开发子分支）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。安装稳定正式版请前往 [`main` 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
+本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。安装稳定正式版请前往 [`main` 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-- **当前开发基线**：`0.8.0-rc.10`（演进自 `0.7.5-rc.1`）；当前正式版为 **0.7.4**。
+- **当前候选版本**：`0.8.0-rc.11`（演进自 `0.7.5-rc.1`）；当前正式版为 **0.7.4**。
 - **近期开发重点**：修复 Codex 桌面端冷启动换窗导致的首次发送延迟，兼容桌面端 v13 外部审批协议，修复开发脚本信号退出卡顿与气泡首行裁切；精简独立「工作区状态条」为显隐二态，重构多套餐额度排版与解耦的 `TokenDisclosureControl` 用量展开控件，并将原“性能”分类整合为“画质与性能”。完整迭代记录见 [CHANGELOG](CHANGELOG.md)，待验收事项见 [TODO](todo.md)。
 
 本项目基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)（参考基线 `v0.5.1 / b102e73`），使用 Swift + AppKit 原生重写并独立维护。角色动画采用透明 HEVC（HEVC with Alpha）与 AVFoundation 解码，由 CPU／vImage 完成线性光缩放与色彩转换；界面采用原生 AppKit 分栏与液态玻璃材质。
