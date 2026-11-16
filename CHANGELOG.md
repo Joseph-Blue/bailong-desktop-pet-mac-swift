@@ -1,8 +1,17 @@
 # 开发变更记录
 
-本文件保留开发迭代与正式版本记录，适用于 `joseph/dev`。普通用户请阅读 [main 的正式变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/main/CHANGELOG.md)。
+本文件完整记录 `joseph/dev` 开发迭代与正式版演进；正式发布说明请查阅 [`main` 分支变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/main/CHANGELOG.md)，各阶段提交快照索引见 [开发变更索引](docs/开发变更索引.md)（其中历史条目保留归档原文，`6.0.1` 为早期后更正为 `0.6.1` 的版本号）。
 
-历史条目从原 Git 提交恢复，保留当时的行为与验证状态；同名标题展示最近记录，各次原文见 [历史快照索引](docs/开发变更索引.md)。旧版的 FFmpeg、默认值及发布流程属于历史实现。`6.0.1` 为后来改正为 `0.6.1` 的旧编号。
+## [未发布 · joseph/agy-dev] — 2026-11-16
+
+- **外部审批协议 v13 兼容**：修复 Codex 桌面端升级至 `26.1111.21308` 后外部任务待批准请求不在桌宠端弹出的问题。`DesktopApprovalReader` 与 `DesktopApproval` 兼容 `thread-stream-state-changed` v11～v13，增量补丁校验同源连接与相同协议版本，命令允许前置条件要求非空命令文本。
+- **开发脚本信号退出修复**：修复 `run-dev.command` 按 `^C` 时因 `NSModalPanelRunLoopMode` 阻塞导致淡出与清理计时器无法触发、耗尽 5 秒超时的问题。菜单与信号退出改为先在常规 RunLoop 完成淡出及连接关闭再调用 `NSApp.terminate`，并将 `WindowFade`、`BubbleMotion` 与 `ChatController` 关闭计时器同步注册至 `.modalPanel`。
+- **气泡首行裁切修复**：修复开启底部任务信息栏或经空正文过渡后消息气泡首行偶发被裁切的问题。`MessageTextView` 在无选区写入后将插入点保持在 `{0, 0}` 并拦截容器尺寸变化触发的自动滚向文末；`BubbleBodyScrollView` 固定 `documentView` 零点、按落地目标视口高度判定溢出并过滤回顶前的残留触控板惯性滚轮；`Bubble.showFailure` 统一使用 `layoutBodyHeight`。
+- **工作区状态条精简为二态**：独立「工作区状态条」（`WorkspaceStatusPanel`）收束为常驻显示与隐藏二态（`gitWindowEnabled`），移除倒计时、变化召回以及废弃的 `gitWindowPinned`／`gitWindowSeconds` 设置键（启动与导入旧 JSON 时自动剥离）。右键与状态栏菜单动态显示“显示工作区状态条”／“隐藏工作区状态条”，点击状态条左侧关闭按钮同步关闭开关；“消息与提醒 › 工作区状态条”分组采用 `Lucide git-branch` 图标，保留单一开关并补充功能副标题。
+- **多套餐额度排版重构**：额度气泡全面采用高对比 `labelColor` 正文色；重置时间升级为 `12.5pt` 半粗等宽数字字体，后接真实 `\t` 与 `NSTextTab` 右对齐倒计时（不足 1 分钟显示 `< 1 分钟`）；标题区分 `ChatGPT 免费用户`、`ChatGPT 订阅 · <套餐>` 与 `计费方式 · <名称>`；Free 与 Go 仅展示单条 `30 天额度`；按 `account/read` 与公开 `planType` 区分 `Business Standard`、`Business Premium`、`Business 按量计费` 三档；双窗口套餐保留 `≤10%` 橙色、`≤5%` 红色低额度提示；底部“立即刷新”与失败态“重试”改用配 `arrow.clockwise` 图标的强调色按钮。
+- **Token 展开触发器解耦与光学对齐**：新增独立控件 `TokenDisclosureControl`，由额度弹窗、历史会话底栏与任务完成气泡底栏共用。按文字大写字高中心对齐 SF Symbol `alignmentRect.midY` 消除箭头纵向偏移；鼠标移入文字或箭头的整块区域时呈现统一圆角悬停背景，点击整块区域切换展开／收起并支持右键拷贝汇总。
+- **设置分类与文档整理**：设置侧栏“性能”更名为“画质与性能”并同步静态搜索索引；全面梳理 `AGENTS.md`、`README.md`、`docs/` 现行规范、`todo.md`、`Tools/NativeHEVC/README.md` 与 `skills/bailong-macos-port/SKILL.md`，剔除防御性免责表述并同步最新架构规则。
+- **检查与验收**：全量 126 个 Swift 源文件零警告类型检查、定向回归与链接核对通过；外部审批、信号退出、气泡首行及多套餐额度样式已完成用户核验，Token 展开控件与二态工作区状态条已完成真机核验。
 
 ## [0.8.0-rc.10] — 2026-11-16
 
