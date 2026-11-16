@@ -187,16 +187,13 @@ final class ChatController {
         }
         pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
         workspacePanel.onShowRequested = { [weak self] in self?.showWorkspace() }
-        workspacePanel.onRecallRequested = { [weak self] key in
-            guard let self,self.allConversations.contains(where:{$0.key == key}) else {return}
-            self.showWorkspace(key)
-        }
         workspacePanel.onHide = { [weak pet] in pet?.placeBubble() }
         pet.workspaceFrame = { [weak self] in self?.workspacePanel.frame }
         pet.onWorkspace = { [weak self] in
             guard let self else {return}
-            self.pet.reveal()
-            self.showWorkspace(force:true)
+            let next = !self.pet.preferences.bool("gitWindowEnabled")
+            if next {self.pet.reveal()}
+            self.pet.preferences.set(next,for:"gitWindowEnabled")
         }
         pet.workspaceProvider = { [weak self] key in
             guard let self,let conversation = self.allConversations.first(where:{$0.key == key}) else {return nil}
@@ -247,7 +244,10 @@ final class ChatController {
             return BubbleTaskOverview(tasks:active+recent,status:self.desktopTaskReadStatus)
         }
         pet.onGeometry = { [weak self] in self?.positionComposer(); self?.positionWorkspace() }
-        pet.onVisibility = { [weak self] shown in if !shown {self?.ui.hideComposer(); self?.workspacePanel.hide()} }
+        pet.onVisibility = { [weak self] shown in
+            if shown {self?.showWorkspace()}
+            else {self?.ui.hideComposer(); self?.workspacePanel.hide()}
+        }
         pet.onPreferencesChanged = { [weak self] in
             guard let self else {return}
             self.store.setRecording(self.pet.preferences.bool("recordHistory")); self.refresh()
@@ -305,10 +305,10 @@ final class ChatController {
     func refresh() {
         ui.refresh(allConversations,selected:selected,historyState:inputState(selected,kind:selected.kind),composerState:inputState(composerSelection,kind:composerKind))
         pet.refreshWorkspaceBars()
-        if workspacePanel.observesChanges {
+        if workspacePanel.visible {
             if let conversation = allConversations.first(where:{$0.key == workspacePanel.conversationKey}) {
                 workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)
-            } else {workspacePanel.hide()}
+            } else {showWorkspace()}
         }
     }
 
@@ -393,8 +393,8 @@ final class ChatController {
         composerSide = result.side; ui.moveComposer(to:result.frame.origin)
     }
 
-    private func showWorkspace(_ key:String? = nil,force:Bool = false) {
-        guard !closing,!pet.hidden,force || pet.preferences.bool("gitWindowEnabled") else {return}
+    private func showWorkspace(_ key:String? = nil) {
+        guard !closing,!pet.hidden,pet.preferences.bool("gitWindowEnabled") else {return}
         let requested = key ?? (pet.bubble.visible ? pet.bubble.relatedConversation : nil) ?? workspacePanel.conversationKey
         let conversation = allConversations.first {$0.key == requested} ?? (ui.composerVisible ? composerSelection : ui.history.isVisible ? selected : nil) ?? running?.0 ?? allConversations.max(by:{$0.lastActivity < $1.lastActivity}) ?? selected
         workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)

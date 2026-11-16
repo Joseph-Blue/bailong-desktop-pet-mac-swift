@@ -42,10 +42,7 @@ final class TranscriptActionBar:NSView {
     private let copyButton = HoverIconButton(symbol:"doc.on.doc",label:"拷贝")
     private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:"转到 Codex")
     private let completion = NSTextField(wrappingLabelWithString:"")
-    private let tokenGroup = NSView()
-    private let tokens = TranscriptTokenText(frame:.zero)
-    private let disclosure = HoverIconButton(symbol:"chevron.right",label:"展开用量明细")
-    private var tokenTextWidth:CGFloat = 0
+    private let tokenDisclosure = TokenDisclosureControl(frame:.zero)
     private let detail = TranscriptTokenText(frame:.zero)
     init(_ content:TranscriptActions) {
         self.content = content
@@ -58,10 +55,9 @@ final class TranscriptActionBar:NSView {
         CopyFeedback.attach(to:copyButton) { [weak self] in self?.content.text }
         codexButton.image = AppIcons.openAI; codexButton.hoverHelp = "转到 Codex"
         codexButton.target = self; codexButton.action = #selector(openCodex)
-        disclosure.target = self; disclosure.action = #selector(toggle)
-        tokenGroup.addSubview(tokens); tokenGroup.addSubview(disclosure)
-        for view in [completion,tokenGroup,detail] {addSubview(view)}
-        completion.isSelectable = true; tokens.isSelectable = true; detail.isSelectable = true
+        tokenDisclosure.onToggle = { [weak self] in self?.toggle() }
+        for view in [completion,tokenDisclosure,detail] {addSubview(view)}
+        completion.isSelectable = true; detail.isSelectable = true
         configure()
     }
     required init?(coder:NSCoder) {fatalError()}
@@ -81,15 +77,19 @@ final class TranscriptActionBar:NSView {
         paragraph.tabStops = [NSTextTab(textAlignment:.left,location:valueTab),NSTextTab(textAlignment:.left,location:unitTab)]
         paragraph.lineSpacing = 3
         let heading = "本轮\t"+(content.usage.map {TokenUsage.formatted($0.total)+"\tTokens"} ?? (content.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
-        tokens.attributedStringValue = NSAttributedString(string:heading,attributes:[.font:font,.paragraphStyle:paragraph,.foregroundColor:NSColor.labelColor])
-        tokenTextWidth = content.usage == nil ? valueTab+(heading.components(separatedBy:"\t").last! as NSString).size(withAttributes:[.font:font]).width+4 : unitTab+("Tokens" as NSString).size(withAttributes:[.font:font]).width+4
-        tokenGroup.isHidden = content.ended == nil
-        disclosure.isHidden = content.usage == nil && content.usageError == nil
-        disclosure.image = NSImage(systemSymbolName:expanded ? "chevron.down" : "chevron.right",accessibilityDescription:nil)
-        disclosure.setAccessibilityLabel(expanded ? "收起用量明细" : "展开用量明细")
+        let canExpand = content.usage != nil || content.usageError != nil
+        let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
+        tokenDisclosure.scale = max(0.85,content.font.pointSize/12)
+        tokenDisclosure.baseFont = font
+        tokenDisclosure.chevronTint = .secondaryLabelColor
+        tokenDisclosure.expandable = canExpand
+        tokenDisclosure.expanded = expanded
+        tokenDisclosure.accessibilityTitle = "用量明细"
+        tokenDisclosure.attributedTitle = NSAttributedString(string:heading,attributes:[.font:font,.paragraphStyle:paragraph,.foregroundColor:primaryTextColor])
+        tokenDisclosure.isHidden = content.ended == nil
         detail.attributedStringValue = NSAttributedString(string:content.usage?.details ?? content.usageError ?? "",attributes:[
             .font:font,.paragraphStyle:content.usage == nil ? NSParagraphStyle.default : paragraph,.foregroundColor:NSColor.secondaryLabelColor])
-        detail.isHidden = !expanded || disclosure.isHidden
+        detail.isHidden = !expanded || !canExpand
         needsLayout = true
     }
     // 按控件组换行，不缩字；测量和摆放共用同一算法。
@@ -111,20 +111,20 @@ final class TranscriptActionBar:NSView {
         if content.ended != nil {
             let natural = ceil(completion.attributedStringValue.size().width)+4
             let size = completion.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:min(width,natural),height:10000))
-            place(NSSize(width:min(width,natural),height:max(content.showsActions ? side : 0,size.height))) {r in
+            let completionSlot = place(NSSize(width:min(width,natural),height:max(content.showsActions ? side : 0,size.height))) {r in
                 completion.frame = r.insetBy(dx:0,dy:max(0,(r.height-size.height)/2))
             }
-            let arrowWidth:CGFloat = disclosure.isHidden ? 0 : side+4
-            let tokenWidth = min(width,tokenTextWidth+arrowWidth)
-            let labelWidth = max(1,tokenWidth-arrowWidth)
-            let labelHeight = tokens.height(for:labelWidth)
-            let tokenHeight = max(side,labelHeight)
-            tokenOrigin = place(NSSize(width:tokenWidth,height:tokenHeight)) {rect in
-                tokenGroup.frame = rect
-                tokens.frame = NSRect(x:0,y:(tokenHeight-labelHeight)/2,width:labelWidth,height:labelHeight)
-                disclosure.frame = NSRect(x:labelWidth+4,y:(tokenHeight-side)/2,width:side,height:side)
-                disclosure.frame.origin.y = tokens.convert(NSPoint(x:0,y:tokens.firstLineCenter),to:tokenGroup).y-side/2
-            }.minX
+            let controlSize = tokenDisclosure.preferredSize(maxWidth:width)
+            let tokenHeight = max(side,controlSize.height)
+            let tokenSlot = place(NSSize(width:controlSize.width,height:tokenHeight)) {rect in
+                var controlY = rect.minY+(tokenHeight-controlSize.height)/2
+                if rect.minY == completionSlot.minY {
+                    tokenDisclosure.frame = NSRect(x:rect.minX,y:controlY,width:controlSize.width,height:controlSize.height)
+                    controlY += InlineStatusLayout.baseline(of:completion)-(tokenDisclosure.frame.minY+tokenDisclosure.firstLineBaseline)
+                }
+                tokenDisclosure.frame = NSRect(x:rect.minX,y:controlY,width:controlSize.width,height:controlSize.height)
+            }
+            tokenOrigin = tokenSlot.minX+tokenDisclosure.textLeadingInset
         }
         if placing,content.showsActions,content.ended != nil,completion.frame.minX > 0 {
             InlineStatusLayout.align(copyButton,to:completion,side:side)

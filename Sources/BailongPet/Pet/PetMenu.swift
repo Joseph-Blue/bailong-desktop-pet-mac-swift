@@ -24,7 +24,8 @@ enum PetMenu {
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
         menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
-        let workspace = MenuAction("工作区状态") { [weak pet] in pet?.onWorkspace() }
+        let workspace = MenuAction(pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条") { [weak pet] in pet?.onWorkspace() }
+        workspace.identifier = .init("workspaceStatus")
         workspace.image = GitIcons.git; menu.addItem(workspace)
         menu.addItem(MenuAction("查询额度",symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
         let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
@@ -64,6 +65,9 @@ enum PetMenu {
         return menu
     }
     static func refreshVisibility(in menu:NSMenu,pet:PetController) {
+        if let workspace = menu.items.first(where:{$0.identifier?.rawValue == "workspaceStatus"}) {
+            workspace.title = pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条"
+        }
         guard let item = menu.items.first,item.identifier?.rawValue == "petVisibility" else {return}
         let show = pet.hidden || NSApp.isHidden
         item.title = show ? "显示桌宠" : "隐藏桌宠"

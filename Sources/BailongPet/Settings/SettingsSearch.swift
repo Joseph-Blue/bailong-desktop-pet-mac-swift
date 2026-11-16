@@ -60,7 +60,7 @@ struct SettingsSearchEntry {
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
         add(.messages,"进展提醒",["久无进展时提醒","提醒间隔"],"任务 执行 无新进度 90秒 5分钟 定时 等待 台词")
         add(.messages,"任务气泡",["在气泡中显示任务信息栏"],"Git 仓库状态 本轮文件改动 状态栏 进度 工具调用")
-        add(.messages,"工作区状态",["显示工作区状态","常驻","显示时长"],"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 独立 小窗 常驻 秒 右键菜单 召唤")
+        add(.messages,"工作区状态条",["显示工作区状态条"],"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条")
         add(.messages,"历史记录",["记录历史"],"聊天 保存 同步")
         add(.messages,"气泡窗审批",["气泡窗审批按钮顺序"],"批准 允许这一次 允许本轮 拒绝 左拒绝 右允许 左允许 右拒绝 左右 位置 红叉 绿对钩")
         add(.messages,"气泡卡片与任务概览",["气泡卡片保留数量","互动气泡显示任务概览","近期结束任务数量"],"消息 历史 上一条 下一条 正在执行 最近 完成")
@@ -116,10 +116,6 @@ struct SettingsSearchEntry {
                 entries[index].condition = "开启自主移动后可调整"
             } else if entries[index].section == .messages {
                 switch (entries[index].group,entries[index].title) {
-                case ("工作区状态","常驻"):
-                    entries[index].condition = "开启显示工作区状态后可调整"
-                case ("工作区状态","显示时长"):
-                    entries[index].condition = "关闭常驻后显示；开启显示工作区状态后可调整"
                 case (_,"开始时间"),(_,"结束时间"):
                     entries[index].condition = "开启定时安静陪伴后可调整"
                 case ("进展提醒","久无进展时提醒"):
