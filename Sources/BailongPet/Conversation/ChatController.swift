@@ -26,6 +26,7 @@ final class ChatController {
     var saveError: String?
     var updateTimer: Timer?
     var saveTimer: Timer?
+    private var shutdownTimer: Timer?
     lazy var requestCoordinator = RequestCoordinator(chat:self)
     private lazy var quotaCoordinator = QuotaCoordinator(pet:pet,connection:connection,isClosing:{ [unowned self] in self.closing })
     func quota() {quotaCoordinator.query()}
@@ -565,8 +566,14 @@ final class ChatController {
         quotaCoordinator.cancel()
         if running != nil {
             stop()
-            DispatchQueue.main.asyncAfter(deadline:.now()+2) { [weak self] in if self?.running != nil {self?.finish("interrupted",error:"桌宠退出，任务未确认完成。")} }
+            let timer = Timer(timeInterval:2,repeats:false) { [weak self] _ in
+                self?.shutdownTimer = nil
+                if self?.running != nil {self?.finish("interrupted",error:"桌宠退出，任务未确认完成。")}
+            }
+            shutdownTimer = timer
+            RunLoop.main.add(timer,forMode:.common)
+            RunLoop.main.add(timer,forMode:.modalPanel)
         } else {finishShutdown()}
     }
-    func finishShutdown() { updateTimer?.invalidate(); saveTimer?.invalidate(); connection.close(); store.finish(); ui.hideComposer(); ui.history.orderOut(nil); let completion = onFinishedShutdown; onFinishedShutdown = nil; completion?() }
+    func finishShutdown() { shutdownTimer?.invalidate(); shutdownTimer = nil; updateTimer?.invalidate(); saveTimer?.invalidate(); connection.close(); store.finish(); ui.hideComposer(); ui.history.orderOut(nil); let completion = onFinishedShutdown; onFinishedShutdown = nil; completion?() }
 }

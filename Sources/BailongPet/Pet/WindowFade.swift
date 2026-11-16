@@ -29,7 +29,9 @@ final class WindowFade: NSObject {
             window.alphaValue = from+(target-from)*(1-pow(1-t,3))
             if t >= 1 {self.finish()}
         }
-        timer = tick; RunLoop.main.add(tick,forMode:.common)
+        timer = tick
+        RunLoop.main.add(tick,forMode:.common)
+        RunLoop.main.add(tick,forMode:.modalPanel)
     }
     @objc private func settingsChanged() {if !preferences.bool("bubbleMotion") {finish()}}
     func hide(completion: @escaping () -> Void) {

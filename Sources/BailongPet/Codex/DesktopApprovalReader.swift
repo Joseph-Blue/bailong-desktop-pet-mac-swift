@@ -1,10 +1,12 @@
 import Foundation
 
-// 本机桌面端 thread-stream-state-changed v11 / following-changed v1。
+// 本机桌面端 thread-stream-state-changed v11–v13 / following-changed v1。
 // 订阅公开进展和待批准请求；不成为 writer，决定另经用户点击后的原请求提交。
 final class DesktopApprovalReader {
+    static let supportedStreamVersions = 11...13
     private struct State {
         var source:String
+        var version:Int
         var revision:Int
         var projection:[String:Any]
         var updatedAt:Date
@@ -92,7 +94,8 @@ final class DesktopApprovalReader {
         guard frame["type"] as? String == "broadcast",frame["method"] as? String == "thread-stream-state-changed",
               let params = frame["params"] as? [String:Any],params["hostId"] as? String == "local",
               let id = params["conversationId"] as? String,followed.contains(id),let turns = targetTurns[id] else {return}
-        guard frame["version"] as? Int == 11,let source = frame["sourceClientId"] as? String,
+        guard let version = frame["version"] as? Int,Self.supportedStreamVersions.contains(version),
+              let source = frame["sourceClientId"] as? String,
               let change = params["change"] as? [String:Any],let revision = change["revision"] as? Int else {
             throw PetFailure(message:"Codex 审批状态协议不兼容。")
         }
@@ -100,12 +103,12 @@ final class DesktopApprovalReader {
             guard let conversation = change["conversationState"] as? [String:Any],conversation["requests"] is [Any] else {
                 throw PetFailure(message:"Codex 审批快照缺少请求列表。")
             }
-            states[id] = State(source:source,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation,keepingTurns:turns),updatedAt:Date()); return
+            states[id] = State(source:source,version:version,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation,keepingTurns:turns),updatedAt:Date()); return
         }
         guard change["type"] as? String == "patches",let patches = change["patches"] as? [[String:Any]] else {
             throw PetFailure(message:"Codex 审批增量格式不兼容。")
         }
-        guard var state = states[id],state.source == source,state.revision == change["baseRevision"] as? Int else {
+        guard var state = states[id],state.source == source,state.version == version,state.revision == change["baseRevision"] as? Int else {
             states.removeValue(forKey:id); try follow(id,true,socket); return
         }
         for patch in patches {

@@ -11,9 +11,20 @@ final class MessageTextView: LinkTextView {
     private var transcriptToolbars = [Int:TranscriptActionBar]()
     private var expandedUsage = Set<String>()
     private var preparingFooters = false
+    private var resizingFrame = false
     private var codeLayoutDirty = true
     private var codeLayoutWidth:CGFloat = -1
     private func invalidateCodeLayout() {codeLayoutDirty = true; needsLayout = true}
+    override func setFrameSize(_ newSize:NSSize) {
+        resizingFrame = true
+        defer {resizingFrame = false}
+        super.setFrameSize(newSize)
+    }
+    @discardableResult override func scrollToVisible(_ rect:NSRect) -> Bool {
+        // NSTextView 随 clip 尺寸更新自身高度时会把插入点滚入视口；只读正文不随容器排版自动跳动。
+        guard !resizingFrame else {return false}
+        return super.scrollToVisible(rect)
+    }
     override func layout() {
         prepareFooters(width:bounds.width)
         super.layout()
@@ -149,10 +160,12 @@ final class MessageTextView: LinkTextView {
     }
     @discardableResult private func applyContent(_ value:NSAttributedString,reset:Bool) -> Bool {
         guard reset || !attributedString().isEqual(to:value) else {return false}
-        if reset {setSelectedRange(NSRange(location:0,length:0)); textStorage?.setAttributedString(value)}
+        let hadSelection = !reset && selectedRange().length > 0
+        if reset {textStorage?.setAttributedString(value)}
         else {replaceChangedSuffix(with:value)}
         measuredWidth = -1; invalidateCodeLayout()
         prepareFooters(width:bounds.width)
+        if !hadSelection {setSelectedRange(NSRange(location:0,length:0))}
         return true
     }
     // 使用实际 TextKit 布局，宽度不受滚动条显隐影响；只在正文或宽度改变后测量。

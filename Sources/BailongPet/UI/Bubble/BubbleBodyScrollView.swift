@@ -39,7 +39,9 @@ struct BubbleBodyLayout {
 final class BubbleBodyScrollView:GutterScrollView {
     private let readingClip = BubbleReadingClipView()
     private(set) var bodyHeight:CGFloat = 0
+    private var targetViewportHeight:CGFloat?
     private var pendingTop = false
+    private var acceptsMomentumScroll = false
     var allowsScrolling = true {didSet {updateGeometry()}}
     override var documentLayoutWidth:CGFloat {Self.documentWidth(for:bounds.width)}
 
@@ -54,30 +56,44 @@ final class BubbleBodyScrollView:GutterScrollView {
     required init?(coder:NSCoder) {fatalError()}
 
     override func layout() {
+        let before = contentView.bounds.origin
         super.layout()
-        guard pendingTop else {return}
-        // 新正文的回顶请求要等原生 clip/document 排版完成，不能被随后布局覆盖。
-        contentView.layoutSubtreeIfNeeded()
-        pendingTop = false
-        restorePosition(.zero)
+        if let document = documentView,document.frame.origin != .zero {document.setFrameOrigin(.zero)}
+        if pendingTop {
+            // 新正文的回顶请求要等原生 clip/document 排版完成，不能被随后布局覆盖。
+            contentView.layoutSubtreeIfNeeded()
+            if let document = documentView,document.frame.origin != .zero {document.setFrameOrigin(.zero)}
+            pendingTop = false
+            restorePosition(.zero)
+        } else if contentView.bounds.origin != before {
+            restorePosition(before)
+        }
     }
 
-    @objc private func beginReading() {pendingTop = false}
+    @objc private func beginReading() {
+        pendingTop = false
+        acceptsMomentumScroll = true
+    }
     override func scrollWheel(with event:NSEvent) {
         guard allowsScrolling else {return}
+        if !event.phase.isEmpty {acceptsMomentumScroll = true}
+        else if !event.momentumPhase.isEmpty && !acceptsMomentumScroll {return}
         beginReading()
         super.scrollWheel(with:event)
     }
 
     func setBody(_ document:NSView,height:CGFloat) {
+        let origin = pendingTop ? .zero : contentView.bounds.origin
         bodyHeight = max(0,ceil(height))
         if documentView !== document {documentView = document}
         updateGeometry()
+        restorePosition(origin)
     }
 
-    func setViewport(_ viewport:NSRect) {
+    func setViewport(_ viewport:NSRect,targetHeight:CGFloat? = nil) {
+        targetViewportHeight = targetHeight
         // 相同视口的重复排版不钳回正在回弹的阅读位置。
-        guard frame != viewport else {return}
+        guard frame != viewport else {updateGeometry(); return}
         let origin = pendingTop ? .zero : contentView.bounds.origin
         frame = viewport
         updateGeometry()
@@ -88,16 +104,20 @@ final class BubbleBodyScrollView:GutterScrollView {
         readingClip.pinsToTop = !allowsScrolling
         verticalScrollElasticity = allowsScrolling ? .allowed : .none
         guard let document = documentView else {return}
-        let overflow = allowsScrolling && bodyHeight > bounds.height
+        let effectiveHeight = max(bounds.height,targetViewportHeight ?? bounds.height)
+        let overflow = allowsScrolling && bodyHeight > effectiveHeight
         if hasVerticalScroller != overflow {hasVerticalScroller = overflow}
-        let size = NSSize(width:documentLayoutWidth,height:allowsScrolling ? bodyHeight : min(bodyHeight,bounds.height))
-        if document.frame.size != size {document.setFrameSize(size)}
+        let rect = NSRect(origin:.zero,size:NSSize(width:documentLayoutWidth,height:allowsScrolling ? bodyHeight : min(bodyHeight,bounds.height)))
+        if document.frame != rect {document.frame = rect}
         tile()
+        if document.frame.origin != .zero {document.setFrameOrigin(.zero)}
         reflectScrolledClipView(contentView)
         (window as? ContentCursorPanel)?.refreshContentCursor()
     }
 
     func showTop() {
+        acceptsMomentumScroll = false
+        if let document = documentView,document.frame.origin != .zero {document.setFrameOrigin(.zero)}
         restorePosition(.zero)
         pendingTop = true
         needsLayout = true
@@ -105,7 +125,8 @@ final class BubbleBodyScrollView:GutterScrollView {
 
     func restorePosition(_ origin:NSPoint) {
         // 本容器中的文档均按从上往下布局；不足一页时只存在顶部位置。
-        let y = allowsScrolling ? min(max(0,origin.y),max(0,bodyHeight-contentView.bounds.height)) : 0
+        let effectiveHeight = max(contentView.bounds.height,targetViewportHeight ?? contentView.bounds.height)
+        let y = allowsScrolling ? min(max(0,origin.y),max(0,bodyHeight-effectiveHeight)) : 0
         let point = NSPoint(x:0,y:y)
         if contentView.bounds.origin != point {contentView.scroll(to:point)}
         reflectScrolledClipView(contentView)

@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var terminationSignals = [DispatchSourceSignal]()
     var quitReady = false
     var quitInProgress = false
+    var awaitingTerminateReply = false
     var terminationRequested = false
     var explicitQuit = false
     let lifecycle = RunLifecycle()
@@ -142,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showSettings() {pet?.showSettings()}
     @objc func showAbout() {pet?.showSettings(section:.about)}
     @objc func systemWillTerminate() {explicitQuit = true}
-    @objc func quitFromMenu() {explicitQuit = true; FollowSessions.markManualExit(); NSApp.terminate(nil)}
+    @objc func quitFromMenu() {explicitQuit = true; FollowSessions.markManualExit(); prepareForTermination()}
     @objc func closeInterface() {
         // 原生模态窗口与 sheet 均走取消路径，不触发确认或危险操作。
         if let modal = NSApp.modalWindow {
@@ -180,21 +181,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {false}
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Dock 的系统“退出”只关闭界面；完整退出必须来自桌宠的显式退出入口。
-        if !explicitQuit {closeInterface(); return .terminateCancel}
+    private func prepareForTermination() {
         UpdateChecker.shared.cancel()
-        if quitReady || (pet == nil && chat == nil) {return .terminateNow}
-        if quitInProgress {return .terminateLater}
+        if quitReady || (pet == nil && chat == nil) {
+            quitReady = true
+            finishTermination()
+            return
+        }
+        guard !quitInProgress else {return}
         quitInProgress = true
         sync?.close()
-        // 淡出与原任务清理并行，两个完成后才答复退出；同步完成也在返回 terminateLater 后答复。
+        // 淡出与原任务清理并行；退出等待处于 modalPanel 模式时，DispatchQueue.main 不会被消费。
         let pending = DispatchGroup()
         if let pet {pending.enter(); pet.prepareForExit {pending.leave()}}
         if let chat {pending.enter(); chat.shutdown {pending.leave()}}
-        pending.notify(queue:.main) { [weak self] in
-            self?.quitReady = true; NSApp.reply(toApplicationShouldTerminate:true)
+        pending.notify(queue:.global(qos:.userInitiated)) { [weak self] in
+            RunLoop.main.perform(inModes:[.common,.modalPanel]) {
+                guard let self else {return}
+                self.quitReady = true
+                self.finishTermination()
+            }
         }
+    }
+    private func finishTermination() {
+        if awaitingTerminateReply {
+            awaitingTerminateReply = false
+            NSApp.reply(toApplicationShouldTerminate:true)
+        } else {
+            NSApp.terminate(nil)
+        }
+    }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Dock 的系统“退出”只关闭界面；完整退出必须来自桌宠的显式退出入口。
+        if !explicitQuit {closeInterface(); return .terminateCancel}
+        if quitReady || (pet == nil && chat == nil) {return .terminateNow}
+        awaitingTerminateReply = true
+        prepareForTermination()
         return .terminateLater
     }
     func applicationWillTerminate(_ notification: Notification) {

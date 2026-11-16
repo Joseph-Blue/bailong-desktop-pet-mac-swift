@@ -105,7 +105,9 @@ final class BubbleMotion: NSObject {
     private func startTimerIfNeeded() {
         guard timer == nil, progress(since:fadeStart,duration:fadeDuration) < 1 || resizeFrom != nil else {return}
         let tick = Timer(timeInterval:1.0/60,repeats:true) { [weak self] _ in self?.render() }
-        timer = tick; RunLoop.main.add(tick,forMode:.common)
+        timer = tick
+        RunLoop.main.add(tick,forMode:.common)
+        RunLoop.main.add(tick,forMode:.modalPanel)
     }
     @objc private func settingsChanged() {
         guard !enabled || reduced else {return}

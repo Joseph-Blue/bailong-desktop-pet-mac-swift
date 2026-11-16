@@ -425,8 +425,13 @@ final class Bubble {
         let chromeHeight = baseChromeHeight+progressHeight+workspaceHeight
         // 进展独占新增高度，包括启用宽高比时；不从原正文视口扣除。
         let desiredHeight:CGFloat = (usesCustomAspect ? max(baseChromeHeight+(bodyHeight > 0 ? 24*scale : 0),w/preferences.number("bubbleAspectRatio")) : baseChromeHeight+bodyHeight)+progressHeight+workspaceHeight
-        let h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale+workspaceHeight : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
-        if truncatesProgressBody {fitToolProgressBody(height:max(0,h-chromeHeight),width:bodyLayout.contentWidth)}
+        var h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale+workspaceHeight : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
+        if truncatesProgressBody {
+            let availableHeight = h < desiredHeight ? max(0,h-chromeHeight) : max(bodyHeight,h-chromeHeight)
+            let fittedHeight = fitToolProgressBody(height:availableHeight,width:bodyLayout.contentWidth)
+            h = min(h,chromeHeight+fittedHeight)
+        }
+        let targetTextHeight = ceil(max(0,h-chromeHeight))
         motion.onResize = { [weak self] size in
             guard let self else {return}
             let height = size.height
@@ -452,8 +457,8 @@ final class Bubble {
             self.closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
             let textHeight = max(0,height-chromeHeight)
             let viewport = bodyLayout.viewport(y:bottomMargin+footer,height:ceil(textHeight))
-            self.scroll.setViewport(viewport)
-            self.scroll.isHidden = bodyHeight <= 0
+            self.scroll.setViewport(viewport,targetHeight:targetTextHeight)
+            self.scroll.isHidden = self.scroll.bodyHeight <= 0
             // 两列共享边界与控件高度；翻页留在左下，正文高度不影响导航位置。
             let navigationY = bottomMargin, actionY = navigationY+navigationHeight
             let allowOnLeft = self.preferences.string("approvalButtonOrder") == "allowLeft"
@@ -620,7 +625,7 @@ final class Bubble {
                 questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput,truncateBody:truncateBody,completionFooter:completionFooter,failure:failure,headingActivity:headingActivity,conversation:conversation)
         }
     }
-    private func fitToolProgressBody(height:CGFloat,width:CGFloat) {
+    @discardableResult private func fitToolProgressBody(height:CGFloat,width:CGFloat) -> CGFloat {
         let attributes:[NSAttributedString.Key:Any] = [.font:NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale),.foregroundColor:NSColor.labelColor]
         func measure(_ body:String) -> CGFloat {
             text.setContent(NSAttributedString(string:body,attributes:attributes))
@@ -639,8 +644,10 @@ final class Bubble {
             }
             fittedHeight = measure(fitted)
         }
-        scroll.setBody(text,height:min(height,fittedHeight))
+        let result = min(height,fittedHeight)
+        scroll.setBody(text,height:result)
         scroll.showTop()
+        return result
     }
     private func layoutTextBody() {
         let naturalHeight = text.contentHeight(for:bodyLayout.contentWidth)
@@ -802,7 +809,7 @@ final class Bubble {
         codexButton.isHidden = true
         if let retry {retryButton.title = "重试"; retryButton.isHidden = false; retryButton.callback = retry}
         else if failure.openDesktop {retryButton.title = "打开 Codex"; retryButton.isHidden = false; retryButton.callback = {CodexConnection.openDesktop()}}
-        layout(bodyHeight:scroll.frame.height)
+        layout(bodyHeight:layoutBodyHeight)
         refreshStandalone = { [weak self] in
             guard let self else {return}
             self.showFailure(failure,scale:self.preferences.number("bubblePercent")/100,retry:retry,taskStartedAt:taskStartedAt,taskFinishedAt:taskFinishedAt,taskStatus:taskStatus)
