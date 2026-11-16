@@ -195,9 +195,8 @@ final class ChatController {
         pet.workspaceFrame = { [weak self] in self?.workspacePanel.frame }
         pet.onWorkspace = { [weak self] in
             guard let self else {return}
-            if self.workspacePanel.visible {self.workspacePanel.hide()}
-            else if !self.pet.preferences.bool("gitWindowEnabled") {self.pet.preferences.set(true,for:"gitWindowEnabled")}
-            else {self.showWorkspace()}
+            self.pet.reveal()
+            self.showWorkspace(force:true)
         }
         pet.workspaceProvider = { [weak self] key in
             guard let self,let conversation = self.allConversations.first(where:{$0.key == key}) else {return nil}
@@ -394,8 +393,8 @@ final class ChatController {
         composerSide = result.side; ui.moveComposer(to:result.frame.origin)
     }
 
-    private func showWorkspace(_ key:String? = nil) {
-        guard !closing,!pet.hidden,pet.preferences.bool("gitWindowEnabled") else {return}
+    private func showWorkspace(_ key:String? = nil,force:Bool = false) {
+        guard !closing,!pet.hidden,force || pet.preferences.bool("gitWindowEnabled") else {return}
         let requested = key ?? (pet.bubble.visible ? pet.bubble.relatedConversation : nil) ?? workspacePanel.conversationKey
         let conversation = allConversations.first {$0.key == requested} ?? (ui.composerVisible ? composerSelection : ui.history.isVisible ? selected : nil) ?? running?.0 ?? allConversations.max(by:{$0.lastActivity < $1.lastActivity}) ?? selected
         workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)

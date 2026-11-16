@@ -7,7 +7,7 @@ struct PlaybackSettingsError: LocalizedError {
 
 enum SettingsSection: Int, CaseIterable {
     case general, identity, activity, messages, appearance, advanced, developer, updates, about
-    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","性能","更新","关于"][rawValue] }
+    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","画质与性能","更新","关于"][rawValue] }
     var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer","arrow.triangle.2.circlepath","info.circle"][rawValue] }
     var keys: [String] {
         switch self {

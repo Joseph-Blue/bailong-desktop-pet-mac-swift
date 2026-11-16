@@ -44,8 +44,8 @@ final class WorkspaceStatusPanel {
             self.position(near:placement.pet,screen:placement.screen,avoiding:placement.avoiding)
         }
         workspace.onContentChange = { [weak self] in
-            guard let self,self.preferences.bool("gitWindowEnabled") else {return}
-            if self.waitingForChange,let key = self.conversationKey {
+            guard let self else {return}
+            if self.waitingForChange,self.preferences.bool("gitWindowEnabled"),let key = self.conversationKey {
                 self.onRecallRequested(key)
             } else if self.visible {self.startCountdown()}
         }
@@ -53,9 +53,9 @@ final class WorkspaceStatusPanel {
             guard let self else {return}
             let keys = Set(note.userInfo?["keys"] as? [String] ?? [])
             guard !keys.isDisjoint(with:["gitWindowEnabled","gitWindowPinned","gitWindowSeconds"]) else {return}
-            if !self.preferences.bool("gitWindowEnabled") {self.hide()}
+            if keys.contains("gitWindowEnabled") && !self.preferences.bool("gitWindowEnabled") {self.hide()}
             else if self.visible {self.startCountdown()}
-            else if keys.contains("gitWindowEnabled") || keys.contains("gitWindowPinned") {self.onShowRequested()}
+            else if self.preferences.bool("gitWindowEnabled") && (keys.contains("gitWindowEnabled") || keys.contains("gitWindowPinned")) {self.onShowRequested()}
         }
     }
     func update(conversation:Conversation,executing:Bool) {

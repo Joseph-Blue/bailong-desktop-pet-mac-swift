@@ -81,10 +81,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     func conditional(_ view:NSView,when condition:@escaping (PetPreferences) -> Bool) -> NSView {
         view.isHidden = !condition(preferences); conditionalRows.append((view,condition)); return view
     }
-    func group(_ title: String, _ rows: [NSView], symbol:String? = nil, action:NSView? = nil,detail:String? = nil) {
+    func group(_ title: String, _ rows: [NSView], symbol:String? = nil, image:NSImage? = nil, action:NSView? = nil,detail:String? = nil) {
         let section = NSStackView(); section.orientation = .vertical; section.alignment = .leading; section.spacing = 10
         let text = label(title,bold:true); text.font = .systemFont(ofSize:13,weight:.semibold)
-        let heading:NSView = symbol.map {iconTitle(text,symbol:$0,weight:.semibold)} ?? text
+        let iconImage = image ?? symbol.flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:13,weight:.semibold))}
+        let heading:NSView = iconImage.map {iconTitle(text,image:$0)} ?? text
         if let action {fill(alignedRow(leading:heading,control:action),in:section)} else {fill(heading,in:section)}
         if let detail {
             section.setCustomSpacing(4,after:section.arrangedSubviews.last!)
@@ -116,9 +117,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     func searchable(_ view:NSView,title:String) -> NSView {
         view.identifier = .init("setting:"+title); return view
     }
-    private func iconTitle(_ text:NSTextField,symbol:String,weight:NSFont.Weight) -> NSView {
+    private func iconTitle(_ text:NSTextField,image:NSImage) -> NSView {
         let icon = NSImageView()
-        icon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:13,weight:weight))
+        icon.image = image
+        icon.imageScaling = .scaleProportionallyDown
         icon.contentTintColor = .secondaryLabelColor
         icon.setAccessibilityElement(false)
         icon.translatesAutoresizingMaskIntoConstraints = false

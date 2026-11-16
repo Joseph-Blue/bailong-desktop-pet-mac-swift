@@ -384,7 +384,9 @@ final class Bubble {
             column = max(column,2*(buttonHeight+gap)+countWidth)
         }
         let questionWidth = previousQuestion.isHidden ? 0 : 32*scale+2*gap+3*([previousQuestion!,skipQuestion!,details!].map {$0.intrinsicContentSize.width}.max() ?? 0)
-        return max(usesCustomAspect ? aspectWidth : 320*scale,320*scale,32*scale+gap+2*column,questionWidth)
+        let quotaInset = BubbleBodyLayout(width:320*scale,scale:scale).inset
+        let quotaWidth = kind == "quota" ? max(360*scale,quotaRequiredContentWidth+2*quotaInset) : 0
+        return max(usesCustomAspect ? aspectWidth : 320*scale,320*scale,quotaWidth,32*scale+gap+2*column,questionWidth)
     }
     private var layoutWidth:CGFloat {min(max(questionSize?.width ?? 0,minimumLayoutWidth),kind == "progressToast" ? 360*scale : .greatestFiniteMagnitude,placementArea?.width ?? .greatestFiniteMagnitude)}
     private var bodyLayout:BubbleBodyLayout {BubbleBodyLayout(width:layoutWidth,scale:scale)}
@@ -508,6 +510,7 @@ final class Bubble {
         preparingDisplay = true
         defer {preparingDisplay = false; onVisibilityChange()}
         if kind == "quotaLoading" {quotaUsageExpanded = false}
+        if kind != "quota" {quotaRequiredContentWidth = 0}
         stopQuotaLoading()
         taskList?.stop(); taskList = nil
         userInputPrefixLength = 0
@@ -842,6 +845,7 @@ final class Bubble {
         quotaLoadingTimer = timer; RunLoop.main.add(timer,forMode:.common)
     }
     private var quotaUsageExpanded = false
+    private var quotaRequiredContentWidth:CGFloat = 0
     func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, cachedAt:Date? = nil, retry: (() -> Void)? = nil,preserveScroll:Bool = false,revealUsage:Bool = false) {
         let readingOrigin = scroll.contentView.bounds.origin
         var usageEnd:CGFloat?
@@ -854,6 +858,12 @@ final class Bubble {
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
         }
         configureButtons()
+        let now = Date()
+        let resetFont = NSFont.monospacedDigitSystemFont(ofSize:12.5*fontScale,weight:.medium)
+        let resetDates = overview.rows.compactMap(\.resetsAt)
+        let resetTab = ceil(resetDates.map {(QuotaPresentation.resetDateText($0) as NSString).size(withAttributes:[.font:resetFont]).width}.max() ?? 0)+16*fontScale
+        let resetTail = ceil(resetDates.map {(QuotaPresentation.countdown(until:$0,now:now) as NSString).size(withAttributes:[.font:resetFont]).width}.max() ?? 0)
+        quotaRequiredContentWidth = resetDates.isEmpty ? 0 : resetTab+resetTail+8
         let width = bodyLayout.contentWidth
         let content = TopDownView(frame:NSRect(x:0,y:0,width:width,height:1))
         content.autoresizesSubviews = false
@@ -864,9 +874,22 @@ final class Bubble {
             text.frame = NSRect(x:0,y:y,width:width,height:height); content.addSubview(text); y += height
             return height
         }
-        addText("套餐 · "+overview.plan,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
+        addText(overview.subscriptionHeading,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
         if let cachedAt {
-            addText("缓存 · 更新于 "+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale),color:.secondaryLabelColor)
+            addText("缓存 · 更新于 "+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale))
+        }
+        let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
+        func addReset(_ date: Date) {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.tabStops = [NSTextTab(textAlignment:.left,location:resetTab)]
+            let line = QuotaPresentation.resetDateText(date)+"\t"+QuotaPresentation.countdown(until:date,now:now)
+            let view = TranscriptTokenText(frame:.zero)
+            view.textContainer?.lineFragmentPadding = 2
+            view.font = resetFont
+            view.attributedStringValue = NSAttributedString(string:line,attributes:[.font:resetFont,.foregroundColor:primaryTextColor,.paragraphStyle:paragraph])
+            let height = max(ceil(resetFont.pointSize+5),view.height(for:width))
+            view.frame = NSRect(x:0,y:y,width:width,height:height)
+            content.addSubview(view); y += height
         }
         y += 12*scale
         for (index,row) in overview.rows.enumerated() {
@@ -894,11 +917,11 @@ final class Bubble {
             let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
             // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
             // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
-            let heading = NSTextField(labelWithString:row.title); heading.font = headingFont
+            let heading = NSTextField(labelWithString:row.title); heading.font = headingFont; heading.textColor = .labelColor
             if let subtitle = row.subtitle {
                 heading.usesSingleLineMode = false; heading.maximumNumberOfLines = 0; heading.lineBreakMode = .byWordWrapping
-                let title = NSMutableAttributedString(string:row.title+"\n",attributes:[.font:headingFont])
-                title.append(NSAttributedString(string:subtitle,attributes:[.font:NSFont.systemFont(ofSize:11*fontScale),.foregroundColor:NSColor.secondaryLabelColor]))
+                let title = NSMutableAttributedString(string:row.title+"\n",attributes:[.font:headingFont,.foregroundColor:NSColor.labelColor])
+                title.append(NSAttributedString(string:subtitle,attributes:[.font:NSFont.systemFont(ofSize:11*fontScale),.foregroundColor:NSColor.labelColor]))
                 heading.attributedStringValue = title
             }
             let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
@@ -930,10 +953,14 @@ final class Bubble {
                 bar.style = .bar; bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 100; bar.doubleValue = amount
                 content.addSubview(bar); y += 16*scale
             }
-            if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*fontScale),color:.secondaryLabelColor)}
+            if let resetDate = row.resetsAt {
+                addReset(resetDate)
+                if row.detail != nil {y += 4*scale}
+            }
+            if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*fontScale))}
             if let footnote = row.footnote {
                 y += 4*scale
-                addText(footnote,font:.systemFont(ofSize:11*fontScale),color:.secondaryLabelColor)
+                addText(footnote,font:.systemFont(ofSize:11*fontScale))
             }
             if row.retry,let retry {
                 let button = ActionButton("重试",retry); button.bezelStyle = .inline
@@ -946,12 +973,19 @@ final class Bubble {
         if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
         let management = SubscriptionManagementButton(management:overview.management,font:.systemFont(ofSize:12*fontScale))
         let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
-        refresh?.bezelStyle = .inline; refresh?.isBordered = false; refresh?.font = .systemFont(ofSize:12*fontScale)
-        let actionHeight = max(24*scale,management.intrinsicContentSize.height,refresh?.intrinsicContentSize.height ?? 0)
+        if let refresh {
+            refresh.font = .systemFont(ofSize:12*fontScale,weight:.medium)
+            refresh.image = NSImage(systemSymbolName:"arrow.clockwise",accessibilityDescription:nil)?
+                .withSymbolConfiguration(.init(pointSize:11*fontScale,weight:.semibold))
+            refresh.imagePosition = .imageLeading
+            refresh.keepsAccentWhenInactive = true
+            refresh.emphasize()
+        }
+        let actionHeight = max(26*scale,management.intrinsicContentSize.height,refresh?.intrinsicContentSize.height ?? 0)
         management.frame = NSRect(x:0,y:y,width:min(width,management.intrinsicContentSize.width+12*scale),height:actionHeight)
         content.addSubview(management)
         if let refresh {
-            let refreshWidth = refresh.intrinsicContentSize.width+12*scale
+            let refreshWidth = refresh.intrinsicContentSize.width
             refresh.frame = NSRect(x:width-refreshWidth,y:y,width:refreshWidth,height:actionHeight)
             content.addSubview(refresh)
         }

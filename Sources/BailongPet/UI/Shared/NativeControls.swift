@@ -98,7 +98,10 @@ final class ActionButton: NSButton {
         let iconSpace = iconSize > 0 ? iconSize+6*ratio : 0
         let start = (bounds.width-size.width-iconSpace)/2
         if let image {
-            let rect = NSRect(x:start,y:(bounds.height-iconSize)/2,width:iconSize,height:iconSize)
+            let natural = image.size
+            let scale = natural.width > 0 && natural.height > 0 ? min(iconSize/natural.width,iconSize/natural.height) : 1
+            let target = NSSize(width:natural.width*scale,height:natural.height*scale)
+            let rect = NSRect(x:start+(iconSize-target.width)/2,y:(bounds.height-target.height)/2,width:target.width,height:target.height)
             let tinted = NSImage(size:rect.size,flipped:false) { bounds in
                 image.draw(in:bounds)
                 foreground.setFill(); bounds.fill(using:.sourceIn); return true

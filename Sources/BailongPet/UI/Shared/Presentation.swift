@@ -77,6 +77,7 @@ struct AppFailure {
 struct QuotaRow {
     let title: String, value: String, detail: String?
     let remaining: Double?
+    var resetsAt: Date? = nil
     var retry = false
     var wrapsValue = false
     var loading = false
@@ -89,12 +90,24 @@ struct QuotaOverview {
     var rows: [QuotaRow]
     var notice: String?
     var management:SubscriptionManagement = .personal
+    var subscriptionHeading: String {
+        if plan == "Free" {return "ChatGPT 免费用户"}
+        if management == .api || management == .bedrock || management == .gcp {return "计费方式 · "+plan}
+        return "ChatGPT 订阅 · "+plan
+    }
 }
 enum QuotaPresentation {
-    static let plans = ["free":"Free", "go":"Go", "plus":"Plus", "prolite":"Pro 100", "pro":"Pro 200", "promax":"Pro 500",
-        "team":"Team", "business":"Business", "self_serve_business_prolite":"Business Premium", "self_serve_business_usage_based":"Business（按量计费）",
-        "ent26":"Enterprise", "enterprise":"Enterprise", "enterprise_cbp_automation":"Enterprise（自动化）", "enterprise_cbp_usage_based":"Enterprise（按量计费）",
-        "edu":"Edu", "edu_plus":"Edu Plus", "edu_pro":"Edu Pro", "sci":"Science", "sci_plus":"Science Plus"]
+    static let plans = [
+        "free":"Free", "free_workspace":"Free", "go":"Go", "plus":"Plus",
+        "prolite":"Pro 100", "pro":"Pro 200", "promax":"Pro 500",
+        "team":"Business Standard", "business":"Business Standard", "business_standard":"Business Standard", "self_serve_business":"Business Standard",
+        "self_serve_business_prolite":"Business Premium", "business_premium":"Business Premium",
+        "self_serve_business_usage_based":"Business 按量计费", "business_usage_based":"Business 按量计费",
+        "ent26":"Enterprise", "enterprise":"Enterprise", "hc":"Enterprise",
+        "enterprise_cbp_automation":"Enterprise（自动化）", "enterprise_cbp_usage_based":"Enterprise 按量计费",
+        "edu":"Edu", "education":"Edu", "edu_plus":"Edu Plus", "edu_pro":"Edu Pro",
+        "sci":"Science", "sci_plus":"Science Plus"
+    ]
     static func string(_ value: Any?) -> String? {
         guard let text = value as? String else {return nil}
         let result = text.trimmingCharacters(in:.whitespacesAndNewlines)
@@ -105,10 +118,19 @@ enum QuotaPresentation {
         guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite else {return nil}
         return value.doubleValue
     }
-    static func plan(_ value: Any?, account: [String:Any]?) -> String {
+    static func rawPlan(_ value: Any?, account: [String:Any]?) -> String? {
         let supplied = string(value), accountPlan = string(account?["planType"])
-        let raw = supplied == nil || supplied == "unknown" ? accountPlan ?? supplied : supplied
-        if let raw {return plans[raw] ?? (raw == "unknown" ? "套餐未识别" : "套餐："+raw)}
+        if let accountPlan, accountPlan != "unknown", plans[accountPlan] != nil {
+            if supplied == nil || supplied == "unknown" || ["team","business","pro","edu","sci"].contains(supplied!) {
+                return accountPlan
+            }
+        }
+        return supplied == nil || supplied == "unknown" ? accountPlan ?? supplied : supplied
+    }
+    static func plan(_ value: Any?, account: [String:Any]?) -> String {
+        if let raw = rawPlan(value,account:account) {
+            return plans[raw] ?? (raw == "unknown" ? "套餐未识别" : "套餐："+raw)
+        }
         switch account?["type"] as? String {
         case "apiKey": return "API 按量计费"
         case "amazonBedrock": return "Amazon Bedrock"
@@ -116,14 +138,44 @@ enum QuotaPresentation {
         default: return "套餐信息暂不可用"
         }
     }
-    static func reset(_ value: Any?) -> String? {
-        number(value).map {"重置："+Date(timeIntervalSince1970:$0).formatted(date:.abbreviated,time:.shortened)}
+    static func resetDateText(_ date: Date) -> String {
+        "重置："+date.formatted(date:.abbreviated,time:.shortened)
     }
-    static func overview(_ value: [String:Any], account: [String:Any]?) -> QuotaOverview {
+    static func countdown(until date: Date, now: Date = Date()) -> String {
+        let remaining = date.timeIntervalSince(now)
+        if remaining < 60 {return "< 1 分钟"}
+        let totalMinutes = Int(remaining/60)
+        let days = totalMinutes/1440, hours = (totalMinutes%1440)/60, minutes = totalMinutes%60
+        return [days > 0 ? "\(days) 天" : nil,hours > 0 ? "\(hours) 小时" : nil,minutes > 0 ? "\(minutes) 分钟" : nil]
+            .compactMap {$0}.joined(separator:" ")
+    }
+    static func reset(_ value: Any?, now: Date = Date()) -> String? {
+        guard let seconds = number(value) else {return nil}
+        let date = Date(timeIntervalSince1970:seconds)
+        return resetDateText(date)+"\t"+countdown(until:date,now:now)
+    }
+    private static func periodTitle(minutes: Double?, role: String, monthlyOnly: Bool) -> String {
+        if monthlyOnly {return "30 天额度"}
+        guard let minutes, minutes > 0 else {return role == "primary" ? "主要额度" : "次要额度"}
+        if abs(minutes-43200) <= 2160 {
+            return minutes.truncatingRemainder(dividingBy:1440) == 0 ? String(format:"%.0f 天额度",minutes/1440) : "30 天额度"
+        }
+        if abs(minutes-10080) <= 1 {return "每周额度"}
+        if minutes >= 1440 && minutes.truncatingRemainder(dividingBy:1440) == 0 {
+            return String(format:"%.0f 天额度",minutes/1440)
+        }
+        if minutes.truncatingRemainder(dividingBy:60) == 0 {
+            return String(format:"%.0f 小时额度",minutes/60)
+        }
+        return String(format:"%.0f 分钟额度",minutes)
+    }
+    static func overview(_ value: [String:Any], account: [String:Any]?, now: Date = Date()) -> QuotaOverview {
         let map = value["rateLimitsByLimitId"] as? [String:[String:Any]] ?? [:]
         var buckets = map.keys.sorted {a,b in a == "codex" && b != "codex" || a != "codex" && b != "codex" && a < b}.compactMap {map[$0]}
         if buckets.isEmpty, let legacy = value["rateLimits"] as? [String:Any] {buckets = [legacy]}
         let bucketPlan = buckets.compactMap {string($0["planType"])}.first(where:{$0 != "unknown"})
+        let resolvedPlan = rawPlan(bucketPlan,account:account)
+        let isFreeOrGo = ["free","free_workspace","go"].contains(resolvedPlan ?? "")
         var result = QuotaOverview(plan:plan(bucketPlan,account:account),rows:[])
         var creditNotes = [String]()
         result.management = .forAccount(account,plan:result.plan)
@@ -131,20 +183,26 @@ enum QuotaPresentation {
             let name = string(bucket["limitName"]) ?? string(bucket["limitId"]) ?? "额度组 \(index+1)"
             let prefix = buckets.count > 1 ? name+" · " : ""
             let before = result.rows.count
-            for key in ["primary","secondary"] {
-                guard let window = bucket[key] as? [String:Any] else {continue}
-                let period: String
-                if let minutes = number(window["windowDurationMins"]) {
-                    period = minutes == 10080 ? "每周额度" : minutes.truncatingRemainder(dividingBy:60) == 0 ? String(format:"%.0f 小时额度",minutes/60) : String(format:"%.0f 分钟额度",minutes)
-                } else {period = key == "primary" ? "主要额度" : "次要额度"}
+            let bucketRawPlan = rawPlan(bucket["planType"],account:account) ?? resolvedPlan
+            let monthlyOnly = ["free","free_workspace","go"].contains(bucketRawPlan ?? "")
+            let allWindows = ["primary","secondary"].compactMap {key in (bucket[key] as? [String:Any]).map {(key,$0)}}
+            let selectedWindows: [(String,[String:Any])]
+            if monthlyOnly {
+                selectedWindows = allWindows.max {(number($0.1["windowDurationMins"]) ?? 0) < (number($1.1["windowDurationMins"]) ?? 0)}.map {[$0]} ?? []
+            } else {
+                selectedWindows = allWindows
+            }
+            for (key,window) in selectedWindows {
+                let period = periodTitle(minutes:number(window["windowDurationMins"]),role:key,monthlyOnly:monthlyOnly)
                 let remaining = number(window["usedPercent"]).map {max(0,min(100,100-$0))}
-                result.rows.append(QuotaRow(title:prefix+period,value:remaining.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供",detail:reset(window["resetsAt"]) ?? "重置时间暂未提供",remaining:remaining))
+                let resetDate = number(window["resetsAt"]).map {Date(timeIntervalSince1970:$0)}
+                result.rows.append(QuotaRow(title:prefix+period,value:remaining.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供",detail:resetDate == nil ? "重置时间暂未提供" : nil,remaining:remaining,resetsAt:resetDate))
             }
             if let limit = bucket["individualLimit"] as? [String:Any] {
                 let remaining = number(limit["remainingPercent"]).map {max(0,min(100,$0))}
                 let amounts = [string(limit["used"]).map {"已用 "+$0},string(limit["limit"]).map {"上限 "+$0}].compactMap {$0}.joined(separator:" / ")
-                let detail = [amounts.isEmpty ? nil : amounts,reset(limit["resetsAt"])].compactMap {$0}.joined(separator:"\n")
-                result.rows.append(QuotaRow(title:prefix+"个人使用限额",value:remaining.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供",detail:detail.isEmpty ? nil : detail,remaining:remaining))
+                let resetDate = number(limit["resetsAt"]).map {Date(timeIntervalSince1970:$0)}
+                result.rows.append(QuotaRow(title:prefix+"个人使用限额",value:remaining.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供",detail:amounts.isEmpty ? nil : amounts,remaining:remaining,resetsAt:resetDate))
             }
             if let credits = bucket["credits"] as? [String:Any] {
                 let unlimited = credits["unlimited"] as? Bool == true
@@ -160,7 +218,10 @@ enum QuotaPresentation {
         }
         if result.rows.isEmpty && creditNotes.isEmpty {result.rows = [QuotaRow(title:"使用额度",value:"暂未提供",detail:emptyMessage(account),remaining:nil)]}
         let cards = QuotaResetCards(value)
-        result.rows.append(QuotaRow(title:"额度重置卡",value:cards.amount,detail:cards.detail,remaining:nil,footnote:creditNotes.isEmpty ? nil : creditNotes.joined(separator:"\n")))
+        let hidesEmptyResetCards = isFreeOrGo || [.api,.bedrock,.gcp].contains(result.management)
+        if !hidesEmptyResetCards || (cards.availableCount ?? 0) > 0 || !creditNotes.isEmpty {
+            result.rows.append(QuotaRow(title:"额度重置卡",value:cards.amount,detail:cards.detail,remaining:nil,footnote:creditNotes.isEmpty ? nil : creditNotes.joined(separator:"\n")))
+        }
         if value["ordinaryUsageAllowed"] as? Bool == false {result.notice = "服务当前未允许使用包含额度。"}
         return result
     }

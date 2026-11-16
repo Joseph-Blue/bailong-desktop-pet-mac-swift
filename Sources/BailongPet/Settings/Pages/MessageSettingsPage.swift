@@ -14,7 +14,7 @@ enum MessageSettingsPage {
         form.group("工作区状态",[
             form.toggle("显示工作区状态","gitWindowEnabled"),
             form.toggle("常驻","gitWindowPinned",requires:["gitWindowEnabled"]),
-            form.conditional(form.slider("显示时长","gitWindowSeconds",range:PetPreferences.ranges["gitWindowSeconds"]!,suffix:"秒",requires:["gitWindowEnabled"]),when:{!$0.bool("gitWindowPinned")})],symbol:"arrow.triangle.branch")
+            form.conditional(form.slider("显示时长","gitWindowSeconds",range:PetPreferences.ranges["gitWindowSeconds"]!,suffix:"秒",requires:["gitWindowEnabled"]),when:{!$0.bool("gitWindowPinned")})],image:GitIcons.git)
         form.group("进展提醒",[
             form.toggle("久无进展时提醒","taskReminderEnabled",detail:"任务连续 90 秒没有新进展后，按下方间隔提醒。等待回答、批准或正在停止时不提醒。",requires:["taskBubbles","progressBubbles"]),
             form.slider("提醒间隔","taskReminderMinutes",range:1...30,suffix:"分钟",requires:["taskBubbles","progressBubbles","taskReminderEnabled"])],symbol:"bell.badge")

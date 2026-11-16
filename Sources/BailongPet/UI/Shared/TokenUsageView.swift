@@ -47,7 +47,7 @@ final class QuotaTokenUsageView:NSView {
         super.init(frame:.zero)
         autoresizesSubviews = false
         heading.font = .systemFont(ofSize:12*fontScale,weight:.medium)
-        source.font = .systemFont(ofSize:11*fontScale); source.textColor = .secondaryLabelColor
+        source.font = .systemFont(ofSize:11*fontScale); source.textColor = .labelColor
         amount.font = .monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
         amount.stringValue = TokenUsage.formatted(usage.total)+" Tokens"; amount.isSelectable = true
         arrow.setButtonType(.pushOnPushOff); arrow.bezelStyle = .disclosure; arrow.title = ""
@@ -60,8 +60,9 @@ final class QuotaTokenUsageView:NSView {
         let numberWidth = numbers.map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
         let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 3*scale
         paragraph.tabStops = [NSTextTab(textAlignment:.left,location:ceil(labelWidth)+12*scale),NSTextTab(textAlignment:.left,location:ceil(labelWidth+numberWidth)+24*scale)]
+        let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
         detail.font = font
-        detail.attributedStringValue = NSAttributedString(string:usage.details,attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph])
+        detail.attributedStringValue = NSAttributedString(string:usage.details,attributes:[.font:font,.foregroundColor:primaryTextColor,.paragraphStyle:paragraph])
         [heading,source,amount,arrow,detail].forEach {addSubview($0)}
     }
     required init?(coder:NSCoder) {fatalError()}

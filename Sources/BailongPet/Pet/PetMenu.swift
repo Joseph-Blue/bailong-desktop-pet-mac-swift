@@ -24,7 +24,7 @@ enum PetMenu {
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
         menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
-        let workspace = MenuAction("工作区状态",checked:pet.workspaceFrame() != nil) { [weak pet] in pet?.onWorkspace() }
+        let workspace = MenuAction("工作区状态") { [weak pet] in pet?.onWorkspace() }
         workspace.image = GitIcons.git; menu.addItem(workspace)
         menu.addItem(MenuAction("查询额度",symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
         let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
