@@ -23,25 +23,30 @@ enum PetMenu {
             let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
-        menu.addItem(MenuAction("历史会话",symbol:"book.closed") { [weak pet] in pet?.onHistory(nil) })
-        menu.addItem(MenuAction("查询额度",symbol:"gauge.with.dots.needle.50percent") { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
+        menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
+        let workspace = MenuAction(pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条") { [weak pet] in pet?.onWorkspace() }
+        workspace.identifier = .init("workspaceStatus")
+        workspace.image = GitIcons.git; menu.addItem(workspace)
+        menu.addItem(MenuAction("查询额度",symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
         let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
         codex.image = AppIcons.openAI?.copy() as? NSImage
         codex.image?.size = NSSize(width:16,height:16)
         menu.addItem(codex)
         menu.addItem(.separator())
-        menu.addItem(MenuAction("随机动画",symbol:"shuffle") {random()})
+        menu.addItem(MenuAction("播放随机动画",symbol:"shuffle") {random()})
         let animations = submenu("播放动作",symbol:"play.rectangle")
-        for (name,clips) in [("待机动作",pet.catalog.idles+pet.catalog.extras),("互动动作",pet.catalog.variants),("工作动作",pet.catalog.work),("移动动作",pet.catalog.movementAnimations)] {
+        for (name,clips,symbol) in [("待机动作",pet.catalog.idles+pet.catalog.extras,"figure.stand"),("互动动作",pet.catalog.variants,"figure.play"),("工作动作",pet.catalog.work,"briefcase"),("移动动作",pet.catalog.movementAnimations,"figure.walk.motion")] {
             let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
+            item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
+            item.image?.isTemplate = true
             for clip in clips {group.addItem(MenuAction(clip.title) { [weak pet] in pet?.preview(clip) })}
             item.submenu = group; animations.addItem(item)
         }
         let switches = submenu("快捷开关",symbol:"switch.2")
-        switches.addItem(MenuAction("自主移动",checked:pet.autoMove) { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
-        switches.addItem(MenuAction("播放音效",checked:pet.soundEnabled) { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
-        switches.addItem(MenuAction("任务气泡提醒",checked:pet.taskBubbles) { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
-        switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen) { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
+        switches.addItem(MenuAction("自主移动",checked:pet.autoMove,symbol:"figure.walk.motion") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
+        switches.addItem(MenuAction("播放音效",checked:pet.soundEnabled,symbol:"speaker.wave.2") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
+        switches.addItem(MenuAction("任务气泡提醒",checked:pet.taskBubbles,symbol:"bell.badge") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
+        switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen,symbol:"eye.slash") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
         switches.addItem(.separator())
         switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak pet] in pet?.showSettings(section:.general) })
         menu.addItem(.separator())
@@ -60,6 +65,9 @@ enum PetMenu {
         return menu
     }
     static func refreshVisibility(in menu:NSMenu,pet:PetController) {
+        if let workspace = menu.items.first(where:{$0.identifier?.rawValue == "workspaceStatus"}) {
+            workspace.title = pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条"
+        }
         guard let item = menu.items.first,item.identifier?.rawValue == "petVisibility" else {return}
         let show = pet.hidden || NSApp.isHidden
         item.title = show ? "显示桌宠" : "隐藏桌宠"

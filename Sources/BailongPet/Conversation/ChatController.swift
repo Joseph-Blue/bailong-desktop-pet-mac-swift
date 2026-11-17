@@ -7,6 +7,7 @@ final class ChatController {
     let pet: PetController
     let store: HistoryStore
     let ui = ChatInterface()
+    private let workspacePanel = WorkspaceStatusPanel()
     let connection = CodexConnection()
     var selected: Conversation // 历史窗口浏览目标
     var composerSelection:Conversation?
@@ -18,12 +19,14 @@ final class ChatController {
     private var clearingWorkspace = false
     var cancelled = false, closing = false
     private var messagesState = TaskMessageAccumulator()
+    private var tokenAccumulator = TurnTokenAccumulator()
     var reminderClock:TaskReminderClock?
     private var interruptInFlight = false
     var currentActivity:TaskActivity? {messagesState.currentActivity}
     var saveError: String?
     var updateTimer: Timer?
     var saveTimer: Timer?
+    private var shutdownTimer: Timer?
     lazy var requestCoordinator = RequestCoordinator(chat:self)
     private lazy var quotaCoordinator = QuotaCoordinator(pet:pet,connection:connection,isClosing:{ [unowned self] in self.closing })
     func quota() {quotaCoordinator.query()}
@@ -119,16 +122,20 @@ final class ChatController {
                 self.reportHistoryReadFailure(error)
                 return
             }
-            self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史保存失败，请检查磁盘空间。"; self.ui.status.isHidden = false
+            self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史记录未能保存，请查看错误详情。"; self.ui.status.isHidden = false
             guard !self.closing else {return}
-            RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"原文件保留。新记录暂留运行内存 (RAM)，尚未写入磁盘；退出会丢失尚未保存的新记录。处理磁盘空间或写入权限后，可重新保存。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
+            RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"新记录尚未保存到磁盘，退出应用后会丢失。请检查磁盘空间和写入权限，再点“重新保存”。原有记录保留。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
         }
         store.onSaved = { [weak self] in
             guard let self,self.saveError != nil else {return}
             self.saveError = nil; RecoveryWindow.resolve("history-save"); self.refresh()
         }
         ui.onSubmit = { [weak self] key,text,entry in self?.submit(text,to:key,entry:entry) }
-        ui.onStop = { [weak self] key in if self?.running?.0.key == key {self?.stop()} }
+        ui.onStop = { [weak self] key in
+            guard let self else {return}
+            if self.desktopSession.preparing(key) {self.desktopSession.cancelPreparation(key)}
+            else if self.running?.0.key == key {self.stop()}
+        }
         ui.onNew = { [weak self] entry in self?.newConversation(entry:entry) }
         ui.onNewDefault = { [weak self] entry in self?.newDefaultConversation(entry:entry) }
         ui.onFolder = { [weak self] entry in self?.chooseFolder(entry:entry) }
@@ -173,12 +180,30 @@ final class ChatController {
         }
         connection.event = { [weak self] method,p in self?.receive(method,p) }
         connection.request = { [weak self] id,method,p in self?.requestCoordinator.enqueue(id,method,p) }
-        connection.disconnected = { [weak self] error in if self?.running != nil {self?.finish("interrupted",error:error.localizedDescription)} }
+        connection.disconnected = { [weak self] error in if self?.running != nil {self?.finish("interrupted",error:CodexErrorMessage.encode(["message":error.localizedDescription,"code":"localConnectionDisconnected"]))} }
         pet.cliDiagnostics = { [weak self] in
             guard let self else { return "连接已关闭" }
             return self.connection.diagnostics + "\n内置任务：" + (self.running?.1.status ?? "空闲")
         }
-        pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
+        pet.onComposer = { [weak self] in self?.toggleComposer() }
+        pet.onDismissComposer = { [weak self] in
+            guard let self,self.ui.composer.attachedSheet == nil else {return}
+            self.ui.hideComposer()
+        }
+        pet.onHistory = { [weak self] key in self?.showHistory(key) }
+        workspacePanel.onShowRequested = { [weak self] in self?.showWorkspace() }
+        workspacePanel.onHide = { [weak pet] in pet?.placeBubble() }
+        pet.workspaceFrame = { [weak self] in self?.workspacePanel.frame }
+        pet.onWorkspace = { [weak self] in
+            guard let self else {return}
+            let next = !self.pet.preferences.bool("gitWindowEnabled")
+            if next {self.pet.reveal()}
+            self.pet.preferences.set(next,for:"gitWindowEnabled")
+        }
+        pet.workspaceProvider = { [weak self] key in
+            guard let self,let conversation = self.allConversations.first(where:{$0.key == key}) else {return nil}
+            return (conversation,self.running?.0.key == key || self.desktopTasks.contains {conversation.threadID != nil && $0.threadID == conversation.threadID && $0.active})
+        }
         pet.onReply = { [weak self] key in
             guard let self,let conversation = self.store.conversations.first(where:{$0.key == key}) else {return}
             self.selectConversation(conversation.key,entry:.composer)
@@ -188,9 +213,14 @@ final class ChatController {
             if let self, let (conversation,turn) = self.running, conversation.key == key,
                ["waitingForInput","waitingForApproval"].contains(turn.status), let request = self.requestCoordinator.alert {
                 let parent = request.window.sheetParent ?? self.approvalParent()
-                if parent.isMiniaturized {parent.deminiaturize(nil)}
-                parent.makeKeyAndOrderFront(nil); request.window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps:true); return
+                if parent === self.ui.history {
+                    InterfaceWindows.shared.focus(parent)
+                } else {
+                    if parent.isMiniaturized {parent.deminiaturize(nil)}
+                    NSApp.activate(ignoringOtherApps:true)
+                    parent.makeKeyAndOrderFront(nil)
+                }
+                request.window.makeKeyAndOrderFront(nil); return
             }
             CodexConnection.openConversation(self?.store.conversations.first(where:{$0.key == key})?.threadID)
         }
@@ -200,7 +230,7 @@ final class ChatController {
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
             var tasks = self.desktopTasks.filter {!self.store.deletedThreads.contains($0.threadID ?? "")}.map {task in
                 let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title
-                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity)
+                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed)
             }
             let observed = Set(tasks.compactMap(\.threadID))
             for conversation in self.store.conversations {
@@ -208,7 +238,13 @@ final class ChatController {
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
-                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity(title:"等待批准",kind:.reply) : turn.status == "waitingForInput" ? TaskActivity(title:"等待回答",kind:.reply) : self.messagesState.currentActivity) : nil))
+                tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network,directory:conversation.cwd,fileEdits:turn.fileEdits ?? []))
+            }
+            for index in tasks.indices {
+                guard let conversation = self.store.conversations.first(where:{$0.threadID == tasks[index].threadID && tasks[index].threadID != nil}) else {continue}
+                tasks[index].directory = conversation.cwd
+                let task = tasks[index]
+                tasks[index].fileEdits = conversation.turns.first(where:{$0.key == task.key || (task.turnID != nil && $0.id == task.turnID) || $0.date == task.start})?.fileEdits ?? []
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
@@ -217,13 +253,20 @@ final class ChatController {
                 .sorted {($0.end ?? $0.start) > ($1.end ?? $1.start)}
             return BubbleTaskOverview(tasks:active+recent,status:self.desktopTaskReadStatus)
         }
-        pet.onGeometry = { [weak self] in self?.positionComposer() }
-        pet.onVisibility = { [weak self] shown in if !shown {self?.ui.hideComposer()} }
+        pet.onGeometry = { [weak self] in self?.positionComposer(); self?.positionWorkspace() }
+        pet.onVisibility = { [weak self] shown in
+            if shown {
+                guard let self,!self.workspacePanel.visible else {return}
+                self.showWorkspace()
+            }
+            else {self?.ui.hideComposer(); self?.workspacePanel.hide()}
+        }
         pet.onPreferencesChanged = { [weak self] in
             guard let self else {return}
             self.store.setRecording(self.pet.preferences.bool("recordHistory")); self.refresh()
         }
         refresh()
+        DispatchQueue.main.async { [weak self] in self?.showWorkspace() }
     }
     var personalizedPersona: String {
         let preferences = pet.preferences
@@ -236,33 +279,52 @@ final class ChatController {
         let page = [conversation.key]+turns.map(\.key)
         guard page != historyInputPage else {return}
         historyInputPage = page; historyInputRequest = UUID()
-        guard conversation.external,let thread = conversation.threadID else {return}
-        let missing = turns.filter {$0.input.isEmpty && store.canEnrichInput($0,in:conversation)}.compactMap(\.id)
-        guard !missing.isEmpty else {return}
+        guard let thread = conversation.threadID else {return}
+        let missing = turns.filter {conversation.external && $0.input.isEmpty && store.canEnrichInput($0,in:conversation)}.compactMap(\.id)
+        let missingUsage = turns.filter {!activeStatuses.contains($0.status) && $0.tokenUsage == nil && store.canEnrichInput($0,in:conversation)}.compactMap(\.id)
+        guard !missing.isEmpty || !missingUsage.isEmpty else {return}
         let request = historyInputRequest, key = conversation.key
         // 复用已有只读队列，只补当前一页，不新增轮询或全库回填。
         titleQueue.async { [weak self] in
-            let result = Result {try DesktopHistoryReader.userInputs(thread:thread,turns:missing)}
+            let inputs = Result {try missing.isEmpty ? [:] : DesktopHistoryReader.userInputs(thread:thread,turns:missing)}
+            let usages = Result {try missingUsage.isEmpty ? [:] : DesktopHistoryReader.tokenUsages(thread:thread,turns:missingUsage)}
             DispatchQueue.main.async {
                 guard let self,!self.closing,self.historyInputRequest == request,
                       self.ui.history.isVisible,!self.ui.history.isMiniaturized,
                       let current = self.store.conversations.first(where:{$0.key == key}) else {return}
-                switch result {
+                var changed = false
+                switch inputs {
                 case .success(let inputs):
-                    var changed = false
                     for turn in current.turns where missing.contains(turn.id ?? "") && turn.input.isEmpty && self.store.canEnrichInput(turn,in:current) {
                         if let id = turn.id,let input = inputs[id] {turn.input = input; changed = true}
                     }
-                    if changed {self.persist()}
                 case .failure(let error):
                     self.ui.historyStatus.stringValue = "用户消息读取失败："+error.localizedDescription
                 }
+                switch usages {
+                case .success(let values):
+                    for turn in current.turns where self.store.canEnrichInput(turn,in:current) {
+                        guard let id = turn.id,let value = values[id],turn.tokenUsage == nil else {continue}
+                        if turn.tokenUsage != value.usage || turn.tokenUsageError != value.error {
+                            turn.tokenUsage = value.usage; turn.tokenUsageError = value.error; changed = true
+                        }
+                    }
+                case .failure(let error):self.ui.historyStatus.stringValue = "Token 用量读取失败："+error.localizedDescription
+                }
+                if changed {self.persist()}
             }
         }
     }
     func refresh() {
         ui.refresh(allConversations,selected:selected,historyState:inputState(selected,kind:selected.kind),composerState:inputState(composerSelection,kind:composerKind))
+        pet.refreshWorkspaceBars()
+        if workspacePanel.visible {
+            if let conversation = allConversations.first(where:{$0.key == workspacePanel.conversationKey}) {
+                workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)
+            } else {showWorkspace()}
+        }
     }
+
     private func inputState(_ conversation:Conversation?,kind:ConversationKind) -> ChatInputState {
         var state = ChatInputState(conversation:conversation,kind:kind)
         state.runningTitle = running?.0.title; state.ownsRunningTask = conversation != nil && running?.0 === conversation
@@ -276,6 +338,7 @@ final class ChatController {
             state.modelSettings = desktopSession.modelSettings(conversation.key)
             state.modelNote = desktopSession.modelNote(conversation.key); state.replyNote = desktopSession.replyNote(conversation.key)
             state.desktopReady = desktopSession.canReply(conversation.key)
+            state.desktopPreparing = desktopSession.preparing(conversation.key)
         }
         return state
     }
@@ -331,6 +394,7 @@ final class ChatController {
         if ui.composerVisible { ui.hideComposer(); return }
         refresh()
         pet.reveal(); pet.undock(); pet.composerVisible = true; pet.interaction()
+        ui.prepareComposer()
         positionComposer(); loadModels(entry:.composer)
         ui.showComposer()
         pet.placeBubble(); refreshDesktopSettingsIfNeeded()
@@ -343,8 +407,21 @@ final class ChatController {
         composerSide = result.side; ui.moveComposer(to:result.frame.origin)
     }
 
+    private func showWorkspace(_ key:String? = nil) {
+        guard !closing,!pet.hidden,pet.preferences.bool("gitWindowEnabled") else {return}
+        let requested = key ?? (pet.bubble.visible ? pet.bubble.relatedConversation : nil) ?? workspacePanel.conversationKey
+        let conversation = allConversations.first {$0.key == requested} ?? (ui.composerVisible ? composerSelection : ui.history.isVisible ? selected : nil) ?? running?.0 ?? allConversations.max(by:{$0.lastActivity < $1.lastActivity}) ?? selected
+        workspacePanel.update(conversation:conversation,executing:inputState(conversation,kind:conversation.kind).executing)
+        workspacePanel.show(near:pet.visiblePetFrame,screen:pet.screen.visibleFrame,avoiding:ui.composerVisible ? [ui.composerFrame] : [])
+        pet.placeBubble()
+    }
+    private func positionWorkspace() {
+        workspacePanel.position(near:pet.visiblePetFrame,screen:pet.screen.visibleFrame,avoiding:ui.composerVisible ? [ui.composerFrame] : [])
+    }
+
     // 两种会话共用用户卡片入口；发送、审批及停止仍由各自连接负责。
     func showUserMessage(_ text:String,in conversation:Conversation,timing:TaskTiming,messageID:String,steering:Bool = false,select:Bool = false) {
+        showWorkspace(conversation.key)
         let title = pet.preferences.statusLine(steering ? "taskSteeringTemplate" : conversation.external ? "desktopTaskReceivedTemplate" : "taskReceivedTemplate")
         pet.say(title,body:UserInputText.display(text),kind:"task",thread:conversation.key,
             purpose:.progress,personalizeTitle:false,animateHeading:timing.finished == nil,timing:timing,
@@ -368,11 +445,12 @@ final class ChatController {
         let turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
         turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
+        tokenAccumulator = TurnTokenAccumulator()
         running = (c,turn); cancelled = false; interruptInFlight = false; messagesState = TaskMessageAccumulator()
         reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
-        pet.taskStarted("own"); showUserMessage(text,in:c,timing:.init(start:turn.date,key:"own"),messageID:"task-received",select:true); persist()
+        pet.taskStarted("own"); showUserMessage(text,in:c,timing:.init(start:turn.date,key:"own",activityKey:turn.key),messageID:"task-received",select:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
             if let error {self.finish("failed",error:error.localizedDescription); return}
@@ -407,11 +485,17 @@ final class ChatController {
         if let id = p["turnId"] as? String, let current = t.id, id != current {return}
         switch method {
         case "turn/started": t.id = (p["turn"] as? [String:Any])?["id"] as? String; t.status = "running"; if cancelled {interrupt()}
+        case "thread/tokenUsage/updated":
+            guard let current = t.id,p["turnId"] as? String == current else {return}
+            tokenAccumulator.receive(p["tokenUsage"]); t.tokenUsage = tokenAccumulator.usage; return
         case "turn/completed":
             guard let turn = p["turn"] as? [String:Any], t.id == nil || t.id == turn["id"] as? String else{return}
             for item in turn["items"] as? [[String:Any]] ?? [] {messagesState.record(item)}
-            updateText(); finish(turn["status"] as? String ?? "unknown",error:(turn["error"] as? [String:Any])?["message"] as? String ?? ""); return
-        case "error": t.error = (p["error"] as? [String:Any])?["message"] as? String ?? "Codex 报告错误"
+            let status = turn["status"] as? String ?? "unknown", error = CodexErrorMessage.encode(turn["error"])
+            updateText(); finish(status,error:error.isEmpty && status == "failed" ? t.error : error); return
+        case "error":
+            messagesState.receiveError(p)
+            if p["willRetry"] as? Bool != true {t.error = CodexErrorMessage.encode(p["error"])}
         default:guard messagesState.receive(method,p) else {return}
         }
         reminderClock?.lastProgress = Date().timeIntervalSince1970
@@ -429,7 +513,7 @@ final class ChatController {
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
             if self.messagesState.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
             self.presentAgentMessages(conversation:c,turn:t)
-            self.pet.showProgressToast(self.messagesState.currentActivity,key:"own",timing:.init(start:t.date,key:"own"))
+            self.pet.showProgressToast(self.messagesState.currentActivity,key:"own",timing:.init(start:t.date,key:"own",activityKey:t.key),thread:c.key)
 
         }
         updateTimer = timer; RunLoop.main.add(timer,forMode:.common)
@@ -437,7 +521,7 @@ final class ChatController {
     private func presentAgentMessages(conversation:Conversation,turn:Turn) {
         for message in messagesState.takeChangedMessages() {
             pet.say(pet.preferences.statusLine(message.isImage ? "taskUpdateTemplate" : "taskReplyTemplate"),body:message.text,kind:"task",thread:conversation.key,personalizeTitle:false,animateHeading:turn.completedAt == nil,
-                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status),messageID:message.id)
+                timing:.init(start:turn.date,key:"own",finished:turn.completedAt,status:turn.completedAt == nil ? nil : turn.status,activityKey:turn.key),messageID:message.id)
             reminderClock?.lastNotice = Date().timeIntervalSince1970
         }
     }
@@ -469,7 +553,7 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [])}
+        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],completionFooter:TranscriptActions(id:t.key,text:t.final,threadID:c.threadID,font:.systemFont(ofSize:13),status:t.status,completedAt:t.completedAt,usage:t.tokenUsage,usageError:t.tokenUsageError))}
         messagesState = TaskMessageAccumulator()
         if closing {finishShutdown()}
     }
@@ -491,10 +575,18 @@ final class ChatController {
     }
     func shutdown(_ completion: @escaping () -> Void) {
         closing = true; onFinishedShutdown = completion
+        workspacePanel.hide()
+        quotaCoordinator.cancel()
         if running != nil {
             stop()
-            DispatchQueue.main.asyncAfter(deadline:.now()+2) { [weak self] in if self?.running != nil {self?.finish("interrupted",error:"桌宠退出，任务未确认完成。")} }
+            let timer = Timer(timeInterval:2,repeats:false) { [weak self] _ in
+                self?.shutdownTimer = nil
+                if self?.running != nil {self?.finish("interrupted",error:"桌宠退出，任务未确认完成。")}
+            }
+            shutdownTimer = timer
+            RunLoop.main.add(timer,forMode:.common)
+            RunLoop.main.add(timer,forMode:.modalPanel)
         } else {finishShutdown()}
     }
-    func finishShutdown() { updateTimer?.invalidate(); saveTimer?.invalidate(); connection.close(); store.finish(); ui.hideComposer(); ui.history.orderOut(nil); let completion = onFinishedShutdown; onFinishedShutdown = nil; completion?() }
+    func finishShutdown() { shutdownTimer?.invalidate(); shutdownTimer = nil; updateTimer?.invalidate(); saveTimer?.invalidate(); connection.close(); store.finish(); ui.hideComposer(); ui.history.orderOut(nil); let completion = onFinishedShutdown; onFinishedShutdown = nil; completion?() }
 }

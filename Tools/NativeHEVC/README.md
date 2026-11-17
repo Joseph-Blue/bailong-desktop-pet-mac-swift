@@ -1,31 +1,33 @@
-# 原生素材工具
+# 原生素材工具（NativeHEVC）
 
-当前源码为 0.7.4，应用和工具版本以仓库根目录 VERSION 为准。0.7.4 沿用 0.7.3 App 内的运行素材，不在构建时重新转换。运行、构建和 PNG 接入均使用 Apple 原生技术；退役的 WebM 转码工具已删除。
+本目录提供基于 Apple 原生媒体框架的透明 PNG 序列转码与独立动画预览工具，版本号与仓库根目录 [VERSION](../../VERSION) 保持一致。
 
-## 输入资源
+## 1. 局部替换透明 HEVC 动作
 
-首次准备见 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md)。开发资源 ZIP 包含 samples.json；普通正式 App 只包含运行素材，不含此工具元数据。
+首次准备素材请先按 [开发资源获取](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/docs/开发资源获取.md) 导入完整开发素材包（需包含 `local-assets/native-hevc/catalog/素材清单.json`、`samples.json` 与 `透明HEVC/*.mov`；正式版 `.app` 包内不含 `samples.json`）。
 
-完整应用读取 `local-assets/native-hevc/catalog/素材清单.json` 与 `透明HEVC/*.mov`。本地保留的原始 WebM 不参与运行。PNG 接入使用已有完整 catalog，其中 `samples.json` 是素材来源与预览元数据。
+工具支持用修整后的 720×720（带 Alpha 通道）连续编号 PNG 序列替换以下 4 段核心动作：
 
-修复 PNG 根目录包含以下连续编号文件：
+| 动作 | PNG 子目录名 | 帧序列规格 |
+| --- | --- | --- |
+| 待机 | `01_待机_idle` | `0001.png`～`0096.png`，24 fps |
+| 第二待机 | `02_第二待机_idle2` | `0001.png`～`0096.png`，24 fps |
+| 拖拽 | `03_拖拽_drag` | `0001.png`～`0096.png`，24 fps |
+| 落地 | `04_落地_landing` | `0001.png`～`0048.png`，24 fps |
 
-| 动作 | 子目录 | 帧数／帧率 |
-|---|---|---|
-| 待机 | 01_待机_idle | 0001.png～0096.png，24 fps |
-| 第二待机 | 02_第二待机_idle2 | 0001.png～0096.png，24 fps |
-| 拖拽 | 03_拖拽_drag | 0001.png～0096.png，24 fps |
-| 落地 | 04_落地_landing | 0001.png～0048.png，24 fps |
-
-所有 PNG 为 720×720，保留透明通道。执行：
+执行替换：
 
 ```sh
 ./scripts/apply-native-png-repairs.sh <PNG根目录>
 ./scripts/apply-native-png-repairs.sh <落地PNG根目录> --landing
 ```
 
-Swift 工具以 Core Image 读取 PNG，通过 AVAssetWriter 写入 ProRes 4444，再调用系统 avconvert 的 PresetHEVCHighestQualityWithAlpha 编码透明 HEVC。工具检查输出尺寸、时长、帧率、透明标记和原生首帧读取；完成后才切换当前 catalog，旧目录保留为 `catalog-before-png-<VERSION>`。中间文件不进入应用包。PNG 替换属于独立素材制作步骤，普通应用构建只复制现有资源。
+**编码与切换流程**：`ApplyPNGRepairs.swift` 使用 Core Image 读取 PNG 帧，经 `AVAssetWriter` 编码为中间 ProRes 4444 视频，再调用系统 `avconvert`（`PresetHEVCHighestQualityWithAlpha`）输出带 Alpha 通道的透明 HEVC `.mov`。编码完成后会自动核对输出分辨率、时长、帧率、Alpha 标记与首帧解码可用性；全部通过后将原目录备份为 `catalog-before-png-<VERSION>` 并切换至新 catalog，中间产物不打入应用包。
 
-## 独立预览
+## 2. 独立素材预览器
 
-`./scripts/prepare-native-hevc.sh` 直接复制已有 catalog 的 samples.json 和透明 MOV，构建 arm64／x86_64 独立预览，不转码、不自动启动。预览使用 AVPlayerLayer，与桌宠的流式 AVAssetReader 实现不同；它不读取桌宠设置、历史或 Codex 数据。这里只保留原生预览，不再维护独立开发版版本号。
+```sh
+./scripts/prepare-native-hevc.sh
+```
+
+该脚本直接复用现有 catalog 中的 `samples.json` 与透明 `.mov` 构建独立预览小工具（支持 `arm64`／`x86_64`，构建后不自动启动）。预览器采用系统 `AVPlayerLayer` 直接回放素材，与主程序的 `AVAssetReader` 流式解码管线相互独立，也不读写桌宠偏好、聊天历史或 Codex 数据，适合单独核对转码后的透明边缘与画面表现。

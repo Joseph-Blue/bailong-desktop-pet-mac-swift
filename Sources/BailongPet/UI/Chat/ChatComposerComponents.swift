@@ -1,7 +1,7 @@
 import AppKit
 
 // 纯展示组件：会话选择、设置与操作由调用方持有。
-final class ChatModeControl: NSSegmentedControl {
+final class ChatModeControl: AccentSegmentedControl {
     var onSelect:(Int) -> Void = {_ in}
     init(labels:[String]) {
         super.init(frame:.zero)
@@ -17,6 +17,7 @@ final class ChatModeControl: NSSegmentedControl {
 }
 
 final class ChatMetadataRow: NSStackView {
+    static let captionWidth = ("工作区" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)
     init(_ title:String,content:NSView,accessory:NSView? = nil,expandsContent:Bool = false) {
         super.init(frame:.zero)
         orientation = .horizontal; alignment = .centerY; distribution = .fill; spacing = 8
@@ -24,7 +25,7 @@ final class ChatMetadataRow: NSStackView {
         caption.font = .systemFont(ofSize:12); caption.textColor = .secondaryLabelColor
         caption.setContentCompressionResistancePriority(.required,for:.horizontal)
         addArrangedSubview(caption); addArrangedSubview(content)
-        caption.widthAnchor.constraint(equalToConstant:("工作区" as NSString).size(withAttributes:[.font:caption.font!]).width.rounded(.up)).isActive = true
+        caption.widthAnchor.constraint(equalToConstant:Self.captionWidth).isActive = true
         if let accessory {addArrangedSubview(accessory); accessory.setContentCompressionResistancePriority(.required,for:.horizontal)}
         if !expandsContent {addArrangedSubview(NSView()); content.setContentHuggingPriority(.defaultHigh,for:.horizontal)}
     }
@@ -82,6 +83,13 @@ final class ChatReplyPreview: NSTextField {
 
 // 链接只负责路径显示和用户点击，打开目录交给调用方，不读取文件或会话数据。
 final class WorkspaceLinkButton: NSButton,LinkCursorControl {
+    private static let middleTruncatingParagraph:NSParagraphStyle = {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        return paragraph.copy() as! NSParagraphStyle
+    }()
+    var emphasizesLink = true
+    var usesMonochromeLink = false
     var onOpen:(URL) -> Void = {_ in}
     private var directory:URL?
     private var displayedPath:String?
@@ -92,19 +100,21 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         setAccessibilityLabel("在访达中打开工作区")
+        NotificationCenter.default.addObserver(self,selector:#selector(accentChanged),name:AppAccent.didChange,object:nil)
         update(path:"")
     }
     required init?(coder:NSCoder) {fatalError()}
-    func update(path:String) {
-        let color = path.isEmpty ? NSColor.secondaryLabelColor : AppAccent.color
-        guard displayedPath != path || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color else {return}
+    @objc private func accentChanged() {needsDisplay = true}
+    func update(path:String,displayName:String? = nil) {
+        let color = path.isEmpty || !emphasizesLink ? NSColor.secondaryLabelColor : usesMonochromeLink ? .labelColor : AppAccent.foregroundColor
+        let text = path.isEmpty ? "未选择工作区" : displayName ?? (path as NSString).abbreviatingWithTildeInPath
+        guard displayedPath != path || attributedTitle.string != text || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color || attributedTitle.attribute(.font,at:0,effectiveRange:nil) as? NSFont != font else {return}
         displayedPath = path
         directory = path.isEmpty ? nil : URL(fileURLWithPath:path,isDirectory:true)
         isEnabled = directory != nil
-        let text = path.isEmpty ? "未选择工作区" : (path as NSString).abbreviatingWithTildeInPath
-        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingMiddle
-        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph]
-        if isEnabled {attributes.merge(LinkAppearance.attributes) {_,link in link}}
+        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .paragraphStyle:Self.middleTruncatingParagraph]
+        if isEnabled && emphasizesLink {attributes.merge(LinkAppearance.attributes) {_,link in link}}
+        attributes[.foregroundColor] = color
         attributedTitle = NSAttributedString(string:text,attributes:attributes)
         hoverHelp = path.isEmpty ? nil : path
         setAccessibilityValue(path)

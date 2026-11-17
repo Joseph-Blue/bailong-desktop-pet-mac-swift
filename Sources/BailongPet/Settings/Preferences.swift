@@ -7,19 +7,19 @@ struct PlaybackSettingsError: LocalizedError {
 
 enum SettingsSection: Int, CaseIterable {
     case general, identity, activity, messages, appearance, advanced, developer, updates, about
-    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","性能","更新","关于"][rawValue] }
+    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","画质与性能","更新","关于"][rawValue] }
     var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer","arrow.triangle.2.circlepath","info.circle"][rawValue] }
     var keys: [String] {
         switch self {
-        case .general: return ["showOnLaunch","rememberPosition","preferredDisplay","autoFullscreen"]
-        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
-        case .activity: return ["singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","favorites","taskOpening","taskCelebration"]
-        case .messages: return ["taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
-        case .appearance: return ["petPercent","petShadow","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion"]
+        case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
+        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
+        case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
+        case .messages: return ["taskInfoBarEnabled","gitWindowEnabled","taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","hideToolFailures","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
         case .updates: return ["automaticallyCheckUpdates"]
-        case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit"]
+        case .developer: return ["showDiagnostics","diagnosticsPinned","preloadWholeAnimation","animationBufferFrames","animationQuality","animationFPSLimit","animationOpeningCache","bubbleMotion","animationSmoothTransition","animationEdgeCleanup","petShadow","quotaCacheEnabled","quotaCacheSeconds"]
         }
     }
 }
@@ -31,19 +31,14 @@ enum SendShortcut: String, CaseIterable {
     case commandReturn, returnToSend, controlOrCommandReturn
     var sendLabel: String {
         switch self {
-        case .commandReturn:return "⌘ Command + ↩ Enter"
-        case .returnToSend:return "↩ Enter"
-        case .controlOrCommandReturn:return "⌃ Control + ↩ Enter 或 ⌘ Command + ↩ Enter"
+        case .commandReturn:return "⌘↩"
+        case .returnToSend:return "↩"
+        case .controlOrCommandReturn:return "⌃↩ 或 ⌘↩"
         }
     }
-    var newlineLabel: String {self == .returnToSend ? "⇧ Shift + ↩ Enter，或 ⌥ Option + ↩ Enter" : "↩ Enter"}
+    var newlineLabel: String {self == .returnToSend ? "⇧↩ 或 ⌥↩" : "↩"}
     var hint: String {"发送：\(sendLabel)\n换行：\(newlineLabel)"}
-    static var options:[(String,String)] {allCases.map {($0.rawValue,$0.sendLabel+" 发送")}}
-    static var settingsExplanation:String {
-        allCases.enumerated().map {index,value in
-            "\(index == 0 ? "默认" : "备选 \(index)")：\(value.sendLabel) 发送；\(value.newlineLabel) 换行。"
-        }.joined(separator:"\n")+"\n临时对话、历史对话和问卷输入同步生效，中文输入法选词时不会发送。"
-    }
+    static var options:[(String,String)] {allCases.map {($0.rawValue,"发送：\($0.sendLabel)\t换行：\($0.newlineLabel)")}}
     func action(modifiers: NSEvent.ModifierFlags) -> Bool? {
         let flags = modifiers.intersection([.command,.shift,.option,.control])
         switch self {
@@ -66,35 +61,49 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let defaults: [String:Any] = [
-        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
+        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"",
+        "taskInfoBarEnabled":true,"gitWindowEnabled":false,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
-        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full",
-        "showOnLaunch":true,"rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
+        "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
+        "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
+        "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
-        "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),
+        "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),"randomWorkingLines":true,
         "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskThinkingTemplate":"{桌宠名}正在思考","taskToolTemplate":"{桌宠名}正在调用工具","taskCommandTemplate":"{桌宠名}正在运行命令","taskCommandCompletedTemplate":"{桌宠名}已运行命令","taskSuccessTemplate":"{用户名}，完成啦！",
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
-        "singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat",
+        "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,"singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat",
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
-        "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"favorites":[String](),"taskOpening":true,"taskCelebration":true,
+        "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"taskOpening":true,"taskCelebration":true,
         "sendShortcut":"commandReturn","taskBubbles":true,"progressBubbles":true,"resultBubbles":true,"interactionBubbles":true,
         "interactionSeconds":5.0,"progressSeconds":10.0,"resultSeconds":20.0,"quotaSeconds":5.0,
         "autoReadTime":true,"pauseOnHover":true,"countAfterReveal":true,"typingEffect":true,"soundEnabled":true,
         "quietCompanion":false,"quietSchedule":false,"quietStart":22*60,"quietEnd":8*60,
-        "petPercent":100,"petShadow":true,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
+        "petPercent":100,"petShadow":false,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
     ].merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
         "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
-        "glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
-        "resultSeconds":0...120,"quotaSeconds":0...120,"quietStart":0...1439,"quietEnd":0...1439,
+        "sideExposurePercent":40...85,"notchExposurePercent":40...85,"glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
+        "resultSeconds":0...120,"quotaSeconds":0...120,"quotaCacheSeconds":15...300,"quietStart":0...1439,"quietEnd":0...1439,
         "petPercent":50...200,"bubblePercent":50...150,"bubbleAspectRatio":0.6...3,"messageFontSize":11...20
     ]
-    static var glassAvailable: Bool {if #available(macOS 26.0, *) {return true}; return false}
+    static var glassAvailable: Bool {
+        #if BAILONG_SDK_GLASS
+        if #available(macOS 26.0, *) {return true}
+        #endif
+        return false
+    }
+    static var glassAvailabilityDescription: String {
+        #if BAILONG_SDK_GLASS
+        return "macOS 26 起支持液态玻璃材质。"
+        #else
+        return "此构建未包含液态玻璃，使用普通材质。"
+        #endif
+    }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
-    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random"],"doubleClickAction":["none","chat","quota","history","random"],"rightDoubleClickAction":["none","chat","quota","history","random"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
+    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random","randomAnimation"],"doubleClickAction":["none","chat","quota","history","random","randomAnimation"],"rightDoubleClickAction":["none","chat","quota","history","random","randomAnimation"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
@@ -107,11 +116,20 @@ final class PetPreferences {
         for (key,value) in ConversationLines.migrateReceivedLine(received) {defaults.set(value,forKey:key)}
         defaults.removeObject(forKey:"desktopTaskReceivedBodyTemplate")
         defaults.removeObject(forKey:"addressMode")
+        defaults.removeObject(forKey:"showOnLaunch")
+        defaults.removeObject(forKey:"gitWindowPinned")
+        defaults.removeObject(forKey:"gitWindowSeconds")
+        if let oldFavorites = defaults.stringArray(forKey:"favorites") {
+            let weights = defaults.dictionary(forKey:"animationWeights") as? [String:Int] ?? [:]
+            defaults.set(Self.combinedAnimationWeights(weights,favorites:oldFavorites),forKey:"animationWeights")
+        }
+        defaults.removeObject(forKey:"favorites")
+
         if let old = defaults.string(forKey:"animationFPSLimit"), ["24","30"].contains(old) {defaults.set("full",forKey:"animationFPSLimit")}
     }
     func validatePlayback() throws {
         guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {
-            throw PetFailure(message:"设置由更新版本的应用保存，请使用新版打开。原配置未修改。")
+            throw PetFailure(message:"这份设置来自更高版本，请使用新版应用打开。原设置已保留。")
         }
         var repaired = [String:Any]()
         for key in ["animationQuality","animationFPSLimit"] where !Self.choices[key]!.contains(string(key)) {
@@ -125,7 +143,7 @@ final class PetPreferences {
         }
         if !repaired.isEmpty {
             defaults.set(repaired,forKey:"compatibilityRecoveredValues")
-            compatibilityNotice = "已将不支持的画质、帧率或播放数值恢复为默认值，原值保留在配置兼容备份中。"
+            compatibilityNotice = "部分画质、帧率或播放设置无法使用，已恢复默认值。可导出备份查看原设置。"
         }
     }
 
@@ -139,7 +157,12 @@ final class PetPreferences {
         let path = string("defaultWorkspace")
         return path.isEmpty ? LocalStorage.workspace : URL(fileURLWithPath:path,isDirectory:true).standardizedFileURL
     }
-    var animationResolution: Int { Int(string("animationQuality"))! }
+    var usesAutomaticAnimationResolution: Bool { string("animationQuality") == "auto" }
+    func animationResolution(points: Double, backingScale: Double) -> Int {
+        if !usesAutomaticAnimationResolution { return Int(string("animationQuality"))! }
+        let pixels = points * backingScale
+        return [256,384,512,720].first { Double($0) >= pixels } ?? 720
+    }
     func animationFPS(native: Double) -> Double { string("animationFPSLimit") == "full" ? native : min(native,Double(string("animationFPSLimit"))!) }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
     func set(_ value: Any, for key: String) {defaults.set(TemplateSyntax.migrate([key:value])[key]!,forKey:key); notify([key])}
@@ -168,6 +191,10 @@ final class PetPreferences {
         let value = string(key)
         return template(value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? Self.defaults[key] as? String ?? "" : value)
     }
+    func workingOverviewLine() -> String {
+        let key = bool("randomWorkingLines") ? ConversationLines.working.randomElement()!.key : "taskProgressTemplate"
+        return statusLine(key)
+    }
     var sensitiveQuestionNotice: String {template("（已隐藏{桌宠名}的敏感信息提问）")}
     var sensitiveInputNotice: String {template("（已隐藏{用户名}的敏感信息输入）")}
     func taskResultLine(_ status:String) -> String {
@@ -185,12 +212,17 @@ final class PetPreferences {
         if text.isEmpty {lines.removeValue(forKey:id)} else {lines[id] = text}
         set(lines,for:"customLines")
     }
-    func defaultWeight(_ id:String) -> Int {id == "idle" ? 4 : id == "idle2" ? 1 : 3}
+    private static func defaultAnimationWeight(_ id:String) -> Int {id == "idle" ? 4 : id == "idle2" ? 1 : 3}
+    private static func combinedAnimationWeights(_ weights:[String:Int],favorites:[String]) -> [String:Int] {
+        var weights = weights
+        for id in Set(favorites) {weights[id] = (weights[id] ?? defaultAnimationWeight(id))*2}
+        return weights
+    }
+    func defaultWeight(_ id:String) -> Int {Self.defaultAnimationWeight(id)}
     func baseWeight(_ id: String) -> Int {
         (value("animationWeights") as? [String:Int])?[id] ?? defaultWeight(id)
     }
-    func weight(_ id: String) -> Double {Double(baseWeight(id)) * (favorites.contains(id) ? 2 : 1)}
-    var favorites: [String] {value("favorites") as? [String] ?? []}
+    func weight(_ id:String) -> Double {Double(baseWeight(id))}
     func setWeight(_ weight: Int, for id: String) {var map = value("animationWeights") as? [String:Int] ?? [:]; map[id] = weight; set(map,for:"animationWeights")}
     func clipSpeed(_ id: String) -> Double {(value("animationSpeeds") as? [String:Double])?[id] ?? 1}
     func speed(_ id: String) -> Double {number("playbackSpeed") * clipSpeed(id)}
@@ -254,17 +286,27 @@ final class PetPreferences {
             throw PetFailure(message:"请选择本应用导出的设置文件。")
         }
         guard (1...SettingsStorage.schemaVersion).contains(schema) else {
-            throw PetFailure(message:"不支持设置格式 \(schema)，请使用对应版本的应用。尚未导入任何更改。")
+            throw PetFailure(message:"无法读取这份设置文件（格式版本 \(schema)），请使用保存它的应用版本。当前设置未改变。")
         }
         values = TemplateSyntax.migrate(values)
         values = ConversationLines.migrateReceivedLine(values)
         values.removeValue(forKey:"addressMode")
+        values.removeValue(forKey:"showOnLaunch")
+        values.removeValue(forKey:"gitWindowPinned")
+        values.removeValue(forKey:"gitWindowSeconds")
+        if let favorites = values.removeValue(forKey:"favorites") {
+            guard Self.valid(favorites,key:"favorites",baseline:[String](),clipIDs:clipIDs) else {throw PetFailure(message:"旧设置中的偏爱动作无法读取。当前设置未改变。")}
+            let rawWeights = values["animationWeights"] ?? [String:Int]()
+            guard Self.valid(rawWeights,key:"animationWeights",baseline:[String:Int](),clipIDs:clipIDs),let weights = rawWeights as? [String:Int] else {throw PetFailure(message:"旧设置中的动作权重无法读取。当前设置未改变。")}
+            values["animationWeights"] = Self.combinedAnimationWeights(weights,favorites:favorites as! [String])
+        }
+
         if let old = values["animationFPSLimit"] as? String, ["24","30"].contains(old) {values["animationFPSLimit"] = "full"}
         for (key,value) in values {
             // dev.7 / dev.8 导出包含旧开关；统一流式后只校验类型，不恢复旧播放策略。
             if key == "lowResourceMode", let n = value as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() { continue }
             guard let baseline = Self.defaults[key], Self.valid(value,key:key,baseline:baseline,clipIDs:clipIDs) else {
-                throw PetFailure(message:"设置项「\(key)」不受支持或数值超出范围，尚未导入任何更改。")
+                throw PetFailure(message:"设置项「\(key)」无法使用或数值超出范围。当前设置未改变。")
             }
         }
         // 全部验证后才一次应用；未提供的已知设置回到默认值。
@@ -275,14 +317,14 @@ final class PetPreferences {
     private static func valid(_ value: Any, key: String, baseline: Any, clipIDs: Set<String>) -> Bool {
         if key == "defaultWorkspace",let path = value as? String {return path.isEmpty || (path.hasPrefix("/") && !path.contains("\0") && path.utf8.count <= 4096)}
         if key == "animationWeights", let map = value as? [String:NSNumber] {
-            return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0,1,3,4,6].contains($0.value.doubleValue) && ($0.key != "idle" || $0.value.intValue > 0)}
+            return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && (0...12).contains($0.value.doubleValue) && $0.value.doubleValue.rounded() == $0.value.doubleValue && ($0.key != "idle" || $0.value.intValue > 0)}
         }
         if key == "animationSpeeds", let map = value as? [String:NSNumber] {return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0.75,1,1.25,1.5].contains($0.value.doubleValue)}}
         if key == "customLines", let map = value as? [String:String] {return map.allSatisfy {clipIDs.contains($0.key) && TemplateSyntax.count($0.value) <= 120}}
         if key == "favorites", let list = value as? [String] {return list.allSatisfy {clipIDs.contains($0)}}
         if key == "accentRGB", let rgb = value as? [NSNumber] {return rgb.count == 3 && rgb.allSatisfy {CFGetTypeID($0) != CFBooleanGetTypeID() && (0...1).contains($0.doubleValue)}}
         if let range = ranges[key], let n = value as? NSNumber {
-            let integer = ["bubbleCardLimit","recentTaskCount","petPercent","bubblePercent","quietStart","quietEnd","animationBufferFrames"].contains(key)
+            let integer = ["bubbleCardLimit","recentTaskCount","petPercent","bubblePercent","quietStart","quietEnd","animationBufferFrames","quotaCacheSeconds"].contains(key)
             return CFGetTypeID(n) != CFBooleanGetTypeID() && range.contains(n.doubleValue) && (!integer || n.doubleValue.rounded() == n.doubleValue)
         }
         if let b = baseline as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID() {return (value as? NSNumber).map {CFGetTypeID($0) == CFBooleanGetTypeID()} ?? false}

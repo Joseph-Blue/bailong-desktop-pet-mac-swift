@@ -75,7 +75,10 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
     }
     static func revealAll() {
         let controllers = Array(windows.values)
-        for controller in controllers {controller.present(takeFocus:false)}
+        for controller in controllers.dropFirst() {
+            if controller.window.isMiniaturized {controller.window.deminiaturize(nil)}
+            controller.present(takeFocus:false)
+        }
         controllers.first?.present(takeFocus:true)
     }
     static var hasIssues: Bool {!windows.isEmpty}
@@ -120,9 +123,9 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         copy = ActionButton("拷贝报告") {}
         copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil); copy.imagePosition = .imageLeading
         CopyFeedback.attach(to:copy) { [weak self] in self?.report.string }
-        let issue = ActionButton("反馈 Issue…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
+        let issue = ActionButton("反馈问题…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
         issue.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil); issue.imagePosition = .imageLeading
-        issue.hoverHelp = "打开项目仓库的新建 Issue 页面"
+        issue.hoverHelp = "打开 GitHub 问题反馈页"
         retry = ActionButton("") { [weak self] in self?.retryRecovery() }; retry.keepsAccentWhenInactive = true; retry.emphasize()
         let quit = SettingsFooterButton(title:"退出程序",target:self,action:#selector(exitApplication))
         quit.hasDestructiveAction = true; quit.isBordered = false
@@ -160,12 +163,12 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in self?.recoveryAction() }
     }
     private func present(takeFocus:Bool) {
-        InterfaceWindows.shared.opened(window)
-        NSApp.addWindowsItem(window,title:window.title,filename:false)
         if takeFocus {
-            if window.isMiniaturized {window.deminiaturize(nil)}
-            if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil)
-        } else if !window.isVisible && !window.isMiniaturized {window.orderFront(nil)}
+            InterfaceWindows.shared.focus(window)
+        } else {
+            InterfaceWindows.shared.opened(window)
+            if !window.isVisible && !window.isMiniaturized {window.orderFront(nil)}
+        }
     }
     @objc private func exitApplication() {Self.quit()}
     func windowWillClose(_ notification:Notification) {NSApp.removeWindowsItem(window)}

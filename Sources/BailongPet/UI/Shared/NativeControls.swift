@@ -3,7 +3,9 @@ import AppKit
 extension NSMenu {
     func showProvidedImages() {
         for item in items {
+            #if BAILONG_SDK_MENU_IMAGES
             if #available(macOS 27.0, *), item.image != nil {item.preferredImageVisibility = .visible}
+            #endif
             item.submenu?.showProvidedImages()
         }
     }
@@ -35,6 +37,8 @@ final class ActionButton: NSButton {
         if acceptsKeyboardActivation {super.keyDown(with:event)}
     }
     private var prominent = false
+    private var hovering = false
+    private var hoverTracking:NSTrackingArea?
     private var flexibleLayout = false
     var extraHorizontalPadding:CGFloat = 0 {didSet {invalidateIntrinsicContentSize()}}
     var semanticColor:NSColor? {didSet {updateAccent()}}
@@ -45,6 +49,13 @@ final class ActionButton: NSButton {
         NotificationCenter.default.addObserver(self,selector:#selector(updateAccent),name:AppAccent.didChange,object:nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+    override func updateTrackingAreas() {
+        if let hoverTracking {removeTrackingArea(hoverTracking)}
+        let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+        hoverTracking = area; addTrackingArea(area); super.updateTrackingAreas()
+    }
+    override func mouseEntered(with event:NSEvent) {super.mouseEntered(with:event); hovering = true; needsDisplay = true}
+    override func mouseExited(with event:NSEvent) {super.mouseExited(with:event); hovering = false; needsDisplay = true}
     func configureFlexible(font:NSFont) {
         flexibleLayout = true; bezelStyle = .flexiblePush; self.font = font
         symbolConfiguration = .init(pointSize:font.pointSize,weight:.regular)
@@ -72,10 +83,10 @@ final class ActionButton: NSButton {
         let color:NSColor, foreground:NSColor
         if let semanticColor {
             // 实色浅底，文字随系统外观提高对比；不依赖背景玻璃或仅靠颜色区分。
-            color = NSColor.controlBackgroundColor.blended(withFraction:isHighlighted ? 0.26 : 0.13,of:semanticColor) ?? .controlBackgroundColor
+            color = NSColor.controlBackgroundColor.blended(withFraction:isHighlighted ? 0.26 : isEnabled && hovering ? 0.20 : 0.13,of:semanticColor) ?? .controlBackgroundColor
             foreground = isEnabled ? semanticColor.blended(withFraction:0.35,of:.labelColor) ?? .labelColor : .disabledControlTextColor
         } else {
-            color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : AppAccent.color
+            color = isHighlighted ? AppAccent.color.blended(withFraction:0.15,of:.black) ?? AppAccent.color : isEnabled && hovering ? AppAccent.color.blended(withFraction:0.08,of:.white) ?? AppAccent.color : AppAccent.color
             foreground = .white
         }
         color.withAlphaComponent(isEnabled ? 1 : 0.45).setFill()
@@ -87,7 +98,10 @@ final class ActionButton: NSButton {
         let iconSpace = iconSize > 0 ? iconSize+6*ratio : 0
         let start = (bounds.width-size.width-iconSpace)/2
         if let image {
-            let rect = NSRect(x:start,y:(bounds.height-iconSize)/2,width:iconSize,height:iconSize)
+            let natural = image.size
+            let scale = natural.width > 0 && natural.height > 0 ? min(iconSize/natural.width,iconSize/natural.height) : 1
+            let target = NSSize(width:natural.width*scale,height:natural.height*scale)
+            let rect = NSRect(x:start+(iconSize-target.width)/2,y:(bounds.height-target.height)/2,width:target.width,height:target.height)
             let tinted = NSImage(size:rect.size,flipped:false) { bounds in
                 image.draw(in:bounds)
                 foreground.setFill(); bounds.fill(using:.sourceIn); return true
@@ -99,6 +113,8 @@ final class ActionButton: NSButton {
     @objc func invokeCallback() { callback() }
 }
 class HoverIconButton: NSButton {
+    var hoverCornerRadius:CGFloat?
+    var horizontalPadding:CGFloat = 0
     private var tracking: NSTrackingArea?
     private var hovering = false
     init(symbol:String,label:String) {
@@ -108,6 +124,10 @@ class HoverIconButton: NSButton {
         setAccessibilityLabel(label)
     }
     required init?(coder: NSCoder) {fatalError()}
+    override var intrinsicContentSize:NSSize {
+        let size = super.intrinsicContentSize
+        return NSSize(width:size.width+2*horizontalPadding,height:size.height)
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {true}
     override func updateTrackingAreas() {
         if let tracking {removeTrackingArea(tracking)}
@@ -119,7 +139,9 @@ class HoverIconButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         if hovering || isHighlighted {
             NSColor.secondaryLabelColor.withAlphaComponent(isHighlighted ? 0.24 : 0.14).setFill()
-            NSBezierPath(ovalIn:bounds.insetBy(dx:1,dy:1)).fill()
+            let rect = bounds.insetBy(dx:1,dy:1)
+            if let radius = hoverCornerRadius {NSBezierPath(roundedRect:rect,xRadius:radius,yRadius:radius).fill()}
+            else {NSBezierPath(ovalIn:rect).fill()}
         }
         super.draw(dirtyRect)
     }
@@ -134,29 +156,32 @@ final class BubbleCloseButton: HoverIconButton {
     @objc private func closeBubble() {onClose()}
 }
 final class TopDownView: NSView {override var isFlipped: Bool {true}}
-final class PetWindow: NSPanel {
-    var allowsInput = false
-    override var canBecomeKey: Bool { allowsInput }
-    override var canBecomeMain: Bool { false }
+class ContentCursorPanel:NSPanel {
+    var tracksContentCursor = false
+    override func performKeyEquivalent(with event:NSEvent) -> Bool {
+        TextContextMenu.performKeyEquivalent(event,in:self) || super.performKeyEquivalent(with:event)
+    }
     override func sendEvent(_ event:NSEvent) {
         super.sendEvent(event)
-        guard allowsInput,event.type == .mouseMoved,let contentView else {return}
-        let point = contentView.convert(event.locationInWindow,from:nil)
-        guard contentView.bounds.insetBy(dx:6,dy:6).contains(point) else {return}
-        var hit = contentView.hitTest(point)
-        while let view = hit {
-            if let link = view as? LinkCursorControl,link.isEnabled {NSCursor.pointingHand.set(); return}
-            if let text = view as? NSTextView,
-               LinkAppearance.link(at:text.convert(event.locationInWindow,from:nil),in:text) != nil {
-                NSCursor.pointingHand.set(); return
-            }
-            if let text = view as? NSTextView,text.isEditable || text.isSelectable {NSCursor.iBeam.set(); return}
-            hit = view.superview
-        }
-        NSCursor.arrow.set()
+        guard [.mouseMoved,.mouseEntered,.cursorUpdate,.scrollWheel,.leftMouseUp].contains(event.type) else {return}
+        // AppKit 分发完成后再确定光标，输入能力与链接悬停互不依赖。
+        refreshContentCursor()
+    }
+    func refreshContentCursor() {
+        guard tracksContentCursor,isVisible,let contentView,
+              NSWindow.windowNumber(at:NSEvent.mouseLocation,belowWindowWithWindowNumber:0) == windowNumber else {return}
+        let point = contentView.convert(convertPoint(fromScreen:NSEvent.mouseLocation),from:nil)
+        let interior = styleMask.contains(.resizable) ? contentView.bounds.insetBy(dx:6,dy:6) : contentView.bounds
+        guard interior.contains(point) else {return}
+        LinkAppearance.cursor(at:point,in:contentView).set()
     }
 }
-// 正文与材质分开管理；切换材质不改消息、输入内容或窗口透明度。
+final class PetWindow:ContentCursorPanel {
+    var allowsInput = false
+    override var canBecomeKey:Bool {allowsInput}
+    override var canBecomeMain:Bool {false}
+}
+// 正文与衬底保持同一视图树；玻璃通过 contentView 为其中的内容提供原生适配。
 private final class BubbleBackingView: NSView {
     var opacity: CGFloat = 1 {didSet {needsDisplay = true}}
     override var isOpaque: Bool {false}
@@ -169,22 +194,68 @@ private final class BubbleBackingView: NSView {
 final class BubbleBackgroundView: NSView {
     static let cornerRadius:CGFloat = 14
     let body = NSView()
+    private let surface = NSView()
+    private let edge = GlassEdgeHighlight()
     private let ordinary = BubbleBackingView(), glassBacking = BubbleBackingView()
     private var glass: NSView?
+    private var usesGlassContent = false
     private var fade: Timer?
     private var targetOpacity: CGFloat = 1
+    private var cursorTracking:NSTrackingArea?
     private let preferences: PetPreferences
     init(preferences: PetPreferences = .shared) {
         self.preferences = preferences
         super.init(frame:.zero)
-        // 正文永远在固定根视图内；玻璃和普通背景在其下独立过渡。
-        addSubview(ordinary); addSubview(body)
-        for view in [ordinary,body] {view.autoresizingMask = [.width,.height]}
+        addSubview(surface)
+        for view in [glassBacking,ordinary,body] {
+            surface.addSubview(view); view.autoresizingMask = [.width,.height]
+        }
+        surface.autoresizingMask = [.width,.height]
+        edge.cornerRadius = Self.cornerRadius; edge.autoresizingMask = [.width,.height]
+        edge.isHidden = true; addSubview(edge)
         NotificationCenter.default.addObserver(self,selector:#selector(preferencesChanged(_:)),name:PetPreferences.didChange,object:preferences)
         NSWorkspace.shared.notificationCenter.addObserver(self,selector:#selector(updateMaterial),name:NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,object:nil)
         updateMaterial()
     }
     required init?(coder:NSCoder) {fatalError()}
+    private func setGlassContent(_ enabled:Bool) {
+        guard enabled != usesGlassContent else {return}
+        #if BAILONG_SDK_GLASS
+        if #available(macOS 26.0, *),let effect = glass as? NSGlassEffectView {
+            let host = window
+            let responder = host?.firstResponder as? NSView
+            let contentResponder = responder.flatMap {$0.isDescendant(of:surface) ? $0 : nil}
+            if enabled {
+                effect.isHidden = false
+                effect.contentView = surface
+            } else {
+                effect.contentView = nil
+                surface.translatesAutoresizingMaskIntoConstraints = true
+                addSubview(surface)
+                effect.isHidden = true
+            }
+            usesGlassContent = enabled
+            surface.frame = bounds
+            // 只恢复本窗原有的内容焦点，不激活应用或把窗口变为 key。
+            if let host,let contentResponder,host.firstResponder !== contentResponder {
+                host.makeFirstResponder(contentResponder)
+            }
+        }
+        #endif
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let cursorTracking {removeTrackingArea(cursorTracking); self.cursorTracking = nil}
+        guard let panel = window as? ContentCursorPanel,panel.tracksContentCursor else {return}
+        // 非激活气泡仍接收移动事件；activeAlways 不会发送 cursorUpdate。
+        let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.mouseMoved,.activeAlways,.inVisibleRect],owner:self,userInfo:nil)
+        addTrackingArea(area); cursorTracking = area
+        panel.refreshContentCursor()
+    }
+    override func mouseExited(with event:NSEvent) {
+        super.mouseExited(with:event)
+        if let cursorTracking,event.trackingArea === cursorTracking {NSCursor.arrow.set()}
+    }
     override var isOpaque: Bool {false}
     @objc private func preferencesChanged(_ note: Notification) {
         let keys = note.userInfo?["keys"] as? [String] ?? []
@@ -193,22 +264,24 @@ final class BubbleBackgroundView: NSView {
     @objc private func updateMaterial() {
         let enabled = preferences.usesGlass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let next: CGFloat = enabled ? 0 : 1
+        // 高光仅参与绘制，不跟随 key 状态，也不获取鼠标或键盘焦点。
+        edge.isHidden = !enabled
+        #if BAILONG_SDK_GLASS
         if #available(macOS 26.0, *), enabled {
             if glass == nil {
                 let effect = NSGlassEffectView(frame:bounds)
                 effect.autoresizingMask = [.width,.height]; effect.cornerRadius = Self.cornerRadius
-                glassBacking.autoresizingMask = [.width,.height]
-                effect.contentView = glassBacking
-                addSubview(effect,positioned:.below,relativeTo:ordinary); glass = effect
+                addSubview(effect,positioned:.below,relativeTo:surface); glass = effect
             }
             let effect = glass as! NSGlassEffectView
             effect.style = preferences.bool("glassFollowsSystem") ? .regular : .clear
             glassBacking.opacity = preferences.bool("glassFollowsSystem") ? 0 : CGFloat(preferences.number("glassOpacity"))
+            setGlassContent(true)
         }
+        #endif
         let animate = preferences.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && window?.isVisible == true
         if next == targetOpacity && fade != nil && animate {return}
         fade?.invalidate(); fade = nil; targetOpacity = next
-        glass?.isHidden = false
         guard animate, ordinary.opacity != next else {ordinary.opacity = next; finishMaterial(); return}
         let from = ordinary.opacity, started = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval:1.0/60,repeats:true) { [weak self] timer in
@@ -221,14 +294,14 @@ final class BubbleBackgroundView: NSView {
         fade = timer; RunLoop.main.add(timer,forMode:.common)
     }
     private func finishMaterial() {
-        // 普通底层始终存在，先铺实再隐藏玻璃，不出现空背景帧。
+        // 实色衬底先铺满，再把同一内容容器移回普通根视图。
         ordinary.opacity = targetOpacity; ordinary.displayIfNeeded()
-        glass?.isHidden = targetOpacity == 1
+        if targetOpacity == 1 {setGlassContent(false)}
         window?.invalidateShadow()
     }
     override func layout() {
-        super.layout(); glass?.frame = bounds; ordinary.frame = bounds; body.frame = bounds
-        glassBacking.frame = bounds
+        super.layout(); glass?.frame = bounds; surface.frame = bounds; edge.frame = bounds
+        for view in [glassBacking,ordinary,body] {view.frame = surface.bounds}
     }
     deinit {fade?.invalidate(); NotificationCenter.default.removeObserver(self); NSWorkspace.shared.notificationCenter.removeObserver(self)}
 }
@@ -267,7 +340,7 @@ enum TaskQuestionLayout {
                 y += 8*scale
                 let padding = 10*scale, numberWidth = 18*scale, gap = 6*scale
                 let contentX = padding+numberWidth+gap, contentWidth = width-contentX-padding
-                let badge = option.recommended ? text("推荐",detailFont,34*scale,color:AppAccent.color) : nil
+                let badge = option.recommended ? text("推荐",detailFont,34*scale,color:AppAccent.foregroundColor) : nil
                 let titleWidth = contentWidth-(badge.map {$0.frame.width+gap} ?? 0)
                 let name = text(option.title,bodyFont,titleWidth)
                 name.frame.origin = NSPoint(x:contentX,y:padding)

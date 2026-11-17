@@ -23,7 +23,7 @@ struct DesktopApproval {
         let available = params["availableDecisions"] as? [Any]
         let acceptsOnce = available == nil || available!.contains {($0 as? String) == "accept"}
         switch method {
-        case "item/commandExecution/requestApproval":canAllow = acceptsOnce && display["command"] is String
+        case "item/commandExecution/requestApproval":canAllow = acceptsOnce && (display["command"] as? String)?.isEmpty == false
         case "item/fileChange/requestApproval":canAllow = acceptsOnce && display["changes"] != nil
         case "item/permissions/requestApproval":canAllow = params["permissions"] is [String:Any]
         default:return nil
@@ -85,7 +85,8 @@ struct DesktopApproval {
         let deadline = Date().addingTimeInterval(3)
         while Date() < deadline {
             guard let frame = try connection.receiveIfAvailable(milliseconds:50) else {continue}
-            guard frame["sourceClientId"] as? String == source,frame["method"] as? String == "thread-stream-state-changed",frame["version"] as? Int == 11,
+            guard frame["sourceClientId"] as? String == source,frame["method"] as? String == "thread-stream-state-changed",
+                  let version = frame["version"] as? Int,DesktopApprovalReader.supportedStreamVersions.contains(version),
                   let p = frame["params"] as? [String:Any],p["hostId"] as? String == "local",p["conversationId"] as? String == thread,
                   let change = p["change"] as? [String:Any],change["type"] as? String == "snapshot",let value = change["conversationState"] as? [String:Any] else {continue}
             return DesktopRuntimeProjection.conversation(value,keepingTurns:[turn])

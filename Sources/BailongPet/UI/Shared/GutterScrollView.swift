@@ -1,7 +1,7 @@
 import AppKit
 
 // 正文按宽度换行，只允许纵向阅读；排版、选择及恢复位置不能横移正文。
-private class VerticalReadingClipView:NSClipView {
+class VerticalReadingClipView:NSClipView {
     override func scroll(to newOrigin:NSPoint) {
         super.scroll(to:NSPoint(x:documentView?.frame.minX ?? 0,y:newOrigin.y))
     }
@@ -38,6 +38,7 @@ class GutterScrollView:NSScrollView {
         automaticallyAdjustsContentInsets = false
         contentInsets = .init(); scrollerInsets = .init()
         hasHorizontalScroller = false; horizontalScrollElasticity = .none
+        verticalScrollElasticity = .allowed
     }
     required init?(coder:NSCoder) {fatalError()}
     override func tile() {

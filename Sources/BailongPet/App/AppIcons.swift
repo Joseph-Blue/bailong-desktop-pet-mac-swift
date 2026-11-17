@@ -1,6 +1,11 @@
 import AppKit
 
 enum AppIcons {
+    static var quotaSymbol:String {
+        if #available(macOS 15.0, *) {return "dollarsign.gauge.chart.leftthird.topthird.rightthird"}
+        return "dollarsign"
+    }
+
     // 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png；原图随本地资源打包。
     static let openAI: NSImage? = {
         if let image = NSImage(contentsOf:Paths.resources.appendingPathComponent("openai-logo.png")) {
@@ -19,22 +24,25 @@ enum AppIcons {
     }()
 
     static var application: NSImage? {NSImage(contentsOf:Paths.resources.appendingPathComponent("BailongPet.icns"))}
-    // 保留素材的透明轮廓，菜单栏交由系统按背景绘制为白/黑剪影。
-    static func petSilhouette(_ frame: Frame) -> NSImage {
-        let pixelBounds = frame.bounds.applying(CGAffineTransform(scaleX: Double(frame.image.width)/512, y: Double(frame.image.height)/512))
-        let crop = frame.image.cropping(to:pixelBounds.integral) ?? frame.image
-        let source = NSImage(cgImage:crop,size:NSSize(width:crop.width,height:crop.height))
-        let image = NSImage(size:NSSize(width:18,height:18),flipped:false) { rect in
-            let scale = min(rect.width/source.size.width,rect.height/source.size.height)
-            let size = NSSize(width:source.size.width*scale,height:source.size.height*scale)
-            let fitted = NSRect(x:(rect.width-size.width)/2,y:(rect.height-size.height)/2,width:size.width,height:size.height)
-            source.draw(in:fitted)
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current?.compositingOperation = .sourceIn
-            NSColor.white.setFill(); NSBezierPath(rect:fitted).fill()
-            NSGraphicsContext.restoreGraphicsState()
-            return true
+    // 托盘使用简化头像；设置与历史使用保留花饰细节的头像。
+    static let petTemplate = loadPetTemplate(named:"pet-status-template.png",pixels:36)
+    static let petAvatarTemplate = loadPetTemplate(named:"pet-avatar-template.png",pixels:72)
+    private static func loadPetTemplate(named name:String,pixels:Int) -> NSImage? {
+        let url = Paths.resources.appendingPathComponent(name)
+        guard let source = NSImage(contentsOf:url),
+              let context = CGContext(data:nil,width:pixels,height:pixels,bitsPerComponent:8,bytesPerRow:pixels*4,
+                                      space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue),
+              let sourceImage = source.cgImage(forProposedRect:nil,context:nil,hints:nil) else {
+            NSLog("无法读取桌宠模板图：%@",url.path); return nil
         }
+        let side = CGFloat(pixels)
+        let scale = min(side/CGFloat(sourceImage.width),side/CGFloat(sourceImage.height))
+        let size = CGSize(width:CGFloat(sourceImage.width)*scale,height:CGFloat(sourceImage.height)*scale)
+        let fitted = CGRect(x:(side-size.width)/2,y:(side-size.height)/2,width:size.width,height:size.height)
+        context.interpolationQuality = .high
+        context.draw(sourceImage,in:fitted)
+        guard let raster = context.makeImage() else {NSLog("无法绘制桌宠模板图：%@",name); return nil}
+        let image = NSImage(cgImage:raster,size:NSSize(width:18,height:18))
         image.isTemplate = true; image.accessibilityDescription = PetPreferences.shared.appName
         return image
     }

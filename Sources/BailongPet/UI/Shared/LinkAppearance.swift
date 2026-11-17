@@ -6,10 +6,25 @@ protocol LinkCursorControl:AnyObject {var isEnabled:Bool {get}}
 // 仅提供超链接外观与命中区域；导航、文件定位和展开动作仍由调用方处理。
 enum LinkAppearance {
     static var attributes:[NSAttributedString.Key:Any] {
-        [.foregroundColor:AppAccent.color,.underlineStyle:NSUnderlineStyle.single.rawValue,.cursor:NSCursor.pointingHand]
+        [.foregroundColor:AppAccent.foregroundColor,.underlineStyle:NSUnderlineStyle.single.rawValue,.cursor:NSCursor.pointingHand]
     }
     static func attributes(for url:URL) -> [NSAttributedString.Key:Any] {
         var value = attributes; value[.link] = url; return value
+    }
+    static func cursor(at point:NSPoint,in root:NSView) -> NSCursor {
+        var hit = root.hitTest(root.convert(point,to:root.superview))
+        while let view = hit {
+            if let control = view as? LinkCursorControl {return control.isEnabled ? .pointingHand : .arrow}
+            if let text = view as? NSTextView {
+                if link(at:text.convert(point,from:root),in:text) != nil {return .pointingHand}
+                return text.isEditable || text.isSelectable ? .iBeam : .arrow
+            }
+            if let field = view as? NSTextField,field.isEditable || field.isSelectable {return .iBeam}
+            // 复制按钮等子控件优先，不能命中其背后的正文链接。
+            if view is NSControl,!(view is NSTextField),!(view is NSImageView) {return .arrow}
+            hit = view.superview
+        }
+        return .arrow
     }
     static func addCursorRect(_ rect:NSRect,to view:NSView) {
         view.addCursorRect(rect,cursor:.pointingHand)

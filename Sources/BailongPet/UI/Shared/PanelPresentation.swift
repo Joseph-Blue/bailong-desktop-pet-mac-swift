@@ -38,3 +38,45 @@ final class CenteredColorWell:NSColorWell {
         PanelPresentation.center(NSColorPanel.shared,on:target)
     }
 }
+
+// 非激活面板上的 transient Popover 同步监听应用内外点击，并在打开普通窗口前可立即收起。
+final class PopoverDismissal {
+    private static let active = NSHashTable<NSPopover>.weakObjects()
+    private var insideClickMonitor:Any?
+    private var outsideClickMonitor:Any?
+    static func closeAll() {
+        for popover in active.allObjects where popover.isShown {
+            popover.close()
+        }
+    }
+    func start(for popover:NSPopover,anchor:NSView? = nil) {
+        stop()
+        guard popover.isShown else {return}
+        Self.active.add(popover)
+        let events:NSEvent.EventTypeMask = [.leftMouseDown,.rightMouseDown,.otherMouseDown]
+        insideClickMonitor = NSEvent.addLocalMonitorForEvents(matching:events) { [weak self,weak popover,weak anchor] event in
+            guard let popover,popover.isShown else {self?.stop(); return event}
+            let popoverWindow = popover.contentViewController?.view.window
+            if let target = event.window {
+                if target === popoverWindow || target.parent === popoverWindow || target.sheetParent === popoverWindow || target.level >= .popUpMenu {
+                    return event
+                }
+                if let anchor,target === anchor.window,anchor.bounds.contains(anchor.convert(event.locationInWindow,from:nil)) {
+                    return event
+                }
+            }
+            popover.performClose(nil)
+            return event
+        }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching:events) { [weak popover] _ in
+            popover?.performClose(nil)
+        }
+    }
+    func stop() {
+        if let insideClickMonitor {NSEvent.removeMonitor(insideClickMonitor)}
+        if let outsideClickMonitor {NSEvent.removeMonitor(outsideClickMonitor)}
+        insideClickMonitor = nil
+        outsideClickMonitor = nil
+    }
+    deinit {stop()}
+}

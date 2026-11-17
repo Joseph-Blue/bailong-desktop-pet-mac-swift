@@ -1,13 +1,16 @@
 import Foundation
 
-// 本机桌面端 thread-stream-state-changed v11 / following-changed v1。
+// 本机桌面端 thread-stream-state-changed v11–v13 / following-changed v1。
 // 订阅公开进展和待批准请求；不成为 writer，决定另经用户点击后的原请求提交。
 final class DesktopApprovalReader {
+    static let supportedStreamVersions = 11...13
     private struct State {
         var source:String
+        var version:Int
         var revision:Int
         var projection:[String:Any]
         var updatedAt:Date
+        var resumedTurns = Set<String>()
     }
     private var socket:DesktopSocket?
     private var followed = Set<String>()
@@ -17,8 +20,9 @@ final class DesktopApprovalReader {
     private(set) var unavailableCount = 0
     var knownThreads:Set<String> {Set(states.keys)}
     private(set) var activities = [String:TaskActivity]()
+    private var connections = [String:CodexConnectionProgress]()
 
-    func close() {socket = nil; followed.removeAll(); targetTurns.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll()}
+    func close() {socket = nil; followed.removeAll(); targetTurns.removeAll(); states.removeAll(); snapshotRequestedAt.removeAll(); unavailableCount = 0; activities.removeAll(); connections.removeAll()}
 
     func read(_ records:[PublicSnapshot]) throws -> [String:StateApproval] {
         let active = records.filter {$0.isLatest && activeStatuses.contains($0.status)}
@@ -56,9 +60,17 @@ final class DesktopApprovalReader {
             states = states.filter {Date().timeIntervalSince($0.value.updatedAt) < 8}
             unavailableCount = wanted.subtracting(states.keys).count
             var result = [String:StateApproval](); activities.removeAll()
+            let keys = Set(active.map(\.key)); connections = connections.filter {keys.contains($0.key)}
             for record in active {
                 guard let state = states[record.logical] else {continue}
-                if let turn = DesktopRuntimeProjection.findTurn(state.projection,record.turn),let activity = TaskActivity.current(items:turn["items"] as? [[String:Any]] ?? [],replyTemplateKey:"taskUpdateTemplate") {activities[record.key] = activity}
+                if let turn = DesktopRuntimeProjection.findTurn(state.projection,record.turn) {
+                    let items = turn["items"] as? [[String:Any]] ?? []
+                    var connection = connections[record.key] ?? CodexConnectionProgress()
+                    connection.observe(items:items,resumed:state.resumedTurns.contains(record.turn))
+                    connections[record.key] = connection
+                    activities[record.key] = connection.activity ?? TaskActivity.current(items:items,replyTemplateKey:"taskUpdateTemplate")
+                    states[record.logical]?.resumedTurns.remove(record.turn)
+                }
                 let requests = (state.projection["requests"] as? [[String:Any]] ?? []).filter {($0["params"] as? [String:Any])?["turnId"] as? String == record.turn}
                 if let request = requests.first(where:{Self.methods.contains($0["method"] as? String ?? "")}) {
                     if let approval = DesktopApproval(thread:record.logical,turn:record.turn,source:state.source,request:request,conversation:state.projection) {
@@ -82,7 +94,8 @@ final class DesktopApprovalReader {
         guard frame["type"] as? String == "broadcast",frame["method"] as? String == "thread-stream-state-changed",
               let params = frame["params"] as? [String:Any],params["hostId"] as? String == "local",
               let id = params["conversationId"] as? String,followed.contains(id),let turns = targetTurns[id] else {return}
-        guard frame["version"] as? Int == 11,let source = frame["sourceClientId"] as? String,
+        guard let version = frame["version"] as? Int,Self.supportedStreamVersions.contains(version),
+              let source = frame["sourceClientId"] as? String,
               let change = params["change"] as? [String:Any],let revision = change["revision"] as? Int else {
             throw PetFailure(message:"Codex 审批状态协议不兼容。")
         }
@@ -90,18 +103,20 @@ final class DesktopApprovalReader {
             guard let conversation = change["conversationState"] as? [String:Any],conversation["requests"] is [Any] else {
                 throw PetFailure(message:"Codex 审批快照缺少请求列表。")
             }
-            states[id] = State(source:source,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation,keepingTurns:turns),updatedAt:Date()); return
+            states[id] = State(source:source,version:version,revision:revision,projection:DesktopRuntimeProjection.conversation(conversation,keepingTurns:turns),updatedAt:Date()); return
         }
         guard change["type"] as? String == "patches",let patches = change["patches"] as? [[String:Any]] else {
             throw PetFailure(message:"Codex 审批增量格式不兼容。")
         }
-        guard var state = states[id],state.source == source,state.revision == change["baseRevision"] as? Int else {
+        guard var state = states[id],state.source == source,state.version == version,state.revision == change["baseRevision"] as? Int else {
             states.removeValue(forKey:id); try follow(id,true,socket); return
         }
         for patch in patches {
+            if let turn = DesktopRuntimeProjection.modelProgressTurn(patch,state:state.projection) {state.resumedTurns.insert(turn)}
             guard try DesktopRuntimeProjection.patch(patch,state:&state.projection,keepingTurns:turns) else {
                 states.removeValue(forKey:id); try follow(id,true,socket); return
             }
+            if let turn = DesktopRuntimeProjection.errorProgressTurn(patch,state:state.projection) {state.resumedTurns.remove(turn)}
         }
         state.revision = revision; state.updatedAt = Date(); states[id] = state
     }

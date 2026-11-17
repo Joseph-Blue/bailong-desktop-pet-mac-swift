@@ -18,7 +18,7 @@ final class HistoryWindow: NSWindow {
         return super.performKeyEquivalent(with:event)
     }
 }
-final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSToolbarDelegate {
+final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSToolbarDelegate, NSToolbarItemValidation {
     private let composerView:ChatComposer
     var composer:ComposerPanel {composerView.composer}
     var composerEditor:MessageEditor {composerView.composerEditor}
@@ -31,7 +31,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let historySplit = NSSplitViewController()
     private var historyDetailItem: NSSplitViewItem!
     private var historyInputHeight: NSLayoutConstraint!
-    let list = HistoryTableView(), folder = label("")
+    let list = HistoryTableView()
+    private let workspaceStatus = WorkspaceStatusView()
     let historyStatus = label(PetPreferences.shared.fixedText("主人的叮嘱，我都记在这台电脑里啦"))
     let models: ChatModelSettings
     let composerModels = ChatModelSettings()
@@ -80,6 +81,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var pageConversation:String?, pageQuery:String?
     private var renderedPageStart:Int?
     private let pageLabel = label("")
+    private var pageRow:NSStackView!
+    private let readingEdge = NSBox()
     private var pageNavigation:NSSegmentedControl!
     private var renderedConversation: String?
     private let transcriptRenderer = TranscriptRenderer()
@@ -111,6 +114,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         history.styleMask.insert(.fullSizeContentView)
         let sidebar = NSVisualEffectView(); sidebar.material = .sidebar; sidebar.blendingMode = .behindWindow; sidebar.state = .followsWindowActiveState
         let left = NSScrollView(); left.hasVerticalScroller = true; left.autohidesScrollers = true; left.drawsBackground = false
+        left.verticalScrollElasticity = .allowed
         let column = NSTableColumn(identifier:NSUserInterfaceItemIdentifier("会话")); column.width = 224; column.resizingMask = .autoresizingMask
         list.addTableColumn(column); list.headerView = nil; list.rowHeight = 32; list.delegate = self; list.dataSource = self
         list.style = .plain; list.selectionHighlightStyle = .none; list.intercellSpacing = .zero
@@ -140,7 +144,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.isEditable = false; transcript.isSelectable = true
         transcript.onContentLayoutChange = { [weak self] in self?.updateSearchHighlights(reveal:false) }
         let reading = ChatViewLayout.editorScroll(transcript); reading.drawsBackground = false
-        transcript.textContainerInset = NSSize(width:24,height:20)
+        // 保留 TextKit 行内留白，使实际文字起点与顶部信息行同为 24pt。
+        transcript.textContainerInset = NSSize(width:24-(transcript.textContainer?.lineFragmentPadding ?? 0),height:14)
+        reading.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self,selector:#selector(historyScrolled(_:)),name:NSView.boundsDidChangeNotification,object:reading.contentView)
         historyEditor.placeholder = historyPlaceholder
         historyInput = ChatViewLayout.inputBox(historyEditor)
         let drafting = historyInput!
@@ -158,8 +165,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let preferences = NSStackView(views:[historyModel,inheritedSettings,historyRetrySettings!,NSView(),historyStop,historyCheck,historyButton]); preferences.spacing = 12; preferences.alignment = .centerY
         let inputArea = NSStackView(views:[drafting,preferences]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
         for view in [drafting,preferences] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
-        folder.font = .systemFont(ofSize:11); folder.textColor = .secondaryLabelColor; folder.maximumNumberOfLines = 1; folder.lineBreakMode = .byTruncatingMiddle
-        folder.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        workspaceStatus.onOpen = { [weak self] in self?.onOpenWorkspace($0) }
         historyStatus.font = .systemFont(ofSize:11); historyStatus.textColor = .secondaryLabelColor
         historyStatus.alignment = .right; historyStatus.maximumNumberOfLines = 1; historyStatus.lineBreakMode = .byTruncatingTail
         matchLabel.font = .systemFont(ofSize:11); matchLabel.textColor = .secondaryLabelColor
@@ -170,10 +176,12 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             button.imagePosition = .imageOnly; button.setAccessibilityLabel(title)
             button.widthAnchor.constraint(equalToConstant:28).isActive = true
         }
-        let targetMetadata = NSStackView(views:[sourceLabel,folder]); targetMetadata.orientation = .vertical; targetMetadata.alignment = .leading; targetMetadata.spacing = 3
+        let targetMetadata = NSStackView(views:[sourceLabel]); targetMetadata.orientation = .vertical; targetMetadata.alignment = .leading; targetMetadata.spacing = 3
+        sourceLabel.maximumNumberOfLines = 1; sourceLabel.lineBreakMode = .byTruncatingTail
+        sourceLabel.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let metadata = NSStackView(views:[targetMetadata,NSView(),historyStatus,matchLabel,previousMatch!,nextMatch!]); metadata.spacing = 8; metadata.alignment = .centerY
         [matchLabel,previousMatch!,nextMatch!].forEach {$0.isHidden = true}
-        pageNavigation = NSSegmentedControl(images:[NSImage(systemSymbolName:"chevron.left",accessibilityDescription:"较早记录")!,NSImage(systemSymbolName:"chevron.right",accessibilityDescription:"较新记录")!],trackingMode:.momentary,target:self,action:#selector(changeHistoryPage(_:)))
+        pageNavigation = AccentSegmentedControl(images:[NSImage(systemSymbolName:"chevron.left",accessibilityDescription:"较早记录")!,NSImage(systemSymbolName:"chevron.right",accessibilityDescription:"较新记录")!],trackingMode:.momentary,target:self,action:#selector(changeHistoryPage(_:)))
         pageNavigation.controlSize = .small
         for index in 0...1 {pageNavigation.setWidth(28,forSegment:index)}
         pageNavigation.setToolTip("查看较早的 20 轮记录",forSegment:0)
@@ -181,12 +189,16 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         pageNavigation.setAccessibilityLabel("历史记录翻页")
         pageLabel.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); pageLabel.textColor = .secondaryLabelColor
         let pages = NSStackView(views:[pageLabel,NSView(),pageNavigation!]); pages.spacing = 8; pages.alignment = .centerY; pages.distribution = .fill
+        pageRow = pages; pages.isHidden = true
+        let header = NSStackView(views:[metadata,workspaceStatus,pages]); header.orientation = .vertical; header.alignment = .leading; header.spacing = 6
+        readingEdge.boxType = .separator; readingEdge.isHidden = true
         let separator = NSBox(); separator.boxType = .separator
-        for view in [metadata,pages,reading,separator,inputArea] {view.translatesAutoresizingMaskIntoConstraints = false; right.addSubview(view)}
+        for view in [header,readingEdge,reading,separator,inputArea] {view.translatesAutoresizingMaskIntoConstraints = false; right.addSubview(view)}
         NSLayoutConstraint.activate([
-            metadata.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:24),metadata.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-24),metadata.topAnchor.constraint(equalTo:right.safeAreaLayoutGuide.topAnchor,constant:12),
-            pages.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:24),pages.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-24),pages.topAnchor.constraint(equalTo:metadata.bottomAnchor,constant:8),
-            reading.leadingAnchor.constraint(equalTo:right.leadingAnchor),reading.trailingAnchor.constraint(equalTo:right.trailingAnchor),reading.topAnchor.constraint(equalTo:pages.bottomAnchor,constant:8),reading.bottomAnchor.constraint(equalTo:separator.topAnchor),reading.heightAnchor.constraint(greaterThanOrEqualToConstant:180),
+            header.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:24),header.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-24),header.topAnchor.constraint(equalTo:right.safeAreaLayoutGuide.topAnchor,constant:12),
+            metadata.widthAnchor.constraint(equalTo:header.widthAnchor),workspaceStatus.widthAnchor.constraint(equalTo:header.widthAnchor),pages.widthAnchor.constraint(equalTo:header.widthAnchor),
+            readingEdge.leadingAnchor.constraint(equalTo:right.leadingAnchor),readingEdge.trailingAnchor.constraint(equalTo:right.trailingAnchor),readingEdge.topAnchor.constraint(equalTo:header.bottomAnchor,constant:8),readingEdge.heightAnchor.constraint(equalToConstant:1),
+            reading.leadingAnchor.constraint(equalTo:right.leadingAnchor),reading.trailingAnchor.constraint(equalTo:right.trailingAnchor),reading.topAnchor.constraint(equalTo:readingEdge.bottomAnchor),reading.bottomAnchor.constraint(equalTo:separator.topAnchor),reading.heightAnchor.constraint(greaterThanOrEqualToConstant:180),
             separator.leadingAnchor.constraint(equalTo:right.leadingAnchor),separator.trailingAnchor.constraint(equalTo:right.trailingAnchor),
             inputArea.leadingAnchor.constraint(equalTo:right.leadingAnchor,constant:20),inputArea.trailingAnchor.constraint(equalTo:right.trailingAnchor,constant:-20),inputArea.topAnchor.constraint(equalTo:separator.bottomAnchor,constant:16),inputArea.bottomAnchor.constraint(equalTo:right.bottomAnchor,constant:-16)
         ])
@@ -220,7 +232,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func stopTarget(_ entry:ChatEntry) {
-        guard let state = inputStates[entry],state.ownsRunningTask,!state.stopping,let key = state.conversation?.key else {return}
+        guard let state = inputStates[entry],state.ownsRunningTask || state.desktopPreparing,!state.stopping,let key = state.conversation?.key else {return}
         onStop(key)
     }
     private func checkTarget(_ entry:ChatEntry) {
@@ -228,9 +240,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         onCheckDelivery(key,entry)
     }
 
+    func prepareComposer() {composerView.prepareLayout()}
     func showComposer() {composerView.showComposer()}
     func hideComposer() {composerView.hideComposer()}
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.init("history-sidebar"),.init("history-divider"),.init("new"),.init("folder"),.init("codex"),.init("reveal"),.flexibleSpace,.init("search")] }
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.init("history-sidebar"),.init("history-divider"),.init("new"),.init("folder"),.space,.init("codex"),.init("reveal"),.space,.init("delete"),.flexibleSpace,.init("search")] }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {toolbarAllowedItemIdentifiers(toolbar)}
     func toolbar(_ toolbar: NSToolbar,itemForItemIdentifier id: NSToolbarItem.Identifier,willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
         if id.rawValue == "search" {
@@ -250,11 +263,20 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case "new": item.label = "新对话"; item.image = NSImage(systemSymbolName:"square.and.pencil",accessibilityDescription:item.label); item.action = #selector(newChat)
         case "folder": item.label = "选择文件夹"; item.image = NSImage(systemSymbolName:"folder",accessibilityDescription:item.label); item.action = #selector(chooseFolder)
         case "codex": item.label = "跳转到 Codex"; item.image = AppIcons.openAI; item.action = #selector(goCodex)
+        case "delete": item.label = "删除记录…"; item.image = NSImage(systemSymbolName:"trash",accessibilityDescription:item.label); item.action = #selector(deleteSelectedConversation)
         case "reveal": item.label = "访达中打开"; item.image = AppIcons.finder; item.action = #selector(revealFolder)
         default: return nil
         }
         item.paletteLabel = item.label; item.installHoverHelp()
         return item
+    }
+    func validateToolbarItem(_ item:NSToolbarItem) -> Bool {
+        if item.itemIdentifier.rawValue == "delete" {return inputStates[.history]?.readOnly != true && conversations.contains(where:{$0.key == selected})}
+        return true
+    }
+    @objc private func deleteSelectedConversation() {
+        guard let selected,inputStates[.history]?.readOnly != true else {return}
+        confirmDeleteConversation(selected)
     }
     private func resizeHistoryInput() {
         guard let height = historyInputHeight, let container = historyEditor.textContainer, let layout = historyEditor.layoutManager else {return}
@@ -265,6 +287,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func modelStateChanged() {
         updateShortcuts()
         composerView.updateLayout()
+        guard history.isVisible && !history.isMiniaturized else {return}
         let detailWidth = max(520,historyModel.layoutWidth+historyButton.intrinsicContentSize.width+64)
         historyDetailItem.minimumThickness = detailWidth
         let historyWidth = max(800,detailWidth+180)
@@ -336,7 +359,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
         menu.addItem(.separator())
         let delete = NSMenuItem(title:"删除记录…",action:#selector(deleteConversation(_:)),keyEquivalent:"")
-        delete.target = self; delete.representedObject = conversation.key; menu.addItem(delete)
+        delete.target = self; delete.representedObject = conversation.key; delete.isEnabled = inputStates[.history]?.readOnly != true; menu.addItem(delete)
         return menu
     }
     @objc private func renameConversation(_ item:NSMenuItem) {
@@ -358,7 +381,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if let key = item.representedObject as? String {onSyncTitle(key)}
     }
     @objc private func deleteConversation(_ item:NSMenuItem) {
-        guard let key = item.representedObject as? String,let conversation = conversations.first(where:{$0.key == key}) else {return}
+        guard let key = item.representedObject as? String else {return}
+        confirmDeleteConversation(key)
+    }
+    private func confirmDeleteConversation(_ key:String) {
+        guard inputStates[.history]?.readOnly != true,let conversation = conversations.first(where:{$0.key == key}) else {return}
         let alert = NSAlert(); alert.alertStyle = .warning; alert.messageText = "删除这条历史记录？"
         alert.informativeText = "从桌宠的本机历史文件中删除“\(conversation.title)”及其记录正文。Codex 原始会话和任务文件保留。"
         alert.addButton(withTitle:"取消"); alert.addButton(withTitle:"删除记录").hasDestructiveAction = true
@@ -404,15 +431,20 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             }
             inputStates[entry] = state
         }
-        self.conversations = conversations.enumerated().sorted {
-            let left = $0.element.lastActivity, right = $1.element.lastActivity
-            return left == right ? $0.offset > $1.offset : left > right
-        }.map(\.element)
+        let indexed:[(offset:Int,conversation:Conversation,activity:Date)] = conversations.enumerated().map {
+            (offset:$0.offset,conversation:$0.element,activity:$0.element.lastActivity)
+        }
+        self.conversations = indexed.sorted {
+            $0.activity == $1.activity ? $0.offset > $1.offset : $0.activity > $1.activity
+        }.map(\.conversation)
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
+        let historyVisible = history.isVisible && !history.isMiniaturized
         inheritedSettings.update(settings:historyState.modelSettings,error:historyState.modelNote)
         refreshList()
-        sourceLabel.stringValue = selected.kind.title
-        folder.stringValue = "工作区："+selected.cwd; folder.hoverHelp = selected.cwd
+        sourceLabel.stringValue = selected.title
+        sourceLabel.hoverHelp = selected.kind.title+" · 共 \(selected.turns.count) 轮记录\n"+selected.title
+        workspaceStatus.update(conversation:selected,executing:historyState.executing,visible:historyVisible)
+        if historyVisible {history.toolbar?.validateVisibleItems()}
         historyInput.fillColor = .textBackgroundColor
         historyEditor.placeholder = selected.external ? "发送到这条 Codex 项目对话…" : historyPlaceholder
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
@@ -425,16 +457,17 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyRetrySettings.isHidden = !selected.external || historyState.desktopReady || historyState.modelNote == nil
         historyRetrySettings.isEnabled = !historyState.sending
         historyStop.isEnabled = !historyState.stopping
-        historyStop.title = historyState.stopping ? "正在停止…" : "停止任务"
-        historyStop.isHidden = !historyState.ownsRunningTask; historyCheck.isHidden = !historyState.unconfirmed
+        historyStop.title = historyState.desktopPreparing ? "取消发送" : historyState.stopping ? "正在停止…" : "停止任务"
+        historyStop.isHidden = !historyState.ownsRunningTask && !historyState.desktopPreparing; historyCheck.isHidden = !historyState.unconfirmed
         historyStatus.stringValue = historyState.historyNote; historyStatus.hoverHelp = historyState.replyNote ?? historyState.historyNote
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
-        resizeHistoryInput(); modelStateChanged()
+        if historyVisible {resizeHistoryInput()}
+        modelStateChanged()
         composerEditor.placeholder = composerState.kind == .project ? "发送到这条 Codex 项目对话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
         historyEditor.isEditable = historyState.canEdit
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}
-        guard history.isVisible && !history.isMiniaturized else {return}
+        guard historyVisible else {return}
         let selectionChanged = renderedConversation != selected.key
         if pageConversation != selected.key {historyPage = HistoryPageWindow(); pageConversation = selected.key; pageQuery = nil}
         if pageQuery != searchField.stringValue {
@@ -449,6 +482,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         pageNavigation.setEnabled(range.lowerBound > 0,forSegment:0)
         pageNavigation.setEnabled(range.upperBound < selected.turns.count,forSegment:1)
         pageNavigation.isHidden = selected.turns.count <= HistoryPageWindow.size
+        pageRow.isHidden = pageNavigation.isHidden
         pageLabel.stringValue = turns.isEmpty ? "暂无记录" : pageNavigation.isHidden ? "共 \(selected.turns.count) 轮记录" : "第 \(range.lowerBound+1)–\(range.upperBound) 轮 · 共 \(selected.turns.count) 轮"
         let signature = transcriptRenderer.style(selected) + turns.flatMap {[ $0.key ] + transcriptRenderer.turnSignature($0)}
         let contentChanged = selectionChanged || pageChanged || signature != renderedTranscriptSignature
@@ -471,6 +505,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcriptRenderer.invalidate()
         list.needsDisplay = true; list.enumerateAvailableRowViews {row,_ in row.needsDisplay = true}; renderedTranscriptSignature = []
         refreshVisibleHistory()
+    }
+    @objc private func historyScrolled(_ notification:Notification) {
+        guard let clip = notification.object as? NSClipView else {return}
+        readingEdge.isHidden = clip.bounds.minY <= 0
     }
     func numberOfRows(in tableView: NSTableView) -> Int { visibleConversations.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -507,6 +545,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     func windowWillClose(_ notification:Notification) {
         guard notification.object as? NSWindow === history else {return}
+        workspaceStatus.deactivate()
         transcriptRenderer.invalidate()
         renderedTranscriptSignature.removeAll(); renderedConversation = nil
         renderedPageStart = nil; pageConversation = nil; pageQuery = nil
@@ -516,14 +555,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.releaseRenderedContent()
         onReleaseHistory()
     }
+    func windowDidMiniaturize(_ notification:Notification) {if notification.object as? NSWindow === history {workspaceStatus.deactivate()}}
     func openHistory() {
         hideComposer(); onOpenHistory()
-        // 历史窗口打开或最小化期间保留 Dock 入口，关闭后移除。
-        InterfaceWindows.shared.opened(history)
         if let icon = AppIcons.application {NSApp.applicationIconImage = icon}
         history.miniwindowImage = NSApp.applicationIconImage
-        if history.isMiniaturized {history.deminiaturize(nil)}
-        if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; history.makeKeyAndOrderFront(nil)
+        // 历史窗口打开或最小化期间保留 Dock 入口，关闭后移除。
+        InterfaceWindows.shared.focus(history)
         refreshVisibleHistory()
         history.contentView?.layoutSubtreeIfNeeded()
         if searching {updateSearchHighlights(reveal:true)}

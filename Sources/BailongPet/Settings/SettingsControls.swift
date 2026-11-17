@@ -52,18 +52,48 @@ enum SettingsTemplateTokens {
         }
     }
 }
+// 标题旁的变量提示整体绘制背景，避免中文与花括号的字形分段留下白缝。
+final class SettingsTokenBadge:NSView {
+    private let color:NSColor
+    init(token:String,color:NSColor) {
+        self.color = color
+        super.init(frame:.zero)
+        let text = NSTextField(labelWithString:token)
+        text.font = .systemFont(ofSize:11); text.textColor = color
+        text.setContentCompressionResistancePriority(.required,for:.horizontal)
+        addSubview(text); text.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            text.leadingAnchor.constraint(equalTo:leadingAnchor,constant:5),
+            text.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-5),
+            text.topAnchor.constraint(equalTo:topAnchor,constant:3),
+            text.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-3)
+        ])
+        setAccessibilityElement(true); setAccessibilityRole(.staticText); setAccessibilityLabel(token)
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    override func draw(_ dirtyRect:NSRect) {
+        color.withAlphaComponent(0.13).setFill()
+        NSBezierPath(roundedRect:bounds,xRadius:4,yRadius:4).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
+}
+
 final class SettingsTemplateField: NSTextField {
+    override class var cellClass:AnyClass? {
+        get {SettingsTokenFieldCell.self}
+        set {}
+    }
     var allowsTokens = true
     func refreshHighlight() {
         if let editor = currentEditor() as? SettingsTemplateEditor {editor.refreshHighlight(); return}
         let value = NSMutableAttributedString(string:stringValue,attributes:[.font:font ?? NSFont.systemFont(ofSize:13),.foregroundColor:NSColor.labelColor])
         if allowsTokens {SettingsTemplateTokens.ranges(in:stringValue) {range,color in
-            value.addAttributes([.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],range:range)
+            value.addAttribute(.foregroundColor,value:color,range:range)
         }
         }
         attributedStringValue = value
     }
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }
 final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
     var allowsTokens = true
@@ -79,10 +109,7 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
         return accepted
     }
     override func menu(for event:NSEvent) -> NSMenu? {
-        let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
-        for (title,action) in [("剪切",#selector(NSText.cut(_:))),("拷贝",#selector(NSText.copy(_:))),("粘贴",#selector(NSText.paste(_:))),("全选",#selector(NSResponder.selectAll(_:)))] {
-            let item = NSMenuItem(title:title,action:action,keyEquivalent:""); item.target = self; menu.addItem(item)
-        }
+        let menu = TextContextMenu.menu(for:self)
         guard allowsTokens else {return menu}
         menu.addItem(.separator())
         let font = NSFont.menuFont(ofSize:0)
@@ -100,17 +127,81 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
         guard let token = sender.representedObject as? String else {return}
         insertText(token,replacementRange:selectedRange())
     }
+    override func deleteBackward(_ sender:Any?) {
+        guard allowsTokens,!hasMarkedText() else {super.deleteBackward(sender); return}
+        let selection = selectedRange()
+        var deletion = selection
+        var touchesToken = false
+        SettingsTemplateTokens.ranges(in:string) {range,_ in
+            let intersects = selection.length == 0
+                ? selection.location > range.location && selection.location <= NSMaxRange(range)
+                : NSIntersectionRange(selection,range).length > 0
+            if intersects {
+                deletion = NSUnionRange(deletion,range); touchesToken = true
+            }
+        }
+        guard touchesToken else {super.deleteBackward(sender); return}
+        // 使用原生编辑入口，沿用撤销、字数限制及偏好保存通知。
+        insertText("",replacementRange:deletion)
+    }
     override func paste(_ sender:Any?) {pasteAsPlainText(sender)}
     override func didChangeText() {super.didChangeText(); refreshHighlight()}
     func refreshHighlight() {
-        guard !hasMarkedText(), let layoutManager else {return}
+        guard !hasMarkedText(), let container = textContainer else {return}
+        if !(layoutManager is SettingsTokenLayoutManager) {
+            container.replaceLayoutManager(SettingsTokenLayoutManager())
+        }
+        guard let layoutManager = layoutManager as? SettingsTokenLayoutManager else {return}
+        layoutManager.showsTokens = allowsTokens
         let whole = NSRange(location:0,length:(string as NSString).length)
         layoutManager.removeTemporaryAttribute(.foregroundColor,forCharacterRange:whole)
         layoutManager.removeTemporaryAttribute(.backgroundColor,forCharacterRange:whole)
+        // 旧字段属性由 AppKit 带入编辑器时一并去掉，不再逐字绘制背景。
+        textStorage?.removeAttribute(.backgroundColor,range:whole)
+        needsDisplay = true
         guard allowsTokens else {return}
         SettingsTemplateTokens.ranges(in:string) {range,color in
-            layoutManager.addTemporaryAttributes([.foregroundColor:color,.backgroundColor:color.withAlphaComponent(0.13)],forCharacterRange:range)
+            layoutManager.addTemporaryAttribute(.foregroundColor,value:color,forCharacterRange:range)
         }
     }
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
+}
+
+// 数值、单位与轨道同轴；范围标签独占轨道下方，不挤动设置标题。
+final class SettingsSliderControl:NSView {
+    let slider:NSSlider
+    init(number:NSTextField,unit:NSTextField,slider:NSSlider,limits:(String,String)?,ticks:Int) {
+        self.slider = slider
+        super.init(frame:.zero)
+        slider.numberOfTickMarks = limits == nil ? 0 : ticks
+        slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false
+        let track = NSStackView(views:[slider]); track.orientation = .vertical; track.distribution = .fill; track.alignment = .leading; track.spacing = 0
+        if let limits {
+            let minimum = NSTextField(labelWithString:limits.0), maximum = NSTextField(labelWithString:limits.1)
+            let labels = NSView()
+            for field in [minimum,maximum] {
+                field.font = .systemFont(ofSize:10); field.textColor = .secondaryLabelColor
+                field.translatesAutoresizingMaskIntoConstraints = false; labels.addSubview(field)
+            }
+            NSLayoutConstraint.activate([
+                labels.widthAnchor.constraint(equalToConstant:180), labels.heightAnchor.constraint(equalToConstant:14),
+                minimum.leadingAnchor.constraint(equalTo:labels.leadingAnchor), minimum.centerYAnchor.constraint(equalTo:labels.centerYAnchor),
+                maximum.trailingAnchor.constraint(equalTo:labels.trailingAnchor), maximum.centerYAnchor.constraint(equalTo:labels.centerYAnchor)
+            ])
+            track.addArrangedSubview(labels)
+        }
+        for view in [number,unit,track] {view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)}
+        // 下方范围文字占用的高度也预留在上方，让主轨道位于整组的中线。
+        let legendHeight:CGFloat = limits == nil ? 0 : 14
+        let height = heightAnchor.constraint(equalTo:track.heightAnchor,constant:legendHeight); height.priority = .defaultLow
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant:272), track.widthAnchor.constraint(equalToConstant:180),
+            number.leadingAnchor.constraint(equalTo:leadingAnchor), unit.leadingAnchor.constraint(equalTo:number.trailingAnchor,constant:8),
+            track.leadingAnchor.constraint(equalTo:unit.trailingAnchor,constant:8), track.trailingAnchor.constraint(equalTo:trailingAnchor),
+            track.topAnchor.constraint(equalTo:topAnchor,constant:legendHeight), track.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor),
+            number.centerYAnchor.constraint(equalTo:slider.centerYAnchor), unit.centerYAnchor.constraint(equalTo:slider.centerYAnchor),
+            heightAnchor.constraint(greaterThanOrEqualTo:number.heightAnchor), height
+        ])
+    }
+    required init?(coder:NSCoder) {fatalError()}
 }

@@ -10,6 +10,7 @@ final class BubbleMotion: NSObject {
     private var slide = 0.0
     private var resizeStart = 0.0
     private var resizeFrom: NSSize?
+    var keepsTopEdge = false
     private(set) var frame: NSRect
     private(set) var presented = false
     var onHidden:(() -> Void)?
@@ -60,6 +61,7 @@ final class BubbleMotion: NSObject {
         guard let window else {return}
         guard frame.size != size else {onResize?(window.frame.size); return}
         let previous = window.frame.size
+        if keepsTopEdge {frame.origin.y += frame.height-size.height}
         frame.size = size
         if presented && enabled && !reduced && previous.height != size.height {
             resizeFrom = NSSize(width:size.width,height:previous.height)
@@ -81,11 +83,18 @@ final class BubbleMotion: NSObject {
         if let from = resizeFrom {
             let r = progress(since:resizeStart,duration:0.14)
             displayed.size.height = from.height+(frame.height-from.height)*r
+            if keepsTopEdge {displayed.origin.y += frame.height-displayed.height}
             if r >= 1 {resizeFrom = nil}
         }
         let sizeChanged = displayed.size != window.frame.size
-        if displayed != window.frame {window.setFrame(displayed,display:true)}
-        if sizeChanged {onResize?(displayed.size)}
+        if displayed != window.frame {window.setFrame(displayed,display:!sizeChanged)}
+        if sizeChanged {
+            // 先更新玻璃内容容器和正文视口，再绘制这一帧；不能拿旧视口画新尺寸窗口。
+            window.contentView?.layoutSubtreeIfNeeded()
+            // AppKit 会对窗口尺寸取整，正文必须使用实际落地尺寸。
+            onResize?(window.frame.size)
+            window.displayIfNeeded()
+        }
         if f >= 1 && !presented {window.orderOut(nil); window.alphaValue = 1; window.ignoresMouseEvents = false}
         if f >= 1 && resizeFrom == nil {timer?.invalidate(); timer = nil}
         if f >= 1 && !presented && pendingHide {
@@ -96,7 +105,9 @@ final class BubbleMotion: NSObject {
     private func startTimerIfNeeded() {
         guard timer == nil, progress(since:fadeStart,duration:fadeDuration) < 1 || resizeFrom != nil else {return}
         let tick = Timer(timeInterval:1.0/60,repeats:true) { [weak self] _ in self?.render() }
-        timer = tick; RunLoop.main.add(tick,forMode:.common)
+        timer = tick
+        RunLoop.main.add(tick,forMode:.common)
+        RunLoop.main.add(tick,forMode:.modalPanel)
     }
     @objc private func settingsChanged() {
         guard !enabled || reduced else {return}

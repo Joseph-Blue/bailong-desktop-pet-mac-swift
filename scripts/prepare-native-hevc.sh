@@ -11,7 +11,7 @@ mkdir -p "$workspace/module-cache"
 
 # 预览只复用原生素材，独立包标识，不读取桌宠数据。
 for target_arch in arm64 x86_64; do
-    output="dist/native-hevc/$version/$target_arch"
+    output="dist/$version/$target_arch"
     mkdir -p "$output"
     app="$output/白龙娘原生动画预览.app"
     staging="$(mktemp -d "$output/.preview-XXXXXX")"

@@ -147,7 +147,8 @@ enum MarkdownText {
                 block.setWidth(6,type:.absoluteValueType,for:.padding)
                 block.setWidth(0.5,type:.absoluteValueType,for:.border)
                 block.setBorderColor(.separatorColor)
-                block.verticalAlignment = .top
+                // 顶部对齐在 SDK 26/27 中的 Swift 名称不同，原始值均为 0。
+                block.verticalAlignment = NSTextBlock.VerticalAlignment(rawValue:0)!
                 if content.headers.contains(rowID) {block.backgroundColor = .quaternaryLabelColor}
                 let paragraph = NSMutableParagraphStyle()
                 paragraph.textBlocks = [block]; paragraph.lineSpacing = lineSpacing; paragraph.paragraphSpacing = 0

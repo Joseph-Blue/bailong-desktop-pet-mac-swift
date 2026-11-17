@@ -7,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var localEvents: Any?
     var terminationSignals = [DispatchSourceSignal]()
     var quitReady = false
+    var quitInProgress = false
+    var awaitingTerminateReply = false
     var terminationRequested = false
     var explicitQuit = false
     let lifecycle = RunLifecycle()
@@ -39,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DistributedNotificationCenter.default().postNotificationName(revealName,object:nil,userInfo:nil,deliverImmediately:true)
                     explicitQuit = true; NSApp.terminate(nil); return
                 }
-                ownsInstance = true; unfinishedRun = lifecycle.begin(version:Paths.version)
+                ownsInstance = true
+                unfinishedRun = lifecycle.begin(version:Paths.version)
             }
             FollowSessions.clearManualExit()
             LoginLauncher.refreshExistingRegistration()
@@ -122,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.chat?.toggleComposer() })
         commands.addItem(MenuAction("新对话") { [weak self] in self?.chat?.newConversation(); self?.chat?.showHistory(nil) })
         commands.addItem(MenuAction("选择任务文件夹…") { [weak self] in self?.chat?.chooseFolder() })
-        commands.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.chat?.showHistory(nil) })
+        commands.addItem(MenuAction("历史对话",symbol:"book") { [weak self] in self?.chat?.showHistory(nil) })
         let windowsItem = NSMenuItem(title:"窗口",action:nil,keyEquivalent:"")
         let windows = NSMenu(title:"窗口"); windowsItem.submenu = windows; bar.addItem(windowsItem)
         windows.addItem(MenuAction("应用性能信息统计",symbol:"chart.xyaxis.line") { [weak self] in self?.pet?.showDiagnostics() })
@@ -140,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showSettings() {pet?.showSettings()}
     @objc func showAbout() {pet?.showSettings(section:.about)}
     @objc func systemWillTerminate() {explicitQuit = true}
-    @objc func quitFromMenu() {explicitQuit = true; FollowSessions.markManualExit(); NSApp.terminate(nil)}
+    @objc func quitFromMenu() {explicitQuit = true; FollowSessions.markManualExit(); prepareForTermination()}
     @objc func closeInterface() {
         // 原生模态窗口与 sheet 均走取消路径，不触发确认或危险操作。
         if let modal = NSApp.modalWindow {
@@ -172,20 +175,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak self] in self?.pet?.showSettings() })
         menu.addItem(MenuAction("应用性能信息统计") { [weak self] in self?.pet?.showDiagnostics() })
-        menu.addItem(MenuAction("历史对话",symbol:"clock") { [weak self] in self?.chat?.showHistory(nil) })
+        menu.addItem(MenuAction("历史对话",symbol:"book") { [weak self] in self?.chat?.showHistory(nil) })
         if RecoveryWindow.hasIssues {menu.addItem(MenuAction("错误与恢复") {RecoveryWindow.revealAll()})}
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.chat?.toggleComposer() })
         return menu
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {false}
+    private func prepareForTermination() {
+        UpdateChecker.shared.cancel()
+        if quitReady || (pet == nil && chat == nil) {
+            quitReady = true
+            finishTermination()
+            return
+        }
+        guard !quitInProgress else {return}
+        quitInProgress = true
+        sync?.close()
+        // 淡出与原任务清理并行；退出等待处于 modalPanel 模式时，DispatchQueue.main 不会被消费。
+        let pending = DispatchGroup()
+        if let pet {pending.enter(); pet.prepareForExit {pending.leave()}}
+        if let chat {pending.enter(); chat.shutdown {pending.leave()}}
+        pending.notify(queue:.global(qos:.userInitiated)) { [weak self] in
+            RunLoop.main.perform(inModes:[.common,.modalPanel]) {
+                guard let self else {return}
+                self.quitReady = true
+                self.finishTermination()
+            }
+        }
+    }
+    private func finishTermination() {
+        if awaitingTerminateReply {
+            awaitingTerminateReply = false
+            NSApp.reply(toApplicationShouldTerminate:true)
+        } else {
+            NSApp.terminate(nil)
+        }
+    }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Dock 的系统“退出”只关闭界面；完整退出必须来自桌宠的显式退出入口。
         if !explicitQuit {closeInterface(); return .terminateCancel}
-        UpdateChecker.shared.cancel()
-        if quitReady || chat == nil {return .terminateNow}
-        sync?.close()
-        if chat?.running == nil {chat?.shutdown {}; return .terminateNow}
-        chat?.shutdown { [weak self] in self?.quitReady = true; NSApp.reply(toApplicationShouldTerminate:true) }
+        if quitReady || (pet == nil && chat == nil) {return .terminateNow}
+        awaitingTerminateReply = true
+        prepareForTermination()
         return .terminateLater
     }
     func applicationWillTerminate(_ notification: Notification) {

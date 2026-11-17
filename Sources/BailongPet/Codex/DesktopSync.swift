@@ -24,6 +24,8 @@ struct PublicSnapshot {
     var hasSensitiveQuestion = false
     var agentMessages = [PublicAgentMessage]()
     var fileEdits = [FileEditSummary]()
+    var tokenUsage:TokenUsage?
+    var tokenUsageError:String?
     var isLatest = true
     var receivedText:String?
     var steeringMessages = [PublicUserMessage]()
@@ -32,6 +34,7 @@ struct PublicSnapshot {
     var fingerprint:[String] {
         var result = steeringMessages.flatMap {[$0.id,$0.text]}
         result += fileEdits.flatMap(\.signature)
+        result += [tokenUsage?.signature ?? "",tokenUsageError ?? ""]
         result += agentMessages.flatMap {[$0.id,$0.text]}
         result += [status,messages,final,alert,step,error,receivedText ?? "",approvalID,approval?.details ?? "",attention?.kind.rawValue ?? "",hasSensitiveInput ? "sensitive-input" : "",hasSensitiveQuestion ? "sensitive-question" : ""]
         for question in attention?.questions ?? [] {
@@ -119,7 +122,7 @@ final class DesktopSync {
                     self.reading = false; guard !self.stopped else {return}
                     self.chat.desktopTaskReadStatus = nil
                     self.chat.desktopTasks = values.filter {$0.isLatest && $0.started > self.clearedBefore && !self.chat.store.deletedThreads.contains($0.logical)}.map {
-                        BubbleTaskSummary(key:$0.key,title:$0.title,threadID:$0.logical,status:$0.status,start:Date(timeIntervalSince1970:$0.started),end:$0.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},turnID:$0.turn,activity:$0.attention.map {TaskActivity(title:$0.kind == .approval ? "等待批准" : "等待回答",kind:.reply)} ?? $0.activity)
+                        BubbleTaskSummary(key:$0.key,title:$0.title,threadID:$0.logical,status:$0.status,start:Date(timeIntervalSince1970:$0.started),end:$0.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},turnID:$0.turn,activity:$0.attention.map {TaskActivity.waiting(approval:$0.kind == .approval)} ?? $0.activity,connectionFailed:!activeStatuses.contains($0.status) && $0.status != "completed" && CodexErrorMessage($0.error)?.category == .network)
                     }
                     if !titleIDs.isEmpty {self.lastTitleSync = Date()}
                     var changed = false
@@ -128,7 +131,7 @@ final class DesktopSync {
                             conversation.title = title; changed = true
                         }
                     }
-                    let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint}
+                    let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint || self.tracked[$0.key]?.activity != $0.activity}
                     let recordsChanged = self.accept(values)
                     if let approvalError {
                         self.diagnostics += " · 审批同步失败："+approvalError
@@ -173,6 +176,9 @@ final class DesktopSync {
                     let enriched = GeneratedImageLink.appending(value.agentMessages.filter(\.isImage).map(\.text),to:turn.messages)
                     if enriched != turn.messages {turn.messages = enriched; changed = true}
                     if turn.fileEdits != value.fileEdits {turn.fileEdits = value.fileEdits; changed = true}
+                    if chat.store.canEnrichInput(turn,in:conversation),turn.tokenUsage != value.tokenUsage || turn.tokenUsageError != value.tokenUsageError {
+                        turn.tokenUsage = value.tokenUsage; turn.tokenUsageError = value.tokenUsageError; changed = true
+                    }
                 }
                 continue
             }
@@ -214,6 +220,7 @@ final class DesktopSync {
                     turn.lastMessageAt = Date(timeIntervalSince1970:time)
                 }
                 turn.fileEdits = value.fileEdits
+                turn.tokenUsage = value.tokenUsage; turn.tokenUsageError = value.tokenUsageError
                 turn.status = value.status; turn.messages = value.messages; turn.final = value.final; turn.steps = value.attention?.isSensitive == true ? "" : value.alert.isEmpty ? value.step : value.alert; turn.error = value.error; changed = true
             }
             if different {
@@ -237,8 +244,9 @@ final class DesktopSync {
                 }
             }
             if active {
-                if value.attention == nil,previous?.activity != value.activity {
-                    chat.pet.showProgressToast(value.activity,key:key,timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key))
+                // 重连提示不按相同文案过滤，沿用现有状态入口与观察节奏。
+                if value.attention == nil,(previous?.activity != value.activity || value.activity?.isReconnecting == true) {
+                    chat.pet.showProgressToast(value.activity,key:key,timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key),thread:conversation.key)
                 }
                 if !running.contains(key) {running.insert(key); chat.pet.taskStarted(key)}
                 if value.attention == nil && ["running","inProgress"].contains(value.status),
@@ -251,7 +259,7 @@ final class DesktopSync {
                     let questionIDs = value.attention?.questions.map(\.id).joined(separator:"\u{001f}") ?? ""
                     let signature = (value.attention?.kind.rawValue ?? "progress")+":"+value.approvalID+":"+questionIDs+":"+text
                     if (value.attention != nil || value.status.hasPrefix("waiting")) && !text.isEmpty && (turn.notices[signature] == nil || previous?.approval?.details != value.approval?.details || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key,  purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key), question:.init(questions:value.attention?.questions ?? [],submit:value.attention?.kind == .answer && value.attention?.isSensitive == false && value.attention?.questions.allSatisfy({!$0.id.isEmpty}) == true ? { [weak self] answers,completion in
+                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key,  purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,status:value.attention?.kind.status), question:.init(questions:value.attention?.questions ?? [],submit:value.attention?.kind == .answer && value.attention?.isSensitive == false && value.attention?.questions.allSatisfy({!$0.id.isEmpty}) == true ? { [weak self] answers,completion in
                             self?.submitAnswers(value,answers:answers,completion:completion)
                         } : nil,skip:{ [weak self] ids in self?.skippedQuestionIDs.formUnion(ids) }),approval:value.approval.map(ApprovalPresentation.init))
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
@@ -259,9 +267,10 @@ final class DesktopSync {
                 }
             } else if ["completed","failed","interrupted"].contains(value.status) {
                 running.remove(key)
-                if !turn.finished || (previous != nil && previous?.fileEdits != value.fileEdits) {
+                if !turn.finished || (previous != nil && (previous?.fileEdits != value.fileEdits || previous?.tokenUsage != value.tokenUsage || previous?.tokenUsageError != value.tokenUsageError)) {
                     if !turn.finished {turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)}
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits)
+                    let failure = value.status != "completed" && CodexErrorMessage(value.error) != nil ? AppFailure.codex(value.error) : nil
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:failure?.message ?? TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits,completionFooter:TranscriptActions(id:turn.key,text:value.resultText,threadID:conversation.threadID,font:.systemFont(ofSize:13),status:turn.status,completedAt:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},usage:turn.tokenUsage,usageError:turn.tokenUsageError),failure:failure)
                 }
             }
         }
@@ -310,10 +319,6 @@ final class DesktopSync {
         if missing > 0 {lines.append("另有 \(missing) 条此前仍在进行的任务暂时读不到，正在等待状态更新。")}
         lines += [
             "", "最近刷新："+Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),
-            "", "这些数量怎么理解？",
-            "每次发送消息并等待回复算一条任务记录；同一个会话里多次发送会分别计数。",
-            "统计范围是最近使用的 Codex 会话，以及桌宠已经在跟踪的任务。",
-            "需要批准或补充信息时，请回到原 Codex 会话处理。"
         ]
         return lines.joined(separator:"\n")
     }
