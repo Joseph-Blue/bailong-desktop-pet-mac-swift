@@ -75,7 +75,10 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
     }
     static func revealAll() {
         let controllers = Array(windows.values)
-        for controller in controllers {controller.present(takeFocus:false)}
+        for controller in controllers.dropFirst() {
+            if controller.window.isMiniaturized {controller.window.deminiaturize(nil)}
+            controller.present(takeFocus:false)
+        }
         controllers.first?.present(takeFocus:true)
     }
     static var hasIssues: Bool {!windows.isEmpty}
@@ -160,12 +163,12 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in self?.recoveryAction() }
     }
     private func present(takeFocus:Bool) {
-        InterfaceWindows.shared.opened(window)
-        NSApp.addWindowsItem(window,title:window.title,filename:false)
         if takeFocus {
-            if window.isMiniaturized {window.deminiaturize(nil)}
-            if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil)
-        } else if !window.isVisible && !window.isMiniaturized {window.orderFront(nil)}
+            InterfaceWindows.shared.focus(window)
+        } else {
+            InterfaceWindows.shared.opened(window)
+            if !window.isVisible && !window.isMiniaturized {window.orderFront(nil)}
+        }
     }
     @objc private func exitApplication() {Self.quit()}
     func windowWillClose(_ notification:Notification) {NSApp.removeWindowsItem(window)}

@@ -26,22 +26,32 @@ final class SettingsTokenLayoutManager:NSLayoutManager {
 
 // 非编辑状态沿用 NSTextField 的边框与焦点，仅正文使用与 field editor 相同的排版器。
 final class SettingsTokenFieldCell:NSTextFieldCell {
+    private enum SharedLayout {
+        static let storage = NSTextStorage()
+        static let manager = SettingsTokenLayoutManager()
+        static let container:NSTextContainer = {
+            let value = NSTextContainer(containerSize:NSSize(width:0,height:CGFloat.greatestFiniteMagnitude))
+            value.lineFragmentPadding = 0
+            manager.addTextContainer(value)
+            storage.addLayoutManager(manager)
+            return value
+        }()
+    }
     override func drawInterior(withFrame cellFrame:NSRect,in controlView:NSView) {
         guard let field = controlView as? SettingsTemplateField,field.allowsTokens,
               field.currentEditor() == nil,!stringValue.isEmpty else {
             super.drawInterior(withFrame:cellFrame,in:controlView); return
         }
         let rect = drawingRect(forBounds:cellFrame)
-        let storage = NSTextStorage(attributedString:attributedStringValue)
+        let storage = SharedLayout.storage, manager = SharedLayout.manager, container = SharedLayout.container
+        defer {storage.setAttributedString(NSAttributedString())}
+        storage.setAttributedString(attributedStringValue)
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
         paragraph.lineBreakMode = wraps ? .byWordWrapping : lineBreakMode
         storage.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:storage.length))
-        let manager = SettingsTokenLayoutManager()
-        let container = NSTextContainer(containerSize:NSSize(width:rect.width,height:CGFloat.greatestFiniteMagnitude))
-        container.lineFragmentPadding = 0
+        container.containerSize = NSSize(width:rect.width,height:CGFloat.greatestFiniteMagnitude)
         container.maximumNumberOfLines = field.maximumNumberOfLines
-        manager.addTextContainer(container); storage.addLayoutManager(manager)
         manager.ensureLayout(for:container)
         let glyphs = manager.glyphRange(for:container)
         let height = manager.usedRect(for:container).height

@@ -83,6 +83,11 @@ final class ChatReplyPreview: NSTextField {
 
 // 链接只负责路径显示和用户点击，打开目录交给调用方，不读取文件或会话数据。
 final class WorkspaceLinkButton: NSButton,LinkCursorControl {
+    private static let middleTruncatingParagraph:NSParagraphStyle = {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        return paragraph.copy() as! NSParagraphStyle
+    }()
     var emphasizesLink = true
     var usesMonochromeLink = false
     var onOpen:(URL) -> Void = {_ in}
@@ -95,9 +100,11 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         setAccessibilityLabel("在访达中打开工作区")
+        NotificationCenter.default.addObserver(self,selector:#selector(accentChanged),name:AppAccent.didChange,object:nil)
         update(path:"")
     }
     required init?(coder:NSCoder) {fatalError()}
+    @objc private func accentChanged() {needsDisplay = true}
     func update(path:String,displayName:String? = nil) {
         let color = path.isEmpty || !emphasizesLink ? NSColor.secondaryLabelColor : usesMonochromeLink ? .labelColor : AppAccent.foregroundColor
         let text = path.isEmpty ? "未选择工作区" : displayName ?? (path as NSString).abbreviatingWithTildeInPath
@@ -105,8 +112,7 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
         displayedPath = path
         directory = path.isEmpty ? nil : URL(fileURLWithPath:path,isDirectory:true)
         isEnabled = directory != nil
-        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingMiddle
-        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .paragraphStyle:paragraph]
+        var attributes:[NSAttributedString.Key:Any] = [.font:font!, .paragraphStyle:Self.middleTruncatingParagraph]
         if isEnabled && emphasizesLink {attributes.merge(LinkAppearance.attributes) {_,link in link}}
         attributes[.foregroundColor] = color
         attributedTitle = NSAttributedString(string:text,attributes:attributes)

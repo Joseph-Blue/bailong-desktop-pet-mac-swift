@@ -34,11 +34,8 @@ enum AppAccent {
     static let choices = [("system","跟随系统"),("blue","蓝色"),("purple","紫色"),("pink","粉色"),("red","红色"),("orange","橙色"),("yellow","黄色"),("green","绿色"),("gray","石墨色"),("custom","自定义")]
     static var selection: String {SettingsStorage.defaults.string(forKey:"accentStyle") ?? "system"}
     static var color: NSColor {color(for:selection)}
-    // 文字使用独立动态色；原取样色继续用于按钮、色点和填充。
-    static var foregroundColor:NSColor {
-        let base = color
-        return NSColor(name:nil) {appearance in foregroundColor(base,for:appearance)}
-    }
+    // 文字使用独立动态色（固定对象身份以避免属性字典反复新建）；原取样色继续用于按钮、色点和填充。
+    static let foregroundColor = NSColor(name:nil) {appearance in foregroundColor(color,for:appearance)}
     static func foregroundColor(_ base:NSColor,for appearance:NSAppearance,increasedContrast:Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,backgroundColor:NSColor = .windowBackgroundColor) -> NSColor {
         var source = [CGFloat](), background = [CGFloat]()
         appearance.performAsCurrentDrawingAppearance {

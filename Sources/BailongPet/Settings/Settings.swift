@@ -33,6 +33,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private lazy var searchIndex = SettingsSearchEntry.all(catalog:catalog)
     private var searchHighlight:SettingsSearchHighlight?
     private var selected: SettingsSection = .general
+    private var renderedSection: SettingsSection?
+    private var selectingSidebar = false
     private var hasShown = false
     private var hasSavedFrame = false
     var petSymbol: () -> NSImage? = {nil}
@@ -137,33 +139,47 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             content.topAnchor.constraint(equalTo:document.topAnchor,constant:24),content.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-24)
         ])
         splitController.splitView.setPosition(200,ofDividerAt:0)
+        selectingSidebar = true
         sidebar.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+        selectingSidebar = false
         NotificationCenter.default.addObserver(self,selector:#selector(refreshAccent),name:AppAccent.didChange,object:nil)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshUpdateStatus),name:UpdateChecker.didChange,object:nil)
-        NotificationCenter.default.addObserver(self,selector:#selector(refreshDiagnosticsSwitch),name:PetPreferences.didChange,object:preferences)
+        NotificationCenter.default.addObserver(self,selector:#selector(refreshDiagnosticsSwitch(_:)),name:PetPreferences.didChange,object:preferences)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshDisplays),name:NSApplication.didChangeScreenParametersNotification,object:nil)
-        render()
         window.center()
         hasSavedFrame = window.restoreSavedFrame(named:"BailongSettingsWindow")
     }
-    @objc private func refreshDiagnosticsSwitch() {
+    @objc private func refreshDiagnosticsSwitch(_ note:Notification) {
+        guard renderedSection != nil else {return}
         form.refreshAvailability()
         appearancePage.refreshAvailability()
+        if !window.isVisible && !window.isMiniaturized,
+           let keys = note.userInfo?["keys"] as? [String],
+           let rendered = renderedSection,
+           !Set(keys).isDisjoint(with:rendered.keys) {
+            renderedSection = nil
+        }
     }
     func show(section: SettingsSection? = nil) {
-        if let section {select(section)} else {render()}
+        if let section {
+            select(section)
+        } else if renderedSection != selected {
+            render()
+        }
         if !hasShown {
             if !hasSavedFrame {window.zoom(nil)}
             hasShown = true
         }
-        InterfaceWindows.shared.opened(window)
-        NSApp.addWindowsItem(window,title:window.title,filename:false)
-        if window.isMiniaturized {window.deminiaturize(nil)}
-        if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil)
+        InterfaceWindows.shared.focus(window)
     }
     func select(_ section: SettingsSection) {
         guard let index = SettingsSection.allCases.firstIndex(of:section) else {return}
-        clearSearch(); selected = section; sidebar.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false); render()
+        clearSearch()
+        selected = section
+        selectingSidebar = true
+        sidebar.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)
+        selectingSidebar = false
+        if renderedSection != section {render()}
     }
     func numberOfRows(in tableView: NSTableView) -> Int {SettingsSection.allCases.count}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {AccentHistoryRow()}
@@ -174,10 +190,22 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         return cell
     }
     func tableViewSelectionDidChange(_ notification: Notification) {
-        guard SettingsSection.allCases.indices.contains(sidebar.selectedRow) else {return}
-        window.makeFirstResponder(nil); clearSearch(); selected = SettingsSection.allCases[sidebar.selectedRow]; render()
+        guard !selectingSidebar,SettingsSection.allCases.indices.contains(sidebar.selectedRow) else {return}
+        let next = SettingsSection.allCases[sidebar.selectedRow]
+        window.makeFirstResponder(nil); clearSearch()
+        guard next != selected || renderedSection != next else {return}
+        selected = next; render()
     }
-    func windowWillClose(_ notification: Notification) {window.makeFirstResponder(nil); appearancePage.dismissPreview(); NSApp.removeWindowsItem(window); onClose()}
+    func windowWillClose(_ notification: Notification) {
+        window.makeFirstResponder(nil)
+        searchHighlight?.removeFromSuperview(); searchHighlight = nil
+        appearancePage.dismissPreview()
+        appearancePage.reset()
+        form.reset(section:selected)
+        renderedSection = nil
+        NSApp.removeWindowsItem(window)
+        onClose()
+    }
     func windowWillReturnFieldEditor(_ sender:NSWindow,to client:Any?) -> Any? {form.fieldEditor(for:client)}
     func controlTextDidChange(_ notification:Notification) {
         guard notification.object as? NSTextField === searchField else {return}
@@ -265,6 +293,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func render() {
         guard window.contentView != nil else {return}
+        renderedSection = selected
         searchHighlight?.removeFromSuperview(); searchHighlight = nil
         appearancePage.reset()
         form.reset(section:selected)

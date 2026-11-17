@@ -93,7 +93,7 @@ final class SettingsTemplateField: NSTextField {
         }
         attributedStringValue = value
     }
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }
 final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
     var allowsTokens = true
@@ -164,7 +164,7 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
             layoutManager.addTemporaryAttribute(.foregroundColor,value:color,forCharacterRange:range)
         }
     }
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refreshHighlight()}
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }
 
 // 数值、单位与轨道同轴；范围标签独占轨道下方，不挤动设置标题。

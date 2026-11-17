@@ -3,6 +3,37 @@ import CoreText
 
 // 文字以原生第一行基线对齐；图标以相邻文字的大写字高中心对齐。
 enum InlineStatusLayout {
+    private struct FontKey:Hashable {
+        let name:String
+        let size:CGFloat
+    }
+    private struct BrailleStyleKey:Hashable {
+        let font:FontKey
+        let colorID:ObjectIdentifier
+    }
+    private struct BrailleStyleEntry {
+        let attributes:[NSAttributedString.Key:Any]
+        let prototype:NSAttributedString
+    }
+    private static var brailleOffsets = [FontKey:CGFloat]()
+    private static var brailleOffsetOrder = [FontKey]()
+    private static var brailleStyles = [BrailleStyleKey:BrailleStyleEntry]()
+    private static var brailleStyleOrder = [BrailleStyleKey]()
+
+    private static func brailleBaselineOffset(for font:NSFont) -> CGFloat {
+        let key = FontKey(name:font.fontName,size:font.pointSize)
+        if let cached = brailleOffsets[key] {return cached}
+        // 用完整盲文单元测量，所有动画帧保持同一中心，避免随亮点上下跳动。
+        let cell = CTLineCreateWithAttributedString(NSAttributedString(string:"⣿",attributes:[.font:font]))
+        let bounds = CTLineGetBoundsWithOptions(cell,.useGlyphPathBounds)
+        let offset = font.capHeight/2-bounds.midY
+        if brailleOffsetOrder.count >= 16,let oldest = brailleOffsetOrder.first {
+            brailleOffsetOrder.removeFirst(); brailleOffsets.removeValue(forKey:oldest)
+        }
+        brailleOffsetOrder.append(key); brailleOffsets[key] = offset
+        return offset
+    }
+
     static func centeredSymbol(_ symbol:String,font:NSFont,color:NSColor) -> NSAttributedString {
         let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:color]
         let line = CTLineCreateWithAttributedString(NSAttributedString(string:symbol,attributes:attributes))
@@ -18,11 +49,21 @@ enum InlineStatusLayout {
         icon.frame.size = NSSize(width:width ?? side,height:side)
     }
     static func braille(_ frame:String,font:NSFont,color:NSColor) -> NSAttributedString {
-        // 用完整盲文单元测量，所有动画帧保持同一中心，避免随亮点上下跳动。
-        let cell = CTLineCreateWithAttributedString(NSAttributedString(string:"⣿",attributes:[.font:font]))
-        let bounds = CTLineGetBoundsWithOptions(cell,.useGlyphPathBounds)
-        return NSAttributedString(string:frame,attributes:[.font:font,.foregroundColor:color,
-            .baselineOffset:font.capHeight/2-bounds.midY])
+        let offset = brailleBaselineOffset(for:font)
+        if color === AppAccent.foregroundColor || color === NSColor.labelColor || color === StatusTextColor.secondary {
+            let key = BrailleStyleKey(font:FontKey(name:font.fontName,size:font.pointSize),colorID:ObjectIdentifier(color))
+            if let entry = brailleStyles[key] {
+                return NSAttributedString(string:frame,attributes:entry.attributes)
+            }
+            let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:color,.baselineOffset:offset]
+            let entry = BrailleStyleEntry(attributes:attributes,prototype:NSAttributedString(string:"⣿",attributes:attributes))
+            if brailleStyleOrder.count >= 16,let oldest = brailleStyleOrder.first {
+                brailleStyleOrder.removeFirst(); brailleStyles.removeValue(forKey:oldest)
+            }
+            brailleStyleOrder.append(key); brailleStyles[key] = entry
+            return NSAttributedString(string:frame,attributes:entry.attributes)
+        }
+        return NSAttributedString(string:frame,attributes:[.font:font,.foregroundColor:color,.baselineOffset:offset])
     }
     static func brailleFieldSize(font:NSFont) -> NSSize {
         let cell = NSTextFieldCell(textCell:"")

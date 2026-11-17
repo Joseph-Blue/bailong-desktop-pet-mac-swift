@@ -44,7 +44,7 @@ final class BubbleTaskList: NSView {
             guard let self else {return}; self.tick += 1
             if self.tick % 2 == 0 {self.rebuild()}
             let animated = ProgressTextEffects.enabled
-            for row in self.rows {row.refresh(frame:animated ? self.tick % 10 : 0)}
+            for row in self.rows where row.task.active {row.refresh(frame:animated ? self.tick % 10 : 0)}
         }
         self.timer = timer; RunLoop.main.add(timer,forMode:.common)
     }
@@ -105,6 +105,9 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     private var hoverArea:NSTrackingArea?
     private var hovered = false
     private var titleEffectStart = ProcessInfo.processInfo.systemUptime
+    private var renderedSweep = Int.min
+    private var renderedFrame = -1
+    private var needsRowLayout = true
     init(task:BubbleTaskSummary,scale:CGFloat) {
         self.task = task; self.scale = scale
         super.init(frame:.zero)
@@ -147,9 +150,12 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         hoverHelp = [name.stringValue,task.activity?.text,"在 Codex 中打开"].compactMap {$0}.joined(separator:"\n")
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
+        renderedSweep = Int.min; renderedFrame = -1; needsRowLayout = true
     }
-    func stopMotion() {popover.close(); activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle()}
+    func stopMotion() {popover.close(); activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle(); renderedSweep = Int.min; renderedFrame = -1}
     private func restoreTitle() {
+        guard renderedSweep != -2 else {return}
+        renderedSweep = -2
         name.attributedStringValue = NSAttributedString(string:name.stringValue,attributes:[.font:name.font!,.foregroundColor:NSColor.labelColor])
     }
     required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
@@ -163,7 +169,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         _ = content.view; popover.contentViewController = content; popover.contentSize = content.preferredContentSize
         popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         popover.show(relativeTo:changes.bounds,of:changes,preferredEdge:.maxY)
-        popoverDismissal.start(for:popover)
+        popoverDismissal.start(for:popover,anchor:changes)
     }
     func popoverDidClose(_ notification:Notification) {popoverDismissal.stop(); popover.contentViewController = nil}
     override func updateTrackingAreas() {
@@ -182,18 +188,39 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         }
         super.draw(dirtyRect)
     }
+    override var frame:NSRect {
+        didSet {if oldValue.size != frame.size {needsRowLayout = true}}
+    }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        renderedSweep = Int.min; renderedFrame = -1
+    }
     @objc private func openThread() {CodexConnection.openConversation(task.threadID)}
     func refresh(frame index:Int) {
         if task.active && ProgressTextEffects.enabled && window?.isVisible == true && !isHiddenOrHasHiddenAncestor {
-            name.attributedStringValue = ProgressTextEffects.title(name.stringValue,font:name.font!,appearance:effectiveAppearance,elapsed:ProcessInfo.processInfo.systemUptime-titleEffectStart)
+            let elapsedSweep = ProcessInfo.processInfo.systemUptime-titleEffectStart
+            let sweep = ProgressTextEffects.sweepTick(elapsed:elapsedSweep)
+            if sweep != renderedSweep {
+                renderedSweep = sweep
+                name.attributedStringValue = ProgressTextEffects.title(name.stringValue,font:name.font!,appearance:effectiveAppearance,elapsed:elapsedSweep)
+            }
         } else {restoreTitle()}
         let waiting = task.activity?.kind == .attention
         spinner.isHidden = !task.active || waiting; stateIcon.isHidden = task.active
-        if task.active {spinner.attributedStringValue = InlineStatusLayout.braille(["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"][index],font:spinner.font!,color:AppAccent.foregroundColor)}
-        spinner.textColor = AppAccent.foregroundColor
+        if task.active && renderedFrame != index {
+            renderedFrame = index
+            spinner.attributedStringValue = InlineStatusLayout.braille(["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"][index],font:spinner.font!,color:AppAccent.foregroundColor)
+            spinner.textColor = AppAccent.foregroundColor
+        }
         let hasTime = task.active || task.end != nil
         elapsed.isHidden = !hasTime; watch.isHidden = !hasTime
-        elapsed.stringValue = task.end.map {TaskTiming.elapsed(start:task.start,end:$0)} ?? (task.active ? TaskTiming.elapsed(start:task.start) : "")
+        let nextElapsed = task.end.map {TaskTiming.elapsed(start:task.start,end:$0)} ?? (task.active ? TaskTiming.elapsed(start:task.start) : "")
+        if elapsed.stringValue != nextElapsed {
+            elapsed.stringValue = nextElapsed
+            needsRowLayout = true
+        }
+        guard needsRowLayout else {return}
+        needsRowLayout = false
         let textColor = task.active ? StatusTextColor.secondary : task.connectionFailed ? StatusTextColor.red : task.status == "completed" ? StatusTextColor.green : task.status == "failed" ? StatusTextColor.yellow : StatusTextColor.red
         elapsed.textColor = textColor; watch.contentTintColor = textColor; stateIcon.contentTintColor = textColor
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale

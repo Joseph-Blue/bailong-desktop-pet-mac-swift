@@ -6,32 +6,86 @@ enum ProgressTextEffects {
     static var enabled:Bool {PetPreferences.shared.bool("bubbleMotion") && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion}
     static let speed:CGFloat = 28
     static let marqueeDelay:CFTimeInterval = 0.5
+    private static let sweepSteps = 16
+    private struct PaletteKey:Hashable {
+        let fontName:String
+        let pointSize:CGFloat
+        let dark:Bool
+        let highContrast:Bool
+        let r:Int, g:Int, b:Int
+    }
+    private struct SweepPalette {
+        let attributes:[[NSAttributedString.Key:Any]]
+        let prototypes:[NSAttributedString]
+    }
+    private static var palettes = [PaletteKey:SweepPalette]()
+    private static var paletteOrder = [PaletteKey]()
+
+    static func sweepTick(elapsed:Double) -> Int {
+        guard enabled else {return -1}
+        let phase = elapsed.truncatingRemainder(dividingBy:4)
+        guard phase >= 0,phase < 1.2 else {return -1}
+        return Int((phase/1.2)*36)
+    }
+
+    private static func cachedPalette(font:NSFont,appearance:NSAppearance) -> SweepPalette {
+        let resolved = AppAppearance.resolvedColor(.labelColor,for:appearance)
+        let label = (NSColor(cgColor:resolved) ?? .labelColor).usingColorSpace(.sRGB) ?? .labelColor
+        let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
+        let highContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let key = PaletteKey(fontName:font.fontName,pointSize:font.pointSize,dark:dark,highContrast:highContrast,
+                             r:Int((label.redComponent*255).rounded()),g:Int((label.greenComponent*255).rounded()),b:Int((label.blueComponent*255).rounded()))
+        if let existing = palettes[key] {return existing}
+        let base = label.withAlphaComponent(1)
+        let sweepAmount = highContrast ? 0.18 : 0.30
+        let target:NSColor = dark ? .black : .white
+        var attributes = [[NSAttributedString.Key:Any]]()
+        var prototypes = [NSAttributedString]()
+        attributes.reserveCapacity(sweepSteps+1)
+        prototypes.reserveCapacity(sweepSteps+1)
+        for step in 0...sweepSteps {
+            let fraction = sweepAmount*Double(step)/Double(sweepSteps)
+            let color = step == 0 ? base : (base.blended(withFraction:fraction,of:target) ?? base)
+            let dict:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:color]
+            attributes.append(dict)
+            // 持有固定档位原型，防止 UIFoundation 全局弱属性字典哈希表堆积 tombstone。
+            prototypes.append(NSAttributedString(string:" ",attributes:dict))
+        }
+        let created = SweepPalette(attributes:attributes,prototypes:prototypes)
+        if paletteOrder.count >= 12,let oldest = paletteOrder.first {
+            paletteOrder.removeFirst(); palettes.removeValue(forKey:oldest)
+        }
+        paletteOrder.append(key); palettes[key] = created
+        return created
+    }
+
     static func heading(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double,frame:String) -> NSAttributedString {
-        let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.foregroundColor,for:appearance))!
-        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(frame,font:font,color:accent))
-        value.append(NSAttributedString(string:" ",attributes:[.font:font]))
+        let palette = cachedPalette(font:font,appearance:appearance)
+        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(frame,font:font,color:AppAccent.foregroundColor))
+        value.append(NSAttributedString(string:" ",attributes:palette.attributes[0]))
         value.append(title(text,font:font,appearance:appearance,elapsed:elapsed))
         return value
     }
     // 标题可独立扫光，盲文仍由所在视图单独绘制，不改变字宽或位置。
     static func title(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double) -> NSAttributedString {
-        let label = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:appearance))!.withAlphaComponent(1)
-        let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
-        // 保留黑／白底字，扫过时向反方向的灰色过渡；不靠透明度制造变化。
-        let value = NSMutableAttributedString(string:text,attributes:[.font:font,.foregroundColor:label])
-        guard enabled else {return value}
-        let sweepAmount = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 0.18 : 0.30
+        let palette = cachedPalette(font:font,appearance:appearance)
+        guard enabled else {return NSAttributedString(string:text,attributes:palette.attributes[0])}
         let phase = elapsed.truncatingRemainder(dividingBy:4)
+        guard phase >= 0,phase < 1.2,!text.isEmpty else {
+            return NSAttributedString(string:text,attributes:palette.attributes[0])
+        }
+        // 保留黑／白底字，扫过时向反方向的灰色按离散档位过渡；不靠透明度制造变化。
+        let value = NSMutableAttributedString(string:text,attributes:palette.attributes[0])
         let center = -0.25+1.5*(phase/1.2)
         let count = max(1,text.count-1)
         var offset = 0
         for (index,character) in text.enumerated() {
             let length = (String(character) as NSString).length
             let distance = (Double(index)/Double(count)-center)/0.18
-            let strength = phase < 1.2 ? exp(-distance*distance) : 0
-            // 浅色黑字扫亮灰、深色白字扫暗灰，峰值不到纯白／纯黑。
-            let highlight = label.blended(withFraction:sweepAmount*strength,of:dark ? .black : .white)!
-            value.addAttribute(.foregroundColor,value:highlight,range:NSRange(location:offset,length:length))
+            let level = min(sweepSteps,max(0,Int((exp(-distance*distance)*Double(sweepSteps)).rounded())))
+            if level > 0 {
+                value.setAttributes(palette.attributes[level],range:NSRange(location:offset,length:length))
+            }
             offset += length
         }
         return value

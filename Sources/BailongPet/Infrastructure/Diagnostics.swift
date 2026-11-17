@@ -215,14 +215,15 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         pet?.preferences.set(pinSwitch.state == .on, for: "diagnosticsPinned")
     }
     func show(takeFocus: Bool = true) {
-        InterfaceWindows.shared.opened(window)
         if timer == nil {
             beginSampling(); placeTopLeft()
         }
-        if takeFocus && window.isMiniaturized { window.deminiaturize(nil) }
-        NSApp.addWindowsItem(window, title: window.title, filename: false)
-        if takeFocus { if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; window.makeKeyAndOrderFront(nil) }
-        else if !window.isVisible && !window.isMiniaturized { window.orderFront(nil) }
+        if takeFocus {
+            InterfaceWindows.shared.focus(window)
+        } else {
+            InterfaceWindows.shared.opened(window)
+            if !window.isVisible && !window.isMiniaturized { window.orderFront(nil) }
+        }
     }
     private func beginSampling() {
         timer?.invalidate()

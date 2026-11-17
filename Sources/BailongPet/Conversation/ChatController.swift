@@ -185,7 +185,12 @@ final class ChatController {
             guard let self else { return "连接已关闭" }
             return self.connection.diagnostics + "\n内置任务：" + (self.running?.1.status ?? "空闲")
         }
-        pet.onComposer = { [weak self] in self?.toggleComposer() }; pet.onHistory = { [weak self] key in self?.showHistory(key) }
+        pet.onComposer = { [weak self] in self?.toggleComposer() }
+        pet.onDismissComposer = { [weak self] in
+            guard let self,self.ui.composer.attachedSheet == nil else {return}
+            self.ui.hideComposer()
+        }
+        pet.onHistory = { [weak self] key in self?.showHistory(key) }
         workspacePanel.onShowRequested = { [weak self] in self?.showWorkspace() }
         workspacePanel.onHide = { [weak pet] in pet?.placeBubble() }
         pet.workspaceFrame = { [weak self] in self?.workspacePanel.frame }
@@ -208,9 +213,14 @@ final class ChatController {
             if let self, let (conversation,turn) = self.running, conversation.key == key,
                ["waitingForInput","waitingForApproval"].contains(turn.status), let request = self.requestCoordinator.alert {
                 let parent = request.window.sheetParent ?? self.approvalParent()
-                if parent.isMiniaturized {parent.deminiaturize(nil)}
-                parent.makeKeyAndOrderFront(nil); request.window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps:true); return
+                if parent === self.ui.history {
+                    InterfaceWindows.shared.focus(parent)
+                } else {
+                    if parent.isMiniaturized {parent.deminiaturize(nil)}
+                    NSApp.activate(ignoringOtherApps:true)
+                    parent.makeKeyAndOrderFront(nil)
+                }
+                request.window.makeKeyAndOrderFront(nil); return
             }
             CodexConnection.openConversation(self?.store.conversations.first(where:{$0.key == key})?.threadID)
         }
@@ -384,6 +394,7 @@ final class ChatController {
         if ui.composerVisible { ui.hideComposer(); return }
         refresh()
         pet.reveal(); pet.undock(); pet.composerVisible = true; pet.interaction()
+        ui.prepareComposer()
         positionComposer(); loadModels(entry:.composer)
         ui.showComposer()
         pet.placeBubble(); refreshDesktopSettingsIfNeeded()

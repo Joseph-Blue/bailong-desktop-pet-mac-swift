@@ -240,13 +240,13 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         current.automaticPresentation = automaticallyPresented
         if check {UpdateChecker.shared.check()}
         current.refresh()
-        InterfaceWindows.shared.opened(current.window)
         if !current.window.isVisible && !current.window.isMiniaturized {current.window.center()}
-        if activate && current.window.isMiniaturized {current.window.deminiaturize(nil)}
         if activate {
-            if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}
-            current.window.makeKeyAndOrderFront(nil)
-        } else if !current.window.isVisible && !current.window.isMiniaturized {current.window.orderFront(nil)}
+            InterfaceWindows.shared.focus(current.window)
+        } else {
+            InterfaceWindows.shared.opened(current.window)
+            if !current.window.isVisible && !current.window.isMiniaturized {current.window.orderFront(nil)}
+        }
     }
     override private init() {
         super.init()

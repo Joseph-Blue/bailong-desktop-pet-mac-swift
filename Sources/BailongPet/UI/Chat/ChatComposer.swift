@@ -136,8 +136,11 @@ final class ChatComposer: NSObject {
         composerEditor.send = { [weak self] in guard let self else{return}; self.onSubmit() }
 
     }
+    func prepareLayout() {
+        updateLayout(force:true)
+    }
     func showComposer() {
-        updateLayout()
+        updateLayout(force:true)
         composerMotion.show(key:true)
         if let state = latestState {workspace.update(conversation:state.conversation,executing:state.executing,visible:true)}
         composer.makeFirstResponder(composerEditor)
@@ -215,8 +218,8 @@ final class ChatComposer: NSObject {
     @objc private func newDefault() {onNewDefault()}
     @objc private func newElsewhere() {onFolder()}
 
-    func updateLayout() {
-        guard let content = composer.contentView else {return}
+    func updateLayout(force:Bool = false) {
+        guard composerVisible || force,let content = composer.contentView else {return}
         let buttons = composerFooterButtons.filter {!$0.isHidden}
         let footerWidth = buttons.reduce(CGFloat(32+buttons.count*8)) {$0+$1.intrinsicContentSize.width}
         let width = max(540,footerWidth,modes.intrinsicContentSize.width+196)

@@ -2,7 +2,7 @@ import AppKit
 
 // 独立的单行工作区状态条；仅支持常驻显示与隐藏两种状态，不改变历史或输入目标。
 final class WorkspaceStatusPanel {
-    private let panel = ComposerPanel(contentRect:NSRect(x:0,y:0,width:320,height:40),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+    private let panel = PetWindow(contentRect:NSRect(x:0,y:0,width:320,height:40),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
     private lazy var motion = BubbleMotion(window:panel)
     private let workspace = WorkspaceStatusView()
     private let stack = NSStackView()
@@ -19,7 +19,8 @@ final class WorkspaceStatusPanel {
         panel.title = "工作区状态条"; panel.isReleasedWhenClosed = false
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.hidesOnDeactivate = false; panel.level = .floating
-        panel.collectionBehavior.insert(.fullScreenNone)
+        panel.becomesKeyOnlyIfNeeded = true; panel.isExcludedFromWindowsMenu = true
+        panel.collectionBehavior = [.canJoinAllSpaces,.ignoresCycle,.fullScreenNone]
         panel.tracksContentCursor = true; panel.acceptsMouseMovedEvents = true
         let background = BubbleBackgroundView()
         panel.contentView = background

@@ -44,6 +44,7 @@ final class PetController: NSObject, NSMenuDelegate {
     let defaults: UserDefaults
     let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     var onComposer: () -> Void = {}
+    var onDismissComposer: () -> Void = {}
     var onReply: (String) -> Void = {_ in}
     var onHistory: (String?) -> Void = { _ in }
     var onWorkspace:() -> Void = {}
@@ -101,6 +102,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var timer: Timer?, desktopTimer: Timer?
     var playbackScheduling = PlaybackSchedulingStatistics()
     private var motionDisplayLink: CADisplayLink?
+    private var visibleActivity: NSObjectProtocol?
     private struct BubbleAnchor: Equatable {
         let frame: CGRect
         let screen: CGRect
@@ -255,6 +257,7 @@ final class PetController: NSObject, NSMenuDelegate {
             if self.animation == nil {
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id); self.began = self.now
                 self.animation = Animation([frame]); self.frameIndex = 0; self.view.refreshFrame()
+                self.updateVisibleActivity()
                 if !self.hidden {
                     self.view.displayIfNeeded()
                     self.visibilityFade.setVisible(true)
@@ -271,6 +274,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 self.view.prepareTransition(to:animation.frames[0],clip:clip)
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id)
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
+                self.updateVisibleActivity()
                 self.configureAnimationTimer()
                 self.pauseTime = self.hidden ? self.now : nil
                 self.view.refreshFrame()
@@ -285,6 +289,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 self.began = self.now
                 if self.animation == nil {
                     self.timer?.invalidate(); self.timer = nil
+                    self.updateVisibleActivity()
                     RecoveryWindow.show(id:"animation-initialization",report:RecoveryReport(title:"桌宠画面未能加载",message:"动画没有可显示的画面。请确认应用资源完整，再重新加载。设置和历史记录不会被重置。",module:"动画",operation:"初始化动画",error:error),actionTitle:"重新加载") { [weak self] in self?.play(clip,mode) }
                     return
                 }
@@ -670,7 +675,20 @@ final class PetController: NSObject, NSMenuDelegate {
         if full != fullCandidate { fullCandidate = full; fullCandidateSince = now }
         if fullscreenHidden != full && now-fullCandidateSince >= (full ? 0.25 : 0.75) { fullscreenHidden = full; applyVisibility() }
     }
+    private func updateVisibleActivity() {
+        // 仅在桌宠可见播放时阻止 App Nap 合并帧定时器；不阻止显示器休眠或系统空闲睡眠，隐藏／休眠／退出时立即释放。
+        let active = !hidden && animation != nil
+        if active {
+            if visibleActivity == nil {
+                visibleActivity = ProcessInfo.processInfo.beginActivity(options:[.userInitiatedAllowingIdleSystemSleep],reason:"Visible desktop pet animation")
+            }
+        } else if let visibleActivity {
+            ProcessInfo.processInfo.endActivity(visibleActivity)
+            self.visibleActivity = nil
+        }
+    }
     func applyVisibility() {
+        updateVisibleActivity()
         if hidden {
             view.cancelTransition()
             animation?.stream?.pauseObservation(); diagnostics?.pausePresentationClock()
@@ -779,7 +797,10 @@ final class PetController: NSObject, NSMenuDelegate {
         notchDockArea = nil; notchDockDisplayID = nil; view.refreshFrame()
         move(constrained(position,screen:display)); activityOrigin = position; savePosition()
     }
-    func showSettings(section:SettingsSection? = nil) { settingsOpen = true; interaction(); settings.show(section:section)}
+    func showSettings(section:SettingsSection? = nil) {
+        if composerVisible { onDismissComposer() }
+        settingsOpen = true; interaction(); settings.show(section:section)
+    }
     func showDiagnostics() {
         if !preferences.bool("showDiagnostics") {preferences.set(true,for:"showDiagnostics")}
         diagnostics?.show(takeFocus:true)
@@ -861,9 +882,13 @@ final class PetController: NSObject, NSMenuDelegate {
     func refreshMenu() { status.menu = PetMenu.make(for:self,includeVisibility:true,random:{ [weak self] in self?.randomAnimation() }) }
     func menuWillOpen(_ menu: NSMenu) { PetMenu.refreshVisibility(in:menu,pet:self); dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
-    deinit {motionDisplayLink?.invalidate()}
+    deinit {
+        motionDisplayLink?.invalidate()
+        if let visibleActivity {ProcessInfo.processInfo.endActivity(visibleActivity)}
+    }
     func prepareForExit(_ completion: @escaping () -> Void) {
         exiting = true
+        updateVisibleActivity()
         view.cancelTransition()
         timer?.invalidate(); timer = nil; desktopTimer?.invalidate(); desktopTimer = nil
         motionDisplayLink?.invalidate(); motionDisplayLink = nil
@@ -873,6 +898,7 @@ final class PetController: NSObject, NSMenuDelegate {
         visibilityFade.hide(completion:completion)
     }
     func close() {
+        if let visibleActivity {ProcessInfo.processInfo.endActivity(visibleActivity); self.visibleActivity = nil}
         diagnostics?.stop(); visibilityFade.stop(); view.releaseDisplayTracking()
         motionDisplayLink?.invalidate(); motionDisplayLink = nil
         startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); dockRecallAt = nil; decoder.close(); bubble.hide(); progressBubble.hide(); settings.window.orderOut(nil)

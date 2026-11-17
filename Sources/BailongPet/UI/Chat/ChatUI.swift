@@ -240,6 +240,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         onCheckDelivery(key,entry)
     }
 
+    func prepareComposer() {composerView.prepareLayout()}
     func showComposer() {composerView.showComposer()}
     func hideComposer() {composerView.hideComposer()}
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.init("history-sidebar"),.init("history-divider"),.init("new"),.init("folder"),.space,.init("codex"),.init("reveal"),.space,.init("delete"),.flexibleSpace,.init("search")] }
@@ -286,6 +287,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func modelStateChanged() {
         updateShortcuts()
         composerView.updateLayout()
+        guard history.isVisible && !history.isMiniaturized else {return}
         let detailWidth = max(520,historyModel.layoutWidth+historyButton.intrinsicContentSize.width+64)
         historyDetailItem.minimumThickness = detailWidth
         let historyWidth = max(800,detailWidth+180)
@@ -429,17 +431,20 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             }
             inputStates[entry] = state
         }
-        self.conversations = conversations.enumerated().sorted {
-            let left = $0.element.lastActivity, right = $1.element.lastActivity
-            return left == right ? $0.offset > $1.offset : left > right
-        }.map(\.element)
+        let indexed:[(offset:Int,conversation:Conversation,activity:Date)] = conversations.enumerated().map {
+            (offset:$0.offset,conversation:$0.element,activity:$0.element.lastActivity)
+        }
+        self.conversations = indexed.sorted {
+            $0.activity == $1.activity ? $0.offset > $1.offset : $0.activity > $1.activity
+        }.map(\.conversation)
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
+        let historyVisible = history.isVisible && !history.isMiniaturized
         inheritedSettings.update(settings:historyState.modelSettings,error:historyState.modelNote)
         refreshList()
         sourceLabel.stringValue = selected.title
         sourceLabel.hoverHelp = selected.kind.title+" · 共 \(selected.turns.count) 轮记录\n"+selected.title
-        workspaceStatus.update(conversation:selected,executing:historyState.executing,visible:history.isVisible && !history.isMiniaturized)
-        history.toolbar?.validateVisibleItems()
+        workspaceStatus.update(conversation:selected,executing:historyState.executing,visible:historyVisible)
+        if historyVisible {history.toolbar?.validateVisibleItems()}
         historyInput.fillColor = .textBackgroundColor
         historyEditor.placeholder = selected.external ? "发送到这条 Codex 项目对话…" : historyPlaceholder
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
@@ -456,12 +461,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyStop.isHidden = !historyState.ownsRunningTask && !historyState.desktopPreparing; historyCheck.isHidden = !historyState.unconfirmed
         historyStatus.stringValue = historyState.historyNote; historyStatus.hoverHelp = historyState.replyNote ?? historyState.historyNote
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
-        resizeHistoryInput(); modelStateChanged()
+        if historyVisible {resizeHistoryInput()}
+        modelStateChanged()
         composerEditor.placeholder = composerState.kind == .project ? "发送到这条 Codex 项目对话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
         historyEditor.isEditable = historyState.canEdit
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}
-        guard history.isVisible && !history.isMiniaturized else {return}
+        guard historyVisible else {return}
         let selectionChanged = renderedConversation != selected.key
         if pageConversation != selected.key {historyPage = HistoryPageWindow(); pageConversation = selected.key; pageQuery = nil}
         if pageQuery != searchField.stringValue {
@@ -552,12 +558,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     func windowDidMiniaturize(_ notification:Notification) {if notification.object as? NSWindow === history {workspaceStatus.deactivate()}}
     func openHistory() {
         hideComposer(); onOpenHistory()
-        // 历史窗口打开或最小化期间保留 Dock 入口，关闭后移除。
-        InterfaceWindows.shared.opened(history)
         if let icon = AppIcons.application {NSApp.applicationIconImage = icon}
         history.miniwindowImage = NSApp.applicationIconImage
-        if history.isMiniaturized {history.deminiaturize(nil)}
-        if !NSApp.isActive {NSApp.activate(ignoringOtherApps:true)}; history.makeKeyAndOrderFront(nil)
+        // 历史窗口打开或最小化期间保留 Dock 入口，关闭后移除。
+        InterfaceWindows.shared.focus(history)
         refreshVisibleHistory()
         history.contentView?.layoutSubtreeIfNeeded()
         if searching {updateSearchHighlights(reveal:true)}

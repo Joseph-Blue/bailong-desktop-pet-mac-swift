@@ -120,7 +120,7 @@ final class Conversation: Codable {
     var historyMode = "legacy"
     var turns = [Turn]()
     var lastActivity:Date {
-        turns.map {max($0.date,$0.completedAt ?? .distantPast,$0.lastMessageAt ?? .distantPast)}.max() ?? .distantPast
+        turns.reduce(Date.distantPast) {max($0,$1.date,$1.completedAt ?? .distantPast,$1.lastMessageAt ?? .distantPast)}
     }
     func snapshot() -> Conversation {
         let copy = Conversation()

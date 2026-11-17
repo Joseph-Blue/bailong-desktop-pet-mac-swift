@@ -2,8 +2,8 @@
 
 本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。安装稳定正式版请前往 [`main` 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-- **当前候选版本**：`0.8.0-rc.11`（演进自 `0.7.5-rc.1`）；当前正式版为 **0.7.4**。
-- **近期开发重点**：修复 Codex 桌面端冷启动换窗导致的首次发送延迟，兼容桌面端 v13 外部审批协议，修复开发脚本信号退出卡顿与气泡首行裁切；精简独立「工作区状态条」为显隐二态，重构多套餐额度排版与解耦的 `TokenDisclosureControl` 用量展开控件，并将原“性能”分类整合为“画质与性能”。完整迭代记录见 [CHANGELOG](CHANGELOG.md)，待验收事项见 [TODO](todo.md)。
+- **当前候选版本**：`0.8.0-rc.12`（演进自 `0.7.5-rc.1`）；当前正式版为 **0.7.4**。
+- **近期开发重点**：修复设置窗口激活、召回与持续掉帧，减少文字动效和设置页面开销；完善状态条恢复、短进展摘要、失败提示过滤与深浅色可读性。完整迭代记录见 [CHANGELOG](CHANGELOG.md)，待验收事项见 [TODO](todo.md)。
 
 本项目基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)（参考基线 `v0.5.1 / b102e73`），使用 Swift + AppKit 原生重写并独立维护。角色动画采用透明 HEVC（HEVC with Alpha）与 AVFoundation 解码，由 CPU／vImage 完成线性光缩放与色彩转换；界面采用原生 AppKit 分栏与液态玻璃材质。
 
@@ -14,7 +14,7 @@
 | 方向 | 核心实现 | 详细规范 |
 | --- | --- | --- |
 | 动画与吸边 | `CALayer` 直接呈现透明 HEVC 帧；默认 512×512、满帧、12 帧缓冲与 24 MiB 开头缓存，支持平滑过渡、杂点清理、左右边缘与刘海吸边。 | [动画与吸边](docs/来源与架构.md#current-animation) |
-| 会话与进展 | 内置人设对话（`codex app-server`）与外部项目会话（只读 SQLite + 桌面 IPC）通道隔离；主气泡与任务概览按组汇总进展，2 秒短气泡展示单项操作摘要。 | [会话与任务](docs/来源与架构.md#current-tasks) |
+| 会话与进展 | 内置人设对话（`codex app-server`）与外部项目会话（只读 SQLite + 桌面 IPC）通道隔离；短进展气泡与任务概览同步组摘要，保留个性台词与操作细节，相同内容不重复弹出，重连提示除外。 | [会话与任务](docs/来源与架构.md#current-tasks) |
 | 气泡与窗口 | `NSGlassEffectView.contentView` 承载正文并补充非激活细微亮边；非激活面板保持前台应用输入焦点，支持卡片翻阅、审批问卷与输入窗四向避让。 | [气泡与显示](docs/来源与架构.md#current-bubble)、[输入与窗口](docs/来源与架构.md#current-windows) |
 | 历史与数据 | SQLite（schema 3）按需加载正文，提供每页 20 轮分页、全文搜索与关闭记录时的快照冻结；窗口关闭即释放排版缓存，各入口独立保留输入草稿。 | [历史与数据](docs/来源与架构.md#current-history) |
 | 额度与用量 | 按订阅档位展示 30 天额度或 5 小时／每周双窗口、重置倒计时与重置卡；共用 `TokenDisclosureControl` 展开本轮及本机今日 Token 明细，支持可选运行内存 (RAM) 缓存与立即刷新。 | [额度与用量](docs/来源与架构.md#current-usage) |

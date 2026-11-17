@@ -128,10 +128,13 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let nextPath = conversation?.cwd ?? "", changed = conversationKey != conversation?.key || path != nextPath
         if changed {stop(); observation.stop(); hasGitBaseline = false; observationFailure = nil; snapshot = nil; failure = nil; popover.close(); editSignature = []; taskKey = nil}
         conversationKey = conversation?.key; path = nextPath
-        let becameActive = visible && !active
-        active = visible
+        guard visible else {
+            if active {deactivate()}
+            return
+        }
+        let becameActive = !active
+        active = true
         if !popover.isShown {updateDirectory()}
-        guard visible else {deactivate(); return}
         let turn = turnKey == nil && turnStart == nil ? conversation?.turns.max(by:{$0.date < $1.date}) : conversation?.turns.first {((turnKey != nil && ($0.key == turnKey || $0.id == turnKey)) || (turnStart != nil && $0.date == turnStart))}
         let edits = turn?.fileEdits ?? [], signature = edits.flatMap(\.signature)
         let changedEdits = signature != editSignature || taskKey != turn?.key
@@ -170,7 +173,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
             if known.count < edits.count {text.append(NSAttributedString(string:" · 部分",attributes:[.foregroundColor:StatusTextColor.secondary]))}
         }
         text.addAttribute(.font,value:changes.font!,range:NSRange(location:0,length:text.length))
-        changes.attributedTitle = text
+        if changes.attributedTitle != text {changes.attributedTitle = text}
         let description = "本轮修改 \(edits.count) 个文件。"+(known.isEmpty ? "" : "累计新增 \(added) 行、删除 \(removed) 行。")+(known.count < edits.count ? "\n\(edits.count-known.count) 个文件未提供行数。" : "")
         changes.setAccessibilityValue(description)
     }
@@ -232,7 +235,8 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         text.append(NSAttributedString(string:"  "))
         text.append(GitStatusText.render(snapshot,compact:true,font:git.font!))
         text.addAttribute(.font,value:git.font!,range:NSRange(location:0,length:text.length))
-        git.attributedTitle = text; git.contentTintColor = .secondaryLabelColor
+        if git.attributedTitle != text {git.attributedTitle = text}
+        git.contentTintColor = .secondaryLabelColor
         let tracking = snapshot.upstream.map {"上游："+$0+" · 领先 \(snapshot.ahead)，落后 \(snapshot.behind)（本机记录）"} ?? "未设置上游"
         git.setAccessibilityValue(snapshot.title+"，"+snapshot.summary+"，"+tracking)
     }
@@ -246,7 +250,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         presentPopoverContent()
         popover.show(relativeTo:anchor.bounds,of:anchor,preferredEdge:.maxY)
-        popoverDismissal.start(for:popover)
+        popoverDismissal.start(for:popover,anchor:anchor)
     }
     private func presentPopoverContent() {
         let previous = popover.contentViewController as? GitWorkspaceDetails

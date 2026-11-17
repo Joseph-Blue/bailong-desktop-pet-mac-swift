@@ -10,7 +10,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     private var textActions = [ObjectIdentifier:(String)->Void]()
     private var textEndActions = [ObjectIdentifier:(String)->Void]()
     private let templateEditor = SettingsTemplateEditor()
-    private weak var automaticUpdateSwitch:NSSwitch?, diagnosticsSwitch:NSSwitch?
     private var bufferControls = [NSControl]()
     private weak var bufferRow:NSView?
     private(set) var searchAnchors = [String:NSView]()
@@ -35,8 +34,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         templateEditor.allowsTokens = field.allowsTokens; return templateEditor
     }
     func refreshAvailability() {
-        diagnosticsSwitch?.state = preferences.bool("showDiagnostics") ? .on : .off
-        automaticUpdateSwitch?.state = preferences.bool("automaticallyCheckUpdates") ? .on : .off
         updateBufferAvailability()
         for update in availabilityUpdates {update(preferences)}
         let changed = conditionalRows.filter {$0.0.isHidden == $0.1(preferences)}
@@ -210,8 +207,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = [], symbol:String? = nil, changed:(() -> Void)? = nil) -> NSView {
         let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
         if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
-        if key == "showDiagnostics" { diagnosticsSwitch = control }
-        if key == "automaticallyCheckUpdates" { automaticUpdateSwitch = control }
+        availabilityUpdates.append { [weak control] preferences in
+            guard let control else {return}
+            let state:NSControl.StateValue = preferences.bool(key) ? .on : .off
+            if control.state != state {control.state = state}
+        }
         attach(control) { [weak self] sender in
             self?.preferences.set((sender as! NSSwitch).state == .on,for:key)
             changed?()

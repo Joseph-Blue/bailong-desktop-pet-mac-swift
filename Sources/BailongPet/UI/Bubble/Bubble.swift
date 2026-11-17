@@ -65,6 +65,8 @@ final class Bubble {
     private var headingPhase = 0
     private var headingStarted = 0.0
     private var headingAnimated = false
+    private var renderedHeadingSignature = ""
+    private static let quotaResetTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
     private let elapsedIcon = NSImageView()
     private let elapsedLabel = NSTextField(labelWithString:"00:00")
     private var elapsedTimer: Timer?
@@ -236,6 +238,7 @@ final class Bubble {
         title.isSelectable = false; title.font = .boldSystemFont(ofSize:13)
         title.colorsChanged = { [weak self] in
             guard let self else {return}
+            self.renderedHeadingSignature = ""
             if self.headingAnimated {self.setHeading(self.plainHeading,animated:true)}
             self.refreshQuotaLoading()
             self.refreshTaskProgress()
@@ -679,6 +682,7 @@ final class Bubble {
         if plainHeading != heading || headingTimer == nil {headingStarted = ProcessInfo.processInfo.systemUptime}
         plainHeading = heading
         headingAnimated = animated
+        renderedHeadingSignature = ""
         if !animated {
             headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0
             title.stringValue = heading; title.textColor = .labelColor; return
@@ -699,13 +703,24 @@ final class Bubble {
     private func renderAnimatedHeading() {
         let font = title.font ?? .systemFont(ofSize:13,weight:.semibold)
         let elapsed = ProcessInfo.processInfo.systemUptime-headingStarted
-        if headingActivity != nil {
+        let sweep = ProgressTextEffects.sweepTick(elapsed:elapsed)
+        let appearanceName = title.effectiveAppearance.name.rawValue
+        let hasActivity = headingActivity != nil
+        let signature = "\(plainHeading)\u{0}\(headingPhase)\u{0}\(sweep)\u{0}\(hasActivity)\u{0}\(font.fontName)\u{0}\(font.pointSize)\u{0}\(appearanceName)"
+        guard signature != renderedHeadingSignature else {return}
+        if hasActivity {
+            let previousTitleOnly = renderedHeadingSignature.split(separator:"\u{0}",omittingEmptySubsequences:false)
             headingSpinner.font = font
             headingSpinner.attributedStringValue = InlineStatusLayout.braille(headingFrames[headingPhase],font:font,color:AppAccent.foregroundColor)
-            title.attributedStringValue = ProgressTextEffects.title(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed)
+            let titleKey = "\(plainHeading)|\(sweep)|\(font.fontName)|\(font.pointSize)|\(appearanceName)"
+            let oldTitleKey = previousTitleOnly.count == 7 ? "\(previousTitleOnly[0])|\(previousTitleOnly[2])|\(previousTitleOnly[4])|\(previousTitleOnly[5])|\(previousTitleOnly[6])" : ""
+            if titleKey != oldTitleKey || previousTitleOnly.count != 7 || previousTitleOnly[3] != "true" {
+                title.attributedStringValue = ProgressTextEffects.title(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed)
+            }
         } else {
             title.attributedStringValue = ProgressTextEffects.heading(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed,frame:headingFrames[headingPhase])
         }
+        renderedHeadingSignature = signature
     }
 
     private func configureElapsed(start: Date?, key: String?, finished: Date?, status: String?) {
@@ -877,7 +892,6 @@ final class Bubble {
         if let cachedAt {
             addText("缓存 · 更新于 "+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale))
         }
-        let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
         func addReset(_ date: Date) {
             let paragraph = NSMutableParagraphStyle()
             paragraph.tabStops = [NSTextTab(textAlignment:.left,location:resetTab)]
@@ -885,7 +899,7 @@ final class Bubble {
             let view = TranscriptTokenText(frame:.zero)
             view.textContainer?.lineFragmentPadding = 2
             view.font = resetFont
-            view.attributedStringValue = NSAttributedString(string:line,attributes:[.font:resetFont,.foregroundColor:primaryTextColor,.paragraphStyle:paragraph])
+            view.attributedStringValue = NSAttributedString(string:line,attributes:[.font:resetFont,.foregroundColor:Self.quotaResetTextColor,.paragraphStyle:paragraph])
             let height = max(ceil(resetFont.pointSize+5),view.height(for:width))
             view.frame = NSRect(x:0,y:y,width:width,height:height)
             content.addSubview(view); y += height
@@ -1057,7 +1071,7 @@ final class Bubble {
         window.makeFirstResponder(nil)
         scroll.documentView = nil; taskList = nil
         text.releaseRenderedContent(); text.hoverHelp = nil
-        currentBody = ""; plainHeading = ""; title.stringValue = ""; title.hoverHelp = nil
+        currentBody = ""; plainHeading = ""; renderedHeadingSignature = ""; title.stringValue = ""; title.hoverHelp = nil
         headingActivity = nil; headingSpinner.stringValue = ""; headingSpinner.isHidden = true; headingIcon.update(nil,pointSize:16*scale); headingIcon.isHidden = true; TaskActivityAppearance.stop(headingIcon)
         refreshStandalone = nil; renderedCardID = nil
         TaskActivityAppearance.stop(taskProgressIcon); taskProgressIcon.update(nil,pointSize:15*scale); displayedFailure = nil; taskProgress.stop(); taskProgress.stringValue = ""; taskProgress.hoverHelp = nil; taskProgress.isHidden = true; taskProgressIcon.isHidden = true; progressTaskKey = nil; activityTiming = nil
