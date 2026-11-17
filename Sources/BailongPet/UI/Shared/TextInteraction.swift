@@ -90,9 +90,11 @@ final class MessageInputBox: NSView {
     required init?(coder:NSCoder) {fatalError()}
     override func layout() {
         super.layout()
-        let height = scroll.contentSize.height
-        if editor.minSize.height != height {editor.minSize.height = height}
-        if editor.frame.height < height {editor.setFrameSize(NSSize(width:editor.frame.width,height:height))}
+        scroll.layoutSubtreeIfNeeded()
+        let size = contentSize
+        if editor.minSize.height != size.height {editor.minSize.height = size.height}
+        let editorSize = NSSize(width:size.width,height:max(editor.frame.height,size.height))
+        if editor.frame.size != editorSize {editor.setFrameSize(editorSize)}
     }
 }
 

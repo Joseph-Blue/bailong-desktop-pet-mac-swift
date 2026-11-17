@@ -125,7 +125,6 @@ final class QuestionForm: NSView {
         editor.layoutSubtreeIfNeeded()
         let input = inputs[qi]
         input.setFrameSize(NSSize(width:editor.contentSize.width,height:max(input.frame.height,editor.contentSize.height)))
-        input.textContainer?.containerSize.width = editor.contentSize.width
         y += editor.frame.height+8*scale
         frame.size = NSSize(width:width,height:y+5*scale)
         window?.invalidateCursorRects(for:self)

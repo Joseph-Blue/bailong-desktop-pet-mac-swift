@@ -7,7 +7,7 @@ enum MessageSettingsPage {
         form.group("输入快捷键",[form.choice("发送与换行","sendShortcut",SendShortcut.options)],symbol:"keyboard")
         form.group("任务气泡",[
             form.toggle("显示任务气泡","taskBubbles",detail:"关闭后仍会显示审批、待回答的问题和错误提示。"),
-            form.toggle("任务消息","progressBubbles",requires:["taskBubbles"]),
+            form.toggle("任务过程消息","progressBubbles",requires:["taskBubbles"]),
             form.toggle("最终回复","resultBubbles",requires:["taskBubbles"]),
             form.toggle("在气泡中显示任务信息栏","taskInfoBarEnabled",detail:"显示 Git 仓库状态和本轮文件改动。"),
             form.toggle("思考与工具进展小气泡","progressToastEnabled",requires:["taskBubbles","progressBubbles"])],symbol:"bubble.left.and.bubble.right")
@@ -24,7 +24,7 @@ enum MessageSettingsPage {
             form.slider("近期结束任务数量","recentTaskCount",range:1...20,suffix:"条",detail:"每个会话只显示最近一次任务。",requires:["showTaskOverview"])],symbol:"rectangle.stack")
         form.group("停留时间",[
             form.slider("互动台词","interactionSeconds",range:0...60,suffix:"秒",requires:["interactionBubbles"],minimumLabel:"手动关闭"),
-            form.slider("任务消息","progressSeconds",range:0...60,suffix:"秒",requires:["taskBubbles","progressBubbles"],minimumLabel:"手动关闭"),
+            form.slider("任务过程消息","progressSeconds",range:0...60,suffix:"秒",requires:["taskBubbles","progressBubbles"],minimumLabel:"手动关闭"),
             form.slider("最终回复","resultSeconds",range:0...120,suffix:"秒",requires:["taskBubbles","resultBubbles"],minimumLabel:"手动关闭"),
             form.slider("额度信息","quotaSeconds",range:0...120,suffix:"秒",minimumLabel:"手动关闭"),
             form.toggle("长回复自动延长阅读时间","autoReadTime",detail:"最长 120 秒。",requires:["taskBubbles","resultBubbles"]),

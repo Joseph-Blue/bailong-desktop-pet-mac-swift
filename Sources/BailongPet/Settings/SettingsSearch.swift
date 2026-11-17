@@ -67,9 +67,9 @@ struct SettingsSearchEntry {
         add(.messages,"显示哪些消息",["隐藏工具执行失败提示"],"工具失败 执行失败 命令失败 报错 错误提示 失败角标 过滤 隐藏 概览 组标题 小气泡")
         add(.messages,"任务气泡",["思考与工具进展小气泡"],"自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关")
         add(.messages,"输入快捷键",["发送与换行"],"回车 Return Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 发送 换行 快捷回复 插话 问卷")
-        add(.messages,"任务气泡",["显示任务气泡","任务消息","最终回复"],"任务气泡提醒 任务进展 通知 显示 开关")
+        add(.messages,"任务气泡",["显示任务气泡","任务过程消息","最终回复"],"任务气泡提醒 任务进展 通知 显示 开关")
         add(.messages,"显示哪些消息",["互动台词"],"通知 显示 开关")
-        add(.messages,"停留时间",["互动台词","任务消息","最终回复","额度信息","长回复自动延长阅读时间","鼠标移入时暂停倒计时","预览最终回复气泡"],"气泡 自动关闭 手动关闭 秒 时长 悬停 预览 任务进展 ChatGPT 订阅 额度 重置 倒计时")
+        add(.messages,"停留时间",["互动台词","任务过程消息","最终回复","额度信息","长回复自动延长阅读时间","鼠标移入时暂停倒计时","预览最终回复气泡"],"气泡 自动关闭 手动关闭 秒 时长 悬停 预览 任务进展 ChatGPT 订阅 额度 重置 倒计时")
         add(.messages,"停留时间",["思考与工具进展小气泡"],"进展小气泡停留时间 思考 工具调用 短气泡 小窗口 自动关闭 持续 时间 秒 时长 2s 2秒")
         add(.messages,"声音",["播放音效"],"声音")
         add(.messages,"安静陪伴",["立即开启安静陪伴","定时开启安静陪伴","开始时间","结束时间"],"安静陪伴模式 启用专注时段 免打扰 时间 夜间 静音")
@@ -120,23 +120,23 @@ struct SettingsSearchEntry {
                 case (_,"开始时间"),(_,"结束时间"):
                     entries[index].condition = "开启定时安静陪伴后可调整"
                 case ("进展提醒","久无进展时提醒"):
-                    entries[index].condition = "开启显示任务气泡和任务消息后可调整"
+                    entries[index].condition = "开启显示任务气泡和任务过程消息后可调整"
                 case ("进展提醒","提醒间隔"):
-                    entries[index].condition = "开启任务气泡、任务消息和久无进展提醒后可调整"
+                    entries[index].condition = "开启任务气泡、任务过程消息和久无进展提醒后可调整"
                 case (_,"近期结束任务数量"):
                     entries[index].condition = "开启任务概览后可调整"
                 case ("显示哪些消息","隐藏工具执行失败提示"):
                     entries[index].condition = "开启显示工具调用后可调整"
-                case ("任务气泡","任务消息"),("任务气泡","最终回复"):
+                case ("任务气泡","任务过程消息"),("任务气泡","最终回复"):
                     entries[index].condition = "开启显示任务气泡后可调整"
                 case ("任务气泡","思考与工具进展小气泡"):
-                    entries[index].condition = "开启显示任务气泡和任务消息后可调整"
-                case ("停留时间","任务消息"):
-                    entries[index].condition = "开启显示任务气泡和任务消息后可调整"
+                    entries[index].condition = "开启显示任务气泡和任务过程消息后可调整"
+                case ("停留时间","任务过程消息"):
+                    entries[index].condition = "开启显示任务气泡和任务过程消息后可调整"
                 case ("停留时间","最终回复"),("停留时间","长回复自动延长阅读时间"):
                     entries[index].condition = "开启显示任务气泡和最终回复后可调整"
                 case ("停留时间","思考与工具进展小气泡"):
-                    entries[index].condition = "开启显示任务气泡、任务消息和进展小气泡后可调整"
+                    entries[index].condition = "开启显示任务气泡、任务过程消息和进展小气泡后可调整"
                 case ("停留时间","互动台词"):
                     entries[index].condition = "开启互动台词后可调整"
                 default: break
