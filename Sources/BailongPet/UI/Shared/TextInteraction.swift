@@ -36,6 +36,11 @@ enum TextContextMenu {
             guard event.type == .rightMouseDown || event.modifierFlags.contains(.control),
                   let content = event.window?.contentView else {return event}
             var hit = content.hitTest(content.convert(event.locationInWindow,from:nil))
+            var inputAncestor = hit
+            while let view = inputAncestor {
+                if view is MessageEditor {return event}
+                inputAncestor = view.superview
+            }
             while let view = hit {
                 if view is TemplateContextMenu {return event}
                 if let text = view as? NSTextView, text.isEditable || text.isSelectable {
@@ -62,6 +67,8 @@ class AppTextView: NSTextView {
 final class MessageInputBox: NSView {
     private let surface = NSBox()
     let scroll: NSScrollView
+    private let editor:MessageEditor
+    var contentHeight:CGFloat {editor.contentHeight+max(0,bounds.height-contentSize.height)}
     var fillColor:NSColor {get {surface.fillColor} set {surface.fillColor = newValue}}
     var contentSize:NSSize {
         var size = scroll.contentSize
@@ -69,9 +76,9 @@ final class MessageInputBox: NSView {
         return size
     }
     init(scroll:NSScrollView,editor:MessageEditor) {
-        self.scroll = scroll; super.init(frame:.zero)
-        surface.boxType = .custom; surface.borderColor = .separatorColor; surface.fillColor = .textBackgroundColor
-        surface.cornerRadius = 8; surface.borderWidth = 0.5; surface.contentViewMargins = NSSize(width:8,height:8)
+        self.scroll = scroll; self.editor = editor; super.init(frame:.zero)
+        surface.boxType = .custom; surface.borderColor = .separatorColor; surface.fillColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .textBackgroundColor : .white}
+        surface.cornerRadius = 8; surface.borderWidth = 0.5; surface.contentViewMargins = NSSize(width:6,height:6)
         addSubview(surface); surface.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([surface.leadingAnchor.constraint(equalTo:leadingAnchor,constant:4),surface.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-4),surface.topAnchor.constraint(equalTo:topAnchor,constant:4),surface.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-4)])
         let content = surface.contentView!
@@ -81,9 +88,15 @@ final class MessageInputBox: NSView {
         EditorFocusRing.attach(to:self,editor:editor,radius:8)
     }
     required init?(coder:NSCoder) {fatalError()}
+    override func layout() {
+        super.layout()
+        let height = scroll.contentSize.height
+        if editor.minSize.height != height {editor.minSize.height = height}
+        if editor.frame.height < height {editor.setFrameSize(NSSize(width:editor.frame.width,height:height))}
+    }
 }
 
-// 原生 focus-ring 绘制独立于正文，只对焦点层应用本应用的颜色映射。
+// 保留旧版独立焦点层：使用 AppKit 焦点环绘制 API，但状态和圆角遮罩由本组件管理。
 final class EditorFocusRing: NSView {
     private weak var editor: MessageEditor?
     private var radius: CGFloat = 8
@@ -111,4 +124,5 @@ final class EditorFocusRing: NSView {
         NSBezierPath(roundedRect:bounds.insetBy(dx:4,dy:4),xRadius:radius,yRadius:radius).fill()
         NSGraphicsContext.restoreGraphicsState()
     }
+    deinit {NotificationCenter.default.removeObserver(self)}
 }

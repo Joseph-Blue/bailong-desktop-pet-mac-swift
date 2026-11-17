@@ -1,17 +1,28 @@
 import AppKit
 
-final class MessageEditor: AppTextView {
+// 沿用旧版多行编辑器；系统负责文本编辑、插入点与输入法，外框由 MessageInputBox 承载。
+final class MessageEditor: NSTextView {
     var onFocusChange: () -> Void = {}
     override func becomeFirstResponder() -> Bool {let result = super.becomeFirstResponder(); onFocusChange(); return result}
     override func resignFirstResponder() -> Bool {let result = super.resignFirstResponder(); onFocusChange(); return result}
+    func update(font:NSFont,editable:Bool) {
+        let inputFont = NSFontManager.shared.convert(font,toSize:font.pointSize+1)
+        if self.font != inputFont {self.font = inputFont}
+        if isEditable != editable {isEditable = editable; onFocusChange()}
+    }
+    var contentHeight:CGFloat {
+        guard let container = textContainer,let manager = layoutManager else {return 0}
+        manager.ensureLayout(for:container)
+        return ceil(manager.usedRect(for:container).maxY+textContainerInset.height*2)
+    }
     var send: () -> Void = {}
     var onTextChange: () -> Void = {}
-    var placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…") {didSet {needsDisplay = true}}
+    var placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…") {didSet {if placeholder != oldValue {needsDisplay = true}}}
     override func didChangeText() {super.didChangeText(); needsDisplay = true; onTextChange()}
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         if string.isEmpty {
-            (placeholder as NSString).draw(in:NSRect(x:textContainerOrigin.x+5,y:textContainerOrigin.y,width:max(0,bounds.width-textContainerOrigin.x-14),height:bounds.height-textContainerOrigin.y),withAttributes:[.font:font ?? NSFont.systemFont(ofSize:14),.foregroundColor:NSColor.placeholderTextColor])
+            (placeholder as NSString).draw(in:NSRect(x:textContainerOrigin.x,y:textContainerOrigin.y,width:max(0,bounds.width-textContainerOrigin.x*2),height:bounds.height-textContainerOrigin.y),withAttributes:[.font:font ?? NSFont.systemFont(ofSize:14),.foregroundColor:NSColor.placeholderTextColor])
         }
     }
     private func handleReturn(_ event: NSEvent) -> Bool {

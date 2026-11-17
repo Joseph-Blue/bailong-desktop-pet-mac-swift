@@ -54,6 +54,7 @@ enum DesktopReply {
         let model:String
         let effort:String?
         let effortFromHistory:Bool
+        var serviceTier:String? = nil
     }
     struct PreparedConnection {
         let settings:Settings
@@ -72,10 +73,46 @@ enum DesktopReply {
                       let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:"Codex 未提供当前会话的模型设置。")}
                 let liveEffort = settings["reasoningEffort"] as? String
                 let recordedEffort = liveEffort == nil ? try DesktopHistoryReader.recordedReasoningEffort(thread:thread,model:model) : nil
-                return PreparedConnection(settings:Settings(model:model,effort:liveEffort ?? recordedEffort,effortFromHistory:recordedEffort != nil),thread:thread,socket:connection,owner:target)
+                // read-model-settings v1 不返回速度；从同一 owner 的实时快照读取，不能按模型名推断。
+                let tier = try readServiceTier(connection,thread:thread,owner:target,deadline:min(deadline,Date().addingTimeInterval(3)))
+                return PreparedConnection(settings:Settings(model:model,effort:liveEffort ?? recordedEffort,effortFromHistory:recordedEffort != nil,serviceTier:tier),thread:thread,socket:connection,owner:target)
             }
             DispatchQueue.main.async {completion(result)}
         }
+    }
+    private static func readServiceTier(_ connection:DesktopSocket,thread:String,owner:String,deadline:Date) throws -> String? {
+        try connection.broadcast("thread-stream-following-changed",params:["hostId":"local","conversationId":thread,"following":true],version:1)
+        while Date() < deadline {
+            guard let frame = try connection.receiveIfAvailable(milliseconds:50),
+                  frame["type"] as? String == "broadcast",frame["method"] as? String == "thread-stream-state-changed",
+                  frame["sourceClientId"] as? String == owner,
+                  let params = frame["params"] as? [String:Any],params["hostId"] as? String == "local",
+                  params["conversationId"] as? String == thread else {continue}
+            guard let version = frame["version"] as? Int,DesktopApprovalReader.supportedStreamVersions.contains(version) else {
+                throw PetFailure(message:"Codex 会话速度状态协议不兼容。")
+            }
+            guard let change = params["change"] as? [String:Any],change["type"] as? String == "snapshot",
+                  let state = change["conversationState"] as? [String:Any] else {continue}
+            let tier = serviceTier(in:state)
+            try connection.broadcast("thread-stream-following-changed",params:["hostId":"local","conversationId":thread,"following":false],version:1)
+            return tier
+        }
+        throw PetFailure(message:"未收到 Codex 原会话的速度设置。")
+    }
+    static func serviceTier(in state:[String:Any]) -> String? {
+        if let settings = state["latestThreadSettings"] as? [String:Any],let tier = settings["serviceTier"] {
+            return tier as? String // 显式 null 清除快速档，不回退到旧轮次。
+        }
+        let turns:[[String:Any]]
+        if let turnHistory = state["turnHistory"] as? [String:Any],turnHistory["kind"] as? String == "canonical",
+           let history = turnHistory["history"] as? [String:Any],let islands = history["islands"] as? [[String:Any]],
+           let entities = history["entitiesByKey"] as? [String:[String:Any]] {
+            turns = islands.flatMap {($0["entries"] as? [[String:Any]] ?? []).compactMap {entry in
+                (entry["value"] as? String).flatMap {entities[$0]}
+            }}
+        } else {turns = state["turns"] as? [[String:Any]] ?? []}
+        let params = turns.last(where:{$0["turnId"] is String})?["params"] as? [String:Any]
+        return params?["serviceTierForTurn"] as? String ?? params?["serviceTier"] as? String
     }
     struct Receipt {
         let turnID:String

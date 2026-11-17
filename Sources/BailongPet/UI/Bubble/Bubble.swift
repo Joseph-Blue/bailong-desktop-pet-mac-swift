@@ -423,8 +423,8 @@ final class Bubble {
         let progressIconSide = progressIconSize.height
         let progressLineHeight = max(progressIconSide,ceil(progressFont.ascender-progressFont.descender+progressFont.leading)+2)
         let progressHeight = taskProgress.isHidden ? 0 : progressLineHeight+4*scale
-        // 进展与标题为紧凑状态区；有进展时不再叠加原先 12pt 正文分隔。
-        let bodyGap = bodyHeight > 0 ? (taskProgress.isHidden ? 12 : 4)*scale : 0
+        // 短进展直接接实际摘要，不额外预留标题下的空白；长消息保留正文分隔。
+        let bodyGap = bodyHeight > 0 && kind != "progressToast" ? (taskProgress.isHidden ? 12 : 4)*scale : 0
         let baseChromeHeight = margin+bottomMargin+headingHeight+bodyGap+controlsFooter
         let chromeHeight = baseChromeHeight+progressHeight+workspaceHeight
         // 进展独占新增高度，包括启用宽高比时；不从原正文视口扣除。
@@ -449,7 +449,8 @@ final class Bubble {
                 InlineStatusLayout.align(self.headingIcon,to:self.title,side:self.headingIcon.layoutSize.height,width:self.headingIcon.layoutSize.width)
             }
             if hasElapsed {self.layoutElapsed(in:size)}
-            self.workspace.frame = NSRect(x:bodyLayout.inset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-4*scale))
+            let workspaceInset = self.workspace.leadingContentInset
+            self.workspace.frame = NSRect(x:bodyLayout.inset-workspaceInset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth+workspaceInset,height:max(0,workspaceHeight-4*scale))
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSize.width,height:progressIconSide)
             self.taskProgress.frame = NSRect(x:bodyLayout.inset+progressIconSize.width+6*scale,y:progressY,width:max(0,bodyLayout.contentWidth-progressIconSize.width-6*scale),height:progressLineHeight)

@@ -181,9 +181,6 @@ final class AboutPageController: NSViewController {
 
         heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)
         paragraph("感谢 AntiGravity agent（Gemini 4 Carbon 模型），在 Codex 冷启动首次发送延迟，以及窗口激活异常与持续掉帧的两轮攻坚中提供关键定位与修复。",to:text)
-        let noteStart = text.length
-        paragraph("这两次修复仅反映特定版本、上下文、工具环境与人工复核条件下的实际贡献，不构成任何跨模型能力排名、普适性能结论或未来效果保证，也不应被解读为将整个工程全权委托给该模型的建议；既不能据此证明 Gemini 4 Carbon 在所有方面都强于 GPT-6-Astra，当然，也不能据此证伪这一判断。上述限制同样适用于 Codex 与 AntiGravity 的比较，尽管用户对后者的工作流与交互体验颇有微词（以下省略 500 字……）。",to:text,color:.secondaryLabelColor,font:.systemFont(ofSize:12))
-        text.addAttribute(.obliqueness,value:0.15,range:NSRange(location:noteStart,length:text.length-noteStart))
         return text
     }
 

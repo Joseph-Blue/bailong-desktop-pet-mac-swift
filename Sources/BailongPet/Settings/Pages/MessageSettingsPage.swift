@@ -13,9 +13,6 @@ enum MessageSettingsPage {
             form.toggle("思考与工具进展小气泡","progressToastEnabled",requires:["taskBubbles","progressBubbles"])],symbol:"bubble.left.and.bubble.right")
         form.group("工作区状态条",[
             form.toggle("显示工作区状态条","gitWindowEnabled",detail:"在桌宠旁常驻显示当前会话的目录、Git 状态和本轮文件改动。")],image:GitIcons.git)
-        form.group("进展提醒",[
-            form.toggle("久无进展时提醒","taskReminderEnabled",detail:"任务连续 90 秒没有新进展后，按下方间隔提醒。等待回答、批准或正在停止时不提醒。",requires:["taskBubbles","progressBubbles"]),
-            form.slider("提醒间隔","taskReminderMinutes",range:1...30,suffix:"分钟",requires:["taskBubbles","progressBubbles","taskReminderEnabled"])],symbol:"bell.badge")
         form.group("显示哪些消息",[
             form.toggle("互动台词","interactionBubbles"),
             form.toggle("显示思考摘要","showThinkingProgress"),
@@ -40,5 +37,8 @@ enum MessageSettingsPage {
             form.toggle("定时开启安静陪伴","quietSchedule",detail:"手动开启后会一直保持安静，关闭后恢复定时安排。"),
             form.conditional(form.time("开始时间","quietStart",requires:["quietSchedule"]),when:{$0.bool("quietSchedule")}),
             form.conditional(form.time("结束时间","quietEnd",requires:["quietSchedule"]),when:{$0.bool("quietSchedule")})],symbol:"moon",detail:"按本机时间执行，可跨天；开始和结束时间相同表示全天。")
+        form.group("进展提醒",[
+            form.toggle("久无进展时提醒","taskReminderEnabled",detail:"任务连续 90 秒没有新进展后，按下方间隔提醒。等待回答、批准或正在停止时不提醒。",requires:["taskBubbles","progressBubbles"]),
+            form.slider("提醒间隔","taskReminderMinutes",range:1...30,suffix:"分钟",requires:["taskBubbles","progressBubbles","taskReminderEnabled"])],symbol:"bell.badge")
     }
 }
