@@ -16,7 +16,7 @@ struct TaskActivity:Equatable {
             switch self {case .failed:return "exclamationmark.circle.fill"; case .declined:return "hand.raised.slash.fill"; case .cancelled,.interrupted:return "xmark.circle.fill"}
         }
     }
-    // 折叠进度组标题与逐项短气泡分开；只保存公开标题及其显示身份。
+    // 共用折叠进度组摘要；短气泡另保留当前操作的公开细节。
     struct GroupHeader:Equatable {
         var title:String
         var kind:Kind = .tool
@@ -25,10 +25,33 @@ struct TaskActivity:Equatable {
         var outcome:Outcome? = nil
     }
     var groupHeader:GroupHeader? = nil
+    var groupHeaderHidingToolFailures:GroupHeader? = nil
+    private var displayedGroupHeader:GroupHeader? {
+        PetPreferences.shared.bool("hideToolFailures") ? groupHeaderHidingToolFailures : groupHeader
+    }
     var groupActivity:TaskActivity {
-        guard let header = groupHeader else {return self}
+        guard let header = displayedGroupHeader else {return self}
         return .init(title:header.title,kind:header.kind,finished:header.finished,
                      toolOperation:header.operation,outcome:header.outcome)
+    }
+    // 只比较实际呈现的台词、正文和图标状态，不带入未显示的组摘要或原始长文本。
+    struct ProgressToast:Equatable {
+        let heading:TaskActivity
+        let body:String
+    }
+    var progressToast:ProgressToast {
+        var parts = [String](), seen = Set<String>()
+        func append(_ value:String) {
+            let text = value.replacingOccurrences(of:"**",with:"").trimmingCharacters(in:.whitespacesAndNewlines)
+            let key = text.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
+            if !key.isEmpty,seen.insert(key).inserted {parts.append(text)}
+        }
+        let group = groupActivity
+        if displayedGroupHeader != nil,group.visible {append(group.line)}
+        append(actionTitle)
+        append(displayDetail)
+        let heading = TaskActivity(title:displayTitle,kind:kind,finished:finished,toolOperation:toolOperation,statusSymbol:statusSymbol,outcome:outcome)
+        return .init(heading:heading,body:parts.joined(separator:"\n"))
     }
     let title:String
     var detail:String = ""
@@ -105,7 +128,12 @@ struct TaskActivity:Equatable {
         let parts = (detailOnly ? [detail] : [title,detail]).filter {!$0.isEmpty}
         return parts.joined(separator:" · ").replacingOccurrences(of:"**",with:"").split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
     }
-    var visible:Bool {kind == .reasoning ? PetPreferences.shared.bool("showThinkingProgress") : kind == .tool ? PetPreferences.shared.bool("showToolProgress") : true}
+    var isToolFailure:Bool {kind == .tool && outcome == .failed}
+    var isReconnecting:Bool {kind == .status && statusSymbol == "wifi.exclamationmark"}
+    var visible:Bool {
+        if isToolFailure && PetPreferences.shared.bool("hideToolFailures") {return false}
+        return kind == .reasoning ? PetPreferences.shared.bool("showThinkingProgress") : kind == .tool ? PetPreferences.shared.bool("showToolProgress") : true
+    }
     static func summary(_ parts:[Any]) -> String {
         parts.compactMap {$0 as? String ?? ($0 as? [String:Any])?["text"] as? String}.filter {!$0.isEmpty}.joined(separator:"\n")
     }
@@ -244,16 +272,18 @@ struct TaskActivity:Equatable {
         }
         var activity = runningTool ?? result
         activity?.groupHeader = currentGroupHeader(items:items)
+        // 只存两份有界显示摘要，切换设置时不重读会话，也不改写原始进展或历史。
+        activity?.groupHeaderHidingToolFailures = currentGroupHeader(items:items,hidingToolFailures:true)
         return activity
     }
     // 本机 Codex 的 NQNw / udV3 / I3PO：reasoning 不断组，独立消息断组；
     // live 组取最后活动项，无活动项时取探索标题或思考，关闭的组显示整组摘要。
     // 插件依赖 arguments / result 的自定义呈现不进入此公开投影。
-    private static func currentGroupHeader(items:[[String:Any]]) -> GroupHeader? {
+    private static func currentGroupHeader(items:[[String:Any]],hidingToolFailures:Bool = false) -> GroupHeader? {
         var group = [(item:[String:Any],activity:TaskActivity)]()
         var isOpen = false, heading:String?, closed:GroupHeader?, standalone:GroupHeader?
         func closeGroup() {
-            if isOpen,!group.isEmpty {closed = completedGroupHeader(group); isOpen = false}
+            if isOpen,!group.isEmpty {closed = completedGroupHeader(group,hidingToolFailures:hidingToolFailures); isOpen = false}
             // 桌宠按消息边界限制标题归属，不沿用客户端对全轮 reasoning 的回看。
             heading = nil
         }
@@ -284,14 +314,16 @@ struct TaskActivity:Equatable {
             if ["agentMessage","userMessage","steeringUserMessage","hookPrompt","imageGeneration","imageView","contextCompaction",
                 "collabAgentToolCall","collabToolCall","error"].contains(type) {
                 closeGroup()
-                if let activity = from(item:item) {standalone = header(activity)}
+                if let activity = from(item:item) {standalone = hidingToolFailures && activity.isToolFailure ? nil : header(activity)}
                 else if type == "agentMessage",closed == nil {standalone = .init(title:"正在回复",kind:.reply)}
             }
         }
         if isOpen,!group.isEmpty {
-            if let active = group.last(where:{isActive($0.item,$0.activity)}) {return activeGroupHeader(active.item,active.activity)}
+            let displayed = hidingToolFailures ? group.filter {!$0.activity.isToolFailure} : group
+            if displayed.isEmpty {return heading.map {GroupHeader(title:$0,kind:.reasoning)}}
+            if let active = displayed.last(where:{isActive($0.item,$0.activity)}) {return activeGroupHeader(active.item,active.activity)}
             // EeZ9.G：尾部连续探索段在模型思考期间继续显示探索标题。
-            if let last = group.last,[.read,.search,.listFiles].contains(last.activity.toolOperation) {
+            if let last = displayed.last,[.read,.search,.listFiles].contains(last.activity.toolOperation) {
                 return activeGroupHeader(last.item,last.activity)
             }
             return .init(title:heading ?? "正在思考",kind:.reasoning)
@@ -325,9 +357,11 @@ struct TaskActivity:Equatable {
         }
         return .init(title:short(title),operation:activity.toolOperation)
     }
-    private static func completedGroupHeader(_ entries:[(item:[String:Any],activity:TaskActivity)]) -> GroupHeader {
+    private static func completedGroupHeader(_ entries:[(item:[String:Any],activity:TaskActivity)],hidingToolFailures:Bool) -> GroupHeader? {
+        let displayed = hidingToolFailures ? entries.filter {!$0.activity.isToolFailure} : entries
+        guard !displayed.isEmpty else {return nil}
         var categories = [String:TaskActivity](), failures = [String](), failure:TaskActivity?
-        for entry in entries {
+        for entry in displayed {
             let activity = entry.activity
             if activity.outcome != nil {
                 if !failures.contains(activity.title) {failures.append(activity.title)}

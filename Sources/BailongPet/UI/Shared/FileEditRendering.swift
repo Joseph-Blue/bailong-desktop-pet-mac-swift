@@ -27,7 +27,7 @@ enum FileEditRendering {
     }
     static func count(_ number:Int,added:Bool,font:NSFont) -> NSAttributedString {
         let font = NSFont.monospacedSystemFont(ofSize:font.pointSize,weight:.semibold)
-        let color:NSColor = added ? .systemGreen : .systemRed
+        let color = added ? StatusTextColor.green : StatusTextColor.red
         let value = NSMutableAttributedString(attributedString:InlineStatusLayout.centeredSymbol(added ? "+" : "-",font:font,color:color))
         value.append(NSAttributedString(string:String(number),attributes:[.font:font,.foregroundColor:color]))
         return value

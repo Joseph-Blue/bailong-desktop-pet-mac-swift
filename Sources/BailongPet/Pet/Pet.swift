@@ -29,7 +29,12 @@ final class PetController: NSObject, NSMenuDelegate {
     let decoder = Decoder()
     let bubble = Bubble()
     private let progressBubble = Bubble()
-    private var toastActivities = [String:TaskActivity]()
+    private struct ToastSnapshot:Equatable {
+        let turnKey:String?
+        let start:Date?
+        let content:TaskActivity.ProgressToast
+    }
+    private var toastActivities = [String:ToastSnapshot]()
     private var progressToastKey:String?
     var diagnostics: DiagnosticsPanel?
     var syncDiagnostics: () -> String = { "等待初始化" }
@@ -557,20 +562,28 @@ final class PetController: NSObject, NSMenuDelegate {
         return window.convertToScreen(view.convert(local,to:nil))
     }
     func showProgressToast(_ activity:TaskActivity?,key:String,timing:TaskTiming,thread:String? = nil) {
-        guard toastActivities[key] != activity else {return}
-        toastActivities[key] = activity
         guard let activity,activity.kind != .reply else {
             if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}; return
+        }
+        let content = activity.progressToast
+        let snapshot = ToastSnapshot(turnKey:timing.activityKey ?? timing.key,start:timing.start,content:content)
+        if activity.isToolFailure && preferences.bool("hideToolFailures") {
+            if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
+            return
         }
         if activity.kind == .status {
             if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
             guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),preferences.allows(.progress) else {return}
+            guard activity.isReconnecting || toastActivities[key] != snapshot else {return}
+            toastActivities[key] = snapshot
             if bubble.refreshActivity(timing:timing) {return}
             say(preferences.statusLine("taskProgressTemplate"),kind:"task",thread:thread,purpose:.progress,personalizeTitle:false,timing:timing,messageID:"connection-status")
             return
         }
         guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),
               preferences.bool("progressToastEnabled"),activity.visible,preferences.allows(.progress) else {return}
+        guard toastActivities[key] != snapshot else {return}
+        toastActivities[key] = snapshot
         progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing,conversation:thread); placeBubble()
     }
     func placeBubble() {
@@ -678,6 +691,7 @@ final class PetController: NSObject, NSMenuDelegate {
             pauseTime = nil
             if animation != nil {view.refreshFrame(); visibilityFade.setVisible(true)}
             interaction()
+            onVisibility(true)
         }
         if !hidden { configureAnimationTimer() }
         updateMotionDisplayLink(); refreshMenu(); greetOnFirstAppearance()
@@ -830,7 +844,7 @@ final class PetController: NSObject, NSMenuDelegate {
             resize(Int(preferences.number("petPercent")),Int(preferences.number("bubblePercent")))
             if !bubble.refreshAppearance(),settingsOpen {showSizePreview()}
         }
-        if !Set(keys).isDisjoint(with:["progressToastEnabled","showThinkingProgress","showToolProgress","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate"]) {progressBubble.hide()}
+        if !Set(keys).isDisjoint(with:["progressToastEnabled","showThinkingProgress","showToolProgress","hideToolFailures","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate"]) {progressBubble.hide()}
         if keys.contains("progressToastSeconds") {progressBubble.refreshDuration()}
         if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize","bubbleAspectEnabled","bubbleAspectRatio","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion","appearanceMode"]) {_ = progressBubble.refreshAppearance(); placeBubble()}
         if keys.contains("preferredDisplay") {applyPreferredDisplay()}

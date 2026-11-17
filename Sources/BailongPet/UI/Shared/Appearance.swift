@@ -39,11 +39,11 @@ enum AppAccent {
         let base = color
         return NSColor(name:nil) {appearance in foregroundColor(base,for:appearance)}
     }
-    static func foregroundColor(_ base:NSColor,for appearance:NSAppearance,increasedContrast:Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast) -> NSColor {
+    static func foregroundColor(_ base:NSColor,for appearance:NSAppearance,increasedContrast:Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,backgroundColor:NSColor = .windowBackgroundColor) -> NSColor {
         var source = [CGFloat](), background = [CGFloat]()
         appearance.performAsCurrentDrawingAppearance {
             let rgb = base.usingColorSpace(.sRGB)!
-            let backing = NSColor.windowBackgroundColor.usingColorSpace(.sRGB)!
+            let backing = backgroundColor.usingColorSpace(.sRGB)!
             source = [rgb.redComponent,rgb.greenComponent,rgb.blueComponent]
             background = [backing.redComponent,backing.greenComponent,backing.blueComponent]
         }
@@ -54,7 +54,7 @@ enum AppAccent {
         let backgroundLight = luminance(background.map(linear))
         let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
         let contrast:CGFloat = increasedContrast ? 7 : 4.5
-        // 以系统窗口底色建立文字基准，不把它当作玻璃后的实际桌面取样。
+        // 以传入底色建立文字基准，不把它当作玻璃后的实际桌面取样。
         let required = min(1,max(0,dark ? contrast*(backgroundLight+0.05)-0.05 : (backgroundLight+0.05)/contrast-0.05))
         let target:CGFloat = dark ? 1 : 0
         let fraction:CGFloat
@@ -89,6 +89,37 @@ enum AppAccent {
         guard let rgb = color.usingColorSpace(.sRGB) else {return}
         SettingsStorage.defaults.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],forKey:"accentRGB")
         select("custom")
+    }
+}
+
+// 状态文字、细线图标与任务结果圆标共用动态色，按钮填充仍使用原系统语义色。
+enum StatusTextColor {
+    static let red = adaptive(.systemRed)
+    static let orange = adaptive(.systemOrange)
+    static let yellow = adaptive(.systemYellow)
+    static let green = adaptive(.systemGreen)
+    static let blue = adaptive(.systemBlue)
+    static let teal = adaptive(.systemTeal)
+    static let purple = adaptive(.systemPurple)
+    static let secondary = NSColor(name:nil) {appearance in
+        guard appearance.bestMatch(from:[.aqua,.darkAqua]) != .darkAqua else {return .secondaryLabelColor}
+        var base = NSColor.labelColor
+        appearance.performAsCurrentDrawingAppearance {
+            base = NSColor.labelColor.withAlphaComponent(1).blended(withFraction:0.28,of:.windowBackgroundColor)!
+        }
+        return lightForeground(base,for:appearance)
+    }
+    private static func adaptive(_ base:NSColor) -> NSColor {
+        NSColor(name:nil) {appearance in
+            guard appearance.bestMatch(from:[.aqua,.darkAqua]) != .darkAqua else {return base}
+            return lightForeground(base,for:appearance)
+        }
+    }
+    private static func lightForeground(_ base:NSColor,for appearance:NSAppearance) -> NSColor {
+        // 普通材质按实色底计算；仅有效玻璃状态保留一档加深，不让旧系统也套用玻璃基准。
+        let usesGlass = PetPreferences.shared.usesGlass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let background:NSColor = usesGlass ? NSColor(srgbRed:0.84,green:0.84,blue:0.84,alpha:1) : .windowBackgroundColor
+        return AppAccent.foregroundColor(base,for:appearance,backgroundColor:background)
     }
 }
 

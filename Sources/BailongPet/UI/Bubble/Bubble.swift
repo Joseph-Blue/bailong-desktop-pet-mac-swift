@@ -109,11 +109,10 @@ final class Bubble {
     var blocksProgressToast:Bool {visible && (pendingAttention || questionForm != nil || submittingQuestion || isBrowsingCards)}
     func showProgressToast(_ activity:TaskActivity,timing:TaskTiming,conversation:String? = nil) {
         onQuestionSubmit = nil; onQuestionsSkipped = nil
-        let detail = ([activity.actionTitle,activity.displayDetail].filter {!$0.isEmpty}.joined(separator:"\n"))
-            .replacingOccurrences(of:"**",with:"").trimmingCharacters(in:.whitespacesAndNewlines)
-        show(title:activity.displayTitle,body:detail,kind:"progressToast",scale:preferences.number("bubblePercent")/100,
-             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:activity.kind == .tool,headingActivity:activity,conversation:conversation)
-        purpose = .progress; text.hoverHelp = activity.text
+        let content = activity.progressToast
+        show(title:content.heading.title,body:content.body,kind:"progressToast",scale:preferences.number("bubblePercent")/100,
+             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:content.heading.kind == .tool,headingActivity:content.heading,conversation:conversation)
+        purpose = .progress; text.hoverHelp = content.body
     }
     func resolveQuestions(taskKey:String? = nil,form:QuestionForm? = nil) {
         let affected = cards.filter {card in
@@ -760,17 +759,17 @@ final class Bubble {
         }
     }
     private var elapsedGroupWidth: CGFloat {
-        elapsedLabel.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.regular)
+        elapsedLabel.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.medium)
         elapsedLabel.maximumNumberOfLines = 1; elapsedLabel.usesSingleLineMode = true
         return elapsedLabel.fittingSize.width+16*scale
     }
     private func setElapsedColor(_ status: String?) {
-        let color: NSColor = status == "completed" ? .systemGreen : ["failed","interrupted","cancelled","canceled"].contains(status ?? "") ? .systemRed : .secondaryLabelColor
+        let color = status == "completed" ? StatusTextColor.green : ["failed","interrupted","cancelled","canceled"].contains(status ?? "") ? StatusTextColor.red : StatusTextColor.secondary
         elapsedIcon.contentTintColor = color; elapsedLabel.textColor = color
     }
     private func layoutElapsed(in size: NSSize) {
         let margin = 16*scale, side = 13*scale
-        elapsedLabel.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.regular)
+        elapsedLabel.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.medium)
         elapsedLabel.maximumNumberOfLines = 1; elapsedLabel.usesSingleLineMode = true
         let textSize = elapsedLabel.fittingSize
         // 使用原生标签的第一行基线，不以整个多行标题的矩形中心对齐。
@@ -926,7 +925,7 @@ final class Bubble {
             }
             let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
             let quotaColor: NSColor? = row.remaining.flatMap {$0 <= 5 ? .systemRed : $0 <= 10 ? .systemOrange : nil}
-            amount.textColor = quotaColor ?? .labelColor
+            amount.textColor = row.remaining.map {$0 <= 5 ? StatusTextColor.red : $0 <= 10 ? StatusTextColor.orange : .labelColor} ?? .labelColor
             if row.loading {quotaLoadingAmount = amount; renderQuotaLoading(); amount.setAccessibilityLabel("本机今日用量加载中")}
             for field in [heading,amount] where field !== heading || row.subtitle == nil {
                 field.maximumNumberOfLines = 1; field.usesSingleLineMode = true

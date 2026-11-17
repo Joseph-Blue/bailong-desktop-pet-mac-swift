@@ -17,10 +17,10 @@ enum ProgressTextEffects {
     static func title(_ text:String,font:NSFont,appearance:NSAppearance,elapsed:Double) -> NSAttributedString {
         let label = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:appearance))!.withAlphaComponent(1)
         let dark = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
-        // 留出少量扫光明暗空间，基础文字始终不透明。
-        let foreground = enabled ? label.blended(withFraction:0.08,of:dark ? .black : .white)! : label
-        let value = NSMutableAttributedString(string:text,attributes:[.font:font,.foregroundColor:foreground])
+        // 保留黑／白底字，扫过时向反方向的灰色过渡；不靠透明度制造变化。
+        let value = NSMutableAttributedString(string:text,attributes:[.font:font,.foregroundColor:label])
         guard enabled else {return value}
+        let sweepAmount = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 0.18 : 0.30
         let phase = elapsed.truncatingRemainder(dividingBy:4)
         let center = -0.25+1.5*(phase/1.2)
         let count = max(1,text.count-1)
@@ -29,8 +29,8 @@ enum ProgressTextEffects {
             let length = (String(character) as NSString).length
             let distance = (Double(index)/Double(count)-center)/0.18
             let strength = phase < 1.2 ? exp(-distance*distance) : 0
-            // 深色向白、浅色向黑增强扫光；不再让文字透明来制造明暗变化。
-            let highlight = foreground.blended(withFraction:0.65*strength,of:dark ? .white : .black)!
+            // 浅色黑字扫亮灰、深色白字扫暗灰，峰值不到纯白／纯黑。
+            let highlight = label.blended(withFraction:sweepAmount*strength,of:dark ? .black : .white)!
             value.addAttribute(.foregroundColor,value:highlight,range:NSRange(location:offset,length:length))
             offset += length
         }
@@ -186,13 +186,13 @@ final class TaskActivitySymbolView:NSView {
 // 连接状态共用语义色；呼吸只作用于图标，不重建正文或增加刷新计时器。
 enum TaskActivityAppearance {
     static func color(_ activity:TaskActivity?) -> NSColor {
-        if activity?.kind == .attention || activity?.outcome == .declined {return .systemOrange}
-        if activity?.outcome == .failed {return .systemRed}
+        if activity?.kind == .attention || activity?.outcome == .declined {return StatusTextColor.orange}
+        if activity?.outcome == .failed {return StatusTextColor.red}
         switch activity?.statusSymbol {
-        case "wifi.exclamationmark":return .systemOrange
-        case "wifi":return .systemGreen
-        case "wifi.slash":return .systemRed
-        default:return activity?.kind == .status ? .systemRed : .secondaryLabelColor
+        case "wifi.exclamationmark":return StatusTextColor.orange
+        case "wifi":return StatusTextColor.green
+        case "wifi.slash":return StatusTextColor.red
+        default:return activity?.kind == .status ? StatusTextColor.red : StatusTextColor.secondary
         }
     }
     static func apply(_ activity:TaskActivity?,icon:TaskActivitySymbolView,text:ProgressMarqueeView? = nil,visible:Bool) {

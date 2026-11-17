@@ -112,9 +112,9 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         name.font = .systemFont(ofSize:12*scale); name.lineBreakMode = .byTruncatingTail; name.maximumNumberOfLines = 1
         spinner.font = .monospacedSystemFont(ofSize:12*scale,weight:.medium)
-        elapsed.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.regular); elapsed.alignment = .right
+        elapsed.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.medium); elapsed.alignment = .right
         watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
-        activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = .secondaryLabelColor
+        activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = StatusTextColor.secondary
         activity.isHidden = task.activityLine == nil
         changes.font = .monospacedSystemFont(ofSize:11*scale,weight:.semibold)
         changes.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:11*scale,weight:.semibold))
@@ -129,12 +129,12 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     func update(_ task:BubbleTaskSummary) {
         if self.task.title != task.title || self.task.active != task.active {titleEffectStart = ProcessInfo.processInfo.systemUptime}
         self.task = task
-        let editTitle = NSMutableAttributedString(string:"\(task.fileEdits.count)",attributes:[.font:changes.font!,.foregroundColor:NSColor.secondaryLabelColor])
+        let editTitle = NSMutableAttributedString(string:"\(task.fileEdits.count)",attributes:[.font:changes.font!,.foregroundColor:StatusTextColor.secondary])
         let lines = task.fileEdits.compactMap(\.lines)
         if !lines.isEmpty {
             editTitle.append(NSAttributedString(string:" ",attributes:[.font:changes.font!]))
             editTitle.append(FileEditRendering.counts(.init(added:lines.reduce(0){$0+$1.added},removed:lines.reduce(0){$0+$1.removed}),font:changes.font!))
-            if lines.count < task.fileEdits.count {editTitle.append(NSAttributedString(string:" · 部分",attributes:[.font:changes.font!,.foregroundColor:NSColor.secondaryLabelColor]))}
+            if lines.count < task.fileEdits.count {editTitle.append(NSAttributedString(string:" · 部分",attributes:[.font:changes.font!,.foregroundColor:StatusTextColor.secondary]))}
         }
         changes.attributedTitle = editTitle
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
@@ -194,8 +194,8 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         let hasTime = task.active || task.end != nil
         elapsed.isHidden = !hasTime; watch.isHidden = !hasTime
         elapsed.stringValue = task.end.map {TaskTiming.elapsed(start:task.start,end:$0)} ?? (task.active ? TaskTiming.elapsed(start:task.start) : "")
-        let color:NSColor = task.active ? .secondaryLabelColor : task.connectionFailed ? .systemRed : task.status == "completed" ? .systemGreen : task.status == "failed" ? .systemYellow : .systemRed
-        elapsed.textColor = color; watch.contentTintColor = color; stateIcon.contentTintColor = color
+        let textColor = task.active ? StatusTextColor.secondary : task.connectionFailed ? StatusTextColor.red : task.status == "completed" ? StatusTextColor.green : task.status == "failed" ? StatusTextColor.yellow : StatusTextColor.red
+        elapsed.textColor = textColor; watch.contentTintColor = textColor; stateIcon.contentTintColor = textColor
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
         let headingY = bounds.height-h, metadataHeight = self.metadataHeight
         changes.isHidden = metadataHeight == 0 || task.fileEdits.isEmpty

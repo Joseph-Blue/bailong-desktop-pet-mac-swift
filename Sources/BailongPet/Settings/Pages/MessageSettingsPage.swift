@@ -19,7 +19,8 @@ enum MessageSettingsPage {
         form.group("显示哪些消息",[
             form.toggle("互动台词","interactionBubbles"),
             form.toggle("显示思考摘要","showThinkingProgress"),
-            form.toggle("显示工具调用","showToolProgress")],symbol:"line.3.horizontal.decrease.circle")
+            form.toggle("显示工具调用","showToolProgress"),
+            form.toggle("隐藏工具执行失败提示","hideToolFailures",detail:"隐藏进展小气泡和概览标题中的单次工具失败。历史记录与整轮任务失败照常显示。",requires:["showToolProgress"])],symbol:"line.3.horizontal.decrease.circle")
         form.group("气泡卡片与任务概览",[
             form.slider("气泡卡片保留数量","bubbleCardLimit",range:5...100,suffix:"条"),
             form.toggle("互动气泡显示任务概览","showTaskOverview",detail:"鼠标操作设为“显示任务进度、播放随机动画”时，台词下方显示任务列表。点击任务可在 Codex 中打开。"),

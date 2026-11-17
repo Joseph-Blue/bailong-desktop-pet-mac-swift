@@ -2,8 +2,8 @@ import AppKit
 
 private enum GitStatusText {
     static let groups:[(group:GitWorkspaceStatus.Group,marker:String,color:NSColor)] = [
-        (.conflicted,"~",.systemRed),(.staged,"+",.systemGreen),
-        (.unstaged,"!",.systemOrange),(.untracked,"?",.systemBlue)
+        (.conflicted,"~",StatusTextColor.red),(.staged,"+",StatusTextColor.green),
+        (.unstaged,"!",StatusTextColor.orange),(.untracked,"?",StatusTextColor.blue)
     ]
     static func render(_ status:GitWorkspaceStatus,compact:Bool,font:NSFont) -> NSAttributedString {
         let text = NSMutableAttributedString(), counts = status.counts
@@ -17,11 +17,11 @@ private enum GitStatusText {
         for (group,marker,color) in groups {
             if let count = counts[group],count > 0 {append(compact ? marker+String(count) : group.rawValue+" \(count) 项",color:color)}
         }
-        if status.clean {append(compact ? "✓" : "工作区干净",color:.systemGreen)}
-        if status.stashes > 0 {append(compact ? "*\(status.stashes)" : "暂存栈 \(status.stashes) 份",color:.systemPurple)}
+        if status.clean {append(compact ? "✓" : "工作区干净",color:StatusTextColor.green)}
+        if status.stashes > 0 {append(compact ? "*\(status.stashes)" : "暂存栈 \(status.stashes) 份",color:StatusTextColor.purple)}
         if compact {
-            if status.ahead > 0 {append("⇡\(status.ahead)",color:.systemBlue)}
-            if status.behind > 0 {append("⇣\(status.behind)",color:.systemBlue)}
+            if status.ahead > 0 {append("⇡\(status.ahead)",color:StatusTextColor.blue)}
+            if status.behind > 0 {append("⇣\(status.behind)",color:StatusTextColor.blue)}
         }
         return text
     }
@@ -29,7 +29,7 @@ private enum GitStatusText {
         let text = NSMutableAttributedString(string:"上游："+(status.upstream ?? ""),attributes:[.font:font,.foregroundColor:NSColor.labelColor])
         for (label,count) in [("领先",status.ahead),("落后",status.behind)] {
             text.append(NSAttributedString(string:" · ",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
-            text.append(NSAttributedString(string:label+" \(count)",attributes:[.font:count > 0 ? NSFont.systemFont(ofSize:font.pointSize,weight:.semibold) : font,.foregroundColor:count > 0 ? NSColor.systemBlue : NSColor.labelColor]))
+            text.append(NSAttributedString(string:label+" \(count)",attributes:[.font:count > 0 ? NSFont.systemFont(ofSize:font.pointSize,weight:.semibold) : font,.foregroundColor:count > 0 ? StatusTextColor.blue : NSColor.labelColor]))
         }
         text.append(NSAttributedString(string:"（本机记录）",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
         return text
@@ -163,11 +163,11 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         changes.isHidden = edits.isEmpty
         let known = edits.compactMap(\.lines)
         let added = known.reduce(0) {$0+$1.added}, removed = known.reduce(0) {$0+$1.removed}
-        let text = NSMutableAttributedString(string:"\(edits.count)",attributes:[.font:changes.font!,.foregroundColor:NSColor.secondaryLabelColor])
+        let text = NSMutableAttributedString(string:"\(edits.count)",attributes:[.font:changes.font!,.foregroundColor:StatusTextColor.secondary])
         if !known.isEmpty {
             text.append(NSAttributedString(string:" "))
             text.append(FileEditRendering.counts(.init(added:added,removed:removed),font:changes.font!))
-            if known.count < edits.count {text.append(NSAttributedString(string:" · 部分",attributes:[.foregroundColor:NSColor.secondaryLabelColor]))}
+            if known.count < edits.count {text.append(NSAttributedString(string:" · 部分",attributes:[.foregroundColor:StatusTextColor.secondary]))}
         }
         text.addAttribute(.font,value:changes.font!,range:NSRange(location:0,length:text.length))
         changes.attributedTitle = text
@@ -221,7 +221,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private func presentStatus() {
         git.isHidden = snapshot == nil && failure == nil
         if failure != nil || snapshot == nil {
-            git.image = sourceIcon(github:false); git.title = "读取失败"; git.contentTintColor = .systemOrange
+            git.image = sourceIcon(github:false); git.title = "读取失败"; git.contentTintColor = StatusTextColor.orange
             git.setAccessibilityValue(failure ?? "Git 状态读取失败"); return
         }
         guard let snapshot else {return}
@@ -332,7 +332,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         refresh.isEnabled = !loading
         if loading {refresh.title = "刷新中…"}
         if let failure,snapshot != nil {
-            let error = NSTextField(wrappingLabelWithString:failure); error.textColor = .systemOrange
+            let error = NSTextField(wrappingLabelWithString:failure); error.textColor = StatusTextColor.orange
             error.font = .systemFont(ofSize:11); stack.addArrangedSubview(error)
         }
         func label(_ value:String) -> NSTextField {
@@ -374,7 +374,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             if snapshot.stashes > 0 {states.append("暂存栈 \(snapshot.stashes) 份")}
             if !states.isEmpty {stack.addArrangedSubview(label(states.joined(separator:" · ")))}
             if rows.isEmpty {
-                let clean = label("工作区干净"); clean.textColor = .systemGreen
+                let clean = label("工作区干净"); clean.textColor = StatusTextColor.green
                 stack.addArrangedSubview(clean)
             }
         } else {stack.addArrangedSubview(label(failure ?? (loading ? "正在读取 Git 状态…" : "非 Git 工作区")))}

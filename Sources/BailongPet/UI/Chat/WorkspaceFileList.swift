@@ -120,14 +120,14 @@ final class WorkspaceFileRow:NSView {
         else {FinderFileReveal.openDirectory(file.deletingLastPathComponent())}
     }
     static func symbol(for entry:GitWorkspaceStatus.Entry) -> (String,NSColor) {
-        if entry.group == .conflicted {return ("exclamationmark.triangle",.systemRed)}
+        if entry.group == .conflicted {return ("exclamationmark.triangle",StatusTextColor.red)}
         switch entry.change {
-        case "新增":return ("plus.circle",.systemGreen)
-        case "删除":return ("minus.circle",.systemRed)
-        case "重命名":return ("arrow.right",.systemBlue)
-        case "复制":return ("doc.on.doc",.systemTeal)
-        case "类型变化","子模块变化":return ("square.stack.3d.up",.systemPurple)
-        default:return ("pencil",.systemOrange)
+        case "新增":return ("plus.circle",StatusTextColor.green)
+        case "删除":return ("minus.circle",StatusTextColor.red)
+        case "重命名":return ("arrow.right",StatusTextColor.blue)
+        case "复制":return ("doc.on.doc",StatusTextColor.teal)
+        case "类型变化","子模块变化":return ("square.stack.3d.up",StatusTextColor.purple)
+        default:return ("pencil",StatusTextColor.orange)
         }
     }
 }

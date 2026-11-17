@@ -245,7 +245,10 @@ final class ChatController {
         }
         pet.onGeometry = { [weak self] in self?.positionComposer(); self?.positionWorkspace() }
         pet.onVisibility = { [weak self] shown in
-            if shown {self?.showWorkspace()}
+            if shown {
+                guard let self,!self.workspacePanel.visible else {return}
+                self.showWorkspace()
+            }
             else {self?.ui.hideComposer(); self?.workspacePanel.hide()}
         }
         pet.onPreferencesChanged = { [weak self] in

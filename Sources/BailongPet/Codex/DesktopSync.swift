@@ -244,7 +244,8 @@ final class DesktopSync {
                 }
             }
             if active {
-                if value.attention == nil,previous?.activity != value.activity {
+                // 重连提示不按相同文案过滤，沿用现有状态入口与观察节奏。
+                if value.attention == nil,(previous?.activity != value.activity || value.activity?.isReconnecting == true) {
                     chat.pet.showProgressToast(value.activity,key:key,timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key),thread:conversation.key)
                 }
                 if !running.contains(key) {running.insert(key); chat.pet.taskStarted(key)}
