@@ -38,7 +38,7 @@ enum MessageSettingsPage {
         form.group("安静陪伴",[
             form.toggle("立即开启安静陪伴","quietCompanion",detail:"减少活动并停止自动移动，隐藏互动台词和进展气泡，关闭音效。最终回复和待处理通知照常显示。"),
             form.toggle("定时开启安静陪伴","quietSchedule",detail:"手动开启后会一直保持安静，关闭后恢复定时安排。"),
-            form.time("开始时间","quietStart",requires:["quietSchedule"]),
-            form.time("结束时间","quietEnd",requires:["quietSchedule"])],symbol:"moon",detail:"按本机时间执行，可跨天；开始和结束时间相同表示全天。")
+            form.conditional(form.time("开始时间","quietStart",requires:["quietSchedule"]),when:{$0.bool("quietSchedule")}),
+            form.conditional(form.time("结束时间","quietEnd",requires:["quietSchedule"]),when:{$0.bool("quietSchedule")})],symbol:"moon",detail:"按本机时间执行，可跨天；开始和结束时间相同表示全天。")
     }
 }
