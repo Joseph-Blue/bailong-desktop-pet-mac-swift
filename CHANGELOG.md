@@ -2,9 +2,9 @@
 
 每个版本只记录相较上一个正式 Release 的变化。完整开发迭代保留在 [开发分支变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/joseph/dev/CHANGELOG.md) 与 Git 历史。
 
-## [0.8.0-rc.12] — 2026-11-17
+## [0.8.0] — 2026-11-17
 
-本次将候选版合入本地 main，以下汇总相较正式版 0.7.4 的最终变化。重点是工作区状态、Token 用量、刘海收纳，以及窗口与动画稳定性。
+本版汇总相较 0.7.4 的变化，重点是工作区状态、Token 用量、刘海收纳，以及窗口与动画稳定性。
 
 ### 新增功能
 
@@ -38,8 +38,6 @@
 - **资源与开发入口**：环境检查、打包与素材导入共用资源清单，提供缺失项汇总、固定版本下载、进度显示与备份替换；修复开发程序按 `⌃C` 退出时的模态 RunLoop 阻塞。
 - **参考与来源**：感谢 [ruyeli](https://github.com/ruyeli/bailong-desktop-pet-english) 的 SDK 兼容参考，以及 [moon135246](https://github.com/moon135246/bailong-desktop-pet-optimization) 的动画缓存与性能优化参考；补齐 Lucide 与 Primer Octicons 的来源和许可。
 - **攻坚致谢**：感谢 AntiGravity agent（Gemini 4 Carbon 模型），在 Codex 冷启动首次发送延迟，以及窗口激活异常与持续掉帧的两轮攻坚中提供关键定位与修复。
-
-> *本次修复并不能证明 Gemini 4 Carbon 强于 Argon；当然，也不能证明它不强于 Argon。*
 
 ## [0.7.4] — 2026-11-07
 

@@ -6,7 +6,7 @@
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
-**当前源码：0.8.0-rc.12（候选版）。** 已发布版本与安装包见 [正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)。
+**当前源码：0.8.0。** 已发布版本与安装包见 [正式 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)。
 
 本轮增加工作区／Git 状态、Token 用量明细与刘海收纳，完善任务进展、窗口召回和动画性能。分类变化见 [CHANGELOG](CHANGELOG.md)。
 
