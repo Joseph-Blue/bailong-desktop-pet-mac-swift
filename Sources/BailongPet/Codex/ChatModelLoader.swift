@@ -15,7 +15,8 @@ final class ChatModelLoader {
             self.request = nil
             switch result {
             case .success(let (models,config)):
-                settings.loaded(models,configuredModel:config["model"] as? String,configuredEffort:config["model_reasoning_effort"] as? String)
+                settings.loaded(models,configuredModel:config["model"] as? String,configuredEffort:config["model_reasoning_effort"] as? String,
+                    configuredProvider:config["model_provider"] as? String ?? "openai",configuredServiceTier:config["service_tier"] as? String)
             case .failure(let error): self.directory = nil; settings.failed(error)
             }
         }

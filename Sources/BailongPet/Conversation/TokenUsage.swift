@@ -19,8 +19,10 @@ struct TokenUsage:Codable,Equatable {
         TokenUsage(input:input+other.input,cachedInput:cachedInput+other.cachedInput,output:output+other.output,total:total+other.total)
     }
     static func formatted(_ value:Int64) -> String {value.formatted(.number.locale(Locale(identifier:"en_US")))}
+    static func unit(_ value:Int64) -> String {value == 1 ? "Token" : "Tokens"}
+    static func amount(_ value:Int64,separator:String = " ") -> String {formatted(value)+separator+unit(value)}
     var signature:String {"\(input):\(cachedInput):\(output):\(total)"}
-    var details:String {"输入\t\(Self.formatted(input))\tTokens\n缓存命中\t\(Self.formatted(cachedInput))\tTokens\n输出\t\(Self.formatted(output))\tTokens"}
+    var details:String {zip(["输入","缓存命中","输出"],[input,cachedInput,output]).map {title,value in title+"\t"+Self.amount(value,separator:"\t")}.joined(separator:"\n")}
 }
 
 // 同一轮中的通知是会话累计快照；重复通知不累加，首次通知的 last 仅用于恢复起点。

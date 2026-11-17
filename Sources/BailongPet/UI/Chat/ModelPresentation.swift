@@ -16,6 +16,17 @@ enum ModelPresentation {
 
 // 两类会话共用原生模型字段的尺寸、字体和轮廓；交互能力由各子类决定。
 class ModelSummaryButton:NSButton {
+    func setSummary(_ text:String,lightning:Bool) {
+        title = text
+        setAccessibilityValue((lightning ? "快速模式 · " : "")+text)
+        guard lightning,let image = NSImage(systemSymbolName:"bolt",accessibilityDescription:"快速模式") else {return}
+        let font = font ?? .systemFont(ofSize:13)
+        let attachment = NSTextAttachment(); attachment.image = image
+        attachment.bounds = NSRect(x:0,y:font.descender,width:font.pointSize,height:font.pointSize)
+        let value = NSMutableAttributedString(attachment:attachment)
+        value.append(NSAttributedString(string:" "+text,attributes:[.font:font]))
+        attributedTitle = value
+    }
     override init(frame:NSRect) {
         super.init(frame:frame)
         bezelStyle = .rounded; font = .systemFont(ofSize:13)

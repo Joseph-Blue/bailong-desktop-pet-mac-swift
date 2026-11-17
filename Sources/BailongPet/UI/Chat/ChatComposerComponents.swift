@@ -44,14 +44,14 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
     func update(settings:DesktopReply.Settings?,error:String?) {
         if let settings {
             let effort = settings.effort.map(ChatModelSettings.effortName) ?? "未提供"
-            title = ModelPresentation.summary(model:settings.model,effort:effort)+" · 只读"
+            setSummary(ModelPresentation.summary(model:settings.model,effort:effort)+" · 只读",lightning:CodexServiceTier.hasLightning(settings.serviceTier))
             let source = settings.effortFromHistory ? "思考等级来自会话记录。" : ""
             hoverHelp = "沿用 Codex 原会话设置，当前只读。"+source+"\n模型："+settings.model+"\n思考等级："+effort
+            if let tier = settings.serviceTier {hoverHelp = (hoverHelp ?? "")+"\n速度档位："+CodexServiceTier.displayName(tier)}
         } else {
-            title = error ?? "正在读取 Codex 会话设置…"; hoverHelp = title
+            setSummary(error ?? "正在读取 Codex 会话设置…",lightning:false); hoverHelp = title
         }
         setAccessibilityLabel("Codex 模型与思考等级，只读")
-        setAccessibilityValue(title)
         setAccessibilityHelp(hoverHelp)
     }
 }

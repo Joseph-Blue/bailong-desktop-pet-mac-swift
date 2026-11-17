@@ -178,6 +178,9 @@ final class AboutPageController: NSViewController {
         link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
         link("GitHub 图标 · Primer Octicons（MIT）",url:"https://github.com/primer/octicons",to:text)
         link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
+
+        heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)
+        paragraph("感谢 AntiGravity agent（Gemini 4 Carbon 模型），在 Codex 冷启动首次发送延迟，以及窗口激活异常与持续掉帧的两轮攻坚中提供关键定位与修复。",to:text)
         return text
     }
 

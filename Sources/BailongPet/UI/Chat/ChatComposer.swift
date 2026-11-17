@@ -236,11 +236,7 @@ final class ChatComposer: NSObject {
         inputStatus.update(inline ? "" : statusText)
         inputStatus.measure(width:width-32)
         content.layoutSubtreeIfNeeded()
-        if let container = composerEditor.textContainer,let layout = composerEditor.layoutManager {
-            layout.ensureLayout(for:container)
-            let textHeight = layout.usedRect(for:container).height + composerEditor.textContainerInset.height*2+28
-            inputHeight.constant = min(260,max(140,textHeight.rounded(.up)))
-        }
+        inputHeight.constant = min(260,max(140,composerInput.contentHeight.rounded(.up)))
         let height = contentStack.fittingSize.height.rounded(.up)+32
         let size = NSSize(width:width,height:height)
         composer.contentMinSize = NSSize(width:width,height:min(height,420))
@@ -250,14 +246,13 @@ final class ChatComposer: NSObject {
     func refresh(font:NSFont,state:ChatInputState,conversations:[Conversation]) {
         latestState = state
         let external = state.kind == .project
-        composerEditor.font = font; status.font = font
+        composerEditor.update(font:font,editable:state.canEdit); status.font = font
         composerModel.font = font; composerInheritedSettings.font = font
         for button in composerFooterButtons + [retrySettings!] {button.configureFlexible(font:font)}
         composerButtonHeight?.constant = composerFooterButtons.map {$0.intrinsicContentSize.height}.max() ?? 28
         composerButton.isHidden = !recovery.isHidden; composerButton.emphasize()
         composerButton.title = "发送"
         composerButton.isEnabled = state.canSend(models:composerModel.settings)
-        composerEditor.isEditable = state.canEdit
         folderAction.isEnabled = state.canEdit && !external; composerNew.isEnabled = state.runningTitle == nil && !state.readOnly
         composerNew.isHidden = external; openCodex.isHidden = false
         composerModel.isEnabled = state.canEdit && !external; composerModelRow.isHidden = external

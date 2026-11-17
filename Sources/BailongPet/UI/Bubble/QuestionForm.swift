@@ -49,21 +49,12 @@ final class QuestionForm: NSView {
                 button.setAccessibilityLabel(oi < q.options.count ? q.options[oi].title : "其他"); radios.append(button)
             }
             let input = MessageEditor(frame:NSRect(x:0,y:0,width:width,height:80*scale))
+            let box = ChatViewLayout.inputBox(input)
             input.placeholder = q.options.isEmpty ? "输入回答" : "其他回答或补充说明"
-            input.font = .systemFont(ofSize:fontSize); input.textColor = .labelColor; input.backgroundColor = .textBackgroundColor
-            input.isRichText = false; input.allowsUndo = true
-            input.isAutomaticQuoteSubstitutionEnabled = false; input.isAutomaticDashSubstitutionEnabled = false
-            input.isVerticallyResizable = true; input.isHorizontallyResizable = false; input.autoresizingMask = [.width]
-            input.textContainer?.widthTracksTextView = true
-            input.textContainer?.containerSize = NSSize(width:width,height:CGFloat.greatestFiniteMagnitude)
-            input.textContainerInset = NSSize(width:6*scale,height:6*scale)
-            input.minSize = .zero; input.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
+            input.update(font:.systemFont(ofSize:fontSize),editable:true)
             input.setAccessibilityLabel(q.prompt+"：输入回答")
             input.onTextChange = { [weak self] in self?.changedInput(qi) }
             input.send = { [weak self] in self?.advance() }
-            let scroll = GutterScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
-            scroll.drawsBackground = false; scroll.documentView = input
-            let box = MessageInputBox(scroll:scroll,editor:input)
             inputs.append(input); editors.append(box); addSubview(box)
         }
         reflow(width:width)
@@ -87,7 +78,7 @@ final class QuestionForm: NSView {
     func updateAppearance(scale:CGFloat,fontSize:CGFloat) {
         guard self.scale != scale || self.fontSize != fontSize else {return}
         self.scale = scale; self.fontSize = fontSize; needsReflow = true
-        for input in inputs {input.font = .systemFont(ofSize:fontSize)}
+        for input in inputs {input.update(font:.systemFont(ofSize:fontSize),editable:enabled)}
     }
     func reflow(width:CGFloat) {
         let skippedPage = questions.indices.contains(currentIndex) && skipped.contains(questions[currentIndex].id)
@@ -132,10 +123,9 @@ final class QuestionForm: NSView {
         }
         let editor = editors[qi]; editor.frame = NSRect(x:inset,y:y,width:usable,height:80*scale)
         editor.layoutSubtreeIfNeeded()
-        let input = inputs[qi]; input.frame.size.width = editor.contentSize.width
-        input.textContainer?.containerSize.width = editor.contentSize.width
-        input.minSize.height = editor.contentSize.height
-        input.frame.size.height = max(input.frame.height,editor.contentSize.height); y += editor.frame.height+8*scale
+        let input = inputs[qi]
+        input.setFrameSize(NSSize(width:editor.contentSize.width,height:max(input.frame.height,editor.contentSize.height)))
+        y += editor.frame.height+8*scale
         frame.size = NSSize(width:width,height:y+5*scale)
         window?.invalidateCursorRects(for:self)
     }
@@ -174,7 +164,7 @@ final class QuestionForm: NSView {
     private func setEnabled(_ value:Bool) {
         enabled = value
         for radio in radios {radio.isEnabled = value}
-        for input in inputs {input.isEditable = value}
+        for input in inputs {input.update(font:.systemFont(ofSize:fontSize),editable:value)}
         for button in generated.compactMap({$0 as? NSButton}) {button.isEnabled = value && (button.title != "上一题" || currentIndex > 0)}
     }
 }

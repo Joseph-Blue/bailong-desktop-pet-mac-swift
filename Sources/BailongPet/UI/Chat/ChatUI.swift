@@ -279,10 +279,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         confirmDeleteConversation(selected)
     }
     private func resizeHistoryInput() {
-        guard let height = historyInputHeight, let container = historyEditor.textContainer, let layout = historyEditor.layoutManager else {return}
-        layout.ensureLayout(for:container)
-        let textHeight = layout.usedRect(for:container).height + historyEditor.textContainerInset.height * 2 + 26
-        height.constant = min(160,max(76,textHeight.rounded(.up)))
+        guard let height = historyInputHeight else {return}
+        height.constant = min(160,max(76,historyInput.contentHeight.rounded(.up)))
     }
     @objc private func modelStateChanged() {
         updateShortcuts()
@@ -405,7 +403,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func revealFolder() {onRevealFolder()}
     func clearFailure() {composerView.clearFailure()}
     func showFailure(_ failure:AppFailure,restore:@escaping () -> Void) {composerView.showFailure(failure,busy:busy,restore:restore)}
-    func submit(_ editor:NSTextView) {
+    func submit(_ editor:MessageEditor) {
         let entry:ChatEntry = editor === composerEditor ? .composer : .history
         guard let state = inputStates[entry],state.canSend(models:modelSettings(entry)),let key = state.conversation?.key else {return}
         let text = editor.string.trimmingCharacters(in:.whitespacesAndNewlines)
@@ -445,11 +443,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         sourceLabel.hoverHelp = selected.kind.title+" · 共 \(selected.turns.count) 轮记录\n"+selected.title
         workspaceStatus.update(conversation:selected,executing:historyState.executing,visible:historyVisible)
         if historyVisible {history.toolbar?.validateVisibleItems()}
-        historyInput.fillColor = .textBackgroundColor
         historyEditor.placeholder = selected.external ? "发送到这条 Codex 项目对话…" : historyPlaceholder
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
         historyModel.font = messageFont; inheritedSettings.font = messageFont
-        historyEditor.font = messageFont
+        historyEditor.update(font:messageFont,editable:historyState.canEdit)
         composerView.refresh(font:messageFont,state:composerState,conversations:self.conversations)
         historyButton.emphasize()
         historyModel.isEnabled = historyState.canEdit && !selected.external
@@ -464,7 +461,6 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if historyVisible {resizeHistoryInput()}
         modelStateChanged()
         composerEditor.placeholder = composerState.kind == .project ? "发送到这条 Codex 项目对话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
-        historyEditor.isEditable = historyState.canEdit
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}
         guard historyVisible else {return}

@@ -13,11 +13,23 @@ enum ChatViewLayout {
         view.translatesAutoresizingMaskIntoConstraints = false; parent.addSubview(view)
         NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo:parent.leadingAnchor,constant:inset),view.trailingAnchor.constraint(equalTo:parent.trailingAnchor,constant:-inset),view.topAnchor.constraint(equalTo:parent.topAnchor,constant:verticalInset ?? inset),view.bottomAnchor.constraint(equalTo:parent.bottomAnchor,constant:-(verticalInset ?? inset))])
     }
-    static func inputBox(_ editor: MessageEditor) -> MessageInputBox {
-        MessageInputBox(scroll:editorScroll(editor),editor:editor)
+    static func inputBox(_ editor:MessageEditor) -> MessageInputBox {
+        let scroll = editorScroll(editor,reserveReadingGutter:false)
+        editor.textContainerInset = NSSize(width:4,height:4)
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.update(font:.systemFont(ofSize:14),editable:true)
+        return MessageInputBox(scroll:scroll,editor:editor)
     }
-    static func editorScroll(_ editor: NSTextView) -> NSScrollView {
-        let scroll = GutterScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
+    static func editorScroll(_ editor: NSTextView,reserveReadingGutter:Bool = true) -> NSScrollView {
+        let scroll:NSScrollView = reserveReadingGutter ? GutterScrollView() : NSScrollView()
+        if !reserveReadingGutter {
+            // 编辑区跟随原生 clip 宽度；不为隐藏的覆盖式滚动条常驻预留阅读轨道。
+            let clip = VerticalReadingClipView(); clip.drawsBackground = false
+            scroll.contentView = clip
+            scroll.automaticallyAdjustsContentInsets = false
+            scroll.hasHorizontalScroller = false; scroll.horizontalScrollElasticity = .none
+        }
+        scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
         editor.frame = NSRect(x:0,y:0,width:300,height:100)
         editor.isVerticallyResizable = true; editor.isHorizontallyResizable = false; editor.autoresizingMask = [.width]
         editor.textContainer?.widthTracksTextView = true; editor.textContainer?.containerSize = NSSize(width:300,height:CGFloat.greatestFiniteMagnitude)

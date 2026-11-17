@@ -76,7 +76,8 @@ final class TranscriptActionBar:NSView {
         let valueTab = ceil(labelWidth)+12, unitTab = valueTab+ceil(numberWidth)+12
         paragraph.tabStops = [NSTextTab(textAlignment:.left,location:valueTab),NSTextTab(textAlignment:.left,location:unitTab)]
         paragraph.lineSpacing = 3
-        let heading = "本轮\t"+(content.usage.map {TokenUsage.formatted($0.total)+"\tTokens"} ?? (content.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
+        // 汇总是一句话；只有展开后的明细使用制表位，不让“缓存命中”的列宽撑开汇总。
+        let heading = "本轮  "+(content.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}")} ?? (content.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
         let canExpand = content.usage != nil || content.usageError != nil
         let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
         tokenDisclosure.scale = max(0.85,content.font.pointSize/12)
@@ -85,7 +86,7 @@ final class TranscriptActionBar:NSView {
         tokenDisclosure.expandable = canExpand
         tokenDisclosure.expanded = expanded
         tokenDisclosure.accessibilityTitle = "用量明细"
-        tokenDisclosure.attributedTitle = NSAttributedString(string:heading,attributes:[.font:font,.paragraphStyle:paragraph,.foregroundColor:primaryTextColor])
+        tokenDisclosure.attributedTitle = NSAttributedString(string:heading,attributes:[.font:font,.foregroundColor:primaryTextColor])
         tokenDisclosure.isHidden = content.ended == nil
         detail.attributedStringValue = NSAttributedString(string:content.usage?.details ?? content.usageError ?? "",attributes:[
             .font:font,.paragraphStyle:content.usage == nil ? NSParagraphStyle.default : paragraph,.foregroundColor:NSColor.secondaryLabelColor])
@@ -104,31 +105,39 @@ final class TranscriptActionBar:NSView {
             rowHeight = max(rowHeight,size.height); x += size.width+gap
             return rect
         }
-        if content.showsActions {place(NSSize(width:side*2+8,height:side)) {r in
-            copyButton.frame = NSRect(x:r.minX,y:r.minY,width:side,height:side)
-            codexButton.frame = NSRect(x:r.minX+side+8,y:r.minY,width:side,height:side)
-        }}
         if content.ended != nil {
             let natural = ceil(completion.attributedStringValue.size().width)+4
             let size = completion.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:min(width,natural),height:10000))
             let completionSlot = place(NSSize(width:min(width,natural),height:max(content.showsActions ? side : 0,size.height))) {r in
                 completion.frame = r.insetBy(dx:0,dy:max(0,(r.height-size.height)/2))
+                // NSTextField 的文字内边距不计入正文的左侧对齐线。
+                completion.frame.origin.x -= completion.cell!.drawingRect(forBounds:completion.bounds).minX
             }
-            let controlSize = tokenDisclosure.preferredSize(maxWidth:width)
+            let leadingInset = tokenDisclosure.textLeadingInset
+            let controlSize = tokenDisclosure.preferredSize(maxWidth:width+leadingInset)
             let tokenHeight = max(side,controlSize.height)
-            let tokenSlot = place(NSSize(width:controlSize.width,height:tokenHeight)) {rect in
+            let tokenSlot = place(NSSize(width:controlSize.width-leadingInset,height:tokenHeight)) {rect in
                 var controlY = rect.minY+(tokenHeight-controlSize.height)/2
                 if rect.minY == completionSlot.minY {
-                    tokenDisclosure.frame = NSRect(x:rect.minX,y:controlY,width:controlSize.width,height:controlSize.height)
+                    tokenDisclosure.frame = NSRect(x:rect.minX-leadingInset,y:controlY,width:controlSize.width,height:controlSize.height)
                     controlY += InlineStatusLayout.baseline(of:completion)-(tokenDisclosure.frame.minY+tokenDisclosure.firstLineBaseline)
                 }
-                tokenDisclosure.frame = NSRect(x:rect.minX,y:controlY,width:controlSize.width,height:controlSize.height)
+                tokenDisclosure.frame = NSRect(x:rect.minX-leadingInset,y:controlY,width:controlSize.width,height:controlSize.height)
             }
-            tokenOrigin = tokenSlot.minX+tokenDisclosure.textLeadingInset
+            tokenOrigin = tokenSlot.minX
         }
-        if placing,content.showsActions,content.ended != nil,completion.frame.minX > 0 {
-            InlineStatusLayout.align(copyButton,to:completion,side:side)
-            InlineStatusLayout.align(codexButton,to:completion,side:side)
+        if content.showsActions {
+            let actionsWidth = side*2+8
+            if x > 0 && x+actionsWidth > width {x = 0; y += rowHeight+4; rowHeight = 0}
+            x = max(x,width-actionsWidth)
+            let actionsSlot = place(NSSize(width:actionsWidth,height:side)) {r in
+                copyButton.frame = NSRect(x:r.minX,y:r.minY,width:side,height:side)
+                codexButton.frame = NSRect(x:r.minX+side+8,y:r.minY,width:side,height:side)
+            }
+            if placing,content.ended != nil,actionsSlot.minY == 0 {
+                InlineStatusLayout.align(copyButton,to:completion,side:side)
+                InlineStatusLayout.align(codexButton,to:completion,side:side)
+            }
         }
         var height = y+rowHeight
         if !detail.isHidden {

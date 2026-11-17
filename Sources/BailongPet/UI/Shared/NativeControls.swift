@@ -141,12 +141,18 @@ class HoverIconButton: NSButton {
             NSColor.secondaryLabelColor.withAlphaComponent(isHighlighted ? 0.24 : 0.14).setFill()
             let rect = bounds.insetBy(dx:1,dy:1)
             if let radius = hoverCornerRadius {NSBezierPath(roundedRect:rect,xRadius:radius,yRadius:radius).fill()}
-            else {NSBezierPath(ovalIn:rect).fill()}
+            else {
+                let side = max(0,min(rect.width,rect.height))
+                let circle = NSRect(x:rect.midX-side/2,y:rect.midY-side/2,width:side,height:side)
+                NSBezierPath(ovalIn:circle).fill()
+            }
         }
         super.draw(dirtyRect)
     }
 }
 final class BubbleCloseButton: HoverIconButton {
+    // 无边框图标的布局边界就是实际按钮边界，避免继承 bezel 的对齐补偿。
+    override var alignmentRectInsets:NSEdgeInsets {NSEdgeInsets(top:0,left:0,bottom:0,right:0)}
     var onClose:() -> Void = {}
     init() {
         super.init(symbol:"xmark",label:"关闭气泡")

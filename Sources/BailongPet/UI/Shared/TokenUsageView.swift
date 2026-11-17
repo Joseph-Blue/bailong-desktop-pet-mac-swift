@@ -54,7 +54,7 @@ final class QuotaTokenUsageView:NSView {
         disclosure.chevronTint = primaryTextColor.withAlphaComponent(0.82)
         disclosure.expanded = expanded
         disclosure.accessibilityTitle = "今日 Token 明细"
-        disclosure.attributedTitle = NSAttributedString(string:TokenUsage.formatted(usage.total)+" Tokens",attributes:[.font:amountFont,.foregroundColor:primaryTextColor])
+        disclosure.attributedTitle = NSAttributedString(string:TokenUsage.amount(usage.total),attributes:[.font:amountFont,.foregroundColor:primaryTextColor])
         disclosure.onToggle = { [weak self] in self?.onToggle() }
         detail.isHidden = !expanded
         let font = NSFont.monospacedDigitSystemFont(ofSize:12*fontScale,weight:.regular)

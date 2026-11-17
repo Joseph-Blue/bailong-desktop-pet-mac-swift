@@ -56,6 +56,11 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     var onOpen:(URL) -> Void = {_ in}
     var onStatusChange:() -> Void = {}
     var hasStatus:Bool {snapshot != nil || failure != nil || !changes.isHidden}
+    // 紧凑气泡以图标可见边缘对齐正文，保留按钮本身的点击与悬停留白。
+    var leadingContentInset:CGFloat {
+        guard compact,!git.isHidden,let cell = git.cell else {return 0}
+        return cell.imageRect(forBounds:NSRect(origin:.zero,size:git.intrinsicContentSize)).minX
+    }
     func configure(compact:Bool,fontSize:CGFloat,monochromeDirectory:Bool = false) {
         self.compact = compact
         spacing = compact ? 6 : 10
@@ -99,6 +104,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
             height.isActive = true; buttonHeights.append(height)
         }
         git.imagePosition = .imageLeading; git.imageScaling = .scaleProportionallyDown
+        git.alignment = .left
         git.target = self; git.action = #selector(openDetails); git.setAccessibilityLabel("Git 工作区状态")
         (git.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         git.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
