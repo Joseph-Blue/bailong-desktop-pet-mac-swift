@@ -1,9 +1,6 @@
 # 白龙桌宠Swift · Dev
 
-本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。安装稳定正式版请前往 [`main` 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
-
-- **当前候选版**为 [`0.8.1-rc.1`](VERSION)，源码基线为本地 `main` 的 `0.8.0`。
-- 候选版优化了会话进展、设置首页加载与工作区 Git 详情。完整变更见 [CHANGELOG](CHANGELOG.md#081-rc1--2026-11-18)，打包与验收进度见 [TODO](todo.md#081-rc1-交付验收)。
+本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。开发版本为 [`0.8.1-rc.1`](VERSION)，应用源码和构建脚本已与 0.8.0 对齐。[下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)
 
 本项目基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)（参考基线 `v0.5.1 / b102e73`），使用 Swift + AppKit 原生重写并独立维护。角色动画采用透明 HEVC（HEVC with Alpha）与 AVFoundation 解码，由 CPU／vImage 完成线性光缩放与色彩转换；界面采用原生 AppKit 分栏与液态玻璃材质。
 
@@ -22,7 +19,7 @@
 | 设置与外观 | 支持自定义称呼变量、台词试播、字号比例与强调色；前景文字按背景对比度动态适配明暗，配备无副作用的静态设置搜索索引与 JSON 导入导出。 | [设置与个性](docs/来源与架构.md#current-settings) |
 | 系统集成 | 支持指定显示器或随拖动跨屏、登录自启、随 Codex 桌面端启动、默认工作区管理与 GitHub 正式版更新检查。 | [构建与集成](docs/来源与架构.md#current-build) |
 
-默认构建 Apple Silicon（`arm64`），最低支持 macOS 14 Sonoma。基准机型为 13 英寸 M1 MacBook Air，目标机长时验收与 Intel 实机进度见 [TODO](todo.md)。
+默认构建 Apple Silicon（`arm64`），最低支持 macOS 14 Sonoma。基准机型为 13 英寸 M1 MacBook Air。
 
 ## 分支与发布规则
 
@@ -49,6 +46,8 @@
 ./run-dev.command --build-only     # 仅编译开发可执行文件（无需运行素材）
 ```
 
+**终端日志**随开发程序启动，默认显示 Codex 协议、会话状态和逐段动画。交互终端按 `M` 暂停或恢复日志，按 `A` 收起或展开逐段动画，无需回车。用 `./run-dev.command > bailong-monitor.log` 可将本次标准输出保存为纯文本。[终端监视说明](docs/开发资源获取.md#终端监视)
+
 - **素材导入**：默认仅补齐缺失文件；追加 `--replace-resources` 会先备份同名旧文件至 `.build/resource-import/` 再替换，追加 `--download-resources` 则直接拉取清单指定版本的素材包。
 - **SDK 档位**：构建脚本自动检测当前 SDK 并选择最高可用档位（可通过 `BAILONG_BUILD_PROFILE=auto|full|glass|plain` 或 `SDKROOT` 显式指定）。三档编译产物的最低运行系统均为 macOS 14：
   - `full`（SDK 27+）：启用液态玻璃（macOS 26+ 生效）与菜单图标强制显示（macOS 27+ 生效）；
@@ -58,23 +57,12 @@
 
 ## 源码结构与文档导航
 
-源码位于 `Sources/BailongPet/`，保持单一 Swift target：
-
-| 目录 | 职责 |
-| --- | --- |
-| `App/`、`Pet/` | 应用生命周期、桌宠状态机、透明 HEVC 流式播放、吸边几何与右键／状态栏菜单 |
-| `Conversation/` | 内置会话编排、外部会话输入管理、消息聚合、SQLite 历史存储与额度协调 |
-| `Codex/` | `app-server` 协议通信、桌面端只读数据库与 IPC 投影、审批／问答回执、Token 统计 |
-| `UI/Bubble/`、`UI/Chat/` | 消息气泡与卡片栈、非激活输入面板、工作区状态条、历史浏览与全文搜索界面 |
-| `UI/Shared/` | Markdown 与代码块渲染、`TokenDisclosureControl`、文件修改摘要、液态玻璃亮边与文字动效 |
-| `Settings/`、`Infrastructure/` | 偏好存储、9 个设置分类页面、静态搜索索引、Git 状态监听、启动项、更新检查与恢复面板 |
-
-- **协作与架构**：[AGENTS.md](AGENTS.md)（开发协作边界） · [来源与架构](docs/来源与架构.md)（现行行为约束与历史演进） · [维护 Skill](skills/bailong-macos-port/SKILL.md)
+- **协作与架构**：[AGENTS.md](AGENTS.md)（开发协作规则） · [来源与架构](docs/来源与架构.md)（源码入口、现行行为与历史演进） · [维护 Skill](skills/bailong-macos-port/SKILL.md)
 - **进度与记录**：[TODO](todo.md)（待办与验收清单） · [CHANGELOG](CHANGELOG.md)（完整开发变更） · [开发变更索引](docs/开发变更索引.md)
 
 ## 致谢与问题反馈
 
-- 感谢原作者 jingh12312-rgb（風-隐）：角色动画、主要交互设计灵感源自 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet)（`v0.5.1 / b102e73`）。
+- 感谢原作者 jingh12312-rgb（風-隐）提供角色动画与主要交互设计。
 - 感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 macOS SDK 兼容处理方案。
 - 感谢 [moon135246/bailong-desktop-pet-optimization](https://github.com/moon135246/bailong-desktop-pet-optimization) 在动作开头缓存与内存预算上的优化参考。
 - 图标许可原文见[第三方许可](第三方许可.txt)，也可从「设置 → 关于 → 来源与致谢」打开随应用附带的文本。
