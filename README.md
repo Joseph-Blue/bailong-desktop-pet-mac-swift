@@ -12,7 +12,7 @@ macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消�
   <a href=".github/images/task-progress.svg"><img src=".github/images/task-progress.svg" alt="桌宠与任务气泡" width="380"></a>
 </p>
 
-**当前源码：0.8.0。** 下文介绍当前源码的功能；下载包的版本与功能请查看对应的发布说明。
+**最新正式版：0.8.0。**
 
 ## 目录
 
