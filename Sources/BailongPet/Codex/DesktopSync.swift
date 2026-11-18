@@ -31,6 +31,13 @@ struct PublicSnapshot {
     var steeringMessages = [PublicUserMessage]()
     var resultText:String {GeneratedImageLink.appending(agentMessages.filter(\.isImage).map(\.text),to:final)}
     var key: String { actual+":"+turn }
+    var observedTurn: ObservedDesktopTurn {
+        ObservedDesktopTurn(key:key,threadID:logical,turnID:turn,status:status,start:Date(timeIntervalSince1970:started),
+            end:completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},title:title,
+            activity:attention.map {TaskActivity.waiting(approval:$0.kind == .approval)} ?? activity,
+            connectionFailed:!activeStatuses.contains(status) && status != "completed" && CodexErrorMessage(error)?.category == .network,
+            directory:cwd,fileEdits:fileEdits)
+    }
     var fingerprint:[String] {
         var result = steeringMessages.flatMap {[$0.id,$0.text]}
         result += fileEdits.flatMap(\.signature)
@@ -51,6 +58,14 @@ final class DesktopSync {
     private let approvalReader = DesktopApprovalReader()
     private var timer: Timer?
     private var reading = false, stopped = false, initial = true
+    private var monitorReadIssue:String?
+    private func recordReadIssue(_ issue:String?) {
+        guard issue != monitorReadIssue else {return}
+        monitorReadIssue = issue
+        guard let monitor = TerminalMonitor.active else {return}
+        if let issue {monitor.write(.desktop,issue,.warning)}
+        else {monitor.write(.desktop,"任务与审批同步恢复",.success)}
+    }
     private var lastTitleSync = Date.distantPast
     private var lastHistoryRead = Date.distantPast
     private var historyValues = [PublicSnapshot]()
@@ -66,9 +81,18 @@ final class DesktopSync {
         UserDefaults.standard.set(clearedBefore,forKey:"desktopHistoryClearedBefore")
         for key in running {chat.pet.taskEnded(key,status:"interrupted")}
         running.removeAll(); tracked.removeAll(); fingerprints.removeAll(); noticedAt.removeAll(); changedAt.removeAll()
-        chat.desktopTasks = []; chat.desktopTaskReadStatus = "正在同步 Codex 任务状态…"
+        chat.desktopSession.observedTurns = []; chat.desktopTaskReadStatus = "正在同步 Codex 任务状态…"
     }
     private(set) var diagnostics = "等待同步"
+    func reportMonitorState(to monitor:TerminalMonitor) {
+        let turns = chat.desktopSession.observedTurns.filter(\.active)
+        let phase = initial ? "等待首次同步" : "活跃轮次 \(turns.count)"
+        monitor.write(.desktop,"观察快照  ·  "+phase+(monitorReadIssue.map {"  ·  "+$0} ?? ""))
+        for turn in turns {
+            monitor.write(.desktop,"轮次#"+TerminalMonitor.tag(turn.turnID)+"  "+TerminalMonitor.status(turn.status)
+                + (turn.activity.map {"  ·  "+$0.monitorLabel} ?? ""))
+        }
+    }
     var status = "正在准备读取本机 Codex 的任务记录。\n读取成功后，这里会显示任务数量、当前状态和最近刷新时间。"
     init(chat: ChatController) {
         self.chat = chat
@@ -76,7 +100,7 @@ final class DesktopSync {
         timer = Timer.scheduledTimer(withTimeInterval:0.2,repeats:true) { [weak self] _ in self?.poll() }
     }
     private func forget(_ conversation:Conversation) {
-        chat.desktopTasks.removeAll {$0.threadID == conversation.threadID}
+        chat.desktopSession.observedTurns.removeAll {$0.threadID == conversation.threadID}
         let keys = tracked.filter {$0.value.logical == conversation.threadID || $0.value.actual == conversation.threadID}.map(\.key)
         for key in keys {
             tracked.removeValue(forKey:key); fingerprints.removeValue(forKey:key)
@@ -102,6 +126,7 @@ final class DesktopSync {
                 }
                 var values = self.historyValues.filter {!excluded.contains($0.logical) && !excluded.contains($0.actual)}
                 var approvalError:String?
+                var monitorIssue:String?
                 do {
                     let approvals = try self.approvalReader.read(values)
                     for index in values.indices {
@@ -115,15 +140,20 @@ final class DesktopSync {
                             values[index].attention = nil; values[index].alert = ""; values[index].status = "inProgress"
                         }
                     }
-                    if self.approvalReader.unavailableCount > 0 {approvalError = "\(self.approvalReader.unavailableCount) 个会话尚未收到 Codex 实时状态。"}
-                } catch {approvalError = error.localizedDescription}
+                    if self.approvalReader.unavailableCount > 0 {
+                        approvalError = "\(self.approvalReader.unavailableCount) 个会话尚未收到 Codex 实时状态。"
+                        monitorIssue = approvalError
+                    }
+                } catch {
+                    approvalError = error.localizedDescription
+                    monitorIssue = "读取实时审批失败  ·  "+TerminalMonitor.errorCode(error)
+                }
                 let titles = try DesktopHistoryReader.readTitles(titleIDs)
                 DispatchQueue.main.async {
                     self.reading = false; guard !self.stopped else {return}
+                    self.recordReadIssue(monitorIssue)
                     self.chat.desktopTaskReadStatus = nil
-                    self.chat.desktopTasks = values.filter {$0.isLatest && $0.started > self.clearedBefore && !self.chat.store.deletedThreads.contains($0.logical)}.map {
-                        BubbleTaskSummary(key:$0.key,title:$0.title,threadID:$0.logical,status:$0.status,start:Date(timeIntervalSince1970:$0.started),end:$0.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},turnID:$0.turn,activity:$0.attention.map {TaskActivity.waiting(approval:$0.kind == .approval)} ?? $0.activity,connectionFailed:!activeStatuses.contains($0.status) && $0.status != "completed" && CodexErrorMessage($0.error)?.category == .network)
-                    }
+                    self.chat.desktopSession.observedTurns = values.filter {$0.isLatest && $0.started > self.clearedBefore && !self.chat.store.deletedThreads.contains($0.logical)}.map(\.observedTurn)
                     if !titleIDs.isEmpty {self.lastTitleSync = Date()}
                     var changed = false
                     for conversation in self.chat.store.conversations where conversation.external && conversation.localTitle == nil && self.chat.store.recordsAutomatically {
@@ -141,7 +171,10 @@ final class DesktopSync {
                     else if displayChanged {self.chat.refresh()}
                 }
             }
-            catch {DispatchQueue.main.async {self.reading = false; self.chat.desktopTasks = []; self.chat.desktopTaskReadStatus = "Codex 当前任务状态读取失败"; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
+            catch {DispatchQueue.main.async {
+                self.reading = false
+                self.recordReadIssue("读取任务记录失败  ·  "+TerminalMonitor.errorCode(error))
+                self.chat.desktopSession.observedTurns = []; self.chat.desktopTaskReadStatus = "Codex 当前任务状态读取失败"; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
         }
     }
     private func accept(_ values: [PublicSnapshot]) -> Bool {
@@ -194,9 +227,24 @@ final class DesktopSync {
             if value.started > 0,turn.date != Date(timeIntervalSince1970:value.started) {
                 turn.date = Date(timeIntervalSince1970:value.started); changed = true
             }
-            if ["completed","failed","interrupted"].contains(value.status) {
+            if TaskOutcome.terminalStatuses.contains(value.status) {
                 let end = value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? turn.completedAt ?? Date()
                 if turn.completedAt != end {turn.completedAt = end; changed = true}
+            }
+            if let monitor = TerminalMonitor.active {
+                let context = {TerminalMonitor.context(conversation.key,turn:value.turn)}
+                if previous?.status != value.status {
+                    let level:TerminalMonitor.Level = value.status == "failed" ? .error : value.status == "completed" ? .success : .info
+                    monitor.write(.desktop,context()+"  观察到轮次状态  ·  "+TerminalMonitor.status(value.status),level)
+                }
+                if active,let activity = value.activity,previous?.activity?.monitorLabel != activity.monitorLabel {
+                    monitor.write(.desktop,context()+"  进展  ·  "+activity.monitorLabel,activity.outcome == .failed ? .error : .info)
+                }
+                if previous?.approvalID != value.approvalID || previousAttention != value.attention?.kind {
+                    if value.approval != nil {monitor.write(.approval,context()+"  外部  ·  收到实时审批请求")}
+                    else if let attention = value.attention {monitor.write(.approval,context()+"  外部  ·  "+(attention.kind == .approval ? "记录显示等待审批" : "记录显示等待回答"))}
+                    else if previousAttention != nil {monitor.write(.approval,context()+"  外部  ·  观察结果已无待处理请求")}
+                }
             }
             tracked[key] = value
             if previous == nil {noticedAt[key] = now}
@@ -265,16 +313,26 @@ final class DesktopSync {
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
                     }
                 }
-            } else if ["completed","failed","interrupted"].contains(value.status) {
+            } else if TaskOutcome.terminalStatuses.contains(value.status) {
                 running.remove(key)
                 if !turn.finished || (previous != nil && (previous?.fileEdits != value.fileEdits || previous?.tokenUsage != value.tokenUsage || previous?.tokenUsageError != value.tokenUsageError)) {
                     if !turn.finished {turn.finished = true; changed = true; chat.pet.taskEnded(key,status:value.status)}
                     let failure = value.status != "completed" && CodexErrorMessage(value.error) != nil ? AppFailure.codex(value.error) : nil
-                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status), body:failure?.message ?? TaskOutcome.body(status:value.status,error:value.error,final:value.resultText), kind:"task", thread:conversation.key,  resetText:true, purpose:value.status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,finished:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil} ?? Date(),status:value.status),messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits,completionFooter:TranscriptActions(id:turn.key,text:value.resultText,threadID:conversation.threadID,font:.systemFont(ofSize:13),status:turn.status,completedAt:value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},usage:turn.tokenUsage,usageError:turn.tokenUsageError),failure:failure)
+                    let completedAt = value.completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil}
+                    let body = failure?.message ?? TaskOutcome.body(status:value.status,error:value.error,final:value.resultText)
+                    chat.pet.say(chat.pet.preferences.taskResultLine(value.status),body:body,kind:"task",thread:conversation.key,
+                        resetText:true,purpose:value.status == "completed" ? .result : .attention,personalizeTitle:false,
+                        timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,
+                                     key:key,finished:completedAt ?? Date(),status:value.status),
+                        messageID:value.agentMessages.last(where:{$0.isFinal})?.id ?? "result",fileEdits:value.fileEdits,
+                        completionFooter:TurnCompletion(turn,completedAt:completedAt),failure:failure)
                 }
             }
         }
-        initial = false
+        if initial {
+            TerminalMonitor.active?.write(.desktop,"首次同步完成  ·  读取 \(values.count) 个轮次  ·  活跃 \(currentActive.count)",.success)
+            initial = false
+        }
         let present = Set(values.map{$0.key}), missing = running.subtracting(present)
         // 离开扫描范围的已结束轮次仅留在持久历史，不在观察器再留一份正文与指纹。
         let retained = present.union(running)
@@ -302,7 +360,8 @@ final class DesktopSync {
     private static func describeStatus(_ records: [PublicSnapshot], missing: Int) -> String {
         let counts = Dictionary(grouping:records,by:{$0.status}).mapValues(\.count)
         let working = ["pending","running","inProgress"].reduce(0) {$0+(counts[$1] ?? 0)}
-        let known: Set<String> = activeStatuses.union(["completed","failed","interrupted"])
+        let known: Set<String> = activeStatuses.union(TaskOutcome.terminalStatuses)
+        let stopped = TaskOutcome.stoppedStatuses.reduce(0) {$0 + (counts[$1] ?? 0)}
         let unknown = records.filter {!known.contains($0.status)}.count
         let conversations = Set(records.map(\.logical)).count
         var lines = [
@@ -313,7 +372,7 @@ final class DesktopSync {
             "等待你补充信息：\(counts["waitingForInput"] ?? 0) 条",
             "已完成：\(counts["completed"] ?? 0) 条",
             "已失败：\(counts["failed"] ?? 0) 条",
-            "已停止：\(counts["interrupted"] ?? 0) 条"
+            "已停止：\(stopped) 条"
         ]
         if unknown > 0 {lines.append("状态尚不明确：\(unknown) 条")}
         if missing > 0 {lines.append("另有 \(missing) 条此前仍在进行的任务暂时读不到，正在等待状态更新。")}

@@ -63,9 +63,65 @@ class AppTextView: NSTextView {
     override func menu(for event: NSEvent) -> NSMenu? {TextContextMenu.menu(for:self)}
 }
 
+// 使用自身 TextKit 排版与选择，避免 NSTextField 切换共享 field editor 时丢失制表位。
+final class SelectableRichText:AppTextView {
+    override init(frame:NSRect) {
+        let storage = NSTextStorage(), manager = NSLayoutManager()
+        let container = NSTextContainer(size:NSSize(width:1,height:CGFloat.greatestFiniteMagnitude))
+        storage.addLayoutManager(manager); manager.addTextContainer(container)
+        super.init(frame:frame,textContainer:container)
+        isEditable = false; isSelectable = true; isRichText = true; drawsBackground = false
+        isVerticallyResizable = false; isHorizontallyResizable = false; autoresizingMask = []
+        textContainerInset = .zero
+        self.textContainer?.lineFragmentPadding = 0
+        self.textContainer?.widthTracksTextView = false
+        self.textContainer?.heightTracksTextView = false
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    var attributedStringValue:NSAttributedString {
+        get {attributedString()}
+        set {if !attributedString().isEqual(to:newValue) {textStorage?.setAttributedString(newValue)}}
+    }
+    func height(for width:CGFloat) -> CGFloat {
+        guard let container = textContainer,let manager = layoutManager else {return 0}
+        container.containerSize = NSSize(width:max(1,width-2*textContainerInset.width),height:.greatestFiniteMagnitude)
+        manager.ensureLayout(for:container)
+        return ceil(manager.usedRect(for:container).maxY+2*textContainerInset.height)
+    }
+    var firstLineCenter:CGFloat {
+        guard let manager = layoutManager,manager.numberOfGlyphs > 0 else {return bounds.midY}
+        let line = manager.lineFragmentRect(forGlyphAt:0,effectiveRange:nil)
+        return textContainerOrigin.y+line.minY+manager.location(forGlyphAt:0).y-(font?.capHeight ?? 0)/2
+    }
+}
+
+// 多行输入和只读富文本共用同一外框，编辑器的焦点与键盘行为由各自入口管理。
+final class MessageTextBoxSurface: NSBox {
+    init(scroll: NSScrollView) {
+        super.init(frame:scroll.frame)
+        boxType = .custom
+        borderColor = .separatorColor
+        fillColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .textBackgroundColor : .white}
+        cornerRadius = 8; borderWidth = 0.5; contentViewMargins = NSSize(width:6,height:6)
+        scroll.borderType = .noBorder; scroll.focusRingType = .none; scroll.drawsBackground = false
+        if let text = scroll.documentView as? NSTextView {
+            text.drawsBackground = false
+            text.textContainerInset = NSSize(width:4,height:4)
+            text.textContainer?.lineFragmentPadding = 0
+        }
+        let content = contentView!
+        content.addSubview(scroll); scroll.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo:content.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:content.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo:content.topAnchor),scroll.bottomAnchor.constraint(equalTo:content.bottomAnchor)
+        ])
+    }
+    required init?(coder:NSCoder) {fatalError()}
+}
+
 // NSBox 会把 addSubview 重定向到 contentView；焦点层必须与 NSBox 同级。
 final class MessageInputBox: NSView {
-    private let surface = NSBox()
+    private let surface:MessageTextBoxSurface
     let scroll: NSScrollView
     private let editor:MessageEditor
     var contentHeight:CGFloat {editor.contentHeight+max(0,bounds.height-contentSize.height)}
@@ -76,15 +132,11 @@ final class MessageInputBox: NSView {
         return size
     }
     init(scroll:NSScrollView,editor:MessageEditor) {
-        self.scroll = scroll; self.editor = editor; super.init(frame:.zero)
-        surface.boxType = .custom; surface.borderColor = .separatorColor; surface.fillColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .textBackgroundColor : .white}
-        surface.cornerRadius = 8; surface.borderWidth = 0.5; surface.contentViewMargins = NSSize(width:6,height:6)
+        self.scroll = scroll; self.editor = editor
+        surface = MessageTextBoxSurface(scroll:scroll)
+        super.init(frame:.zero)
         addSubview(surface); surface.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([surface.leadingAnchor.constraint(equalTo:leadingAnchor,constant:4),surface.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-4),surface.topAnchor.constraint(equalTo:topAnchor,constant:4),surface.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-4)])
-        let content = surface.contentView!
-        scroll.borderType = .noBorder; scroll.focusRingType = .none
-        content.addSubview(scroll); scroll.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([scroll.leadingAnchor.constraint(equalTo:content.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:content.trailingAnchor),scroll.topAnchor.constraint(equalTo:content.topAnchor),scroll.bottomAnchor.constraint(equalTo:content.bottomAnchor)])
         EditorFocusRing.attach(to:self,editor:editor,radius:8)
     }
     required init?(coder:NSCoder) {fatalError()}

@@ -271,6 +271,14 @@ final class PetController: NSObject, NSMenuDelegate {
                 RecoveryWindow.resolve("animation-initialization")
                 self.startup?.orderOut(nil); self.startup = nil
                 // 像素、时间轴和清单校准一起切换，不能用新动作倍率绘制旧帧。
+                if TerminalMonitor.active?.showsAnimation == true {
+                    let previous = self.animation?.loadTiming == nil ? "起播" : TerminalMonitor.clip(self.current.id)
+                    var summary = previous+" → "+TerminalMonitor.clip(clip.id)
+                    if let stats = self.animation?.stream?.statistics(),stats.underflows > 0 {
+                        summary += "  ·  上段等帧 \(stats.underflows) 次，最长 "+TerminalMonitor.milliseconds(stats.longestUnderflow)
+                    }
+                    animation.loadTiming?.monitorTransition = summary
+                }
                 self.view.prepareTransition(to:animation.frames[0],clip:clip)
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id)
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
@@ -285,6 +293,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 if self.mode == "move" { self.planMotion(manual: true) }
                 self.greetOnFirstAppearance()
             case .failure(let error):
+                TerminalMonitor.active?.write(.animation,TerminalMonitor.clip(clip.id)+"  加载失败  ·  "+TerminalMonitor.errorCode(error),.error)
                 self.startup?.orderOut(nil); self.startup = nil
                 self.began = self.now
                 if self.animation == nil {
@@ -529,7 +538,7 @@ final class PetController: NSObject, NSMenuDelegate {
             : line ?? preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate")
         say(title,kind:"interaction",personalizeTitle:false,taskOverview:showsOverview)
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TurnCompletion? = nil,failure:AppFailure? = nil) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -545,10 +554,11 @@ final class PetController: NSObject, NSMenuDelegate {
             let identity = taskOverview ? "task-overview" : (timing?.key.map {key in (thread ?? "")+":"+key+":"+String(timing?.start?.timeIntervalSince1970 ?? 0)+":"+(messageID ?? "status")} ?? UUID().uuidString)
             let reply:(() -> Void)? = thread.flatMap {key in attentionAction ? nil : { [weak self] in self?.onReply(key) }}
             bubble.onCardLayout = { [weak self] in self?.placeBubble() }
-            bubble.present(BubbleCard(id:identity,title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
-                seconds:preferences.duration(purpose,text:body),thread:thread,purpose:purpose,
-                resetText:resetText,animateHeading:animateHeading,attentionAction:attentionAction,timing:timing,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter,failure:failure),select:selectCard)
+            let content = BubbleContent(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
+                animateHeading:animateHeading,timing:timing,conversation:thread,failure:failure)
+            bubble.present(BubbleCard(id:identity,content:content,purpose:purpose,resetText:resetText,
+                attentionAction:attentionAction,question:question,
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter),select:selectCard)
         }
         placeBubble()
     }
@@ -586,10 +596,10 @@ final class PetController: NSObject, NSMenuDelegate {
             return
         }
         guard !hidden,!composerVisible,!bubble.blocksProgressToast,!bubble.kind.hasPrefix("quota"),
-              preferences.bool("progressToastEnabled"),activity.visible,preferences.allows(.progress) else {return}
+              preferences.bool("progressToastEnabled"),activity.visible,content.heading.visible,preferences.allows(.progress) else {return}
         guard toastActivities[key] != snapshot else {return}
         toastActivities[key] = snapshot
-        progressToastKey = key; progressBubble.showProgressToast(activity,timing:timing,conversation:thread); placeBubble()
+        progressToastKey = key; progressBubble.showProgressToast(content,timing:timing,conversation:thread); placeBubble()
     }
     func placeBubble() {
         let anchor = bubbleAttachmentFrame
@@ -865,7 +875,7 @@ final class PetController: NSObject, NSMenuDelegate {
             resize(Int(preferences.number("petPercent")),Int(preferences.number("bubblePercent")))
             if !bubble.refreshAppearance(),settingsOpen {showSizePreview()}
         }
-        if !Set(keys).isDisjoint(with:["progressToastEnabled","showThinkingProgress","showToolProgress","hideToolFailures","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate"]) {progressBubble.hide()}
+        if !Set(keys).isDisjoint(with:["progressToastEnabled","showThinkingProgress","showToolProgress","hideToolFailures"]) {progressBubble.hide()}
         if keys.contains("progressToastSeconds") {progressBubble.refreshDuration()}
         if !Set(keys).isDisjoint(with:["petPercent","bubblePercent","messageFontSize","bubbleAspectEnabled","bubbleAspectRatio","bubbleMaterial","glassFollowsSystem","glassOpacity","bubbleMotion","appearanceMode"]) {_ = progressBubble.refreshAppearance(); placeBubble()}
         if keys.contains("preferredDisplay") {applyPreferredDisplay()}

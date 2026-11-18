@@ -26,8 +26,9 @@ final class BubbleTaskList: NSView {
     private var timer:Timer?
     private var overview:BubbleTaskOverview?
     private var showsTaskInfo = false
+    private var metadataLayoutDirty = false
+    private var renderedWidth:CGFloat = -1
     private var recentLimit = 0
-    private var progressTemplates = [String]()
     private var rows = [BubbleTaskRow]()
     var hasPresentedDetails:Bool {rows.contains {$0.hasPresentedDetails}}
     private var tick = 0
@@ -58,9 +59,16 @@ final class BubbleTaskList: NSView {
         }
         let showInfo = PetPreferences.shared.bool("taskInfoBarEnabled")
         let limit = Int(PetPreferences.shared.number("recentTaskCount"))
-        let templates = [PetPreferences.shared.statusLine("taskThinkingTemplate"),PetPreferences.shared.statusLine("taskToolTemplate"),PetPreferences.shared.statusLine("taskCommandTemplate"),PetPreferences.shared.statusLine("taskCommandCompletedTemplate")]
-        guard incoming != overview || limit != recentLimit || templates != progressTemplates || showInfo != showsTaskInfo || subviews.isEmpty else {return}
-        overview = incoming; showsTaskInfo = showInfo; recentLimit = limit; progressTemplates = templates
+        defer {
+            let visible = showInfo && window?.isVisible == true && !isHiddenOrHasHiddenAncestor
+            for row in rows {row.setMetadataVisible(visible && (!row.visibleRect.isEmpty || row.hasPresentedDetails))}
+            if let monitor = TerminalMonitor.active,window?.isVisible == true,!isHiddenOrHasHiddenAncestor {
+                for row in rows where row.task.active && !row.visibleRect.isEmpty {row.recordActivity(in:monitor)}
+            }
+        }
+        guard incoming != overview || limit != recentLimit || showInfo != showsTaskInfo || metadataLayoutDirty || renderedWidth != bounds.width || subviews.isEmpty else {return}
+        metadataLayoutDirty = false; renderedWidth = bounds.width
+        overview = incoming; showsTaskInfo = showInfo; recentLimit = limit
         let records = incoming.tasks; let previousRows = rows; subviews.filter {!($0 is BubbleTaskRow)}.forEach {$0.removeFromSuperview()}; rows = []
         var y:CGFloat = 0
         for (index,section) in [("正在执行的任务：",records.filter(\.active)),("近期执行结束的任务：",Array(records.filter {!$0.active}.prefix(limit)))].enumerated() {
@@ -75,9 +83,11 @@ final class BubbleTaskList: NSView {
             }
             for task in section.1 {
                 let row = previousRows.first(where:{$0.task.key == task.key && $0.task.start == task.start && $0.task.turnID == task.turnID}) ?? BubbleTaskRow(task:task,scale:scale)
+                row.onMetadataResize = { [weak self] in self?.metadataLayoutDirty = true }
                 row.update(task)
                 row.frame = NSRect(x:0,y:y,width:bounds.width,height:row.rowHeight)
-                addSubview(row); rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height+2*scale
+                if row.superview == nil {addSubview(row)}
+                rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height+2*scale
             }
         }
         for row in previousRows where !rows.contains(where:{$0 === row}) {row.stopMotion(); row.removeFromSuperview()}
@@ -86,7 +96,7 @@ final class BubbleTaskList: NSView {
     deinit {stop()}
 }
 
-private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
+private final class BubbleTaskRow:NSButton,LinkCursorControl {
     override var isFlipped:Bool {false}
     private(set) var task:BubbleTaskSummary
     let scale:CGFloat
@@ -96,17 +106,18 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     private let watch = NSImageView()
     private let stateIcon = NSImageView()
     private let jump = NSImageView()
-    private let changes = HoverIconButton(symbol:"doc.on.doc",label:"本轮文件修改")
-    private let popover = NSPopover()
-    private let popoverDismissal = PopoverDismissal()
-    private var metadataHeight:CGFloat {PetPreferences.shared.bool("taskInfoBarEnabled") && !task.fileEdits.isEmpty ? 22*scale : 0}
+    private var metadata:WorkspaceStatusView?
+    private var hasGit = false
+    var onMetadataResize:() -> Void = {}
+    private var metadataHeight:CGFloat {PetPreferences.shared.bool("taskInfoBarEnabled") && (hasGit || !task.fileEdits.isEmpty) ? 22*scale : 0}
     var rowHeight:CGFloat {32*scale+(task.activityLine == nil ? 0 : 20*scale)+metadataHeight}
-    var hasPresentedDetails:Bool {popover.isShown || changes.isHighlighted}
+    var hasPresentedDetails:Bool {metadata?.hasPresentedDetails == true}
     private var hoverArea:NSTrackingArea?
     private var hovered = false
     private var titleEffectStart = ProcessInfo.processInfo.systemUptime
     private var renderedSweep = Int.min
     private var renderedFrame = -1
+    private var monitoredActivity:String?
     private var needsRowLayout = true
     init(task:BubbleTaskSummary,scale:CGFloat) {
         self.task = task; self.scale = scale
@@ -119,40 +130,66 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
         activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = StatusTextColor.secondary
         activity.isHidden = task.activityLine == nil
-        changes.font = .monospacedSystemFont(ofSize:11*scale,weight:.semibold)
-        changes.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:11*scale,weight:.semibold))
-        changes.imagePosition = .imageLeading; changes.imageHugsTitle = true; changes.imageScaling = .scaleProportionallyDown
-        changes.hoverHelp = nil; changes.horizontalPadding = 4; changes.hoverCornerRadius = 4
-        changes.target = self; changes.action = #selector(showChanges); popover.delegate = self
-        for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity,changes] as [NSView] {addSubview(view)}
+        for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity] as [NSView] {addSubview(view)}
         jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:"在 Codex 中打开")
         jump.contentTintColor = .tertiaryLabelColor
         update(task)
     }
     func update(_ task:BubbleTaskSummary) {
         if self.task.title != task.title || self.task.active != task.active {titleEffectStart = ProcessInfo.processInfo.systemUptime}
+        let workspaceChanged = self.task.directory != task.directory || self.task.fileEdits != task.fileEdits || self.task.active != task.active
+        if self.task.directory != task.directory {hasGit = false}
         self.task = task
-        let editTitle = NSMutableAttributedString(string:"\(task.fileEdits.count)",attributes:[.font:changes.font!,.foregroundColor:StatusTextColor.secondary])
-        let lines = task.fileEdits.compactMap(\.lines)
-        if !lines.isEmpty {
-            editTitle.append(NSAttributedString(string:" ",attributes:[.font:changes.font!]))
-            editTitle.append(FileEditRendering.counts(.init(added:lines.reduce(0){$0+$1.added},removed:lines.reduce(0){$0+$1.removed}),font:changes.font!))
-            if lines.count < task.fileEdits.count {editTitle.append(NSAttributedString(string:" · 部分",attributes:[.font:changes.font!,.foregroundColor:StatusTextColor.secondary]))}
-        }
-        changes.attributedTitle = editTitle
+        if workspaceChanged {updateWorkspace()}
         name.stringValue = task.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         activity.stringValue = task.activityLine ?? ""; activity.isHidden = task.activityLine == nil
         activityIcon.isHidden = activity.isHidden
-        if metadataHeight == 0 {popover.close()}
         activityIcon.update(task.activity,pointSize:15*scale)
         let symbol = task.connectionFailed ? "wifi.slash" : task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
         stateIcon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
-        hoverHelp = [name.stringValue,task.activity?.text,"在 Codex 中打开"].compactMap {$0}.joined(separator:"\n")
+        setHoverHelp([name.stringValue,task.activity?.text].compactMap {$0}.joined(separator:"\n")) { [weak self] in
+            guard let self else {return false}
+            return self.name.hasTruncatedText || self.activity.textOverflows
+        }
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
         renderedSweep = Int.min; renderedFrame = -1; needsRowLayout = true
     }
-    func stopMotion() {popover.close(); activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle(); renderedSweep = Int.min; renderedFrame = -1}
+    func recordActivity(in monitor:TerminalMonitor) {
+        let label = activity.isHidden ? "无进展行" : task.activity?.monitorLabel ?? "无进展行"
+        guard monitoredActivity != label else {return}
+        let change = monitoredActivity.map {$0+" → "+label} ?? label
+        monitor.write(.bubble,"轮次#"+TerminalMonitor.tag(task.turnID ?? task.key)+"  任务概览  ·  "+change)
+        monitoredActivity = label
+    }
+    func setMetadataVisible(_ visible:Bool) {
+        guard visible != (metadata != nil) else {return}
+        if visible {
+            let bar = WorkspaceStatusView(frame:.zero)
+            bar.configure(compact:true,fontSize:11*scale)
+            bar.onStatusChange = { [weak self,weak bar] in
+                guard let self,let bar,self.metadata === bar,let present = bar.knownGitPresence else {return}
+                let previous = self.metadataHeight
+                self.hasGit = present
+                if previous != self.metadataHeight {self.needsRowLayout = true; self.onMetadataResize()}
+            }
+            metadata = bar; addSubview(bar)
+            layoutMetadata(); updateWorkspace()
+        } else {
+            metadata?.deactivate(); metadata?.removeFromSuperview(); metadata = nil
+        }
+    }
+    private func updateWorkspace() {
+        metadata?.update(directory:task.directory,context:task.key,turn:task.turnID,edits:task.fileEdits,executing:task.active,visible:true)
+    }
+    private func layoutMetadata() {
+        guard let metadata else {return}
+        let inset = 22*scale, width = max(0,bounds.width-inset)
+        metadata.isHidden = metadataHeight == 0
+        metadata.fitOverview(to:width)
+        metadata.frame = NSRect(x:inset,y:0,width:width,height:22*scale)
+    }
+    func stopMotion() {setMetadataVisible(false); activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle(); renderedSweep = Int.min; renderedFrame = -1}
     private func restoreTitle() {
         guard renderedSweep != -2 else {return}
         renderedSweep = -2
@@ -161,17 +198,13 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
     required init?(coder:NSCoder) {fatalError("init(coder:) has not been implemented")}
     override func hitTest(_ point:NSPoint) -> NSView? {
         guard let hit = super.hitTest(point) else {return nil}
-        return hit === changes || hit.isDescendant(of:changes) ? hit : self
+        var view:NSView? = hit
+        while let child = view,child !== self {
+            if child is NSButton {return child}
+            view = child.superview
+        }
+        return self
     }
-    @objc private func showChanges() {
-        if popover.isShown {popover.close(); return}
-        let content = TurnFileEditsDetails(edits:task.fileEdits,directory:task.directory)
-        _ = content.view; popover.contentViewController = content; popover.contentSize = content.preferredContentSize
-        popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
-        popover.show(relativeTo:changes.bounds,of:changes,preferredEdge:.maxY)
-        popoverDismissal.start(for:popover,anchor:changes)
-    }
-    func popoverDidClose(_ notification:Notification) {popoverDismissal.stop(); popover.contentViewController = nil}
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea {removeTrackingArea(hoverArea)}
@@ -225,10 +258,8 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl,NSPopoverDelegate {
         elapsed.textColor = textColor; watch.contentTintColor = textColor; stateIcon.contentTintColor = textColor
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
         let headingY = bounds.height-h, metadataHeight = self.metadataHeight
-        changes.isHidden = metadataHeight == 0 || task.fileEdits.isEmpty
-        let changesWidth = changes.isHidden ? 0 : changes.intrinsicContentSize.width
-        changes.frame = NSRect(x:bounds.width-changesWidth,y:0,width:changesWidth,height:metadataHeight)
         let iconSize = activityIcon.layoutSize, progressX = 22*scale
+        layoutMetadata()
         activityIcon.frame = NSRect(x:progressX,y:metadataHeight+(20*scale-iconSize.height)/2,width:iconSize.width,height:iconSize.height)
         activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:metadataHeight,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:20*scale)
         InlineStatusLayout.align(activityIcon,toLineIn:activity,font:activity.font!,side:iconSize.height,width:iconSize.width)

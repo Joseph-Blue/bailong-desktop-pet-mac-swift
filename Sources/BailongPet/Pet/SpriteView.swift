@@ -107,8 +107,16 @@ final class SpriteView: NSView, CAAnimationDelegate {
             pet.diagnostics?.record(frame.image)
         }
         // 起播首帧已提交时，最终 Animation 交接仍要登记这次加载的就绪时间。
-        if let animation = pet.animation, animation.loadTiming?.submittedAt == nil {
-            animation.loadTiming?.submittedAt = ProcessInfo.processInfo.systemUptime
+        if let animation = pet.animation,let timing = animation.loadTiming,timing.submittedAt == nil {
+            let submitted = ProcessInfo.processInfo.systemUptime
+            animation.loadTiming?.submittedAt = submitted
+            if let transition = timing.monitorTransition,let monitor = TerminalMonitor.active,monitor.showsAnimation,let handed = timing.handedAt {
+                let ms = TerminalMonitor.milliseconds
+                let stages = ["请求→就绪 "+ms(timing.readyAt-timing.requestedAt),
+                              "就绪→交接 "+ms(handed-timing.readyAt),"交接→图层 "+ms(submitted-handed)]
+                monitor.write(.animation,([transition]+stages).joined(separator:"  ·  "))
+                animation.loadTiming?.monitorTransition = nil
+            }
         }
         if window?.hasShadow == true {
             if shadowState != state {window?.invalidateShadow(); shadowState = state}

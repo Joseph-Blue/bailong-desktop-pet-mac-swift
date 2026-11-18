@@ -87,7 +87,6 @@ final class Bubble {
     var relatedConversation: String?
     var fileLinkDirectory: (() -> URL?)? {didSet {text.linkBaseDirectory = fileLinkDirectory}}
     private var currentBody = ""
-    private var truncatesProgressBody = false
     private var questionForm:QuestionForm?
     private var previousQuestion:ActionButton!
     private var skipQuestion:ActionButton!
@@ -96,6 +95,10 @@ final class Bubble {
     private var questionSize:NSSize?
     private var questionTaskKey:String?
     private var pendingAttention = false
+    private struct MonitoredPresentation:Equatable {
+        let conversation:String, taskKey:String, turn:String?, source:String, label:String
+    }
+    private var monitoredPresentation:MonitoredPresentation?
     private let resizeDelegate = QuestionResizeDelegate()
     var onQuestionSubmit: (([String:String], @escaping (Error?) -> Void) -> Void)?
     var onClose: () -> Void = {}
@@ -109,16 +112,15 @@ final class Bubble {
             (cardIndex.map {cards[$0].priority == .companion} ?? (purpose == .interaction || purpose == .preview)))
     }
     var blocksProgressToast:Bool {visible && (pendingAttention || questionForm != nil || submittingQuestion || isBrowsingCards)}
-    func showProgressToast(_ activity:TaskActivity,timing:TaskTiming,conversation:String? = nil) {
+    func showProgressToast(_ content:TaskActivity.ProgressToast,timing:TaskTiming,conversation:String? = nil) {
         onQuestionSubmit = nil; onQuestionsSkipped = nil
-        let content = activity.progressToast
         show(title:content.heading.title,body:content.body,kind:"progressToast",scale:preferences.number("bubblePercent")/100,
-             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,truncateBody:content.heading.kind == .tool,headingActivity:content.heading,conversation:conversation)
-        purpose = .progress; text.hoverHelp = content.body
+             seconds:preferences.number("progressToastSeconds"),animateHeading:true,timing:timing,headingActivity:content.heading,conversation:conversation)
+        purpose = .progress
     }
     func resolveQuestions(taskKey:String? = nil,form:QuestionForm? = nil) {
         let affected = cards.filter {card in
-            card.attentionAction && (taskKey == nil || card.timing?.key == taskKey) && (form == nil || card.form === form)
+            card.attentionAction && (taskKey == nil || card.content.timing?.key == taskKey) && (form == nil || card.form === form)
         }.map(\.id)
         let currentID = cardIndex.map {cards[$0].id}
         cardStore.remove {affected.contains($0.id)}
@@ -130,12 +132,12 @@ final class Bubble {
     }
     func removeActivity(taskKey:String) {
         let currentID = cardIndex.map {cards[$0].id}
-        cardStore.remove {$0.timing?.key == taskKey && $0.id.hasSuffix(":activity")}
+        cardStore.remove {$0.content.timing?.key == taskKey && $0.id.hasSuffix(":activity")}
         if currentID != nil && cardIndex == nil {hide()}
         else {updateCardNavigation()}
     }
     func discardCards(conversation:String? = nil) {
-        cardStore.remove {conversation == nil || $0.thread == conversation}
+        cardStore.remove {conversation == nil || $0.content.conversation == conversation}
         if cardIndex == nil {hide()}
         updateCardNavigation()
     }
@@ -189,14 +191,14 @@ final class Bubble {
         let card = cards[index]
         let changedApproval = approval?.request.identity != card.approval?.request.identity || approval?.request.details != card.approval?.request.details
         let changedCard = renderedCardID != card.id || changedApproval || !visible
-        questionForm = card.form; questionModels = card.form?.questions ?? card.question?.questions ?? []; questionTaskKey = card.timing?.key; questionSize = card.questionSize
+        questionForm = card.form; questionModels = card.form?.questions ?? card.question?.questions ?? []; questionTaskKey = card.content.timing?.key; questionSize = card.questionSize
         onQuestionSubmit = card.question?.submit; onQuestionsSkipped = card.question?.skip
         onDetails = card.details; onCodex = card.codex; approval = card.approval
         updateCardNavigation()
-        show(title:card.title,body:card.approval?.body ?? card.body,kind:card.kind,scale:preferences.number("bubblePercent")/100,seconds:preferences.duration(card.purpose,text:card.body),
-             details:card.thread != nil,resetText:card.resetText || changedCard,animateHeading:card.animateHeading,
-             attentionAction:card.attentionAction,questions:card.question?.questions ?? [],timing:card.timing,fromCard:true,preserveCountdown:refreshingAppearance,laysOutBody:!card.showsTaskOverview || !preferences.bool("showTaskOverview"),fileEdits:card.fileEdits,isUserInput:card.isUserInput,completionFooter:card.completionFooter,failure:card.failure,conversation:card.thread)
-        relatedConversation = card.thread; purpose = card.purpose
+        render(card.content,card:card,scale:preferences.number("bubblePercent")/100,
+               seconds:preferences.duration(card.purpose,text:card.content.body),details:card.content.conversation != nil,
+               resetText:card.resetText || changedCard,preserveCountdown:refreshingAppearance)
+        purpose = card.purpose
         renderedCardID = card.id
         cardStore.saveForm(questionForm,size:questionSize)
         if changedCard {scroll.showTop()}
@@ -208,7 +210,7 @@ final class Bubble {
             list.onResize = { [weak self,weak list] height in
                 guard let self,let list else {return}
                 self.scroll.setBody(list,height:height)
-                self.layout(bodyHeight:min(320*self.scale,height)); self.scroll.showTop(); self.onCardLayout()
+                self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout()
             }
             scroll.setBody(list,height:list.frame.height)
             layout(bodyHeight:min(320*scale,list.frame.height)); list.start(); scroll.showTop()
@@ -370,12 +372,15 @@ final class Bubble {
     private var buttonHeight:CGFloat {max(28*scale,actionButtons.map {$0.intrinsicContentSize.height}.max() ?? 0)}
     private var usesCustomAspect:Bool {preferences.bool("bubbleAspectEnabled") && kind != "progressToast" && !kind.hasPrefix("quota") && questionModels.isEmpty}
     private var aspectWidth:CGFloat {sqrt(320*240*preferences.number("bubbleAspectRatio"))*scale}
+    private var spinnerWidth:CGFloat {headingSpinner.isHidden ? 0 : InlineStatusLayout.brailleFieldSize(font:title.font!).width+6*scale}
+    private var headingPrefixWidth:CGFloat {headingActivity == nil ? 0 : spinnerWidth+headingIcon.layoutSize.width+6*scale}
     private var minimumLayoutWidth:CGFloat {
         if kind == "progressToast" {
-            if usesCustomAspect {return max(280*scale,aspectWidth)}
             let font = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
-            let longest = currentBody.components(separatedBy:"\n").map {($0 as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
-            return min(360*scale,max(280*scale,longest+52*scale))
+            let detailWidth = (currentBody as NSString).size(withAttributes:[.font:font]).width+52*scale
+            let elapsedWidth = taskStartedAt == nil ? 0 : elapsedGroupWidth+10*scale
+            let titleWidth = (plainHeading as NSString).size(withAttributes:[.font:title.font!]).width+64*scale+headingPrefixWidth+elapsedWidth
+            return min(360*scale,max(280*scale,titleWidth,detailWidth))
         }
         let gap = 8*scale
         var column = [details!,codexButton!,replyButton!,retryButton!,previousQuestion!,skipQuestion!,approvalReject!,approvalAllow!]
@@ -402,8 +407,7 @@ final class Bubble {
         let hasElapsed = taskStartedAt != nil
         let elapsedWidth = hasElapsed ? elapsedGroupWidth : 0
         elapsedLayoutWidth = elapsedWidth
-        let headingSpinnerWidth = headingSpinner.isHidden ? 0 : InlineStatusLayout.brailleFieldSize(font:title.font!).width+6*scale
-        let headingPrefix = headingActivity == nil ? 0 : headingSpinnerWidth+headingIcon.layoutSize.width+6*scale
+        let headingSpinnerWidth = spinnerWidth, headingPrefix = headingPrefixWidth
         let headingWidth = max(1,w-margin*2-32*scale-headingPrefix-(hasElapsed ? elapsedWidth+10*scale : 0))
         let font = title.font!
         let firstLineHeight = (font.ascender-font.descender+font.leading).rounded(.up)+4
@@ -429,12 +433,7 @@ final class Bubble {
         let chromeHeight = baseChromeHeight+progressHeight+workspaceHeight
         // 进展独占新增高度，包括启用宽高比时；不从原正文视口扣除。
         let desiredHeight:CGFloat = (usesCustomAspect ? max(baseChromeHeight+(bodyHeight > 0 ? 24*scale : 0),w/preferences.number("bubbleAspectRatio")) : baseChromeHeight+bodyHeight)+progressHeight+workspaceHeight
-        var h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale+workspaceHeight : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
-        if truncatesProgressBody {
-            let availableHeight = h < desiredHeight ? max(0,h-chromeHeight) : max(bodyHeight,h-chromeHeight)
-            let fittedHeight = fitToolProgressBody(height:availableHeight,width:bodyLayout.contentWidth)
-            h = min(h,chromeHeight+fittedHeight)
-        }
+        let h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale+workspaceHeight : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
         let targetTextHeight = ceil(max(0,h-chromeHeight))
         motion.onResize = { [weak self] size in
             guard let self else {return}
@@ -509,7 +508,21 @@ final class Bubble {
         layout(bodyHeight:min(320*scale,document.frame.height))
     }
 
-    func show(title heading: String, body: String = "", kind: String, scale: Double, seconds: Double = 4, details enabled: Bool = false, resetText: Bool = false, animateHeading: Bool = false, attentionAction: Bool = false, questions:[TaskQuestion] = [], timing:TaskTiming? = nil, fromCard:Bool = false,preserveCountdown:Bool = false,laysOutBody:Bool = true,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,truncateBody:Bool = false,completionFooter:TranscriptActions? = nil,failure:AppFailure? = nil,headingActivity:TaskActivity? = nil,conversation:String? = nil) {
+    func show(title:String,body:String = "",kind:String,scale:Double,seconds:Double = 4,details:Bool = false,
+              animateHeading:Bool = false,timing:TaskTiming? = nil,preserveCountdown:Bool = false,
+              failure:AppFailure? = nil,headingActivity:TaskActivity? = nil,conversation:String? = nil) {
+        let content = BubbleContent(title:title,body:body,kind:kind,animateHeading:animateHeading,
+                                    timing:timing,conversation:conversation,failure:failure)
+        render(content,scale:scale,seconds:seconds,details:details,preserveCountdown:preserveCountdown,
+               headingActivity:headingActivity)
+    }
+
+    private func render(_ message:BubbleContent,card:BubbleCard? = nil,scale:Double,seconds:Double,details enabled:Bool,
+                        resetText:Bool = false,preserveCountdown:Bool,headingActivity:TaskActivity? = nil) {
+        let kind = message.kind, heading = message.title, body = card?.approval?.body ?? message.body
+        let timing = message.timing, failure = message.failure
+        let attentionAction = card?.attentionAction == true, questions = card?.question?.questions ?? []
+        let laysOutBody = card?.showsTaskOverview != true || !preferences.bool("showTaskOverview")
         preparingDisplay = true
         defer {preparingDisplay = false; onVisibilityChange()}
         if kind == "quotaLoading" {quotaUsageExpanded = false}
@@ -518,7 +531,7 @@ final class Bubble {
         taskList?.stop(); taskList = nil
         userInputPrefixLength = 0
         if (attentionAction && !questions.isEmpty || !laysOutBody) && !text.string.isEmpty {text.releaseRenderedContent()}
-        if !fromCard {saveCardForm(); approval = nil; cardStore.clearSelection(); renderedCardID = nil; updateCardNavigation()}
+        if card == nil {saveCardForm(); approval = nil; cardStore.clearSelection(); renderedCardID = nil; updateCardNavigation()}
         let taskKey = timing?.key
         if !preserveCountdown {countdown.stop()}
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
@@ -526,7 +539,8 @@ final class Bubble {
         self.kind = kind; self.scale = scale; displayedFailure = failure
         self.headingActivity = kind == "progressToast" ? headingActivity : attentionAction ? .waiting(approval:timing?.status == "waitingForApproval" || approval != nil) : nil
         headingIcon.isHidden = self.headingActivity == nil
-        headingSpinner.isHidden = self.headingActivity == nil || self.headingActivity?.kind == .attention || self.headingActivity?.finished == true
+        // 盲文表示整轮仍在执行，单个工具的结束状态留给操作图标与结果角标。
+        headingSpinner.isHidden = kind != "progressToast" || self.headingActivity == nil || self.headingActivity?.kind == .attention || timing?.finished != nil
         headingIcon.update(self.headingActivity,pointSize:max(16,preferences.number("messageFontSize"))*scale)
         TaskActivityAppearance.apply(self.headingActivity,icon:headingIcon,visible:true)
         pendingAttention = attentionAction
@@ -550,18 +564,24 @@ final class Bubble {
         window.defaultButtonCell = nil
         activityTiming = timing
         configureElapsed(start:timing?.start,key:taskKey,finished:timing?.finished,status:timing?.status)
-        refreshTaskProgress(relayout:false)
+        refreshTaskProgress(relayout:false,recordPresentation:false)
         // 只有任务消息正文允许复制；互动、额度加载及一般提示不参与文本选择。
         text.isSelectable = kind == "task"
         if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
-        currentBody = body; relatedConversation = conversation
-        truncatesProgressBody = kind == "progressToast" && truncateBody
-        scroll.allowsScrolling = !truncatesProgressBody
+        currentBody = body; relatedConversation = message.conversation
+        let isToast = kind == "progressToast"
+        scroll.allowsScrolling = !isToast
+        let bodyLines = isToast ? 1 : 0
+        if let container = text.textContainer,container.maximumNumberOfLines != bodyLines {
+            container.maximumNumberOfLines = bodyLines
+            container.lineBreakMode = isToast ? .byTruncatingTail : .byWordWrapping
+        }
+        text.setHoverHelp(isToast && !body.isEmpty ? body : nil) { [weak text] in text?.hasTruncatedText == true }
         title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
-        title.maximumNumberOfLines = kind == "progressToast" ? 1 : 0
-        title.lineBreakMode = kind == "progressToast" ? .byTruncatingTail : .byWordWrapping
-        title.hoverHelp = kind == "progressToast" ? heading : nil
-        setHeading(heading, animated: animateHeading && timing?.finished == nil)
+        title.maximumNumberOfLines = isToast ? 1 : 0
+        title.lineBreakMode = isToast ? .byTruncatingTail : .byWordWrapping
+        title.setHoverHelp(isToast ? heading : nil) { [weak title] in title?.hasTruncatedText == true }
+        setHeading(heading, animated: message.animateHeading && timing?.finished == nil)
         refreshWorkspace(relayout:false)
         let bodyFont = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
         if let failure {onDetails = {failure.showDetails()}}
@@ -598,23 +618,22 @@ final class Bubble {
                 scroll.showTop()
             }
         } else if laysOutBody {
-            let rendered = approval.map {ApprovalText.render($0,font:bodyFont)} ?? (isUserInput ? MarkdownText.renderUserInput(body,font:bodyFont) : kind == "task" ? MarkdownText.render(body,font:bodyFont,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:bodyFont,.foregroundColor:NSColor.labelColor]))
+            let rendered = approval.map {ApprovalText.render($0,font:bodyFont)} ?? (card?.isUserInput == true ? MarkdownText.renderUserInput(body,font:bodyFont) : kind == "task" ? MarkdownText.render(body,font:bodyFont,lineSpacing:2,paragraphSpacing:6) : NSAttributedString(string:body,attributes:[.font:bodyFont,.foregroundColor:NSColor.labelColor]))
             let content = NSMutableAttributedString(attributedString:rendered)
-            if isUserInput && !body.isEmpty {
+            if card?.isUserInput == true && !body.isEmpty {
                 // 发言人标记仅在气泡排版时添加，原始提问与历史正文保持原文。
                 let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.foregroundColor,for:window.effectiveAppearance))!
                 let prefix = NSAttributedString(string:preferences.ownerName+"：",attributes:[.font:bodyFont,.foregroundColor:accent])
                 content.insert(prefix,at:0)
                 userInputPrefixLength = prefix.length
             }
-            if !fileEdits.isEmpty {
+            if let fileEdits = card?.fileEdits,!fileEdits.isEmpty {
                 if content.length > 0 {content.append(NSAttributedString(string:"\n\n",attributes:[.font:bodyFont]))}
                 content.append(FileEditRendering.render(fileEdits,font:bodyFont,id:timing?.key ?? renderedCardID ?? "standalone"))
             }
-            if let footer = completionFooter {
+            if let footer = card?.completionFooter {
                 if content.length > 0 {content.append(NSAttributedString(string:"\n",attributes:[.font:bodyFont]))}
-                content.append(TranscriptActions(id:footer.id,text:footer.text,threadID:footer.threadID,font:bodyFont,
-                    status:footer.status,completedAt:footer.completedAt,usage:footer.usage,usageError:footer.usageError,showsActions:false).placeholder())
+                content.append(TranscriptActions(footer,font:bodyFont,showsActions:false).placeholder())
             }
             let changed = text.setContent(content,reset:!same || resetText)
             layoutTextBody()
@@ -624,36 +643,11 @@ final class Bubble {
         refreshTaskProgress(relayout:false)
         if !taskProgress.isHidden {taskProgress.start()}
         if !preserveCountdown {startCountdown(attentionAction ? 0 : seconds)}
-        refreshStandalone = fromCard ? nil : { [weak self] in
+        refreshStandalone = card != nil ? nil : { [weak self] in
             guard let self else {return}
-            self.show(title:heading,body:body,kind:kind,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,
-                details:enabled,resetText:false,animateHeading:animateHeading,attentionAction:attentionAction,
-                questions:questions,timing:timing,preserveCountdown:true,fileEdits:fileEdits,isUserInput:isUserInput,truncateBody:truncateBody,completionFooter:completionFooter,failure:failure,headingActivity:headingActivity,conversation:conversation)
+            self.render(message,scale:self.preferences.number("bubblePercent")/100,seconds:seconds,details:enabled,
+                        preserveCountdown:true,headingActivity:headingActivity)
         }
-    }
-    @discardableResult private func fitToolProgressBody(height:CGFloat,width:CGFloat) -> CGFloat {
-        let attributes:[NSAttributedString.Key:Any] = [.font:NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale),.foregroundColor:NSColor.labelColor]
-        func measure(_ body:String) -> CGFloat {
-            text.setContent(NSAttributedString(string:body,attributes:attributes))
-            return text.contentHeight(for:width)
-        }
-        var fittedHeight = measure(currentBody)
-        if fittedHeight > height {
-            let source = currentBody as NSString
-            var low = 0, high = source.length, fitted = "..."
-            while low <= high {
-                let middle = (low+high)/2
-                let end = middle < source.length ? source.rangeOfComposedCharacterSequence(at:middle).location : middle
-                let candidate = source.substring(to:end).trimmingCharacters(in:.whitespacesAndNewlines)+"..."
-                if measure(candidate) <= height {fitted = candidate; low = middle+1}
-                else {high = middle-1}
-            }
-            fittedHeight = measure(fitted)
-        }
-        let result = min(height,fittedHeight)
-        scroll.setBody(text,height:result)
-        scroll.showTop()
-        return result
     }
     private func layoutTextBody() {
         let naturalHeight = text.contentHeight(for:bodyLayout.contentWidth)
@@ -663,8 +657,14 @@ final class Bubble {
     }
     private func submitApproval(_ allow:Bool) {
         guard let form = approval,form.ready,!allow || form.request.canAllow else {return}
+        let context = TerminalMonitor.active.flatMap { _ in relatedConversation.map {TerminalMonitor.context($0,turn:form.request.turn)} }
+        if let context {TerminalMonitor.active?.write(.approval,context+"  外部  ·  "+(allow ? "提交允许" : "提交拒绝"))}
         form.isSubmitting = true; renderCard()
         form.request.submit(allow:allow) { [weak self,weak form] error in
+            if let context {
+                if let error {TerminalMonitor.active?.write(.approval,context+"  外部审批未确认  ·  "+TerminalMonitor.errorCode(error),.warning)}
+                else {TerminalMonitor.active?.write(.approval,context+"  外部审批已确认",.success)}
+            }
             guard let self,let form else {return}
             form.isSubmitting = false
             if let error {form.error = error.localizedDescription}
@@ -744,7 +744,7 @@ final class Bubble {
               activityTiming?.key == timing.key,activityTiming?.start == timing.start else {return false}
         refreshTaskProgress(); return true
     }
-    private func refreshTaskProgress(relayout:Bool = true) {
+    private func refreshTaskProgress(relayout:Bool = true,recordPresentation:Bool = true) {
         let activity:TaskActivity?
         // 外部 key 包含会话与轮次；内置 activityKey 是真实轮次身份，再核对开始时间。
         // 仅任务主气泡显示，额度、2 秒进展小气泡与审批／问卷不加这一行。
@@ -762,12 +762,28 @@ final class Bubble {
         let wasHidden = taskProgress.isHidden
         taskProgress.font = .systemFont(ofSize:11*scale*preferences.number("messageFontSize")/13)
         taskProgress.stringValue = activity?.line ?? ""
-        taskProgress.hoverHelp = activity?.text
+        taskProgress.setHoverHelp(activity?.text) { [weak taskProgress] in taskProgress?.textOverflows == true }
         taskProgress.isHidden = taskProgress.stringValue.isEmpty
         taskProgressIcon.isHidden = taskProgress.isHidden
         let previousIconSize = taskProgressIcon.layoutSize
         taskProgressIcon.update(activity,pointSize:max(15*scale,taskProgress.font!.pointSize*15/11))
         TaskActivityAppearance.apply(activity,icon:taskProgressIcon,text:taskProgress,visible:visible && !taskProgress.isHidden)
+        if recordPresentation,visible,let monitor = TerminalMonitor.active {
+            let shown = headingActivity ?? activity
+            if let timing = activityTiming,let key = timing.key,let conversation = relatedConversation {
+                let source = pendingAttention ? "待处理卡" : kind == "progressToast" ? "短进展" : "主气泡"
+                let turn = key == "own" ? timing.activityKey : key.split(separator:":").last.map(String.init)
+                let label = shown?.monitorLabel ?? timing.status.map(TerminalMonitor.status) ?? "无进展行"
+                let next = MonitoredPresentation(conversation:conversation,taskKey:key,turn:turn,source:source,label:label)
+                if next != monitoredPresentation {
+                    var change = label
+                    if let old = monitoredPresentation,old.conversation == conversation,old.taskKey == key,
+                       old.turn == turn,old.label != label {change = old.label+" → "+label}
+                    monitor.write(.bubble,TerminalMonitor.context(conversation,turn:turn)+"  "+source+"  ·  "+change)
+                    monitoredPresentation = next
+                }
+            } else {monitoredPresentation = nil}
+        }
         if taskProgress.isHidden {taskProgress.stop()}
         else if visible {taskProgress.start()}
         if relayout,(wasHidden != taskProgress.isHidden || previousIconSize != taskProgressIcon.layoutSize),visible {
@@ -897,7 +913,7 @@ final class Bubble {
             let paragraph = NSMutableParagraphStyle()
             paragraph.tabStops = [NSTextTab(textAlignment:.left,location:resetTab)]
             let line = QuotaPresentation.resetDateText(date)+"\t"+QuotaPresentation.countdown(until:date,now:now)
-            let view = TranscriptTokenText(frame:.zero)
+            let view = SelectableRichText(frame:.zero)
             view.textContainer?.lineFragmentPadding = 2
             view.font = resetFont
             view.attributedStringValue = NSAttributedString(string:line,attributes:[.font:resetFont,.foregroundColor:Self.quotaResetTextColor,.paragraphStyle:paragraph])
@@ -927,8 +943,8 @@ final class Bubble {
                 }
                 continue
             }
-            let headingFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
             let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
+            let headingFont = NSFont.systemFont(ofSize:row.subtitle == nil ? amountFont.pointSize : 12*fontScale,weight:.medium)
             // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
             // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
             let heading = NSTextField(labelWithString:row.title); heading.font = headingFont; heading.textColor = .labelColor
@@ -985,21 +1001,26 @@ final class Bubble {
             y += 12*scale
         }
         if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
-        let management = SubscriptionManagementButton(management:overview.management,font:.systemFont(ofSize:12*fontScale))
+        let actionFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
+        let actionSymbol = NSImage.SymbolConfiguration(pointSize:11*fontScale,weight:.semibold)
+        let management = SubscriptionManagementButton(management:overview.management,font:actionFont)
+        management.symbolConfiguration = actionSymbol
         let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
         if let refresh {
-            refresh.font = .systemFont(ofSize:12*fontScale,weight:.medium)
+            refresh.font = actionFont
             refresh.image = NSImage(systemSymbolName:"arrow.clockwise",accessibilityDescription:nil)?
-                .withSymbolConfiguration(.init(pointSize:11*fontScale,weight:.semibold))
+                .withSymbolConfiguration(actionSymbol)
             refresh.imagePosition = .imageLeading
             refresh.keepsAccentWhenInactive = true
             refresh.emphasize()
         }
-        let actionHeight = max(26*scale,management.intrinsicContentSize.height,refresh?.intrinsicContentSize.height ?? 0)
-        management.frame = NSRect(x:0,y:y,width:min(width,management.intrinsicContentSize.width+12*scale),height:actionHeight)
+        let managementSize = management.intrinsicContentSize, refreshSize = refresh?.intrinsicContentSize ?? .zero
+        let actionHeight = max(26*scale,managementSize.height,refreshSize.height)
+        let refreshWidth = min(width,refreshSize.width)
+        let managementWidth = max(0,min(managementSize.width,width-refreshWidth))
+        management.frame = NSRect(x:0,y:y,width:managementWidth,height:actionHeight)
         content.addSubview(management)
         if let refresh {
-            let refreshWidth = refresh.intrinsicContentSize.width
             refresh.frame = NSRect(x:width-refreshWidth,y:y,width:refreshWidth,height:actionHeight)
             content.addSubview(refresh)
         }
@@ -1080,5 +1101,5 @@ final class Bubble {
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
+    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
 }

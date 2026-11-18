@@ -6,6 +6,32 @@ struct TaskActivity:Equatable {
         case tool, command, read, search, listFiles, edit, webSearch, webOpen, webFind
         case imageGeneration, imageView, compaction, plan, collaboration, waiting, review
         case document, spreadsheet, presentation, mail, calendar, code
+        var monitorName:String {
+            switch self {
+            case .tool:return "工具调用"
+            case .command:return "运行命令"
+            case .read:return "读取文件"
+            case .search:return "搜索内容"
+            case .listFiles:return "列出文件"
+            case .edit:return "修改文件"
+            case .webSearch:return "搜索网页"
+            case .webOpen:return "打开网页"
+            case .webFind:return "页内查找"
+            case .imageGeneration:return "生成图片"
+            case .imageView:return "查看图片"
+            case .compaction:return "压缩上下文"
+            case .plan:return "更新计划"
+            case .collaboration:return "协调子任务"
+            case .waiting:return "等待子任务"
+            case .review:return "代码审查"
+            case .document:return "文档操作"
+            case .spreadsheet:return "表格操作"
+            case .presentation:return "演示文稿操作"
+            case .mail:return "邮件操作"
+            case .calendar:return "日历操作"
+            case .code:return "代码工具"
+            }
+        }
     }
     enum Outcome:String {
         case failed, declined, cancelled, interrupted
@@ -17,12 +43,14 @@ struct TaskActivity:Equatable {
         }
     }
     // 共用折叠进度组摘要；短气泡另保留当前操作的公开细节。
+    enum CommandField:Equatable {case read(String), folder(String), query(String), text(String)}
     struct GroupHeader:Equatable {
         var title:String
         var kind:Kind = .tool
         var operation:ToolOperation = .tool
         var finished = false
         var outcome:Outcome? = nil
+        var subject:CommandField? = nil
     }
     var groupHeader:GroupHeader? = nil
     var groupHeaderHidingToolFailures:GroupHeader? = nil
@@ -34,33 +62,78 @@ struct TaskActivity:Equatable {
         return .init(title:header.title,kind:header.kind,finished:header.finished,
                      toolOperation:header.operation,outcome:header.outcome)
     }
-    // 只比较实际呈现的台词、正文和图标状态，不带入未显示的组摘要或原始长文本。
+    // 同轮次按公开标题、补充细节及图标状态去重。
     struct ProgressToast:Equatable {
         let heading:TaskActivity
         let body:String
     }
     var progressToast:ProgressToast {
-        var parts = [String](), seen = Set<String>()
-        func append(_ value:String) {
-            let text = value.replacingOccurrences(of:"**",with:"").trimmingCharacters(in:.whitespacesAndNewlines)
-            let key = text.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
-            if !key.isEmpty,seen.insert(key).inserted {parts.append(text)}
-        }
         let group = groupActivity
-        if displayedGroupHeader != nil,group.visible {append(group.line)}
-        append(actionTitle)
-        append(displayDetail)
-        let heading = TaskActivity(title:displayTitle,kind:kind,finished:finished,toolOperation:toolOperation,statusSymbol:statusSymbol,outcome:outcome)
-        return .init(heading:heading,body:parts.joined(separator:"\n"))
+        let heading = TaskActivity(title:group.line,kind:group.kind,finished:group.finished,toolOperation:group.toolOperation,
+                                  statusSymbol:group.statusSymbol,outcome:group.outcome)
+        let headline = heading.title
+        guard let header = displayedGroupHeader,header.subject != nil || headline != line else {return .init(heading:heading,body:"")}
+        var seen = Set(headline.components(separatedBy:" · "))
+        var details = [String]()
+        func append(_ value:String) {
+            let text = value.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
+            guard !text.isEmpty,seen.insert(text).inserted else {return}
+            details.append(text)
+        }
+        if let outcome,group.outcome != outcome {append(title)}
+        if !commandToastDetails.isEmpty {
+            for field in commandToastDetails where field != header.subject {
+                switch field {
+                case .read(let path):
+                    let name = (path as NSString).lastPathComponent
+                    if header.subject == .read(name) {
+                        append((path as NSString).deletingLastPathComponent)
+                    } else {append(path)}
+                case .query(let query):append("「"+query+"」")
+                case .folder(let text),.text(let text):append(text)
+                }
+            }
+        } else {
+            for raw in displayDetail.split(whereSeparator:{$0.isNewline}) {
+                if kind == .reasoning {
+                    let line = raw.trimmingCharacters(in:.whitespaces)
+                    if line.hasPrefix("<!--") {continue}
+                    let text = (Self.markdownHeading(line) ?? line).replacingOccurrences(of:"**",with:"")
+                        .split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
+                    if text == headline {continue}
+                    if headline.hasSuffix("…"),Self.short(text) == headline {
+                        append(String(text.dropFirst(headline.count-1)))
+                    } else if !headline.isEmpty,text.hasPrefix(headline) {
+                        let rest = text.dropFirst(headline.count)
+                        if let first = rest.first,first.isWhitespace || "：:，,。—".contains(first) {
+                            append(String(rest.drop(while:{$0.isWhitespace || "：:，,。—".contains($0)})))
+                        } else {append(text)}
+                    } else {append(text)}
+                } else {append(String(raw))}
+            }
+        }
+        return .init(heading:heading,body:details.joined(separator:" · "))
     }
     let title:String
     var detail:String = ""
     var kind:Kind = .tool
     var finished = false
-    var templateKey:String? = nil
     var toolOperation:ToolOperation = .tool
     var statusSymbol:String? = nil
     var outcome:Outcome? = nil
+    var commandToastDetails = [CommandField]()
+    // 终端只显示活动类别和结果。标题、命令、路径和工具参数属于界面正文。
+    var monitorLabel:String {
+        let label:String
+        switch kind {
+        case .reasoning:label = "思考"
+        case .reply:label = "正在回复"
+        case .tool:label = toolOperation.monitorName+(finished && outcome == nil ? "结束" : "")
+        case .status:label = isReconnecting ? "正在重连" : "状态提示"
+        case .attention:label = statusSymbol == "hand.raised" ? "等待审批" : "等待回答"
+        }
+        return outcome.map {label+"（"+$0.label+"）"} ?? label
+    }
     static func waiting(approval:Bool) -> TaskActivity {
         .init(title:approval ? "等待批准" : "等待回答",kind:.attention,statusSymbol:approval ? "hand.raised" : "questionmark.bubble")
     }
@@ -86,7 +159,7 @@ struct TaskActivity:Equatable {
     }
     var symbolName:String {
         switch kind {
-        case .reasoning:return "atom"
+        case .reasoning:return "lightbulb.max"
         case .reply:return "text.bubble"
         case .status,.attention:return statusSymbol ?? "exclamationmark.triangle"
         case .tool:
@@ -116,11 +189,6 @@ struct TaskActivity:Equatable {
             }
         }
     }
-    var displayTitle:String {
-        if let templateKey {return PetPreferences.shared.statusLine(templateKey)}
-        return finished || kind == .reply || kind == .status || kind == .attention ? title : PetPreferences.shared.statusLine(kind == .reasoning ? "taskThinkingTemplate" : "taskToolTemplate")
-    }
-    var actionTitle:String {kind == .tool && (outcome != nil || (!finished && templateKey == nil)) ? title : ""}
     var line:String {
         // 跑马灯使用公开摘要和操作状态，不使用气泡标题的个性台词。
         let detail = displayDetail
@@ -245,9 +313,7 @@ struct TaskActivity:Equatable {
         else if type == "enteredReviewMode" {title = "已进入代码审查"}
         else if type == "exitedReviewMode" {title = "代码审查已结束"}
         else {title = (succeeded ? "已" : "正在")+action}
-        let template:String? = outcome == .failed ? "taskWarningTemplate" : outcome != nil ? nil :
-            type == "commandExecution" ? (ended ? "taskCommandCompletedTemplate" : "taskCommandTemplate") : nil
-        return .init(title:title,detail:detail,finished:ended || type == "enteredReviewMode" || type == "exitedReviewMode",templateKey:template,toolOperation:operation,outcome:outcome)
+        return .init(title:title,detail:detail,finished:ended || type == "enteredReviewMode" || type == "exitedReviewMode",toolOperation:operation,outcome:outcome)
     }
     static func from(item:[String:Any]) -> TaskActivity? {
         var status = item["status"] as? String
@@ -259,21 +325,44 @@ struct TaskActivity:Equatable {
                     actions:item["commandActions"] as? [[String:Any]] ?? [],paths:(item["changes"] as? [[String:Any]] ?? []).compactMap {$0["path"] as? String},
                     text:item["text"] as? String ?? "",webAction:item["action"] as? [String:Any] ?? [:])
     }
-    static func current(items:[[String:Any]],replyTemplateKey:String = "taskReplyTemplate") -> TaskActivity? {
-        var result:TaskActivity?, runningTool:TaskActivity?
-        for item in items {
-            let type = item["type"] as? String ?? ""
-            if type == "agentMessage" {result = .init(title:"正在回复",kind:.reply,templateKey:replyTemplateKey); continue}
-            guard let next = from(item:item) else {continue}
-            if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = next}
-            // 连续的空 reasoning 项不擦掉此前同阶段已公开的摘要；工具/回复切换仍改变状态。
-            if next.kind == .reasoning,next.detail.isEmpty,result?.kind == .reasoning,!((result?.detail.isEmpty) ?? true) {continue}
-            result = next
+    private static func commandToastDetails(_ item:[String:Any]) -> [CommandField] {
+        guard item["type"] as? String == "commandExecution",let actions = item["commandActions"] as? [[String:Any]] else {return []}
+        var fields = [CommandField]()
+        for action in actions.prefix(3) {
+            let path = action["path"] as? String ?? ""
+            switch action["type"] as? String {
+            case "read":fields.append(.read(short(path.isEmpty ? action["name"] as? String ?? "" : path)))
+            case "listFiles":fields.append(.folder(short(path)))
+            case "search":
+                if let query = action["query"] as? String,!query.isEmpty {fields.append(.query(short(query)))}
+                fields.append(.folder(short(path)))
+            default:
+                let command = commandSummary(action["command"] as? String)
+                fields.append(.text(command.isEmpty ? commandSummary(item["command"] as? String) : command))
+            }
         }
-        var activity = runningTool ?? result
-        activity?.groupHeader = currentGroupHeader(items:items)
+        if actions.count > 3 {fields.append(.text("另有 \(actions.count-3) 项"))}
+        return fields
+    }
+    static func current(items:[[String:Any]]) -> TaskActivity? {
+        typealias Entry = (item:[String:Any],activity:TaskActivity)
+        var result:Entry?, runningTool:Entry?
+        for item in items {
+            if item["type"] as? String == "agentMessage" {
+                result = (item,.init(title:"正在回复",kind:.reply)); continue
+            }
+            guard let next = from(item:item) else {continue}
+            if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = (item,next)}
+            // 连续的空 reasoning 项不擦掉此前同阶段已公开的摘要；工具/回复切换仍改变状态。
+            if next.kind == .reasoning,next.detail.isEmpty,result?.activity.kind == .reasoning,result?.activity.detail.isEmpty == false {continue}
+            result = (item,next)
+        }
+        guard let selected = runningTool ?? result else {return nil}
+        var activity = selected.activity
+        activity.commandToastDetails = commandToastDetails(selected.item)
+        activity.groupHeader = currentGroupHeader(items:items)
         // 只存两份有界显示摘要，切换设置时不重读会话，也不改写原始进展或历史。
-        activity?.groupHeaderHidingToolFailures = currentGroupHeader(items:items,hidingToolFailures:true)
+        activity.groupHeaderHidingToolFailures = currentGroupHeader(items:items,hidingToolFailures:true)
         return activity
     }
     // 本机 Codex 的 NQNw / udV3 / I3PO：reasoning 不断组，独立消息断组；
@@ -342,20 +431,25 @@ struct TaskActivity:Equatable {
         if activity.outcome != nil {return header(activity)}
         let action = (item["commandActions"] as? [[String:Any]])?.last ?? [:]
         let title:String
+        var subject:CommandField?
         switch activity.toolOperation {
         case .read:
             let path = action["path"] as? String ?? action["name"] as? String ?? ""
-            title = "正在读取"+(path.isEmpty ? "文件" : " "+(path as NSString).lastPathComponent)
+            let name = (path as NSString).lastPathComponent
+            title = "正在读取"+(path.isEmpty ? "文件" : " "+name)
+            subject = .read(short(name))
         case .search:
             let path = action["path"] as? String ?? "",query = action["query"] as? String ?? ""
             title = !path.isEmpty ? "正在搜索文件夹 "+path : !query.isEmpty ? "正在搜索「"+query+"」" : "正在搜索文件"
+            subject = path.isEmpty ? .query(short(query)) : .folder(short(path))
         case .listFiles:
             let path = action["path"] as? String ?? ""
             title = path.isEmpty ? "正在列出文件" : "正在列出文件夹 "+path
+            subject = .folder(short(path))
         case .edit:title = "正在修改文件"
         default:return header(activity)
         }
-        return .init(title:short(title),operation:activity.toolOperation)
+        return .init(title:short(title),operation:activity.toolOperation,subject:subject)
     }
     private static func completedGroupHeader(_ entries:[(item:[String:Any],activity:TaskActivity)],hidingToolFailures:Bool) -> GroupHeader? {
         let displayed = hidingToolFailures ? entries.filter {!$0.activity.isToolFailure} : entries
@@ -393,14 +487,17 @@ struct TaskActivity:Equatable {
             let line = raw.trimmingCharacters(in:.whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("<!--") {continue}
             last = line
-            if line.hasPrefix("#"),let space = line.firstIndex(of:" "),line[..<space].allSatisfy({$0 == "#"}) {
-                heading = String(line[line.index(after:space)...]).trimmingCharacters(in:.whitespaces)
-            } else if line.hasPrefix("**"),line.hasSuffix("**"),line.count > 4 {
-                heading = String(line.dropFirst(2).dropLast(2))
-            }
+            if let title = markdownHeading(line) {heading = title}
         }
         guard let text = heading ?? last,!text.isEmpty else {return nil}
         return short(text.replacingOccurrences(of:"**",with:""))
+    }
+    private static func markdownHeading(_ line:String) -> String? {
+        if line.hasPrefix("#"),let space = line.firstIndex(of:" "),line[..<space].allSatisfy({$0 == "#"}) {
+            return String(line[line.index(after:space)...]).trimmingCharacters(in:.whitespaces)
+        }
+        if line.hasPrefix("**"),line.hasSuffix("**"),line.count > 4 {return String(line.dropFirst(2).dropLast(2))}
+        return nil
     }
 
 }

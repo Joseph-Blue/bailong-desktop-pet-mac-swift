@@ -72,8 +72,20 @@ fi
 export BAILONG_DEV_RUN=1
 # 保留父脚本处理 ^C；不再 exec 替换为应用，才能执行超时终止。
 setopt nobgnice
-"$binary" <&0 &
+bailong_run_args=()
+(( ! bailong_monitor )) || bailong_run_args+=(--monitor)
+(( ! bailong_monitor_animation )) || bailong_run_args+=(--monitor-animation)
+if [[ -t 0 && -t 1 && "${BAILONG_INTERACTIVE:-1}" != 0 ]]; then
+    bailong_saved_tty="$(stty -g)"
+    stty -icanon -echo min 1 time 0
+    bailong_run_args+=(--monitor-keys)
+    print -r -- "${bl_accent}M${bl_reset} 开关监视    监视中按 ${bl_accent}A${bl_reset} 开关动画明细    ^C 停止"
+fi
+# zsh 会先替后台命令重定向标准输入，从预先保留的描述符接回终端。
+exec {bailong_dev_input}<&0
+"$binary" "${bailong_run_args[@]}" <&$bailong_dev_input {bailong_dev_input}<&- &
 bailong_dev_pid=$!
+exec {bailong_dev_input}<&-
 bailong_exit_waited=1
 print "开发程序已启动 · PID $bailong_dev_pid · 按 ^C 停止"
 if wait "$bailong_dev_pid"; then

@@ -49,7 +49,8 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
             hoverHelp = "沿用 Codex 原会话设置，当前只读。"+source+"\n模型："+settings.model+"\n思考等级："+effort
             if let tier = settings.serviceTier {hoverHelp = (hoverHelp ?? "")+"\n速度档位："+CodexServiceTier.displayName(tier)}
         } else {
-            setSummary(error ?? "正在读取 Codex 会话设置…",lightning:false); hoverHelp = title
+            setSummary(error ?? "正在读取 Codex 会话设置…",lightning:false)
+            setHoverHelp(title) { [weak self] in self?.hasTruncatedTitle == true }
         }
         setAccessibilityLabel("Codex 模型与思考等级，只读")
         setAccessibilityHelp(hoverHelp)
@@ -76,7 +77,9 @@ final class ChatReplyPreview: NSTextField {
         let excerpt = String(plain.prefix(180))+(plain.count > 180 ? "…" : "")
         stringValue = excerpt.isEmpty ? "" : "最近回复："+excerpt
         isHidden = excerpt.isEmpty
-        hoverHelp = plain.isEmpty ? nil : String(plain.prefix(200))+(plain.count > 200 ? "..." : "")
+        let preview = plain.isEmpty ? nil : String(plain.prefix(200))+(plain.count > 200 ? "..." : "")
+        let hasMore = plain.count > 180
+        setHoverHelp(preview) { [weak self] in hasMore || self?.hasTruncatedText == true }
         setAccessibilityLabel(stringValue)
     }
 }

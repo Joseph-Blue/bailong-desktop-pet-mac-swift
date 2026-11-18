@@ -76,13 +76,45 @@ final class DesktopSocket {
     deinit {close(fd)}
     func call(_ method:String,params:[String:Any],version:Int,target:String? = nil,deadline operationDeadline:Date? = nil,wakeup:(([String:Any]) -> Bool)? = nil) throws -> [String:Any] {
         let deadline = min(operationDeadline ?? .distantFuture,Date().addingTimeInterval(Double(timeoutSeconds)))
-        let remaining = deadline.timeIntervalSinceNow
-        guard remaining > 0 else {throw ResponseTimeout(method:method)}
         let id = UUID().uuidString
-        let timeoutMs = max(500,min(max(1000,(timeoutSeconds-1)*1000),Int(ceil(remaining*1000))))
-        var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":timeoutMs]
-        if let target {request["targetClientId"] = target}
-        try send(request)
+        // 主动写入才逐次记录。后台发现 owner、刷新设置和订阅心跳沿用原节奏。
+        let monitor = Self.monitoredMethods.contains(method) ? TerminalMonitor.active : nil
+        let start = monitor.map { _ in ProcessInfo.processInfo.systemUptime }
+        func record(_ event:String,_ detail:String = "",_ level:TerminalMonitor.Level = .info) {
+            guard let monitor,let start else {return}
+            let rpc = method+" v\(version)  ·  RPC#"+TerminalMonitor.tag(id)
+            let thread = (params["conversationId"] as? String).map {"  会话#"+TerminalMonitor.tag($0)} ?? ""
+            let elapsed = TerminalMonitor.milliseconds(ProcessInfo.processInfo.systemUptime-start)
+            monitor.write(.ipc,event+"  "+rpc+thread+"  ·  "+elapsed+detail,level)
+        }
+        do {
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else {throw ResponseTimeout(method:method)}
+            let timeoutMs = max(500,min(max(1000,(timeoutSeconds-1)*1000),Int(ceil(remaining*1000))))
+            var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":timeoutMs]
+            if let target {request["targetClientId"] = target}
+            try send(request)
+            record("→ 请求")
+            let response = try receiveResponse(id:id,method:method,deadline:deadline,wakeup:wakeup)
+            record("← 回执","",.success)
+            return response
+        } catch {
+            if monitor != nil {
+                let reason:String
+                switch error {
+                case is ResponseTimeout:reason = "等待响应超时"
+                case is Disconnected:reason = "桌面端已断开"
+                case is RequestFailure:reason = "桌面端返回错误"
+                default:reason = TerminalMonitor.errorCode(error)
+                }
+                record("× 失败","  ·  "+reason,.error)
+            }
+            throw error
+        }
+    }
+    private static let monitoredMethods:Set<String> = ["thread-follower-start-turn","thread-follower-steer-turn",
+        "thread-follower-command-approval-decision","thread-follower-file-approval-decision","thread-follower-permissions-request-approval-response"]
+    private func receiveResponse(id:String,method:String,deadline:Date,wakeup:(([String:Any]) -> Bool)?) throws -> [String:Any] {
         while Date() < deadline {
             let value:[String:Any]
             do {value = try receive(deadline:deadline)}

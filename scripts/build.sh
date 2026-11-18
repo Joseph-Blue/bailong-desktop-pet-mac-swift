@@ -42,7 +42,7 @@ bailong_phase_begin "3/4" "组装应用与资源"
 mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources/outputs/白龙桌宠素材"
 cp ".build/$target_arch/BailongPet" "$staging/Contents/MacOS/BailongPet"
 "$bailong_resource_tool" copy-app "$bailong_resource_manifest" "$PWD/local-assets" "$staging/Contents/Resources"
-cp VERSION "$staging/Contents/Resources/VERSION"
+cp VERSION "第三方许可.txt" "$staging/Contents/Resources/"
 cat > "$staging/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

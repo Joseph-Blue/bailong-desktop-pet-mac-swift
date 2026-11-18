@@ -76,7 +76,7 @@ final class TranscriptRenderer {
                 let failure = AppFailure.codex(body.error)
                 reply.append(failure.title+"\n"+failure.message)
             }
-            result.append(TranscriptActions(id:turn.key,text:reply.filter {!$0.isEmpty}.joined(separator:"\n\n"),threadID:conversation.threadID,font:bodyFont,status:turn.status,completedAt:turn.completedAt,usage:turn.tokenUsage,usageError:turn.tokenUsageError).placeholder())
+            result.append(TranscriptActions(TurnCompletion(turn,completedAt:turn.completedAt),font:bodyFont,text:reply.filter {!$0.isEmpty}.joined(separator:"\n\n"),threadID:conversation.threadID).placeholder())
             transcriptCache[turn.key] = (signature,result)
             accumulated.append(result); result = accumulated
         }

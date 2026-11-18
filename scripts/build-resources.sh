@@ -20,9 +20,9 @@ bailong_prepare_resource_tool() {
     bailong_resource_published="$fields[3]"; bailong_resource_url="$fields[4]"; bailong_resource_bytes="$fields[5]"
 }
 bailong_resource_source() {
-    print -r -- "素材来源：jingh12312-rgb 的《GPT白龙娘动态桌宠》"
+    print -r -- "素材来源：jingh12312-rgb（風-隐）的《GPT白龙娘动态桌宠》"
     print -r -- "原作仓库：https://github.com/jingh12312-rgb/bailong-desktop-pet"
-    print -r -- "Mac 版素材由 Joseph Blue（约瑟Blue）整理，完整来源见包内 local-assets/资源来源.md。"
+    print -r -- "完整来源见包内 local-assets/资源来源.md。"
 }
 bailong_resource_download_info() {
     print -r -- "下载来源：本项目的 GitHub Release · 资源包 $bailong_resource_version"

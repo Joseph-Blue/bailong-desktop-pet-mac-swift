@@ -12,9 +12,9 @@ enum SettingsSection: Int, CaseIterable {
     var keys: [String] {
         switch self {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
-        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
+        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
-        case .messages: return ["taskInfoBarEnabled","gitWindowEnabled","taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","hideToolFailures","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .messages: return MessageSettingsPage.preferenceKeys
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
@@ -70,7 +70,7 @@ final class PetPreferences {
         "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),"randomWorkingLines":true,
-        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskThinkingTemplate":"{桌宠名}正在思考","taskToolTemplate":"{桌宠名}正在调用工具","taskCommandTemplate":"{桌宠名}正在运行命令","taskCommandCompletedTemplate":"{桌宠名}已运行命令","taskSuccessTemplate":"{用户名}，完成啦！",
+        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskSuccessTemplate":"{用户名}，完成啦！",
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
@@ -198,7 +198,7 @@ final class PetPreferences {
     var sensitiveQuestionNotice: String {template("（已隐藏{桌宠名}的敏感信息提问）")}
     var sensitiveInputNotice: String {template("（已隐藏{用户名}的敏感信息输入）")}
     func taskResultLine(_ status:String) -> String {
-        statusLine(status == "completed" ? "taskSuccessTemplate" : ["interrupted","cancelled","canceled"].contains(status) ? "taskInterruptedTemplate" : "taskFailureTemplate")
+        statusLine(status == "completed" ? "taskSuccessTemplate" : TaskOutcome.stoppedStatuses.contains(status) ? "taskInterruptedTemplate" : "taskFailureTemplate")
     }
     // 只传入应用自带文案，不对用户消息、模型正文或历史记录做全局替换。
     func templateSource(_ text:String) -> String {text.replacingOccurrences(of:"白龙娘",with:"{桌宠名}").replacingOccurrences(of:"白龙",with:"{桌宠名}").replacingOccurrences(of:"主人",with:"{用户名}")}
@@ -212,6 +212,8 @@ final class PetPreferences {
         if text.isEmpty {lines.removeValue(forKey:id)} else {lines[id] = text}
         set(lines,for:"customLines")
     }
+    static let clipSpeedOptions:[Double] = [0.75,1,1.25,1.5]
+    static func clipWeightRange(_ id:String) -> ClosedRange<Int> {(id == "idle" ? 1 : 0)...12}
     private static func defaultAnimationWeight(_ id:String) -> Int {id == "idle" ? 4 : id == "idle2" ? 1 : 3}
     private static func combinedAnimationWeights(_ weights:[String:Int],favorites:[String]) -> [String:Int] {
         var weights = weights
@@ -290,6 +292,10 @@ final class PetPreferences {
         }
         values = TemplateSyntax.migrate(values)
         values = ConversationLines.migrateReceivedLine(values)
+        // 旧短进展标题已由共用进展取代。导入时跳过旧字段，本机旧版保存的值保留。
+        for key in ["taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskWarningTemplate"] {
+            values.removeValue(forKey:key)
+        }
         values.removeValue(forKey:"addressMode")
         values.removeValue(forKey:"showOnLaunch")
         values.removeValue(forKey:"gitWindowPinned")
@@ -317,9 +323,12 @@ final class PetPreferences {
     private static func valid(_ value: Any, key: String, baseline: Any, clipIDs: Set<String>) -> Bool {
         if key == "defaultWorkspace",let path = value as? String {return path.isEmpty || (path.hasPrefix("/") && !path.contains("\0") && path.utf8.count <= 4096)}
         if key == "animationWeights", let map = value as? [String:NSNumber] {
-            return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && (0...12).contains($0.value.doubleValue) && $0.value.doubleValue.rounded() == $0.value.doubleValue && ($0.key != "idle" || $0.value.intValue > 0)}
+            return map.allSatisfy { id,number in
+                guard let weight = Int(exactly:number.doubleValue) else {return false}
+                return clipIDs.contains(id) && CFGetTypeID(number) != CFBooleanGetTypeID() && clipWeightRange(id).contains(weight)
+            }
         }
-        if key == "animationSpeeds", let map = value as? [String:NSNumber] {return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0.75,1,1.25,1.5].contains($0.value.doubleValue)}}
+        if key == "animationSpeeds", let map = value as? [String:NSNumber] {return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && clipSpeedOptions.contains($0.value.doubleValue)}}
         if key == "customLines", let map = value as? [String:String] {return map.allSatisfy {clipIDs.contains($0.key) && TemplateSyntax.count($0.value) <= 120}}
         if key == "favorites", let list = value as? [String] {return list.allSatisfy {clipIDs.contains($0)}}
         if key == "accentRGB", let rgb = value as? [NSNumber] {return rgb.count == 3 && rgb.allSatisfy {CFGetTypeID($0) != CFBooleanGetTypeID() && (0...1).contains($0.doubleValue)}}

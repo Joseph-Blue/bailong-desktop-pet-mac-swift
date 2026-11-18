@@ -68,7 +68,7 @@ final class DesktopApprovalReader {
                     var connection = connections[record.key] ?? CodexConnectionProgress()
                     connection.observe(items:items,resumed:state.resumedTurns.contains(record.turn))
                     connections[record.key] = connection
-                    activities[record.key] = connection.activity ?? TaskActivity.current(items:items,replyTemplateKey:"taskUpdateTemplate")
+                    activities[record.key] = connection.activity ?? TaskActivity.current(items:items)
                     states[record.logical]?.resumedTurns.remove(record.turn)
                 }
                 let requests = (state.projection["requests"] as? [[String:Any]] ?? []).filter {($0["params"] as? [String:Any])?["turnId"] as? String == record.turn}

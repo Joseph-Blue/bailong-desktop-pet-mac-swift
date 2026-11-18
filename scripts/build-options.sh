@@ -2,11 +2,16 @@
 bailong_parse_options() {
     target_arch=arm64
     bailong_check_only=0; bailong_build_only=0; bailong_resource_zip=""; bailong_resource_mode=missing; bailong_download_requested=0
+    bailong_monitor=0; bailong_monitor_animation=0
     local explicit_arch=0
     while (( $# )); do
         case "$1" in
             arm64|x86_64) target_arch="$1"; explicit_arch=1 ;;
             --check) bailong_check_only=1 ;;
+            --monitor|--monitor-animation)
+                [[ "$bailong_entry" == dev ]] || { bailong_error "$1 仅用于 run-dev.command"; return 2; }
+                bailong_monitor=1
+                if [[ "$1" == --monitor-animation ]]; then bailong_monitor_animation=1; fi ;;
             --build-only)
                 [[ "$bailong_entry" == dev ]] || { bailong_error "--build-only 仅用于 run-dev.command"; return 2; }
                 bailong_build_only=1 ;;
@@ -23,6 +28,9 @@ bailong_parse_options() {
   --download-resources     下载清单指定的资源包
   --help                   显示帮助"
                 if [[ "$bailong_entry" == dev ]]; then
+                    print '  --monitor                监视协议与会话，收起逐段动画明细'
+                    print '  --monitor-animation      监视协议、会话和逐段动画（默认）'
+                    print '终端快捷键：M 开关监视，A 开关动画明细，无需回车。'
                     print '  --build-only             仅编译开发程序，不检查运行资源或启动'
                     print '运行时显示 PID；^C 请求退出，5 秒倒计时后强制结束未退出的进程。'
                 fi
@@ -32,6 +40,9 @@ bailong_parse_options() {
         esac
         shift
     done
+    if (( bailong_monitor && (bailong_build_only || bailong_check_only) )); then
+        bailong_error "--monitor 需要启动开发程序，请单独使用或配合资源参数。"; return 2
+    fi
     if (( bailong_build_only && (bailong_check_only || bailong_download_requested) )) ||
        { (( bailong_build_only )) && [[ -n "$bailong_resource_zip" || "$bailong_resource_mode" == replace ]]; }; then
         bailong_error "--build-only 不与资源操作或 --check 同用。"; return 2

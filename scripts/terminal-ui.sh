@@ -1,12 +1,13 @@
 # 共用终端输出；非终端不输出光标控制，NO_COLOR 关闭配色。
 typeset -g bailong_phase="" bailong_phase_log="" bailong_spinner_pid="" bailong_download_pid=""
 typeset -g bailong_temp_dir="" bailong_diagnostic_dir="" bailong_dev_pid=""
+typeset -g bailong_saved_tty=""
 typeset -gi bailong_started=$SECONDS bailong_phase_started=0 bailong_animated=0 bailong_exit_waited=0
 exec {bailong_ui_fd}>&1
 [[ -t 1 && "${TERM:-dumb}" != dumb ]] && bailong_animated=1
-typeset -g bl_reset="" bl_accent="" bl_dim="" bl_green="" bl_red=""
+typeset -g bl_reset="" bl_accent="" bl_heading="" bl_dim="" bl_green="" bl_red=""
 if (( bailong_animated )) && [[ -z "${NO_COLOR+x}" ]]; then
-    bl_reset=$'\e[0m'; bl_accent=$'\e[1;36m'; bl_dim=$'\e[2m'
+    bl_reset=$'\e[0m'; bl_accent=$'\e[1;36m'; bl_heading=$'\e[1;35m'; bl_dim=$'\e[2m'
     bl_green=$'\e[32m'; bl_red=$'\e[31m'
 fi
 bailong_interactive() { [[ "${BAILONG_INTERACTIVE:-0}" == 1 && -t 0 && -t 1 ]] }
@@ -37,7 +38,7 @@ bailong_header() {
         x86_64) architecture="Intel · x86_64" ;;
     esac
     print -ru "$bailong_ui_fd" -- "
-${bl_accent}白龙桌宠Swift${bl_reset}     版本：${bl_accent}$(<VERSION)${bl_reset}"
+${bl_heading}白龙桌宠Swift${bl_reset}     版本：${bl_accent}$(<VERSION)${bl_reset}"
     print -ru "$bailong_ui_fd" -- "${bl_dim}────────────────────────────────────────${bl_reset}"
     print -ru "$bailong_ui_fd" -- "$1  ·  $architecture
 "
@@ -63,7 +64,7 @@ bailong_phase_begin() {
     bailong_phase="[$1] $2"
     bailong_phase_started=$SECONDS
     bailong_phase_log="$(mktemp "$bailong_diagnostic_dir/stage-XXXXXX")"
-    print -ru "$bailong_ui_fd" -- "${bl_accent}${bailong_phase}${bl_reset}"
+    print -ru "$bailong_ui_fd" -- "${bl_heading}${bailong_phase}${bl_reset}"
     if (( bailong_animated )); then
         (
             trap - EXIT ZERR INT TERM
@@ -179,6 +180,7 @@ TRAPEXIT() {
     local result=$?
     (( ZSH_SUBSHELL == 0 )) || return "$result"
     bailong_stop_dev
+    if [[ -n "$bailong_saved_tty" && -t 0 ]]; then stty "$bailong_saved_tty"; fi
     bailong_stop_spinner
     if [[ -n "$bailong_download_pid" ]]; then
         kill "$bailong_download_pid" 2>/dev/null || true

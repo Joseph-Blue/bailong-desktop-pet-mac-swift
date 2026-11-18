@@ -37,11 +37,10 @@ final class ChatController {
     private var titleRequests = [String:UUID]()
     private var historyInputPage = [String]()
     private var historyInputRequest = UUID()
-    var desktopTasks = [BubbleTaskSummary]()
     var desktopTaskReadStatus:String? = "正在同步 Codex 任务状态…"
     lazy var desktopSession:DesktopConversationSession = {
         let session = DesktopConversationSession(store:store,
-            tasks:{ [unowned self] in self.desktopTasks },canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
+            canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
         session.onSubmitted = { [weak self] key,text,entry in
             guard let self else {return}
             self.ui.clearSubmittedDraft(key:key,fromComposer:entry == .composer,text:text)
@@ -119,15 +118,18 @@ final class ChatController {
             guard let self else{return}
             if self.store.isReadOnly {
                 self.refresh()
+                TerminalMonitor.active?.write(.history,"读取历史正文失败，进入只读模式  ·  "+TerminalMonitor.errorCode(error),.error)
                 self.reportHistoryReadFailure(error)
                 return
             }
+            TerminalMonitor.active?.write(.history,"保存失败，暂停自动写入  ·  "+TerminalMonitor.errorCode(error),.error)
             self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史记录未能保存，请查看错误详情。"; self.ui.status.isHidden = false
             guard !self.closing else {return}
             RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"新记录尚未保存到磁盘，退出应用后会丢失。请检查磁盘空间和写入权限，再点“重新保存”。原有记录保留。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
         }
         store.onSaved = { [weak self] in
             guard let self,self.saveError != nil else {return}
+            TerminalMonitor.active?.write(.history,"历史已重新保存",.success)
             self.saveError = nil; RecoveryWindow.resolve("history-save"); self.refresh()
         }
         ui.onSubmit = { [weak self] key,text,entry in self?.submit(text,to:key,entry:entry) }
@@ -202,7 +204,7 @@ final class ChatController {
         }
         pet.workspaceProvider = { [weak self] key in
             guard let self,let conversation = self.allConversations.first(where:{$0.key == key}) else {return nil}
-            return (conversation,self.running?.0.key == key || self.desktopTasks.contains {conversation.threadID != nil && $0.threadID == conversation.threadID && $0.active})
+            return (conversation,self.running?.0.key == key || self.desktopSession.observedTurns.contains {conversation.threadID != nil && $0.threadID == conversation.threadID && $0.active})
         }
         pet.onReply = { [weak self] key in
             guard let self,let conversation = self.store.conversations.first(where:{$0.key == key}) else {return}
@@ -228,28 +230,24 @@ final class ChatController {
         pet.bubble.taskProvider = { [weak self] in
             guard let self else {return BubbleTaskOverview(status:"任务同步已停止")}
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
-            var tasks = self.desktopTasks.filter {!self.store.deletedThreads.contains($0.threadID ?? "")}.map {task in
-                let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title
-                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed)
+            var tasks = self.desktopSession.observedTurns.filter {!self.store.deletedThreads.contains($0.threadID)}.map {task in
+                let conversation = self.store.conversations.first {$0.external && $0.threadID == task.threadID}
+                let edits = task.fileEdits.isEmpty ? conversation?.turns.first {$0.key == task.key || $0.id == task.turnID || $0.date == task.start}?.fileEdits ?? [] : task.fileEdits
+                return BubbleTaskSummary(key:task.key,title:conversation?.title ?? task.title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,
+                    turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed,directory:task.directory.isEmpty ? conversation?.cwd ?? "" : task.directory,fileEdits:edits)
             }
             let observed = Set(tasks.compactMap(\.threadID))
             for conversation in self.store.conversations {
                 guard !conversation.external || !observed.contains(conversation.threadID ?? ""),
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
-                guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
+                guard live || TaskOutcome.terminalStatuses.contains(turn.status) else {continue}
                 tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network,directory:conversation.cwd,fileEdits:turn.fileEdits ?? []))
-            }
-            for index in tasks.indices {
-                guard let conversation = self.store.conversations.first(where:{$0.threadID == tasks[index].threadID && tasks[index].threadID != nil}) else {continue}
-                tasks[index].directory = conversation.cwd
-                let task = tasks[index]
-                tasks[index].fileEdits = conversation.turns.first(where:{$0.key == task.key || (task.turnID != nil && $0.id == task.turnID) || $0.date == task.start})?.fileEdits ?? []
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
             let active = tasks.filter(\.active).sorted {$0.start < $1.start}
-            let recent = tasks.filter {["completed","failed","interrupted","cancelled","canceled"].contains($0.status)}
+            let recent = tasks.filter {TaskOutcome.terminalStatuses.contains($0.status)}
                 .sorted {($0.end ?? $0.start) > ($1.end ?? $1.start)}
             return BubbleTaskOverview(tasks:active+recent,status:self.desktopTaskReadStatus)
         }
@@ -329,7 +327,7 @@ final class ChatController {
         var state = ChatInputState(conversation:conversation,kind:kind)
         state.runningTitle = running?.0.title; state.ownsRunningTask = conversation != nil && running?.0 === conversation
         state.stopping = state.ownsRunningTask && cancelled
-        state.executing = state.ownsRunningTask || (conversation?.external == true && desktopTasks.contains {$0.threadID == conversation?.threadID && $0.active})
+        state.executing = state.ownsRunningTask || (conversation?.external == true && desktopSession.observedTurns.contains {$0.threadID == conversation?.threadID && $0.active})
         state.newConversation = conversation.map {candidate in candidate.turns.isEmpty && unstartedConversations.contains {$0 === candidate}} ?? false
         state.readOnly = store.isReadOnly
         if let conversation,conversation.external {
@@ -450,28 +448,38 @@ final class ChatController {
         reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
+        let trace = TerminalMonitor.active?.begin(.persona,context:TerminalMonitor.context(c.key,turn:turn.key),event:"连接 app-server")
         pet.taskStarted("own"); showUserMessage(text,in:c,timing:.init(start:turn.date,key:"own",activityKey:turn.key),messageID:"task-received",select:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
-            if let error {self.finish("failed",error:error.localizedDescription); return}
+            if let error {trace?.step("连接失败  ·  "+TerminalMonitor.errorCode(error),.error); self.finish("failed",error:error.localizedDescription); return}
             if self.cancelled {self.finish("interrupted"); return}
+            trace?.step("连接就绪，准备会话")
             var params: [String:Any] = ["cwd":c.cwd,"sandbox":"workspace-write","approvalPolicy":"on-request","approvalsReviewer":"user","developerInstructions":self.personalizedPersona]
             if let model = modelParams["model"] {params["model"] = model}
             if c.threadID == nil {params["historyMode"] = "legacy"}
             self.connection.prepareThread(c.threadID,params:params) { [weak self, weak turn] result in
                 guard let self, let turn, self.running?.1 === turn else{return}
                 switch result {
-                case .failure(let error): self.finish("failed",error:error.localizedDescription)
+                case .failure(let error):
+                    trace?.step("准备会话失败  ·  "+TerminalMonitor.errorCode(error),.error)
+                    self.finish("failed",error:error.localizedDescription)
                 case .success(let thread):
                     c.threadID = thread
                     if self.cancelled { self.finish("interrupted"); return }
                     var turnParams: [String:Any] = ["threadId":thread,"cwd":c.cwd,"input":[["type":"text","text":text]],"approvalPolicy":"on-request","approvalsReviewer":"user","summary":"concise","sandboxPolicy":["type":"workspaceWrite","writableRoots":[c.cwd],"networkAccess":false]]
                     turnParams.merge(modelParams) {_,selected in selected}
+                    trace?.step("会话就绪，提交回复  ·  协议会话#"+TerminalMonitor.tag(thread))
                     self.connection.call("turn/start",turnParams) { [weak self, weak turn] result in
                         guard let self, let turn, self.running?.1 === turn else{return}
                         switch result {
-                        case .success(let value): turn.id = (value["turn"] as? [String:Any])?["id"] as? String; turn.status = "running"; if self.cancelled {self.interrupt()}; self.persist()
+                        case .success(let value):
+                            turn.id = (value["turn"] as? [String:Any])?["id"] as? String
+                            trace?.step("收到发送回执"+(turn.id.map {"  ·  协议轮次#"+TerminalMonitor.tag($0)} ?? ""),.success)
+                            turn.status = "running"; if self.cancelled {self.interrupt()}; self.persist()
                         case .failure(let error):
+                            let timedOut = (error as? CodexProtocol.Failure)?.isTimeout == true
+                            trace?.step((timedOut ? "等待回执超时" : "发送返回错误")+"  ·  "+TerminalMonitor.errorCode(error),timedOut ? .warning : .error)
                             if turn.id != nil || (error as? CodexProtocol.Failure)?.isTimeout == true { turn.status = "unknown"; turn.error = error.localizedDescription; self.persist() }
                             else {self.finish("failed",error:error.localizedDescription)}
                         }
@@ -508,8 +516,20 @@ final class ChatController {
     func scheduleUpdate() {
         if updateTimer != nil {return}
         let timer = Timer(timeInterval:1.0/30,repeats:false) { [weak self] _ in
-            guard let self else{return}; self.updateTimer = nil; self.updateText(); self.refresh(); self.scheduleSave()
-            guard let (c,t) = self.running else{return}
+            guard let self else {return}
+            self.updateTimer = nil
+            guard let (c,t) = self.running else {return}
+            let previousMessageAt = t.lastMessageAt, previousEdits = t.fileEdits
+            self.messagesState.apply(to:t)
+            let editsChanged = previousEdits != t.fileEdits
+            self.ui.refreshTurn(t,in:c,previousMessageAt:previousMessageAt,editsChanged:editsChanged)
+            if editsChanged {
+                self.pet.refreshWorkspaceBars()
+                if self.workspacePanel.visible,self.workspacePanel.conversationKey == c.key {
+                    self.workspacePanel.update(conversation:c,executing:true)
+                }
+            }
+            self.scheduleSave()
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
             if self.messagesState.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
             self.presentAgentMessages(conversation:c,turn:t)
@@ -532,11 +552,13 @@ final class ChatController {
     }
     func finish(_ status: String, error: String = "") {
         guard let (c,t) = running else{return}
+        TerminalMonitor.active?.write(.persona,TerminalMonitor.context(c.key,turn:t.key)+"  轮次收尾  ·  "+TerminalMonitor.status(status),
+                                      status == "completed" ? .success : status == "failed" ? .error : .warning)
         pet.bubble.removeActivity(taskKey:"own"); messagesState.clearActivity()
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
         messagesState.finalize(t)
         presentAgentMessages(conversation:c,turn:t)
-        let stoppedByUser = cancelled && ["interrupted","cancelled","canceled"].contains(status)
+        let stoppedByUser = cancelled && TaskOutcome.stoppedStatuses.contains(status)
         reminderClock = nil; interruptInFlight = false
         running = nil; requestCoordinator.dismiss(); pet.bubble.resolveQuestions(taskKey:"own"); pet.taskEnded("own",status:status); persist()
         let title = stoppedByUser ? pet.preferences.statusLine("taskStoppedTemplate") : pet.preferences.taskResultLine(status)
@@ -553,7 +575,13 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],completionFooter:TranscriptActions(id:t.key,text:t.final,threadID:c.threadID,font:.systemFont(ofSize:13),status:t.status,completedAt:t.completedAt,usage:t.tokenUsage,usageError:t.tokenUsageError))}
+        } else {
+            pet.say(title,body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final),kind:"task",thread:c.key,
+                    purpose:status == "completed" ? .result : .attention,personalizeTitle:false,
+                    timing:.init(start:t.date,key:"own",finished:t.completedAt,status:status,activityKey:t.key),
+                    messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],
+                    completionFooter:TurnCompletion(t,completedAt:t.completedAt))
+        }
         messagesState = TaskMessageAccumulator()
         if closing {finishShutdown()}
     }

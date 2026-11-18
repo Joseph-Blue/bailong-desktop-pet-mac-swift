@@ -2,14 +2,22 @@ import AppKit
 
 // 设置表单的控件、编辑回调及定位锚点；不拥有窗口导航、搜索或外部服务。
 final class SettingsForm:NSObject,NSTextFieldDelegate {
+    static let multilineEntryHeight:CGFloat = 52
+    static let multilineEntrySpacing:CGFloat = 8
     let content:NSStackView, preferences:PetPreferences
-    private unowned let window:NSWindow
+    unowned let window:NSWindow
     private var actions = [SettingsAction]()
     private var conditionalRows = [(NSView,(PetPreferences) -> Bool)]()
     private var availabilityUpdates = [(PetPreferences) -> Void]()
     private var textActions = [ObjectIdentifier:(String)->Void]()
     private var textEndActions = [ObjectIdentifier:(String)->Void]()
-    private let templateEditor = SettingsTemplateEditor()
+    private lazy var templateEditor:SettingsTemplateEditor = {
+        let editor = SettingsTemplateEditor()
+        editor.isFieldEditor = true; editor.isRichText = false; editor.allowsUndo = true
+        return editor
+    }()
+    private(set) weak var currentTemplateField:SettingsTemplateField?
+    var moveToAdjacentEntry:((Int) -> Bool)?
     private var bufferControls = [NSControl]()
     private weak var bufferRow:NSView?
     private(set) var searchAnchors = [String:NSView]()
@@ -19,10 +27,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     init(content:NSStackView,preferences:PetPreferences,window:NSWindow) {
         self.content = content; self.preferences = preferences; self.window = window
         super.init()
-        templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
     }
     func reset(section:SettingsSection) {
         self.section = section
+        currentTemplateField = nil
         searchAnchors.removeAll()
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
         actions.removeAll(); textActions.removeAll(); textEndActions.removeAll()
@@ -32,6 +40,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     func fieldEditor(for client:Any?) -> Any? {
         guard let field = client as? SettingsTemplateField else {return nil}
         templateEditor.allowsTokens = field.allowsTokens; return templateEditor
+    }
+    func observeValues(_ update:@escaping (PetPreferences) -> Void) {
+        availabilityUpdates.append(update)
+        update(preferences)
     }
     func refreshAvailability() {
         updateBufferAvailability()
@@ -52,6 +64,20 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     }
     func controlTextDidBeginEditing(_ notification:Notification) {
         (notification.object as? SettingsTemplateField)?.refreshHighlight()
+    }
+    func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector) -> Bool {
+        guard !textView.hasMarkedText(),let moveToAdjacentEntry else {return false}
+        switch selector {
+        case #selector(NSResponder.insertTab(_:)):return moveToAdjacentEntry(1)
+        case #selector(NSResponder.insertBacktab(_:)):return moveToAdjacentEntry(-1)
+        default:return false
+        }
+    }
+    func backButton(_ title:String,action:@escaping () -> Void) -> NSButton {
+        let button = ActionButton(title,action)
+        button.image = NSImage(systemSymbolName:"chevron.backward",accessibilityDescription:nil)
+        button.imagePosition = .imageLeading
+        return button
     }
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else {return}
@@ -88,10 +114,17 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             section.setCustomSpacing(4,after:section.arrangedSubviews.last!)
             fill(note(detail),in:section)
         }
-        let surface = SettingsSectionBackground(), items = NSStackView()
+        let items = NSStackView()
         items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
+        let surface = SettingsSectionBackground()
         surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)])
+        NSLayoutConstraint.activate([
+            items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),
+            items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),
+            items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),
+            items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)
+        ])
+        fill(surface,in:section)
         for (index,row) in rows.enumerated() {
             if index > 0 && row.identifier?.rawValue == "settings-explanation" {items.setCustomSpacing(4,after:rows[index-1])}
             if index > 0 && row.identifier?.rawValue != "settings-explanation" {
@@ -101,7 +134,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             }
             fill(row,in:items)
         }
-        fill(surface,in:section); fill(section,in:content)
+        fill(section,in:content)
         searchAnchors[title] = section
         func registerAnchors(in view:NSView) {
             if let key = view.identifier?.rawValue,key.hasPrefix("setting:") {
@@ -176,6 +209,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     }
     private func compactControl(_ view: NSView) {
         if let stack = view as? NSStackView {
+            if stack.arrangedSubviews.contains(where:{$0 is SettingsValueButton}) {return}
             // 普通 contentHugging 不控制 NSStackView 的 gravity 区域间距。
             // fill 让末个控件贴住操作区尾端，内部间距和控件都保持自然宽度。
             stack.distribution = .fill
@@ -189,12 +223,13 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
     }
     // 只随现有设置通知刷新；离开页面清理回调，不持有旧页面。
-    private func dependent(_ view:NSView, requires keys:[String], unless exclusions:[String] = []) -> NSView {
+    private func dependent(_ view:NSView, requires keys:[String], unless exclusions:[String] = [],except independent:NSView? = nil) -> NSView {
         guard !keys.isEmpty || !exclusions.isEmpty else {return view}
-        let update:(PetPreferences) -> Void = { [weak view] preferences in
+        let update:(PetPreferences) -> Void = { [weak view,weak independent] preferences in
             guard let view else {return}
             let enabled = keys.allSatisfy {preferences.bool($0)} && exclusions.allSatisfy {!preferences.bool($0)}
             func apply(_ child:NSView) {
+                if child === independent {return}
                 if let control = child as? NSControl {control.isEnabled = enabled}
                 else {for child in child.subviews {apply(child)}}
             }
@@ -204,7 +239,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         availabilityUpdates.append(update); update(preferences)
         return view
     }
-    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = [], symbol:String? = nil, changed:(() -> Void)? = nil) -> NSView {
+    func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = [], symbol:String? = nil, accessory:NSView? = nil, changed:(() -> Void)? = nil) -> NSView {
         let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
         if key == "recordHistory" && historyRecoveryReason() != nil {control.isEnabled = false}
         availabilityUpdates.append { [weak control] preferences in
@@ -216,9 +251,19 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             self?.preferences.set((sender as! NSSwitch).state == .on,for:key)
             changed?()
         }
-        return dependent(row(title,detail:detail,symbol:symbol,control:control),requires:requires,unless:unless)
+        let controls:NSView
+        if let accessory {
+            let stack = NSStackView(views:[accessory,control]); stack.spacing = 10; stack.alignment = .centerY
+            controls = stack
+        } else {controls = control}
+        let result = row(title,detail:detail,symbol:symbol,control:controls)
+        return dependent(result,requires:requires,unless:unless,except:accessory)
     }
     func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
+        let menu = popupControl(title,options:options,value:value,width:width,identifier:identifier,changed:changed)
+        return row(title,detail:detail,control:menu)
+    }
+    func popupControl(_ title:String,options:[(String,String)],value:String,width:CGFloat,identifier:String? = nil,changed:@escaping (String)->Void) -> NSPopUpButton {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
         var controlWidth = width
@@ -239,7 +284,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         menu.widthAnchor.constraint(equalToConstant:controlWidth).isActive = true; menu.setAccessibilityLabel(title)
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
-        return row(title,detail:detail,control:menu)
+        return menu
     }
     func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil,requires:[String] = []) -> NSView {
         let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
@@ -267,6 +312,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
         let field: NSTextField = section == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
         let templateField = field as? SettingsTemplateField
+        currentTemplateField = templateField
         templateField?.allowsTokens = allowsTokens
         field.placeholderString = placeholder; field.delegate = self
         templateField?.refreshHighlight(); field.setAccessibilityLabel(title)
@@ -326,8 +372,8 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             // 台词标签在上，输入横向铺满；不再给短标签留出大半行空白。
             field.usesSingleLineMode = false; field.maximumNumberOfLines = 0
             field.cell?.wraps = true; field.cell?.isScrollable = false
-            field.heightAnchor.constraint(equalToConstant:52).isActive = true
-            let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = 8
+            field.heightAnchor.constraint(equalToConstant:Self.multilineEntryHeight).isActive = true
+            let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = Self.multilineEntrySpacing
             let caption = label(title)
             if let action {
                 let heading = NSStackView(views:[caption,action])
@@ -384,12 +430,13 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         return button
     }
     func animationWeight(_ clip:Clip) -> NSView {
-        let minimum = clip.id == "idle" ? 1.0 : 0.0
-        return numericSlider(clip.title+"随机播放权重",value:preferences.weight(clip.id),range:minimum...12,step:1,suffix:"❤️",limitSuffix:"") { [weak self] value in
+        let range = PetPreferences.clipWeightRange(clip.id)
+        let slider = numericSlider(clip.title+"权重",value:preferences.weight(clip.id),range:Double(range.lowerBound)...Double(range.upperBound),step:1,suffix:"") { [weak self] value in
             self?.preferences.setWeight(Int(value),for:clip.id)
         }
+        return alignedRow(leading:label("权重"),control:slider)
     }
-    private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,limitSuffix:String? = nil,color:NSColor? = nil,minimumLabel:String? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
+    private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,minimumLabel:String? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
         let slider = NSSlider(value:value,minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
         slider.isContinuous = true; slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
         slider.setAccessibilityLabel(title)
@@ -403,11 +450,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             number.doubleValue = value; slider.doubleValue = value; changed(value)
         }
         attach(slider) {commit($0.doubleValue)}; attach(number) {commit($0.doubleValue)}
-        let unit = label(suffix); unit.font = .systemFont(ofSize:11); unit.textColor = color ?? .secondaryLabelColor
-        if let color {number.textColor = color}
-        unit.widthAnchor.constraint(equalToConstant:22).isActive = true
-        let unitText = limitSuffix ?? suffix
-        let ending = unitText.isEmpty ? "" : " "+unitText
+        let unit = suffix.isEmpty ? nil : label(suffix)
+        unit?.font = .systemFont(ofSize:11); unit?.textColor = .secondaryLabelColor
+        unit?.widthAnchor.constraint(equalToConstant:22).isActive = true
+        let ending = suffix.isEmpty ? "" : " "+suffix
         let limits:(String,String)? = suffix == "%" && range.lowerBound == 0 && range.upperBound == 100 ? nil :
             (minimumLabel ?? formatter.string(from:NSNumber(value:range.lowerBound))!+ending,formatter.string(from:NSNumber(value:range.upperBound))!+ending)
         let steps = Int(((range.upperBound-range.lowerBound)/step).rounded())

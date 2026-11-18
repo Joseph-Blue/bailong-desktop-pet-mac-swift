@@ -15,11 +15,22 @@ final class RequestCoordinator {
         }
         do {try CodexProtocol.validate(method,params)}
         catch {chat.connection.reject(id,error.localizedDescription); return}
+        if let monitor = TerminalMonitor.active,let (conversation,turn) = chat.running {
+            let request:String?
+            switch method {
+            case "item/commandExecution/requestApproval":request = "收到命令审批"
+            case "item/fileChange/requestApproval":request = "收到文件修改审批"
+            case "item/permissions/requestApproval":request = "收到权限审批"
+            case "item/tool/requestUserInput":request = "收到问卷"
+            default:request = nil
+            }
+            if let request {monitor.write(.approval,TerminalMonitor.context(conversation.key,turn:turn.key)+"  内置  ·  "+request)}
+        }
         requests.append((id,method,params,chat.running?.1.key)); nextRequest()
     }
     private func showAttention(_ attention:TaskAttention, submit: (([String:String], @escaping (Error?) -> Void) -> Void)? = nil) {
         guard let (conversation,turn) = self.chat.running else {return}
-        self.chat.pet.say(self.chat.pet.preferences.statusLine(attention.kind.templateKey), body:attention.body, kind:"task", thread:conversation.key,  resetText:true, purpose:.attention, personalizeTitle:false, animateHeading:false, attentionAction:true, timing:.init(start:turn.date,key:"own",status:attention.kind.status), question:.init(questions:attention.questions,submit:submit))
+        self.chat.pet.say(self.chat.pet.preferences.statusLine(attention.kind.templateKey), body:attention.body, kind:"task", thread:conversation.key,  resetText:true, purpose:.attention, personalizeTitle:false, animateHeading:false, attentionAction:true, timing:.init(start:turn.date,key:"own",status:attention.kind.status,activityKey:turn.key), question:.init(questions:attention.questions,submit:submit))
     }
     private func clearAttention() {
         self.chat.pet.bubble.resolveQuestions(taskKey:"own")
@@ -28,7 +39,12 @@ final class RequestCoordinator {
         guard alert == nil && !requests.isEmpty else{return}
         let (id,method,p,turnKey) = requests.removeFirst()
         guard self.chat.running?.1.key == turnKey && self.chat.running != nil && !self.chat.cancelled else {self.chat.connection.unsupported(id,method); nextRequest();return}
-        if method == "item/permissions/requestApproval" {self.chat.connection.reply(id,["permissions":[:],"scope":"turn"]); nextRequest();return}
+        if method == "item/permissions/requestApproval" {
+            if let monitor = TerminalMonitor.active,let (conversation,turn) = chat.running {
+                monitor.write(.approval,TerminalMonitor.context(conversation.key,turn:turn.key)+"  内置  ·  已答复，本轮未授予额外权限")
+            }
+            self.chat.connection.reply(id,["permissions":[:],"scope":"turn"]); nextRequest();return
+        }
         if method == "item/tool/requestUserInput" { questions(id,p["questions"] as? [[String:Any]] ?? [],answers:[:]); return }
         guard method == "item/commandExecution/requestApproval" || method == "item/fileChange/requestApproval" else {self.chat.connection.unsupported(id,method); nextRequest();return}
         rejectCurrent = { [weak self] in self?.chat.connection.reply(id,["decision":"decline"]) }
@@ -47,7 +63,11 @@ final class RequestCoordinator {
         showAttention(.approval(fileChange:method == "item/fileChange/requestApproval",reason:p["reason"] as? String))
         a.beginSheetModal(for:self.chat.approvalParent()) { [weak self] response in
             guard let self,self.alert === a,self.chat.running?.1 === owner else {return}; self.alert = nil; self.rejectCurrent = nil; self.clearAttention()
-            self.chat.connection.reply(id,["decision":response == .alertSecondButtonReturn && !self.chat.cancelled && self.chat.running != nil ? "accept" : "decline"])
+            let allow = response == .alertSecondButtonReturn && !self.chat.cancelled && self.chat.running != nil
+            if let monitor = TerminalMonitor.active,let (conversation,turn) = self.chat.running {
+                monitor.write(.approval,TerminalMonitor.context(conversation.key,turn:turn.key)+"  内置  ·  "+(allow ? "答复允许" : "答复拒绝"))
+            }
+            self.chat.connection.reply(id,["decision":allow ? "accept" : "decline"])
             self.chat.running?.1.status = "running"; self.chat.persist(); self.nextRequest()
         }
     }

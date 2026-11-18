@@ -9,8 +9,7 @@ enum ConversationLines {
         .init(key:"desktopTaskReceivedTemplate",title:"Codex 对话收到任务",text:"{用户名}，我收到啦！这就认真帮你处理 Codex 里的任务。"),
         .init(key:"taskSteeringTemplate",title:"收到插话",text:"{用户名}，补充的话我收到啦，我会记着一起处理。"),
         .init(key:"taskStoppingTemplate",title:"正在停止任务",text:"{用户名}，我正在收好手头的工作…"),
-        .init(key:"taskStoppedTemplate",title:"主动停止完成",text:"{用户名}，我先停下来啦。"),
-        .init(key:"taskWarningTemplate",title:"步骤执行异常",text:"{用户名}，有个情况要告诉你。")]
+        .init(key:"taskStoppedTemplate",title:"主动停止完成",text:"{用户名}，我先停下来啦。")]
     static let interface:[Entry] = [
         .init(key:"conversationNewTemplate",title:"新对话已准备",text:"{用户名}，新对话准备好啦。"),
         .init(key:"conversationBusyTemplate",title:"临时聊天执行中",text:"{用户名}，我正在认真忙着呢…"),

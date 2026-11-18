@@ -8,7 +8,12 @@ final class CodexConnection {
     private var process: Process?
     private var input: FileHandle?
     private var serial = 0
-    private var pending = [Int:(Reply,Date)]()
+    private struct PendingCall {
+        let reply:Reply, method:String, deadline:Date
+        let started = ProcessInfo.processInfo.systemUptime
+        var elapsed:String {TerminalMonitor.milliseconds(ProcessInfo.processInfo.systemUptime-started)}
+    }
+    private var pending = [Int:PendingCall]()
     private var waiting = [(Error?) -> Void]()
     private var ready = false
     private var loadedThreads = Set<String>()
@@ -20,6 +25,14 @@ final class CodexConnection {
     private(set) var executableURL: URL?
     var isConnected:Bool {ready}
     var connectionGeneration:Int {generation}
+    func reportMonitorState(to monitor:TerminalMonitor) {
+        let state = ready ? "已就绪" : process == nil ? "未连接" : "握手中"
+        let pid = process.map {"  ·  PID \($0.processIdentifier)"} ?? ""
+        monitor.write(.server,"连接快照  ·  "+state+pid+"  ·  待回执 \(pending.count)  ·  已加载会话 \(loadedThreads.count)")
+        for (id,call) in pending.sorted(by:{$0.key < $1.key}) {
+            monitor.write(.server,"等待回执  "+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  已等待 "+call.elapsed)
+        }
+    }
     var diagnostics: String {
         let state = ready ? "协议已连接" : process?.isRunning == true ? "正在初始化" : (connectionError.map { "连接失败：" + $0 } ?? "未连接")
         let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"
@@ -127,6 +140,7 @@ final class CodexConnection {
             // 消费 stderr 防止子进程阻塞；不保存原始诊断流或用户对话日志。
             stderr.fileHandleForReading.readabilityHandler = { handle in if handle.availableData.isEmpty { handle.readabilityHandler = nil } }
             try task.run(); process = task; input = stdin.fileHandleForWriting
+            TerminalMonitor.active?.write(.server,"启动子进程  ·  stdio  ·  PID \(task.processIdentifier)  ·  连接#\(token)")
             reader.async { [weak self] in
                 var buffer = Data()
                 while true {
@@ -137,35 +151,43 @@ final class CodexConnection {
                         do {
                             let message = try autoreleasepool {try CodexProtocol.delivery(CodexProtocol.object(line))}
                             if let message {DispatchQueue.main.async { if self?.generation == token { self?.receive(message) } }}
-                        } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error) } }; return }
+                        } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error,stage:"解析协议帧") } }; return }
                     }
                 }
                 // 先交付最后一条完成/错误消息，再处理 EOF，避免退出回调抢先丢失结果。
                 DispatchQueue.main.async {
                     guard let self, self.generation == token, !self.closing else {return}
-                    self.fail(PetFailure(message:"Codex 连接已结束，任务状态未确认。"))
+                    self.fail(PetFailure(message:"Codex 连接已结束，任务状态未确认。"),stage:"读取到 EOF")
                 }
             }
             expiration?.invalidate()
             expiration = Timer.scheduledTimer(withTimeInterval:1,repeats:true) { [weak self] _ in
                 guard let self else{return}
-                let expired = self.pending.filter { $0.value.1 < Date() }
-                for (id,entry) in expired { self.pending.removeValue(forKey:id); entry.0(.failure(CodexProtocol.Failure.timeout)) }
+                let expired = self.pending.filter { $0.value.deadline < Date() }
+                for (id,_) in expired {
+                    guard let call = self.pending.removeValue(forKey:id) else {continue}
+                    TerminalMonitor.active?.write(.server,"× 超时  "+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  "+call.elapsed,.error)
+                    call.reply(.failure(CodexProtocol.Failure.timeout))
+                }
             }
             call("initialize",["clientInfo":["name":"bailong_appkit","title":PetPreferences.shared.appName,"version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
-                guard let self else{return}
+                guard let self,self.generation == token else{return}
                 switch result {
                 case .success:
                     guard self.send(["method":"initialized"]) else {return}; self.ready = true
+                    TerminalMonitor.active?.write(.server,"→ 通知  initialized  ·  握手完成  ·  连接#\(token)",.success)
                     let callbacks = self.waiting; self.waiting.removeAll(); callbacks.forEach{$0(nil)}
-                case .failure(let error): self.fail(error)
+                case .failure(let error): self.fail(error,stage:"初始化握手")
                 }
             }
-        } catch { fail(error) }
+        } catch { fail(error,stage:"启动子进程") }
     }
     // 同一服务进程内复用已加载的会话；恢复只用于本次连接尚未加载的历史会话。
     func prepareThread(_ id:String?,params:[String:Any],completion:@escaping (Result<String,Error>) -> Void) {
-        if let id,loadedThreads.contains(id) {completion(.success(id)); return}
+        if let id,loadedThreads.contains(id) {
+            TerminalMonitor.active?.write(.server,"复用已加载会话  ·  会话#"+TerminalMonitor.tag(id))
+            completion(.success(id)); return
+        }
         var params = params
         if let id {params["threadId"] = id}
         call(id == nil ? "thread/start" : "thread/resume",params) { [weak self] result in
@@ -181,25 +203,45 @@ final class CodexConnection {
         }
     }
     func call(_ method: String, _ params: [String:Any], completion: @escaping Reply) {
-        guard input != nil else {completion(.failure(CodexProtocol.Failure.disconnected)); return}
-        serial += 1; pending[serial] = (completion,Date().addingTimeInterval(30))
-        send(["id":serial,"method":method,"params":params])
+        guard input != nil else {
+            TerminalMonitor.active?.write(.server,"× 未发送  "+TerminalMonitor.rpcName(method)+"  ·  连接未建立",.warning)
+            completion(.failure(CodexProtocol.Failure.disconnected)); return
+        }
+        serial += 1
+        pending[serial] = PendingCall(reply:completion,method:method,deadline:Date().addingTimeInterval(30))
+        if send(["id":serial,"method":method,"params":params]) {
+            TerminalMonitor.active?.write(.server,"→ 请求  "+TerminalMonitor.rpcName(method)+"  ·  RPC#\(serial)"+TerminalMonitor.rpcFields(params))
+        }
     }
-    func reply(_ id: Any, _ result: [String:Any]) { send(["id":id,"result":result]) }
-    func unsupported(_ id: Any, _ method: String) { send(["id":id,"error":["code":-32601,"message":"此客户端未支持 \(method)"]]) }
+    func reply(_ id: Any, _ result: [String:Any]) {
+        if send(["id":id,"result":result]) {TerminalMonitor.active?.write(.server,"→ 应答  服务请求#"+TerminalMonitor.serverRequestID(id))}
+    }
+    func unsupported(_ id: Any, _ method: String) {
+        if send(["id":id,"error":["code":-32601,"message":"此客户端未支持 \(method)"]]) {
+            TerminalMonitor.active?.write(.server,"→ 应答  服务请求#"+TerminalMonitor.serverRequestID(id)+"  ·  方法不支持 (-32601)",.warning)
+        }
+    }
     @discardableResult private func send(_ value:[String:Any]) -> Bool {
         do {
             guard let input else {throw CodexProtocol.Failure.disconnected}
             var bytes = try JSONSerialization.data(withJSONObject:value); bytes.append(10)
             try input.write(contentsOf:bytes); return true
-        } catch {fail(error); return false}
+        } catch {fail(error,stage:"写入协议帧"); return false}
     }
     func abortUnconfirmedTask() {
         fail(PetFailure(message:"已关闭桌宠任务连接并回收服务进程；任务最终结果未确认，请在 Codex 核对。"))
     }
-    func reject(_ id:Any,_ message:String) {send(["id":id,"error":["code":-32602,"message":message]])}
+    func reject(_ id:Any,_ message:String) {
+        if send(["id":id,"error":["code":-32602,"message":message]]) {
+            TerminalMonitor.active?.write(.server,"→ 应答  服务请求#"+TerminalMonitor.serverRequestID(id)+"  ·  拒绝 (-32602)",.warning)
+        }
+    }
     private func receive(_ value: [String:Any]) {
         if let method = value["method"] as? String {
+            if let id = value["id"] {
+                TerminalMonitor.active?.write(.server,"← 请求  "+TerminalMonitor.rpcName(method)+"  ·  服务请求#"+TerminalMonitor.serverRequestID(id)
+                    + TerminalMonitor.rpcFields(value["params"] as? [String:Any] ?? [:]))
+            }
             guard let params = (value["params"] ?? [:]) as? [String:Any] else {
                 if let id = value["id"] {reject(id,"请求缺少参数对象。")} else {fail(CodexProtocol.Failure.malformed("事件缺少参数对象"))}
                 return
@@ -210,19 +252,36 @@ final class CodexConnection {
                 return
             }
             if method == "thread/closed",let thread = params["threadId"] as? String {loadedThreads.remove(thread)}
-            if let id = value["id"] { request(id,method,params) } else { event(method,params) }
-        } else if let id = value["id"] as? Int, let (callback,_) = pending.removeValue(forKey:id) {
-            if let error = value["error"] as? [String:Any] { callback(.failure(PetFailure(message:CodexErrorMessage.encode(error)))) }
-            else if let result = value["result"] as? [String:Any] {callback(.success(result))}
-            else {callback(.failure(CodexProtocol.Failure.malformed("回复缺少结果对象")))}
+            if let id = value["id"] { request(id,method,params) }
+            else {TerminalMonitor.active?.serverEvent(method,params,connection:generation); event(method,params)}
+        } else if let id = value["id"] as? Int {
+            guard let call = pending.removeValue(forKey:id) else {
+                TerminalMonitor.active?.write(.server,"← 回执  RPC#\(id)  ·  无对应的待处理请求",.warning)
+                return
+            }
+            func receipt(_ detail:String,_ level:TerminalMonitor.Level) {
+                TerminalMonitor.active?.write(.server,"← 回执  "+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  "+call.elapsed+detail,level)
+            }
+            if let error = value["error"] as? [String:Any] {
+                if TerminalMonitor.active != nil {receipt(TerminalMonitor.rpcError(error),.error)}
+                call.reply(.failure(PetFailure(message:CodexErrorMessage.encode(error))))
+            } else if let result = value["result"] as? [String:Any] {
+                if TerminalMonitor.active != nil {receipt(TerminalMonitor.rpcResult(call.method,result),.success)}
+                call.reply(.success(result))
+            } else {
+                receipt("  ·  缺少结果对象",.error)
+                call.reply(.failure(CodexProtocol.Failure.malformed("回复缺少结果对象")))
+            }
         }
     }
-    private func fail(_ error: Error) {
-        let callbacks = waiting, calls = pending.values.map{$0.0}
+    private func fail(_ error: Error,stage:String = "连接中断") {
+        TerminalMonitor.active?.write(.server,stage+"  ·  连接#\(generation)  ·  待回执 \(pending.count)  ·  "+TerminalMonitor.errorCode(error),.error)
+        let callbacks = waiting, calls = pending.values.map(\.reply)
         waiting.removeAll(); pending.removeAll(); close(); connectionError = error.localizedDescription
         callbacks.forEach{$0(error)}; calls.forEach{$0(.failure(error))}; disconnected(error)
     }
     func close() {
+        if let process {TerminalMonitor.active?.write(.server,"关闭连接  ·  PID \(process.processIdentifier)  ·  连接#\(generation)")}
         closing = true; ready = false; loadedThreads.removeAll(); generation += 1; expiration?.invalidate()
         try? input?.close(); input = nil
         if let process, process.isRunning {

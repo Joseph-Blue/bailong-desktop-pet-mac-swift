@@ -6,24 +6,27 @@ extension NSAttributedString.Key {
 
 // 只属于显示层；按钮、完成时间和用量共用一条可换行的原生底栏。
 final class TranscriptActions:NSObject {
-    let id:String, text:String, threadID:String?, side:CGFloat, font:NSFont
-    let status:String?, completedAt:Date?, usage:TokenUsage?, usageError:String?, showsActions:Bool
-    init(id:String,text:String,threadID:String?,font:NSFont,status:String? = nil,completedAt:Date? = nil,
-         usage:TokenUsage? = nil,usageError:String? = nil,showsActions:Bool = true) {
-        self.id = id; self.text = text; self.threadID = threadID; self.font = .systemFont(ofSize:max(11,font.pointSize-1))
-        side = max(28,font.pointSize+12); self.status = status; self.completedAt = completedAt
-        self.usage = usage; self.usageError = usageError; self.showsActions = showsActions
+    let result: TurnCompletion
+    let text:String, threadID:String?, side:CGFloat, font:NSFont, showsActions:Bool
+    var id:String {result.id}
+    init(_ completion:TurnCompletion, font:NSFont, text:String = "", threadID:String? = nil, showsActions:Bool = true) {
+        result = completion
+        self.text = text
+        self.threadID = threadID
+        self.font = .systemFont(ofSize:max(11,font.pointSize-1))
+        side = max(28,font.pointSize+12)
+        self.showsActions = showsActions
     }
-    var ended:String? {["completed":"完成","failed":"失败","interrupted":"中断","cancelled":"停止","canceled":"停止"][status ?? ""]}
+    var ended:String? {["completed":"完成","failed":"失败","interrupted":"中断","cancelled":"停止","canceled":"停止"][result.status]}
     var completion:String {
         guard let ended else {return ""}
-        let time = completedAt.map {$0.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))} ?? "时间未提供"
+        let time = result.completedAt.map {$0.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))} ?? "时间未提供"
         return ended+" · "+time
     }
     override func isEqual(_ object:Any?) -> Bool {
         guard let other = object as? TranscriptActions else {return false}
-        return id == other.id && text == other.text && threadID == other.threadID && font == other.font &&
-            status == other.status && completedAt == other.completedAt && usage == other.usage && usageError == other.usageError && showsActions == other.showsActions
+        return result == other.result && text == other.text && threadID == other.threadID &&
+            font == other.font && showsActions == other.showsActions
     }
     override var hash:Int {id.hashValue}
     func placeholder() -> NSAttributedString {
@@ -43,7 +46,7 @@ final class TranscriptActionBar:NSView {
     private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:"转到 Codex")
     private let completion = NSTextField(wrappingLabelWithString:"")
     private let tokenDisclosure = TokenDisclosureControl(frame:.zero)
-    private let detail = TranscriptTokenText(frame:.zero)
+    private let detail = SelectableRichText(frame:.zero)
     init(_ content:TranscriptActions) {
         self.content = content
         super.init(frame:.zero)
@@ -71,14 +74,14 @@ final class TranscriptActionBar:NSView {
         let font = NSFont.monospacedDigitSystemFont(ofSize:content.font.pointSize,weight:.regular)
         let paragraph = NSMutableParagraphStyle()
         let labelWidth = ["本轮","输入","缓存命中","输出"].map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
-        let counts = content.usage.map {[$0.total,$0.input,$0.cachedInput,$0.output]} ?? []
+        let counts = content.result.usage.map {[$0.total,$0.input,$0.cachedInput,$0.output]} ?? []
         let numberWidth = counts.map {(TokenUsage.formatted($0) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
         let valueTab = ceil(labelWidth)+12, unitTab = valueTab+ceil(numberWidth)+12
         paragraph.tabStops = [NSTextTab(textAlignment:.left,location:valueTab),NSTextTab(textAlignment:.left,location:unitTab)]
         paragraph.lineSpacing = 3
         // 汇总是一句话；只有展开后的明细使用制表位，不让“缓存命中”的列宽撑开汇总。
-        let heading = "本轮  "+(content.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}")} ?? (content.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
-        let canExpand = content.usage != nil || content.usageError != nil
+        let heading = "本轮  "+(content.result.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}")} ?? (content.result.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
+        let canExpand = content.result.usage != nil || content.result.usageError != nil
         let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
         tokenDisclosure.scale = max(0.85,content.font.pointSize/12)
         tokenDisclosure.baseFont = font
@@ -88,8 +91,8 @@ final class TranscriptActionBar:NSView {
         tokenDisclosure.accessibilityTitle = "用量明细"
         tokenDisclosure.attributedTitle = NSAttributedString(string:heading,attributes:[.font:font,.foregroundColor:primaryTextColor])
         tokenDisclosure.isHidden = content.ended == nil
-        detail.attributedStringValue = NSAttributedString(string:content.usage?.details ?? content.usageError ?? "",attributes:[
-            .font:font,.paragraphStyle:content.usage == nil ? NSParagraphStyle.default : paragraph,.foregroundColor:NSColor.secondaryLabelColor])
+        detail.attributedStringValue = NSAttributedString(string:content.result.usage?.details ?? content.result.usageError ?? "",attributes:[
+            .font:font,.paragraphStyle:content.result.usage == nil ? NSParagraphStyle.default : paragraph,.foregroundColor:NSColor.secondaryLabelColor])
         detail.isHidden = !expanded || !canExpand
         needsLayout = true
     }

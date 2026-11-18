@@ -80,6 +80,8 @@ struct AnimationLoadTiming {
     let readyAt: Double
     var handedAt: Double?
     var submittedAt: Double?
+    // 本段首次提交后清除，只在监视运行中保存交接前的动作及等帧汇总。
+    var monitorTransition:String?
 }
 
 // 帧数组构造后不再改变，CGImage 与 Data 均以只读方式跨队列使用。

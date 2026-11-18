@@ -60,9 +60,9 @@ final class BubbleCardStore {
     func clearSelection() {cardIndex = nil; isBrowsingCards = false}
     func stopBrowsing() {isBrowsingCards = false}
     func finishTask(_ key:String,status:String) {
-        for index in cards.indices where cards[index].timing?.key == key && cards[index].timing?.finished == nil {
-            cards[index].timing?.finished = Date(); cards[index].timing?.status = status
-            cards[index].animateHeading = false
+        for index in cards.indices where cards[index].content.timing?.key == key && cards[index].content.timing?.finished == nil {
+            cards[index].content.timing?.finished = Date(); cards[index].content.timing?.status = status
+            cards[index].content.animateHeading = false
         }
     }
 }

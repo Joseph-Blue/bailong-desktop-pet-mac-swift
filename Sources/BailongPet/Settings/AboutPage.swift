@@ -3,6 +3,9 @@ import AppKit
 // 设置“关于”页保留原有图标、版本、原生分页和富文本链接；架构取编译目标。
 final class AboutPageController: NSViewController {
     private static let repositoryURL = URL(string:"https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift")!
+    static let thirdPartyNoticesTitle = "查看第三方许可"
+    private static let thirdPartyNoticesURL = (Bundle.main.bundleURL.pathExtension == "app" ? Paths.resources : Paths.project)
+        .appendingPathComponent("第三方许可.txt")
     private var textViews = [NSTextView]()
     private let titleLabel = NSTextField(wrappingLabelWithString:"")
     private let appIcon = NSImageView()
@@ -38,13 +41,13 @@ final class AboutPageController: NSViewController {
         title.font = .systemFont(ofSize:23,weight:.semibold)
         title.alignment = .center
         let version = NSTextField(labelWithString:"版本 \(Paths.version) · \(Self.architecture)")
-        version.font = .systemFont(ofSize:13)
-        version.textColor = .secondaryLabelColor
+        version.font = .systemFont(ofSize:16)
+        version.textColor = .labelColor
         version.alignment = .center
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
         tabs.font = .systemFont(ofSize:13)
-        for (identifier,label,text) in [("about","关于",aboutText()),("credits","来源与致谢",creditsText()),("licenses","开源许可",licensesText())] {
+        for (identifier,label,text) in [("about","关于",aboutText()),("credits","来源与致谢",creditsText())] {
             let item = NSTabViewItem(identifier:identifier)
             item.label = label
             item.view = readingView(text)
@@ -117,7 +120,10 @@ final class AboutPageController: NSViewController {
         guard glyph < layout.numberOfGlyphs,
               layout.boundingRect(forGlyphRange:NSRange(location:glyph,length:1),in:container).contains(point) else {return}
         let character = layout.characterIndexForGlyph(at:glyph)
-        if let url = storage.attribute(.link,at:character,effectiveRange:nil) as? URL {NSWorkspace.shared.open(url)}
+        if let url = storage.attribute(.link,at:character,effectiveRange:nil) as? URL,
+           !NSWorkspace.shared.open(url),url == Self.thirdPartyNoticesURL {
+            showError("无法打开第三方许可",PetFailure(message:url.path))
+        }
     }
 
     @objc private func updateAccent() {
@@ -178,19 +184,10 @@ final class AboutPageController: NSViewController {
         link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
         link("GitHub 图标 · Primer Octicons（MIT）",url:"https://github.com/primer/octicons",to:text)
         link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
+        link(Self.thirdPartyNoticesTitle,url:Self.thirdPartyNoticesURL.absoluteString,to:text)
 
         heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)
         paragraph("感谢 AntiGravity agent（Gemini 4 Carbon 模型），在 Codex 冷启动首次发送延迟，以及窗口激活异常与持续掉帧的两轮攻坚中提供关键定位与修复。",to:text)
-        return text
-    }
-
-    private func licensesText() -> NSAttributedString {
-        let text = NSMutableAttributedString(string:"")
-        heading("Lucide · git-branch",to:text)
-        paragraph(GitIcons.lucideLicense,to:text)
-        link("Lucide 许可",url:"https://lucide.dev/license",to:text)
-        heading("Primer Octicons · GitHub",to:text)
-        paragraph(GitIcons.license,to:text)
         return text
     }
 

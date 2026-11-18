@@ -45,6 +45,19 @@ struct TaskAttention {
     }
 }
 
+extension NSAlert {
+    func setScrollableDetail(_ value:String,size:NSSize) {
+        let scroll = GutterScrollView(frame:NSRect(origin:.zero,size:size))
+        scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        let text = AppTextView(frame:scroll.contentView.bounds)
+        text.isEditable = false; text.isSelectable = true
+        text.isHorizontallyResizable = false; text.isVerticallyResizable = true
+        text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
+        text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = value
+        scroll.documentView = text; accessoryView = scroll
+    }
+}
+
 struct AppFailure {
     let title: String, message: String, detail: String
     var openDesktop = false
@@ -61,11 +74,7 @@ struct AppFailure {
 
     func showDetails() {
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
-        let scroll = GutterScrollView(frame:NSRect(x:0,y:0,width:480,height:180))
-        let text = AppTextView(frame:scroll.bounds); text.isEditable = false; text.isSelectable = true
-        text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = detail
-        text.isHorizontallyResizable = false; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
-        scroll.documentView = text; scroll.hasVerticalScroller = true; alert.accessoryView = scroll
+        alert.setScrollableDetail(detail,size:NSSize(width:480,height:180))
         alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"拷贝详情")
         alert.applyAccent(primary:1,keyboardDefault:1)
         CopyFeedback.attach(to:alert.buttons[1]) {self.detail}
@@ -139,15 +148,15 @@ enum QuotaPresentation {
         }
     }
     static func resetDateText(_ date: Date) -> String {
-        "重置："+date.formatted(date:.abbreviated,time:.shortened)
+        "重置："+date.formatted(date:.abbreviated,time:.shortened).replacingOccurrences(of:"日 ",with:"日")
     }
     static func countdown(until date: Date, now: Date = Date()) -> String {
         let remaining = date.timeIntervalSince(now)
-        if remaining < 60 {return "< 1 分钟"}
+        if remaining < 60 {return "<1分钟"}
         let totalMinutes = Int(remaining/60)
         let days = totalMinutes/1440, hours = (totalMinutes%1440)/60, minutes = totalMinutes%60
-        return [days > 0 ? "\(days) 天" : nil,hours > 0 ? "\(hours) 小时" : nil,minutes > 0 ? "\(minutes) 分钟" : nil]
-            .compactMap {$0}.joined(separator:" ")
+        return [days > 0 ? "\(days)天" : nil,hours > 0 ? "\(hours)小时" : nil,minutes > 0 ? "\(minutes)分钟" : nil]
+            .compactMap {$0}.joined()
     }
     static func reset(_ value: Any?, now: Date = Date()) -> String? {
         guard let seconds = number(value) else {return nil}
@@ -160,7 +169,7 @@ enum QuotaPresentation {
         if abs(minutes-43200) <= 2160 {
             return minutes.truncatingRemainder(dividingBy:1440) == 0 ? String(format:"%.0f 天额度",minutes/1440) : "30 天额度"
         }
-        if abs(minutes-10080) <= 1 {return "每周额度"}
+        if abs(minutes-10080) <= 1 {return "周额度"}
         if minutes >= 1440 && minutes.truncatingRemainder(dividingBy:1440) == 0 {
             return String(format:"%.0f 天额度",minutes/1440)
         }

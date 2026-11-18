@@ -38,7 +38,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     let composerModels = ChatModelSettings()
     private(set) var historyModel: ModelSelector!
     var historyButton: ActionButton!
-    var conversations: [Conversation] = []
+    private var conversationSource = [Conversation]()
+    private var order = ConversationOrder()
+    var conversations: [Conversation] {order.conversations}
     private(set) var visibleConversations: [Conversation] = []
     let searchField = NSSearchField()
     private var searchItem: NSSearchToolbarItem?
@@ -327,13 +329,31 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
         if reveal,!findMatches.isEmpty {transcript.scrollRangeToVisible(findMatches[matchIndex])}
     }
-    private func refreshList() {
+    private func refreshList(changed:Conversation? = nil) {
         guard history.isVisible && !history.isMiniaturized else {return}
-        let searchSignature = [searchField.stringValue] + conversations.flatMap {[$0.key,$0.title] + (searching ? $0.turns.map {$0.bodyReference.id} : [])}
-        if searchSignature != searchDataSignature {
-            visibleConversations = HistorySearch.filter(conversations,query:searchField.stringValue)
-            snippets = Dictionary(uniqueKeysWithValues:visibleConversations.compactMap {c in HistorySearch.snippet(c,query:searchField.stringValue).map {(c.key,$0)}})
-            searchDataSignature = searchSignature
+        let query = searchField.stringValue
+        if let changed {
+            if searching {
+                var matches = Set(visibleConversations.map(\.key))
+                if HistorySearch.filter([changed],query:query).isEmpty {
+                    matches.remove(changed.key)
+                    snippets.removeValue(forKey:changed.key)
+                } else {
+                    matches.insert(changed.key)
+                    snippets[changed.key] = HistorySearch.snippet(changed,query:query)
+                }
+                visibleConversations = conversations.filter {matches.contains($0.key)}
+            } else {visibleConversations = conversations}
+            searchDataSignature.removeAll()
+        } else {
+            let signature = [query] + conversations.flatMap {[$0.key,$0.title] + (searching ? $0.turns.map {$0.bodyReference.id} : [])}
+            if signature != searchDataSignature {
+                visibleConversations = HistorySearch.filter(conversations,query:query)
+                snippets = Dictionary(uniqueKeysWithValues:visibleConversations.compactMap { conversation in
+                    HistorySearch.snippet(conversation,query:query).map {(conversation.key,$0)}
+                })
+                searchDataSignature = signature
+            }
         }
         noSearchResults.isHidden = !searching || !visibleConversations.isEmpty
         let snapshot = visibleConversations.map {$0.key+"\u{0}"+$0.title+"\u{0}"+(snippets[$0.key] ?? "")+"\u{0}"+searchField.stringValue}
@@ -429,14 +449,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             }
             inputStates[entry] = state
         }
-        let indexed:[(offset:Int,conversation:Conversation,activity:Date)] = conversations.enumerated().map {
-            (offset:$0.offset,conversation:$0.element,activity:$0.element.lastActivity)
-        }
-        self.conversations = indexed.sorted {
-            $0.activity == $1.activity ? $0.offset > $1.offset : $0.activity > $1.activity
-        }.map(\.conversation)
+        conversationSource = conversations
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
         let historyVisible = history.isVisible && !history.isMiniaturized
+        if historyVisible {order.update(conversationSource)}
         inheritedSettings.update(settings:historyState.modelSettings,error:historyState.modelNote)
         refreshList()
         sourceLabel.stringValue = selected.title
@@ -447,7 +463,12 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let messageFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
         historyModel.font = messageFont; inheritedSettings.font = messageFont
         historyEditor.update(font:messageFont,editable:historyState.canEdit)
-        composerView.refresh(font:messageFont,state:composerState,conversations:self.conversations)
+        composerView.refresh(font:messageFont,state:composerState) { [weak self, kind = composerState.kind] in
+            guard let self else {return []}
+            var pickerOrder = ConversationOrder()
+            pickerOrder.update(self.conversationSource.filter {$0.kind == kind})
+            return pickerOrder.conversations
+        }
         historyButton.emphasize()
         historyModel.isEnabled = historyState.canEdit && !selected.external
         historyModel.isHidden = selected.external; inheritedSettings.isHidden = !selected.external
@@ -456,7 +477,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyStop.isEnabled = !historyState.stopping
         historyStop.title = historyState.desktopPreparing ? "取消发送" : historyState.stopping ? "正在停止…" : "停止任务"
         historyStop.isHidden = !historyState.ownsRunningTask && !historyState.desktopPreparing; historyCheck.isHidden = !historyState.unconfirmed
-        historyStatus.stringValue = historyState.historyNote; historyStatus.hoverHelp = historyState.replyNote ?? historyState.historyNote
+        historyStatus.stringValue = historyState.historyNote
+        let statusHelp = historyState.replyNote ?? historyState.historyNote
+        let showsMore = statusHelp != historyState.historyNote
+        historyStatus.setHoverHelp(statusHelp) { [weak historyStatus] in showsMore || historyStatus?.hasTruncatedText == true }
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
         if historyVisible {resizeHistoryInput()}
         modelStateChanged()
@@ -464,6 +488,28 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}
         guard historyVisible else {return}
+        refreshTranscript(selected)
+    }
+
+    func refreshTurn(_ turn:Turn,in conversation:Conversation,previousMessageAt:Date?,editsChanged:Bool) {
+        if composerVisible,inputStates[.composer]?.conversation === conversation {
+            composerView.refreshTurn(turn,in:conversation,editsChanged:editsChanged)
+        }
+        guard history.isVisible,!history.isMiniaturized else {return}
+        var reordered = false
+        if let date = turn.lastMessageAt,date != previousMessageAt {
+            reordered = order.messageChanged(in:conversation,from:previousMessageAt,to:date)
+        }
+        if searching || reordered {refreshList(changed:conversation)}
+        guard selected == conversation.key else {return}
+        if editsChanged {
+            workspaceStatus.update(conversation:conversation,executing:true,visible:true)
+        }
+        let page = historyPage.range(count:conversation.turns.count)
+        if conversation.turns[page].contains(where:{$0 === turn}) {refreshTranscript(conversation)}
+    }
+
+    private func refreshTranscript(_ selected:Conversation) {
         let selectionChanged = renderedConversation != selected.key
         if pageConversation != selected.key {historyPage = HistoryPageWindow(); pageConversation = selected.key; pageQuery = nil}
         if pageQuery != searchField.stringValue {
@@ -546,7 +592,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         renderedTranscriptSignature.removeAll(); renderedConversation = nil
         renderedPageStart = nil; pageConversation = nil; pageQuery = nil
         searchDataSignature.removeAll(); snippets.removeAll()
-        visibleConversations.removeAll(); listSnapshot.removeAll(); list.reloadData()
+        order = ConversationOrder(); visibleConversations.removeAll(); listSnapshot.removeAll(); list.reloadData()
         findMatches.removeAll(); matchIndex = 0
         transcript.releaseRenderedContent()
         onReleaseHistory()
@@ -564,9 +610,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         else {transcript.scrollToEndOfDocument(nil)}
     }
     private func refreshVisibleHistory() {
-        guard let current = conversations.first(where:{$0.key == selected}) else {return}
+        guard let current = inputStates[.history]?.conversation else {return}
         // 搜索、重新打开和取消最小化只刷新显示，不重置发送状态、只读保护和原会话设置。
-        refresh(Array(conversations.reversed()),selected:current,historyState:inputStates[.history] ?? ChatInputState(),composerState:inputStates[.composer] ?? ChatInputState())
+        refresh(conversationSource,selected:current,historyState:inputStates[.history] ?? ChatInputState(),composerState:inputStates[.composer] ?? ChatInputState())
     }
     func windowDidDeminiaturize(_ notification:Notification) {
         if notification.object as? NSWindow === history {refreshVisibleHistory()}
