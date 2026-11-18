@@ -6,15 +6,55 @@ private var hoverHelpKey: UInt8 = 0
 extension NSView {
     var hoverHelp: String? {
         get {(objc_getAssociatedObject(self,&hoverHelpKey) as? HoverHelpTarget)?.text}
-        set {
-            let old = objc_getAssociatedObject(self,&hoverHelpKey) as? HoverHelpTarget
-            if old?.text == newValue {return}
-            old?.detach()
-            toolTip = nil
-            setAccessibilityHelp(newValue)
-            let target = newValue.flatMap {$0.isEmpty ? nil : HoverHelpTarget(view:self,text:$0)}
-            objc_setAssociatedObject(self,&hoverHelpKey,target,.OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        set {setHoverHelp(newValue)}
+    }
+    func setHoverHelp(_ text:String?,when shouldShow:(() -> Bool)? = nil) {
+        let old = objc_getAssociatedObject(self,&hoverHelpKey) as? HoverHelpTarget
+        if old?.text == text {
+            old?.shouldShow = shouldShow
+            return
         }
+        old?.detach()
+        toolTip = nil
+        setAccessibilityHelp(text)
+        let target = text.flatMap {$0.isEmpty ? nil : HoverHelpTarget(view:self,text:$0,shouldShow:shouldShow)}
+        objc_setAssociatedObject(self,&hoverHelpKey,target,.OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+}
+
+extension NSTextField {
+    var hasTruncatedText:Bool {
+        guard !stringValue.isEmpty,let cell else {return false}
+        let area = cell.titleRect(forBounds:bounds)
+        if maximumNumberOfLines == 1 || usesSingleLineMode {
+            return attributedStringValue.size().width > area.width || stringValue.contains(where:\.isNewline)
+        }
+        let storage = NSTextStorage(attributedString:attributedStringValue)
+        let manager = NSLayoutManager()
+        let container = NSTextContainer(size:area.size)
+        container.lineFragmentPadding = 0
+        container.maximumNumberOfLines = maximumNumberOfLines
+        container.lineBreakMode = lineBreakMode
+        storage.addLayoutManager(manager)
+        manager.addTextContainer(container)
+        return manager.hasTruncatedText(in:container)
+    }
+}
+
+extension NSButton {
+    var hasTruncatedTitle:Bool {
+        guard let cell,!title.isEmpty else {return false}
+        return attributedTitle.size().width > cell.titleRect(forBounds:bounds).width || title.contains(where:\.isNewline)
+    }
+}
+
+extension NSLayoutManager {
+    func hasTruncatedText(in container:NSTextContainer) -> Bool {
+        ensureLayout(for:container)
+        let glyphs = glyphRange(for:container)
+        if NSMaxRange(glyphs) < numberOfGlyphs {return true}
+        guard glyphs.length > 0 else {return false}
+        return truncatedGlyphRange(inLineFragmentForGlyphAt:NSMaxRange(glyphs)-1).location != NSNotFound
     }
 }
 
@@ -31,9 +71,10 @@ extension NSToolbarItem {
 private final class HoverHelpTarget: NSResponder {
     weak var view: NSView?
     let text: String
+    var shouldShow:(() -> Bool)?
     private var area: NSTrackingArea!
-    init(view:NSView,text:String) {
-        self.view = view; self.text = text
+    init(view:NSView,text:String,shouldShow:(() -> Bool)?) {
+        self.view = view; self.text = text; self.shouldShow = shouldShow
         super.init()
         area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.inVisibleRect,.activeAlways],owner:self,userInfo:nil)
         view.addTrackingArea(area)
@@ -82,7 +123,7 @@ private final class HoverHelpPresenter {
             guard let self,let next,self.target === next,let view = next.view,let window = view.window,
                   window.isVisible,!view.isHiddenOrHasHiddenAncestor else {return}
             let point = window.convertPoint(fromScreen:NSEvent.mouseLocation)
-            guard view.visibleRect.contains(view.convert(point,from:nil)) else {return}
+            guard view.visibleRect.contains(view.convert(point,from:nil)),next.shouldShow?() ?? true else {return}
             self.show(next.text,window:window)
         }
         pending = job; DispatchQueue.main.asyncAfter(deadline:.now()+0.2,execute:job)

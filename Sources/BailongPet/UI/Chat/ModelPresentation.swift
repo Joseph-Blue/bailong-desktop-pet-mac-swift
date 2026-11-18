@@ -16,10 +16,24 @@ enum ModelPresentation {
 
 // 两类会话共用原生模型字段的尺寸、字体和轮廓；交互能力由各子类决定。
 class ModelSummaryButton:NSButton {
+    private var lightningSummary:String?
+
     func setSummary(_ text:String,lightning:Bool) {
+        lightningSummary = lightning ? text : nil
         title = text
         setAccessibilityValue((lightning ? "快速模式 · " : "")+text)
-        guard lightning,let image = NSImage(systemSymbolName:"bolt",accessibilityDescription:"快速模式") else {return}
+        if lightning {applyLightning(to:text)}
+    }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if let lightningSummary {applyLightning(to:lightningSummary)}
+    }
+    private func applyLightning(to text:String) {
+        let color = AppAppearance.resolvedColor(.labelColor,for:effectiveAppearance)
+        guard let foreground = NSColor(cgColor:color),
+              let image = NSImage(systemSymbolName:"bolt",accessibilityDescription:"快速模式")?
+                .withSymbolConfiguration(.init(paletteColors:[foreground])) else {return}
+        image.isTemplate = false
         let font = font ?? .systemFont(ofSize:13)
         let attachment = NSTextAttachment(); attachment.image = image
         attachment.bounds = NSRect(x:0,y:font.descender,width:font.pointSize,height:font.pointSize)

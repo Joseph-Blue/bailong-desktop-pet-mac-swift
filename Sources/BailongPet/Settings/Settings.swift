@@ -15,7 +15,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private lazy var appearancePage = AppearanceSettingsPage(form:form,window:window,
         onPreviewDetails:{ [weak self] in self?.onPreviewDetails() })
     private lazy var activityPage = ActivitySettingsPage(form:form,catalog:catalog,
-        reload:{ [weak self] in self?.render() })
+        reload:{ [weak self] in self?.render() },onPreview:{ [weak self] clip in self?.onPreview(clip) })
     private let aboutPage = AboutPageController()
     private lazy var workspacePage = WorkspaceSettingsPage(form:form,window:window,reload:{ [weak self] in self?.render() },clear:{ [weak self] completion in
         guard let action = self?.onClearDefaultWorkspace else {completion(.failure(PetFailure(message:"会话管理尚未就绪，无法清理工作区。"))); return}
@@ -32,6 +32,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private let searchResults = SettingsSearchResults()
     private lazy var searchIndex = SettingsSearchEntry.all(catalog:catalog)
     private var searchHighlight:SettingsSearchHighlight?
+    private var identityViewport:SettingsRowViewport?
     private var selected: SettingsSection = .general
     private var detailPage:SettingsDetail?
     private var itemList:SettingsItemList?
@@ -206,6 +207,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         searchHighlight?.removeFromSuperview(); searchHighlight = nil
         appearancePage.dismissPreview()
         appearancePage.reset()
+        activityPage.reset()
+        identityViewport = nil
         releaseItemList(); detailPage = nil
         form.reset(section:selected)
         renderedSection = nil
@@ -245,6 +248,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let searching = !searchField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
         searchResults.isHidden = !searching
         scroll.isHidden = searching || selected == .about || itemList != nil
+        if !scroll.isHidden {
+            activityPage.viewport?.schedule()
+            identityViewport?.schedule()
+        }
         itemList?.isHidden = searching
         aboutPage.view.isHidden = searching || selected != .about
         resetButton.isEnabled = !searching && !selected.keys.isEmpty
@@ -268,7 +275,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if let itemList {
             if let id = entry.itemID {itemList.reveal(group:entry.group,id:id)}
             else if entry.detail == .lines && entry.title == IdentitySettingsPage.editWorkingLineTitle {
-                let line = IdentitySettingsPage.workingExample(preferences)
+                let line = IdentitySettingsPage.workingLineEditTarget(preferences)
                 itemList.reveal(group:line.group,id:line.key)
             }
             return
@@ -283,6 +290,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let rect = target.convert(target.bounds,to:document)
         let y = max(0,min(rect.midY-scroll.contentView.bounds.height/2,document.bounds.height-scroll.contentView.bounds.height))
         scroll.contentView.scroll(to:NSPoint(x:0,y:y)); scroll.reflectScrolledClipView(scroll.contentView)
+        (target as? any SettingsViewportRow)?.loadControls()
         if let button = target as? SettingsValueButton,button.isEnabled {button.showEditor(focusing:entry.title)}
         let highlight = SettingsSearchHighlight(frame:target.bounds)
         highlight.autoresizingMask = [.width,.height]
@@ -314,6 +322,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         renderedSection = selected
         searchHighlight?.removeFromSuperview(); searchHighlight = nil
         appearancePage.reset()
+        activityPage.reset()
+        identityViewport = nil
         form.reset(section:selected)
         window.title = selected.title
         resetButton.isEnabled = !selected.keys.isEmpty
@@ -323,19 +333,16 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .identity where detailPage == .lines:showItemList(IdentitySettingsPage.items(catalog:catalog))
         case .activity where detailPage == .actions:showItemList(ActivitySettingsPage.items(catalog:catalog))
         case .identity:
-            IdentitySettingsPage.render(form:form,catalog:catalog,window:window,onLinePreview:onLinePreview,
-                                        manage:{ [weak self] group,id in
-                                            self?.select(.identity,detail:.lines)
-                                            if let group,let id {self?.itemList?.reveal(group:group,id:id)}
-                                        })
-        case .activity:activityPage.render { [weak self] in self?.select(.activity,detail:.actions) }
+            identityViewport = IdentitySettingsPage.render(form:form,catalog:catalog,window:window,onLinePreview:onLinePreview,
+                play:{ [weak self] in self?.previewItem($0) },reload:{ [weak self] in self?.render() })
+        case .activity:activityPage.render()
         case .messages:
             let topic:MessageSettingsPage.Topic?
             if case .messages(let current) = detailPage {
                 topic = current
-                content.addArrangedSubview(form.navigationButton(selected.title,back:true) { [weak self] in self?.select(.messages) })
+                content.addArrangedSubview(form.backButton(selected.title) { [weak self] in self?.select(.messages) })
             } else {topic = nil}
-            MessageSettingsPage.render(form:form,topic:topic,open:{ [weak self] in self?.select(.messages,detail:.messages($0)) },onPreview:onMessagePreview)
+            MessageSettingsPage.render(form:form,topic:topic,onPreview:onMessagePreview)
         case .appearance: appearancePage.render()
         case .advanced: advanced()
         case .updates: updates()
@@ -364,16 +371,17 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         listPositions[itemList.section] = itemList.position
         itemList.removeFromSuperview(); self.itemList = nil
     }
+    private func previewItem(_ item:SettingsListItem) {
+        guard let clip = item.preview else {return}
+        if case .template(let key,_) = item.kind {onLinePreview(clip,preferences.statusLine(key))}
+        else {onPreview(clip)}
+    }
     private func showItemList(_ items:[SettingsListItem]) {
         guard let host = scroll.superview else {return}
         let section = selected
         let list = SettingsItemList(items:items,section:section,window:window,preferences:preferences,
             back:{ [weak self] in self?.select(section) },
-            play:{ [weak self] item in
-                guard let self,let clip = item.preview else {return}
-                if case .template(let key,_) = item.kind {self.onLinePreview(clip,self.preferences.statusLine(key))}
-                else {self.onPreview(clip)}
-            })
+            play:{ [weak self] in self?.previewItem($0) })
         itemList = list
         host.addSubview(list,positioned:.below,relativeTo:searchResults); list.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([list.topAnchor.constraint(equalTo:host.safeAreaLayoutGuide.topAnchor),list.bottomAnchor.constraint(equalTo:host.bottomAnchor),

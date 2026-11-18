@@ -539,7 +539,8 @@ final class Bubble {
         self.kind = kind; self.scale = scale; displayedFailure = failure
         self.headingActivity = kind == "progressToast" ? headingActivity : attentionAction ? .waiting(approval:timing?.status == "waitingForApproval" || approval != nil) : nil
         headingIcon.isHidden = self.headingActivity == nil
-        headingSpinner.isHidden = self.headingActivity == nil || self.headingActivity?.kind == .attention || self.headingActivity?.finished == true
+        // 盲文表示整轮仍在执行，单个工具的结束状态留给操作图标与结果角标。
+        headingSpinner.isHidden = kind != "progressToast" || self.headingActivity == nil || self.headingActivity?.kind == .attention || timing?.finished != nil
         headingIcon.update(self.headingActivity,pointSize:max(16,preferences.number("messageFontSize"))*scale)
         TaskActivityAppearance.apply(self.headingActivity,icon:headingIcon,visible:true)
         pendingAttention = attentionAction
@@ -575,11 +576,11 @@ final class Bubble {
             container.maximumNumberOfLines = bodyLines
             container.lineBreakMode = isToast ? .byTruncatingTail : .byWordWrapping
         }
-        text.hoverHelp = isToast && !body.isEmpty ? body : nil
+        text.setHoverHelp(isToast && !body.isEmpty ? body : nil) { [weak text] in text?.hasTruncatedText == true }
         title.font = .systemFont(ofSize:preferences.number("messageFontSize")*scale,weight:.semibold)
         title.maximumNumberOfLines = isToast ? 1 : 0
         title.lineBreakMode = isToast ? .byTruncatingTail : .byWordWrapping
-        title.hoverHelp = isToast ? heading : nil
+        title.setHoverHelp(isToast ? heading : nil) { [weak title] in title?.hasTruncatedText == true }
         setHeading(heading, animated: message.animateHeading && timing?.finished == nil)
         refreshWorkspace(relayout:false)
         let bodyFont = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
@@ -761,7 +762,7 @@ final class Bubble {
         let wasHidden = taskProgress.isHidden
         taskProgress.font = .systemFont(ofSize:11*scale*preferences.number("messageFontSize")/13)
         taskProgress.stringValue = activity?.line ?? ""
-        taskProgress.hoverHelp = activity?.text
+        taskProgress.setHoverHelp(activity?.text) { [weak taskProgress] in taskProgress?.textOverflows == true }
         taskProgress.isHidden = taskProgress.stringValue.isEmpty
         taskProgressIcon.isHidden = taskProgress.isHidden
         let previousIconSize = taskProgressIcon.layoutSize
@@ -912,7 +913,7 @@ final class Bubble {
             let paragraph = NSMutableParagraphStyle()
             paragraph.tabStops = [NSTextTab(textAlignment:.left,location:resetTab)]
             let line = QuotaPresentation.resetDateText(date)+"\t"+QuotaPresentation.countdown(until:date,now:now)
-            let view = TranscriptTokenText(frame:.zero)
+            let view = SelectableRichText(frame:.zero)
             view.textContainer?.lineFragmentPadding = 2
             view.font = resetFont
             view.attributedStringValue = NSAttributedString(string:line,attributes:[.font:resetFont,.foregroundColor:Self.quotaResetTextColor,.paragraphStyle:paragraph])
@@ -942,8 +943,8 @@ final class Bubble {
                 }
                 continue
             }
-            let headingFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
             let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
+            let headingFont = NSFont.systemFont(ofSize:row.subtitle == nil ? amountFont.pointSize : 12*fontScale,weight:.medium)
             // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
             // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
             let heading = NSTextField(labelWithString:row.title); heading.font = headingFont; heading.textColor = .labelColor
@@ -1000,21 +1001,26 @@ final class Bubble {
             y += 12*scale
         }
         if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
-        let management = SubscriptionManagementButton(management:overview.management,font:.systemFont(ofSize:12*fontScale))
+        let actionFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
+        let actionSymbol = NSImage.SymbolConfiguration(pointSize:11*fontScale,weight:.semibold)
+        let management = SubscriptionManagementButton(management:overview.management,font:actionFont)
+        management.symbolConfiguration = actionSymbol
         let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
         if let refresh {
-            refresh.font = .systemFont(ofSize:12*fontScale,weight:.medium)
+            refresh.font = actionFont
             refresh.image = NSImage(systemSymbolName:"arrow.clockwise",accessibilityDescription:nil)?
-                .withSymbolConfiguration(.init(pointSize:11*fontScale,weight:.semibold))
+                .withSymbolConfiguration(actionSymbol)
             refresh.imagePosition = .imageLeading
             refresh.keepsAccentWhenInactive = true
             refresh.emphasize()
         }
-        let actionHeight = max(26*scale,management.intrinsicContentSize.height,refresh?.intrinsicContentSize.height ?? 0)
-        management.frame = NSRect(x:0,y:y,width:min(width,management.intrinsicContentSize.width+12*scale),height:actionHeight)
+        let managementSize = management.intrinsicContentSize, refreshSize = refresh?.intrinsicContentSize ?? .zero
+        let actionHeight = max(26*scale,managementSize.height,refreshSize.height)
+        let refreshWidth = min(width,refreshSize.width)
+        let managementWidth = max(0,min(managementSize.width,width-refreshWidth))
+        management.frame = NSRect(x:0,y:y,width:managementWidth,height:actionHeight)
         content.addSubview(management)
         if let refresh {
-            let refreshWidth = refresh.intrinsicContentSize.width
             refresh.frame = NSRect(x:width-refreshWidth,y:y,width:refreshWidth,height:actionHeight)
             content.addSubview(refresh)
         }

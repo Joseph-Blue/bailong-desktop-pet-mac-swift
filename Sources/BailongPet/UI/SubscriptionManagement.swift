@@ -23,15 +23,14 @@ enum SubscriptionManagement {
     }
 }
 
-// 原生轻量文字按钮与 NSMenu；仅用户点击后打开官方页面，不读取网页账号或凭证。
+// 原生圆角按钮与 NSMenu，菜单项打开对应的管理页面。
 final class SubscriptionManagementButton:NSButton {
     let management:SubscriptionManagement
     init(management:SubscriptionManagement,font:NSFont) {
         self.management = management
         super.init(frame:.zero)
-        title = management.title; isBordered = false; bezelStyle = .inline
-        self.font = font; alignment = .left; contentTintColor = AppAccent.foregroundColor
-        attributedTitle = NSAttributedString(string:management.title,attributes:[.font:font,.foregroundColor:AppAccent.foregroundColor])
+        title = management.title; isBordered = true; bezelStyle = .rounded
+        self.font = font
         image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)
         imagePosition = .imageTrailing; imageScaling = .scaleProportionallyDown
         target = self; action = #selector(openMenu); setAccessibilityLabel(management.title)

@@ -199,7 +199,9 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let copyButton = ActionButton("拷贝完整诊断") {}
         copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "拷贝")
         copyButton.imagePosition = .imageLeading; copyButton.emphasize()
-        CopyFeedback.attach(to:copyButton,didCopy:{ [weak self] text in self?.showCopiedInformation(text) }) { [weak self] in self?.copyInformation() }
+        CopyFeedback.attach(to:copyButton,didCopy:{ [weak window] text in
+            if let window {Self.showCopiedInformation(text,for:window)}
+        }) { [weak self] in self?.copyInformation() }
         let actions = NSStackView(views: [closeButton, copyButton]); actions.orientation = .horizontal; actions.spacing = 8
         container.addSubview(actions); actions.translatesAutoresizingMaskIntoConstraints = false
         let pinIcon = NSImageView(image: NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "置顶")!)
@@ -320,10 +322,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     private func number(_ value: Double?) -> String {
         value.map { String(format: "%.1f", $0) } ?? "—"
     }
-    private func showCopiedInformation(_ text:String) {
-        Self.copiedInformationAlert(text).beginSheetModal(for:window)
-    }
-    static func copiedInformationAlert(_ text:String) -> NSAlert {
+    static func showCopiedInformation(_ text:String,for parent:NSWindow) {
         let alert = NSAlert()
         alert.messageText = "已将当前的完整诊断拷贝至剪贴板"
         let symbol = NSImage(systemSymbolName:"chart.xyaxis.line",accessibilityDescription:"应用性能信息统计")?
@@ -337,11 +336,29 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             }
             return true
         }
-        alert.setScrollableDetail(text,size:NSSize(width:450,height:230))
+        let scroll = GutterScrollView(frame:NSRect(x:0,y:0,width:450,height:230))
+        let body = SelectableRichText(frame:.zero)
+        body.attributedStringValue = NSAttributedString(string:text,attributes:[
+            .font:NSFont.monospacedSystemFont(ofSize:12,weight:.regular),.foregroundColor:NSColor.labelColor
+        ])
+        body.setAccessibilityLabel("完整诊断")
+        scroll.hasVerticalScroller = true
+        scroll.documentView = body
+        let box = MessageTextBoxSurface(scroll:scroll)
+        alert.accessoryView = box
         let dismiss = alert.addButton(withTitle:"知道了")
         alert.applyAccent()
         if dismiss.bezelColor == nil && AppAccent.selection != "system" {NativeAccentTint.apply(to:dismiss)}
-        return alert
+        box.layoutSubtreeIfNeeded()
+        let width = scroll.documentLayoutWidth
+        let viewport = NSSize(width:width,height:scroll.contentSize.height)
+        let documentHeight = max(viewport.height,body.height(for:width))
+        body.setSelectedRange(NSRange(location:0,length:0))
+        // AppKit 在 sheet 建立焦点时会居中正文的 frame。先用首屏范围接收焦点，
+        // 再同步展开已排好的文档，手动滚动和文字选择继续由系统处理。
+        body.frame = NSRect(origin:.zero,size:viewport)
+        alert.beginSheetModal(for:parent)
+        body.setFrameSize(NSSize(width:width,height:documentHeight))
     }
     private func copyInformation() -> String {
         guard let pet else { return window.title }

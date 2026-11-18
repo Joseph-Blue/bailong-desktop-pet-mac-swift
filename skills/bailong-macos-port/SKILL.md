@@ -36,7 +36,7 @@ description: 维护白龙桌宠Swift（Swift + AppKit 原生工程），覆盖�
 | 用户消息整理与模型选择 | `Codex/UserInputText.swift`、`UI/Chat/ChatComposerComponents.swift`、`UI/Chat/ChatViewLayout.swift`、`Codex/ModelSelection.swift` |
 | 窗口、玻璃材质与公共控件 | `App/InterfaceWindows.swift`、`UI/Shared/NativeControls.swift`、`UI/Shared/GlassEdgeHighlight.swift`、`UI/Shared/PanelPresentation.swift` |
 | 富文本、代码块与动效 | `UI/Shared/MarkdownText.swift`、`MessageTextView.swift`、`CodeBlockRendering.swift`、`ProgressTextEffects.swift`、`InlineStatusLayout.swift`、`CopyFeedback.swift` |
-| 工作区状态条与任务信息栏 | `UI/Chat/WorkspaceStatusView.swift`、`WorkspaceStatusPanel.swift`、`WorkspaceFileList.swift`、`Infrastructure/GitWorkspace.swift`、`GitWorkspaceObservation.swift` |
+| 工作区状态条与任务信息栏 | `UI/Chat/WorkspaceStatusView.swift`、`WorkspaceStatusPanel.swift`、`WorkspaceFileList.swift`、`Infrastructure/GitWorkspace.swift`、`GitWorkspaceMonitor.swift`、`GitWorkspaceObservation.swift` |
 | 文件引用与修改统计 | `UI/Shared/CodexFileCitation.swift`、`Conversation/FileEditSummary.swift`、`UI/Shared/FileEditRendering.swift`、`UI/Shared/FileEditPresentation.swift`、`UI/MessageFileLink.swift`、`UI/FinderFileReveal.swift` |
 | 额度与 Token 用量控件 | `Conversation/QuotaCoordinator.swift`、`Codex/QuotaQuery.swift`、`Codex/QuotaResetCards.swift`、`Conversation/TokenUsage.swift`、`Codex/TurnTokenReader.swift`、`Codex/LocalDailyTokenReader.swift`、`UI/Shared/TokenDisclosureControl.swift`、`UI/Shared/TokenUsageView.swift` |
 | 图标、关于页与设置系统 | `App/GitIcons.swift`、`App/AppIcons.swift`、`Settings/AboutPage.swift`、`Settings/Preferences.swift`、`Settings/Settings.swift`、`Settings/SettingsForm.swift`、`Settings/Pages/`、`Settings/SettingsSearch.swift` |
@@ -50,12 +50,12 @@ description: 维护白龙桌宠Swift（Swift + AppKit 原生工程），覆盖�
 - 卡片渲染直接使用 `BubbleCard` 和 `BubbleContent`。外部与内置任务提交 `TurnCompletion` 数据，气泡与历史负责 TextKit 字体、底栏和操作按钮。
 - **卡片与计时**：`BubbleCardStore` 负责卡片去重、上限淘汰与优先级排序，`BubbleCountdown` 管理倒计时；正文视图不持有会话发送生命周期，重排不得丢失未提交问卷草稿。
 - **滚动与首行稳定**：`BubbleBodyScrollView` 与 `BubbleBodyLayout` 保证左右边距对称、纵向滚动条位于右边距内且显隐不改变换行宽度。`MessageTextView` 增量替换变化尾部；无选区写入后将插入点重置到 `{0, 0}` 并拦截容器尺寸变化触发的自动滚向文末，`documentView` 原点固定为 `.zero`。普通气泡打开、切卡或换新内容时在布局完成后单次回顶，用户主动滚动即取消待执行回顶；2 秒短进展气泡按自然高度排版、超宽文本由 TextKit 单行尾部省略，专用 clip 锁定顶部且禁用滚动。
-- **Token 汇总与展开**：额度弹窗、历史底栏与任务完成气泡底栏统一复用 `TokenDisclosureControl`（以文字大写字高中心对齐 SF Symbol `alignmentRect.midY`，悬停文字或箭头呈现整块圆角背景，点击整块切换展开）；展开明细使用独立 TextKit 视图（`TranscriptTokenText`）与真实 `NSTextTab` 对齐列宽并支持文本选择。
+- **Token 汇总与展开**：额度弹窗、历史底栏与任务完成气泡底栏统一复用 `TokenDisclosureControl`（以文字大写字高中心对齐 SF Symbol `alignmentRect.midY`，悬停文字或箭头呈现整块圆角背景，点击整块切换展开）；展开明细使用独立 TextKit 视图（`SelectableRichText`）与真实 `NSTextTab` 对齐列宽并支持文本选择。
 - **动效与代码块**：`ProgressTextEffects` 提供标题扫光与超宽跑马灯，主气泡进展、任务概览与 2 秒气泡首行共用 `TaskActivity.groupActivity` 的标题、图标及结果角标，短气泡第二行只放新增的公开细节，有内容时显示；代码块采用原生 `NSTextTableBlock` 与 `CodeBlockHeaderLayout`。用户输入由 `UserInputText` 剥离附件包装后渲染，外部执行中插话按 `userMessage` ID 合并卡片并沿用原任务计时。
 
 ### 任务信息栏与工作区状态条
 
-- **两套独立入口**：气泡内「任务信息栏」（`taskInfoBarEnabled`，默认开启）在正文与操作按钮之间展示 Git 状态与本轮文件增删（隐藏目录名，同会话主气泡与短进展自动去重）。独立「工作区状态条」（`WorkspaceStatusPanel`，`gitWindowEnabled` 默认关闭）仅设**常驻显示**与**隐藏**二态，无倒计时或变化召回；右键与状态栏菜单动态切换「显示工作区状态条」／「隐藏工作区状态条」，点击状态条关闭按钮同步将 `gitWindowEnabled` 设为 `false`。
+- 气泡与任务概览的「任务信息栏」由 `taskInfoBarEnabled` 控制。独立「工作区状态条」由 `WorkspaceStatusPanel` 管理，显隐入口位于右键和状态栏菜单的「快捷开关」。默认值与显示规则见 [输入与窗口](../../docs/来源与架构.md#current-windows)。
 - **双数据源严格区分**：Git 仓库状态通过只读 `/usr/bin/git --no-optional-locks` 查询并配合 `FSEvents` `400ms` 防抖监听刷新；本轮文件增删来自所属轮次已完成的 `fileChange` 累计（`Turn.fileEdits`）。两类详情弹窗共用透明 `WorkspaceFileTable` 与 `PopoverDismissal`（单击选中、双击访达定位、右键定位或复制完整路径）。
 
 ### 双通道会话、审批与历史

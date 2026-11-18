@@ -42,7 +42,7 @@ final class CopyFeedback:NSObject {
             button.contentTintColor = success ? .systemGreen : .systemOrange
         }
         button.imagePosition = originalPosition
-        button.hoverHelp = success ? status : "拷贝失败，请重试"
+        button.hoverHelp = success ? (originalPosition == .imageOnly ? status : nil) : "拷贝失败，请重试"
         button.setAccessibilityLabel(status)
         button.needsDisplay = true
         let timer = Timer(timeInterval:1.5,repeats:false) { [weak self] _ in self?.restore() }

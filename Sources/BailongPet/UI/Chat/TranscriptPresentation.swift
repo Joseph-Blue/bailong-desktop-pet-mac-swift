@@ -46,7 +46,7 @@ final class TranscriptActionBar:NSView {
     private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:"转到 Codex")
     private let completion = NSTextField(wrappingLabelWithString:"")
     private let tokenDisclosure = TokenDisclosureControl(frame:.zero)
-    private let detail = TranscriptTokenText(frame:.zero)
+    private let detail = SelectableRichText(frame:.zero)
     init(_ content:TranscriptActions) {
         self.content = content
         super.init(frame:.zero)

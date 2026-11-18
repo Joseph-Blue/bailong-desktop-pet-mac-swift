@@ -49,11 +49,11 @@ struct SettingsSearchEntry {
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 动作 播放 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
-        entries.append(.init(section:.identity,group:"工作中台词",title:IdentitySettingsPage.editWorkingLineTitle,keywords:"台词示例 任务概览",detail:.lines))
+        entries.append(.init(section:.identity,group:"工作中台词",title:IdentitySettingsPage.editWorkingLineTitle,keywords:"任务概览 随机台词",detail:.lines))
         entries.append(.init(section:.identity,group:SettingsDetail.lines.title,title:SettingsDetail.lines.title,detail:.lines))
-        entries += IdentitySettingsPage.items(catalog:catalog).map {$0.searchEntry(.lines)}
+        entries += IdentitySettingsPage.items(catalog:catalog).map {$0.searchEntry(in:.identity)}
         if catalog != nil {entries.append(.init(section:.activity,group:SettingsDetail.actions.title,title:SettingsDetail.actions.title,detail:.actions))}
-        entries += ActivitySettingsPage.items(catalog:catalog).map {$0.searchEntry(.actions)}
+        entries += ActivitySettingsPage.items(catalog:catalog).map {$0.searchEntry(in:.activity)}
         add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天面板 查看额度 查看历史消息 显示任务进度 播放随机动画 单句台词 无动作")
         add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 适中 活泼 自定义 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
@@ -76,7 +76,8 @@ struct SettingsSearchEntry {
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
-        add(.about,"关于",["关于","来源与致谢","开源许可"],"开源致谢 来源 作者 许可证 图标 Lucide SF Symbols GitHub Codex OpenAI 技术栈 AppKit macOS UI skill")
+        add(.about,"关于",["关于","来源与致谢"],"开源致谢 来源 作者 图标 Lucide SF Symbols GitHub Codex OpenAI 技术栈 AppKit macOS UI skill")
+        add(.about,"来源与致谢",[AboutPageController.thirdPartyNoticesTitle],"开源许可 许可证 英文原文 图标 Lucide ISC Primer Octicons MIT")
         for index in entries.indices {
             if entries[index].section == .appearance && entries[index].title == "消息窗口材质" {
                 entries[index].keywords += " SDK 兼容构建 普通材质"

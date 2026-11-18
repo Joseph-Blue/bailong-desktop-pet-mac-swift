@@ -2,10 +2,11 @@ import AppKit
 
 enum IdentitySettingsPage {
     static let editWorkingLineTitle = "编辑工作中台词"
-    static func workingExample(_ prefs:PetPreferences) -> (group:String,key:String) {
+    static func workingLineEditTarget(_ prefs:PetPreferences) -> (group:String,key:String) {
         prefs.bool("randomWorkingLines") ? ("工作中台词",ConversationLines.working[0].key) : ("任务状态台词","taskProgressTemplate")
     }
-    static func render(form:SettingsForm,catalog:Catalog?,window:NSWindow,onLinePreview:@escaping (Clip,String) -> Void,manage:@escaping (String?,String?) -> Void) {
+    static func render(form:SettingsForm,catalog:Catalog?,window:NSWindow,onLinePreview:@escaping (Clip,String) -> Void,
+                       play:@escaping (SettingsListItem) -> Void,reload:@escaping () -> Void) -> SettingsRowViewport? {
         let preferences = form.preferences
         func templatePreview(_ title:String,key:String,clip:Clip?) -> ActionButton {
             let button = form.animationPreviewButton(title,compact:true) { [weak window] in
@@ -20,21 +21,36 @@ enum IdentitySettingsPage {
         form.group("我们怎么称呼彼此",names,symbol:"person.2")
         let greetingPreview = templatePreview("问候语",key:"greetingTemplate",clip:catalog?.variants.first(where:{$0.id == "01"}))
         form.group("见面时说",[form.text("问候语","greetingTemplate",limit:120,action:greetingPreview)],symbol:"hand.wave")
-        let example = NSTextField(wrappingLabelWithString:"")
-        example.font = .systemFont(ofSize:12); example.textColor = .secondaryLabelColor
-        form.observeValues { [weak example] prefs in
-            let text = prefs.statusLine(workingExample(prefs).key)
-            if example?.stringValue != text {example?.stringValue = text}
+        let grouped = Dictionary(grouping:items(catalog:catalog),by:\.group)
+        let previewHeight = greetingPreview.fittingSize.height
+        var lineRows = [IdentityLineRow]()
+        func rows(_ group:String) -> [NSView] {
+            (grouped[group] ?? []).map { item in
+                let row = IdentityLineRow(item:item,preferences:preferences,previewHeight:previewHeight,play:play)
+                lineRows.append(row)
+                return form.searchable(row,title:item.id)
+            }
         }
-        let edit = form.navigationButton(editWorkingLineTitle+"…") {
-            let line = workingExample(preferences); manage(line.group,line.key)
+        func restore(_ group:SettingsLineResetGroup) -> NSButton {
+            let button = ActionButton("恢复默认") { [weak window] in
+                guard window?.makeFirstResponder(nil) == true else {return}
+                group.restore(in:preferences); reload()
+            }
+            button.controlSize = .small; button.font = .systemFont(ofSize:11)
+            button.setAccessibilityLabel("恢复"+group.rawValue+"为默认值")
+            return button
         }
-        let previewRow = form.alignedRow(leading:example,control:edit)
         form.group("工作中台词",[
-            form.toggle("随机工作中台词抽取","randomWorkingLines",detail:"有执行中任务时，每次打开任务概览随机抽取一句。关闭后使用“执行任务中”台词。"),
-            previewRow
-        ],symbol:"text.bubble")
-        form.content.addArrangedSubview(form.navigationButton(SettingsDetail.lines.title) {manage(nil,nil)})
+            form.toggle("随机工作中台词抽取","randomWorkingLines",detail:"有执行中任务时，每次打开任务概览随机抽取一句。关闭后使用“执行任务中”台词。")
+        ] + rows("工作中台词"),symbol:"briefcase",action:restore(.working))
+        form.group("任务状态台词",rows("任务状态台词"),symbol:"checklist")
+        form.group("聊天窗口台词",rows("聊天窗口台词"),symbol:"bubble.left.and.bubble.right")
+        form.group("额度查询台词",rows("额度查询台词"),symbol:AppIcons.quotaSymbol)
+        if grouped["互动台词"] != nil {
+            form.group("互动台词",rows("互动台词"),symbol:"figure.play",action:restore(.interaction))
+        }
+        guard let scroll = form.content.enclosingScrollView else {return nil}
+        return SettingsRowViewport(rows:lineRows,scroll:scroll)
     }
 
     static func items(catalog:Catalog?) -> [SettingsListItem] {
@@ -57,5 +73,67 @@ enum IdentitySettingsPage {
             }
         }
         return result
+    }
+}
+
+private final class IdentityLineRow:NSView,SettingsViewportRow {
+    private let item:SettingsListItem
+    private let preferences:PetPreferences
+    private let play:(SettingsListItem) -> Void
+    private let caption:NSTextField
+    private var editor:(form:SettingsForm,view:NSView)?
+    var isLoaded:Bool {editor != nil}
+
+    init(item:SettingsListItem,preferences:PetPreferences,previewHeight:CGFloat,play:@escaping (SettingsListItem) -> Void) {
+        self.item = item; self.preferences = preferences; self.play = play
+        caption = label(item.title)
+        super.init(frame:.zero)
+        setAccessibilityRole(.group); setAccessibilityLabel(item.title)
+        caption.translatesAutoresizingMaskIntoConstraints = false; addSubview(caption)
+        let captionHeight = caption.fittingSize.height
+        let headerHeight = item.preview == nil ? captionHeight : max(captionHeight,previewHeight)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant:headerHeight+SettingsForm.multilineEntryHeight+SettingsForm.multilineEntrySpacing),
+            caption.leadingAnchor.constraint(equalTo:leadingAnchor),caption.trailingAnchor.constraint(equalTo:trailingAnchor),
+            caption.topAnchor.constraint(equalTo:topAnchor,constant:(headerHeight-captionHeight)/2)
+        ])
+    }
+    required init?(coder:NSCoder) {fatalError()}
+
+    func loadControls() {
+        guard !isLoaded,let window else {return}
+        let form = SettingsForm(content:NSStackView(),preferences:preferences,window:window)
+        form.reset(section:.identity)
+        let item = item, play = play
+        guard let view = item.lineEditor(in:form,onPreview:{ [weak window] in
+            guard window?.makeFirstResponder(nil) == true else {return}
+            play(item)
+        }) else {return}
+        editor = (form,view)
+        caption.isHidden = true
+        view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo:leadingAnchor),view.trailingAnchor.constraint(equalTo:trailingAnchor),
+            view.topAnchor.constraint(equalTo:topAnchor),view.bottomAnchor.constraint(equalTo:bottomAnchor)
+        ])
+    }
+    func releaseControls() {
+        editor?.view.removeFromSuperview(); editor = nil; caption.isHidden = false
+    }
+
+    override var acceptsFirstResponder:Bool {!isLoaded}
+    override func becomeFirstResponder() -> Bool {
+        guard super.becomeFirstResponder() else {return false}
+        scrollToVisible(bounds); loadControls()
+        DispatchQueue.main.async { [weak self] in
+            guard let self,let window = self.window,window.firstResponder === self,
+                  let field = self.editor?.form.currentTemplateField else {return}
+            window.makeFirstResponder(field)
+        }
+        return true
+    }
+    override func accessibilityChildren() -> [Any]? {
+        loadControls()
+        return super.accessibilityChildren()
     }
 }

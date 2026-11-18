@@ -1,44 +1,12 @@
 import AppKit
 
-// 使用自身 TextKit 排版与选择，避免 NSTextField 切换共享 field editor 时丢失制表位。
-final class TranscriptTokenText:AppTextView {
-    override init(frame:NSRect) {
-        let storage = NSTextStorage(), manager = NSLayoutManager()
-        let container = NSTextContainer(size:NSSize(width:1,height:CGFloat.greatestFiniteMagnitude))
-        storage.addLayoutManager(manager); manager.addTextContainer(container)
-        super.init(frame:frame,textContainer:container)
-        isEditable = false; isSelectable = true; isRichText = true; drawsBackground = false
-        isVerticallyResizable = false; isHorizontallyResizable = false; autoresizingMask = []
-        textContainerInset = .zero
-        self.textContainer?.lineFragmentPadding = 0
-        self.textContainer?.widthTracksTextView = false
-        self.textContainer?.heightTracksTextView = false
-    }
-    required init?(coder:NSCoder) {fatalError()}
-    var attributedStringValue:NSAttributedString {
-        get {attributedString()}
-        set {if !attributedString().isEqual(to:newValue) {textStorage?.setAttributedString(newValue)}}
-    }
-    func height(for width:CGFloat) -> CGFloat {
-        guard let container = textContainer,let manager = layoutManager else {return 0}
-        container.containerSize = NSSize(width:max(1,width),height:.greatestFiniteMagnitude)
-        manager.ensureLayout(for:container)
-        return ceil(manager.usedRect(for:container).maxY)
-    }
-    var firstLineCenter:CGFloat {
-        guard let manager = layoutManager,manager.numberOfGlyphs > 0 else {return bounds.midY}
-        let line = manager.lineFragmentRect(forGlyphAt:0,effectiveRange:nil)
-        return textContainerOrigin.y+line.minY+manager.location(forGlyphAt:0).y-(font?.capHeight ?? 0)/2
-    }
-}
-
 // 额度与历史共用可选择的 TextKit 明细，汇总触发区复用独立的 TokenDisclosureControl。
 final class QuotaTokenUsageView:NSView {
     override var isFlipped:Bool {true}
     private let heading = NSTextField(labelWithString:"今日用量")
     private let source = NSTextField(labelWithString:"（本机日志）")
     private let disclosure = TokenDisclosureControl(frame:.zero)
-    private let detail = TranscriptTokenText(frame:.zero)
+    private let detail = SelectableRichText(frame:.zero)
     private let scale:CGFloat, expanded:Bool
     var onToggle:() -> Void = {}
     init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat) {

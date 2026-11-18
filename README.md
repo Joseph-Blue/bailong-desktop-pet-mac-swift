@@ -2,8 +2,8 @@
 
 本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。安装稳定正式版请前往 [`main` 主线](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/tree/main)。
 
-- **当前开发版本**为 [`0.8.1-dev1`](VERSION)，源码基线为本地 `main` 的 `0.8.0`。
-- **近期开发重点**：整理会话状态、历史流式刷新和完成卡的数据传递，共用消息设置与搜索定义。窗口、动画及目标机验收继续跟踪。完整迭代记录见 [CHANGELOG](CHANGELOG.md)，待验收事项见 [TODO](todo.md)。
+- **当前开发版本**为 [`0.8.1-dev2`](VERSION)，源码基线为本地 `main` 的 `0.8.0`。
+- **近期改动**包括设置首页按需加载、工作区 Git 详情改进，以及开发终端默认开启监视。逐版变更见 [CHANGELOG](CHANGELOG.md#081-dev2--2026-11-18)，待验收事项见 [TODO](todo.md)。
 
 本项目基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)（参考基线 `v0.5.1 / b102e73`），使用 Swift + AppKit 原生重写并独立维护。角色动画采用透明 HEVC（HEVC with Alpha）与 AVFoundation 解码，由 CPU／vImage 完成线性光缩放与色彩转换；界面采用原生 AppKit 分栏与液态玻璃材质。
 
@@ -17,12 +17,12 @@
 | 会话与进展 | 内置人设对话（`codex app-server`）与外部项目会话（只读 SQLite + 桌面 IPC）通道隔离；2 秒气泡首行与任务概览共用进展标题和图标，第二行仅显示新增细节，相同内容不重复弹出，重连提示除外。 | [会话与任务](docs/来源与架构.md#current-tasks) |
 | 气泡与窗口 | `NSGlassEffectView.contentView` 承载正文并补充非激活细微亮边；非激活面板保持前台应用输入焦点，支持卡片翻阅、审批问卷与输入窗四向避让。 | [气泡与显示](docs/来源与架构.md#current-bubble)、[输入与窗口](docs/来源与架构.md#current-windows) |
 | 历史与数据 | SQLite（schema 3）按需加载正文，提供每页 20 轮分页、全文搜索与关闭记录时的快照冻结；窗口关闭即释放排版缓存，各入口独立保留输入草稿。 | [历史与数据](docs/来源与架构.md#current-history) |
-| 额度与用量 | 按订阅档位展示 30 天额度或 5 小时／每周双窗口、重置倒计时与重置卡；共用 `TokenDisclosureControl` 展开本轮及本机今日 Token 明细，支持可选运行内存 (RAM) 缓存与立即刷新。 | [额度与用量](docs/来源与架构.md#current-usage) |
+| 额度与用量 | 按订阅档位展示 30 天额度或 5 小时／周额度、重置倒计时与重置卡；共用 `TokenDisclosureControl` 展开本轮及本机今日 Token 明细，支持可选运行内存 (RAM) 缓存与立即刷新。 | [额度与用量](docs/来源与架构.md#current-usage) |
 | 文件与工作区 | `FSEvents` 监听当前仓库变更，实时展示 Git 分支／状态与本轮 `fileChange` 增删统计；气泡内置任务信息栏（默认开启）与独立常驻「工作区状态条」（默认关闭）各自独立控制。 | [文件与产物](docs/来源与架构.md#current-files) |
 | 设置与外观 | 支持自定义称呼变量、台词试播、字号比例与强调色；前景文字按背景对比度动态适配明暗，配备无副作用的静态设置搜索索引与 JSON 导入导出。 | [设置与个性](docs/来源与架构.md#current-settings) |
 | 系统集成 | 支持指定显示器或随拖动跨屏、登录自启、随 Codex 桌面端启动、默认工作区管理与 GitHub 正式版更新检查。 | [构建与集成](docs/来源与架构.md#current-build) |
 
-**目标平台**：默认构建 Apple Silicon（`arm64`），最低支持 macOS 14 Sonoma（基准验证机型为 13 英寸 M1 MacBook Air；当前开发环境为 16 英寸 M5 Pro MacBook Pro／macOS 27.2）。正式版 `0.7.4` 同时附带 Intel（`x86_64`）社区测试包，Intel 真机与最低目标机长时验收进度见 [TODO](todo.md)。
+默认构建 Apple Silicon（`arm64`），最低支持 macOS 14 Sonoma。基准机型为 13 英寸 M1 MacBook Air，目标机长时验收与 Intel 实机进度见 [TODO](todo.md)。
 
 ## 分支与发布规则
 
@@ -34,7 +34,7 @@
 
 ## 获取素材与构建
 
-首次构建需准备 Apple Command Line Tools 与开发素材包 **[bailong-dev-assets-2026-11-10.zip](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/dev-assets-2026-11-10)**（`2026-11-02` 旧包缺少两张桌宠单色模板图，已停用）。详细目录结构与制作工具说明见 [开发资源获取](docs/开发资源获取.md)。
+首次构建需准备 Apple Command Line Tools 与开发素材包 **[bailong-dev-assets-2026-11-10.zip](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/tag/dev-assets-2026-11-10)**。目录结构与制作工具见 [开发资源获取](docs/开发资源获取.md)。
 
 双击 `build.command` 可在终端交互完成环境检查、素材下载与打包；也可通过命令行直接执行：
 
@@ -44,10 +44,9 @@
 ./build.command --resources-zip /绝对路径/bailong-dev-assets-2026-11-10.zip
                                   # 导入指定路径的素材包并构建
 ./build.command --check           # 仅检查编译环境与运行素材
-./run-dev.command                 # 启动开发程序，在终端按 M 开关监视
-./run-dev.command --monitor       # 从启动时查看 app-server 与桌面会话事件
-./run-dev.command --build-only    # 仅编译开发可执行文件（无需运行素材）
-
+./run-dev.command                 # 启动开发程序，默认显示协议、会话和逐段动画
+./run-dev.command --monitor       # 启动时收起逐段动画明细
+./run-dev.command --build-only     # 仅编译开发可执行文件（无需运行素材）
 ```
 
 - **素材导入**：默认仅补齐缺失文件；追加 `--replace-resources` 会先备份同名旧文件至 `.build/resource-import/` 再替换，追加 `--download-resources` 则直接拉取清单指定版本的素材包。
@@ -72,13 +71,12 @@
 
 - **协作与架构**：[AGENTS.md](AGENTS.md)（开发协作边界） · [来源与架构](docs/来源与架构.md)（现行行为约束与历史演进） · [维护 Skill](skills/bailong-macos-port/SKILL.md)
 - **进度与记录**：[TODO](todo.md)（待办与验收清单） · [CHANGELOG](CHANGELOG.md)（完整开发变更） · [开发变更索引](docs/开发变更索引.md)
-- **专项历史记录**：[启动闪退调查](docs/启动闪退调查.md) · [设置界面检查（0.6.0-dev.10）](docs/设置界面检查.md) · [搜索与消息内存审计](docs/搜索与消息内存审计.md)
 
 ## 致谢与问题反馈
 
 - 感谢原作者 jingh12312-rgb（風-隐）：角色动画、主要交互设计灵感源自 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet)（`v0.5.1 / b102e73`）。
 - 感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 macOS SDK 兼容处理方案。
 - 感谢 [moon135246/bailong-desktop-pet-optimization](https://github.com/moon135246/bailong-desktop-pet-optimization) 在动作开头缓存与内存预算上的优化参考。
-- 完整图标与开源组件许可详见应用内「设置 → 关于」。
+- 图标许可原文见[第三方许可](第三方许可.txt)，也可从「设置 → 关于 → 来源与致谢」打开随应用附带的文本。
 - 提交 [GitHub Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues) 时，请附上应用版本号、macOS 版本与复现步骤；涉及会话同步或发送问题时，请一并说明 Codex 桌面端版本及会话类型（桌宠内置对话／Codex 项目会话）。
 - 欢迎 fork 本仓库，也欢迎提出建议或建设性批评。

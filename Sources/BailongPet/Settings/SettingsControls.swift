@@ -170,7 +170,7 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
 // 数值、单位与轨道同轴；范围标签独占轨道下方，不挤动设置标题。
 final class SettingsSliderControl:NSView {
     let slider:NSSlider
-    init(number:NSTextField,unit:NSTextField,slider:NSSlider,limits:(String,String)?,ticks:Int) {
+    init(number:NSTextField,unit:NSTextField?,slider:NSSlider,limits:(String,String)?,ticks:Int) {
         self.slider = slider
         super.init(frame:.zero)
         slider.numberOfTickMarks = limits == nil ? 0 : ticks
@@ -190,16 +190,19 @@ final class SettingsSliderControl:NSView {
             ])
             track.addArrangedSubview(labels)
         }
-        for view in [number,unit,track] {view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)}
+        for view in [number,unit,track].compactMap({$0}) {view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)}
+        if let unit {
+            unit.leadingAnchor.constraint(equalTo:number.trailingAnchor,constant:8).isActive = true
+            unit.centerYAnchor.constraint(equalTo:slider.centerYAnchor).isActive = true
+        }
         // 下方范围文字占用的高度也预留在上方，让主轨道位于整组的中线。
         let legendHeight:CGFloat = limits == nil ? 0 : 14
         let height = heightAnchor.constraint(equalTo:track.heightAnchor,constant:legendHeight); height.priority = .defaultLow
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant:272), track.widthAnchor.constraint(equalToConstant:180),
-            number.leadingAnchor.constraint(equalTo:leadingAnchor), unit.leadingAnchor.constraint(equalTo:number.trailingAnchor,constant:8),
-            track.leadingAnchor.constraint(equalTo:unit.trailingAnchor,constant:8), track.trailingAnchor.constraint(equalTo:trailingAnchor),
+            track.widthAnchor.constraint(equalToConstant:180),number.leadingAnchor.constraint(equalTo:leadingAnchor),
+            track.leadingAnchor.constraint(equalTo:(unit ?? number).trailingAnchor,constant:8), track.trailingAnchor.constraint(equalTo:trailingAnchor),
             track.topAnchor.constraint(equalTo:topAnchor,constant:legendHeight), track.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor),
-            number.centerYAnchor.constraint(equalTo:slider.centerYAnchor), unit.centerYAnchor.constraint(equalTo:slider.centerYAnchor),
+            number.centerYAnchor.constraint(equalTo:slider.centerYAnchor),
             heightAnchor.constraint(greaterThanOrEqualTo:number.heightAnchor), height
         ])
     }

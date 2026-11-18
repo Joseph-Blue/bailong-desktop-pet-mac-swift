@@ -5,12 +5,13 @@ import Darwin
 final class TerminalMonitor {
     private static let development = ProcessInfo.processInfo.environment["BAILONG_DEV_RUN"] == "1"
     private static let stateLock = NSLock()
-    private static var current:TerminalMonitor? = development && CommandLine.arguments.contains("--monitor") ? TerminalMonitor() : nil
+    private static var current:TerminalMonitor? = development ? TerminalMonitor() : nil
     static var active:TerminalMonitor? {development ? stateLock.withLock {current} : nil}
-    private(set) var showsAnimation = CommandLine.arguments.contains("--monitor-animation")
+    private(set) var showsAnimation = !CommandLine.arguments.contains("--monitor") || CommandLine.arguments.contains("--monitor-animation")
 
     static func keyboard(onEnable:@escaping (TerminalMonitor) -> Void) -> DispatchSourceRead? {
         guard development,CommandLine.arguments.contains("--monitor-keys"),isatty(STDIN_FILENO) == 1 else {return nil}
+        var resumeAnimation = active?.showsAnimation ?? true
         let source = DispatchSource.makeReadSource(fileDescriptor:STDIN_FILENO,queue:.main)
         source.setEventHandler {
             var bytes = [UInt8](repeating:0,count:64)
@@ -20,10 +21,12 @@ final class TerminalMonitor {
                 switch byte {
                 case 77,109: // M
                     if let monitor = active {
+                        resumeAnimation = monitor.showsAnimation
                         monitor.write(.app,"终端监视已关闭")
                         stateLock.withLock {current = nil}
                     } else {
                         let monitor = TerminalMonitor()
+                        monitor.showsAnimation = resumeAnimation
                         stateLock.withLock {current = monitor}
                         onEnable(monitor)
                     }
@@ -44,6 +47,15 @@ final class TerminalMonitor {
         case app = "应用", persona = "内置", desktop = "桌面观察", approval = "审批"
         case server = "app-server", ipc = "桌面 IPC"
         case bubble = "气泡", animation = "动画", history = "历史"
+        var color:String? {
+            switch self {
+            case .server:return "1;36"
+            case .ipc,.desktop:return "35"
+            case .animation:return "94"
+            case .bubble:return "32"
+            default:return nil
+            }
+        }
     }
     enum Level:String {
         case info = "信息", success = "确认", warning = "警告", error = "错误"
@@ -63,13 +75,19 @@ final class TerminalMonitor {
         _ = fcntl(STDOUT_FILENO,F_SETNOSIGPIPE,1)
     }
     private func styled(_ value:String,_ code:String) -> String {color ? "\u{1B}[\(code)m\(value)\u{1B}[0m" : value}
+    // 固定列只包含 ASCII 和中文标签。按终端显示宽度补真实 Tab，然后再应用 ANSI 样式。
+    private func column(_ value:String,stops:Int,color code:String? = nil) -> String {
+        let width = value.unicodeScalars.reduce(0) {$0 + ($1.isASCII ? 1 : 2)}
+        let tabs = String(repeating:"\t",count:max(1,stops-width/8))
+        return (code.map {styled(value,$0)} ?? value)+tabs
+    }
     func start(version:String) {
         #if arch(arm64)
         let architecture = "arm64"
         #else
         let architecture = "x86_64"
         #endif
-        let heading = styled("时间          级别  来源        事件","1")
+        let heading = styled(column("时间",stops:2)+column("级别",stops:1)+column("来源",stops:2)+"事件","1;35")
         output("\n"+heading+"\n")
         write(.app,"开发监视已开启  ·  \(version)  ·  \(architecture)  ·  PID \(ProcessInfo.processInfo.processIdentifier)")
     }
@@ -78,15 +96,10 @@ final class TerminalMonitor {
             DispatchQueue.main.async { [weak self] in self?.write(module,event,level) }; return
         }
         guard self === Self.active else {return}
-        let time = styled(clock.string(from:Date()),"2")
-        let source:String
-        switch module {
-        case .server:source = styled(module.rawValue,"1;36")
-        case .ipc,.desktop:source = styled(module.rawValue,"35")+"  "
-        default:source = module.rawValue+"      "
-        }
-        let line = "\(time)  \(styled(level.rawValue,level.color))  \(source)  \(event)\n"
-        output(line)
+        let time = column(clock.string(from:Date()),stops:2,color:"2")
+        let severity = column(level.rawValue,stops:1,color:level.color)
+        let source = column(module.rawValue,stops:2,color:module.color)
+        output(time+severity+source+event+"\n")
     }
     private func output(_ line:String) {
         guard outputOpen else {return}

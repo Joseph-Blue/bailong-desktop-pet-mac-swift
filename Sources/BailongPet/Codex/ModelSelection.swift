@@ -96,21 +96,6 @@ final class ChatModelSettings {
         let name = models.first(where:{$0.model == id})?.displayName ?? id ?? "未获取模型"
         return "默认（"+name+" - 跟随 Codex）"
     }
-    var lunaMinimum: (String,String)? {
-        guard let luna = models.first(where:{$0.model == "gpt-5.6-luna"}) else {return nil}
-        let order = ["none","minimal","low","medium","high","xhigh","max","ultra"]
-        guard let effort = luna.supportedReasoningEfforts.min(by:{
-            (order.firstIndex(of:$0.reasoningEffort) ?? Int.max) < (order.firstIndex(of:$1.reasoningEffort) ?? Int.max)
-        }) else {return nil}
-        return (luna.model,effort.reasoningEffort)
-    }
-    func chooseLunaMinimum() {
-        guard let (model,effort) = lunaMinimum else {return}
-        defaults.set(model,forKey:"petChatModel")
-        selectedModel = model; selectedEffort = effort
-        defaults.set(effort,forKey:"petChatEffort")
-        notify()
-    }
     func syncWithCodex() {
         defaults.removeObject(forKey:"petChatModel")
         defaults.removeObject(forKey:"petChatEffort")
@@ -186,7 +171,10 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     required init?(coder:NSCoder) {fatalError()}
     @objc private func updateTitle() {
         setSummary(ModelPresentation.summary(model:settings.currentModelID ?? "未获取模型",displayName:settings.currentModel?.displayName,effort:settings.effortTitle),lightning:settings.fastMode)
-        hoverHelp = settings.title+(settings.fastMode ? " · 1.5倍速度" : "")
+        let fastMode = settings.fastMode
+        setHoverHelp(settings.title+(fastMode ? " · 1.5倍速度" : "")) { [weak self] in
+            fastMode || self?.hasTruncatedTitle == true
+        }
     }
     func closeChoices() {popover.performClose(nil)}
     func popoverDidClose(_ notification:Notification) {
@@ -232,8 +220,8 @@ final class ModelSelectorContent: NSViewController {
     private let explanation = NSTextField(wrappingLabelWithString:"")
     private let slider = NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil)
     private let sync = ActionButton("与 Codex 同步") {}
-    private let luna = ActionButton("设置为 5.6-Luna 最低") {}
     private let refresh = ActionButton("刷新模型") {}
+    private var footerButtons:[ActionButton] {[refresh,sync]}
     private var options = [ChatModel.Effort]()
     private var effortMarks = [NSTextField]()
     private let scroll = GutterScrollView(), body = TopDownView()
@@ -258,11 +246,13 @@ final class ModelSelectorContent: NSViewController {
         slider.allowsTickMarkValuesOnly = true; slider.isContinuous = false; slider.setAccessibilityLabel("推理强度")
         for text in [explanation] {text.font = .systemFont(ofSize:12*scale); text.isSelectable = false}
         explanation.textColor = .secondaryLabelColor
-        refresh.frame = NSRect(x:16,y:9,width:88,height:28); refresh.callback = { [weak self] in self?.settings.onLoad(true) }
-        luna.frame = NSRect(x:112,y:9,width:176,height:28); luna.callback = { [weak self] in self?.settings.chooseLunaMinimum() }
-        sync.frame = NSRect(x:304,y:9,width:140,height:28); sync.emphasize(); sync.callback = { [weak self] in self?.settings.syncWithCodex() }
-        for button in [refresh,luna,sync] {button.configureFlexible(font:.systemFont(ofSize:13*scale))}
-        [heading,picker,effort,speedIcon,speedLabel,speedSwitch,slider,explanation,refresh,luna,sync].forEach {body.addSubview($0)}
+        refresh.callback = { [weak self] in self?.settings.onLoad(true) }
+        sync.emphasize(); sync.callback = { [weak self] in self?.settings.syncWithCodex() }
+        [heading,picker,effort,speedIcon,speedLabel,speedSwitch,slider,explanation].forEach {body.addSubview($0)}
+        for button in footerButtons {
+            button.configureFlexible(font:.systemFont(ofSize:13*scale))
+            body.addSubview(button)
+        }
         NotificationCenter.default.addObserver(self,selector:#selector(refreshControls),name:ChatModelSettings.changed,object:settings)
         NotificationCenter.default.addObserver(self,selector:#selector(refreshControls),name:AppAccent.didChange,object:nil)
         refreshControls()
@@ -291,15 +281,13 @@ final class ModelSelectorContent: NSViewController {
         speedLabel.textColor = speedSwitch.isEnabled ? .labelColor : .disabledControlTextColor
         speedIcon.contentTintColor = speedLabel.textColor
         let speedHelp = settings.supportsFastMode ? "开启后使用 Codex 官方快速模式（1.5倍速度），关闭后恢复标准速度。" : "当前模型未提供 Codex 官方快速档位。"
-        speedSwitch.hoverHelp = speedHelp; speedIcon.hoverHelp = speedHelp; speedLabel.hoverHelp = speedHelp
+        speedSwitch.hoverHelp = speedHelp
         if settings.loading {explanation.stringValue = "正在读取可用模型…"}
         else if let error = settings.error {explanation.stringValue = "模型读取失败："+error}
         else {explanation.stringValue = options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation}
-        explanation.hoverHelp = settings.error
-        picker.hoverHelp = picker.title
+        explanation.setHoverHelp(settings.error) { [weak explanation] in explanation?.hasTruncatedText == true }
+        picker.setHoverHelp(picker.title) { [weak picker] in picker?.hasTruncatedTitle == true }
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading
-        luna.isEnabled = !settings.loading && settings.lunaMinimum != nil
-        luna.hoverHelp = settings.lunaMinimum == nil ? "当前模型列表未提供 GPT-5.6 Luna。" : "切换到 GPT-5.6 Luna 支持的最低推理强度，并记住选择。"
         layoutControls()
     }
     override func viewDidLayout() {
@@ -310,7 +298,7 @@ final class ModelSelectorContent: NSViewController {
     }
     private func layoutControls() {
         let margin = 16*scale, gap = 8*scale
-        let footerWidth = [refresh,luna,sync].reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+2*gap
+        let footerWidth = footerButtons.reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+gap
         let menuWidth = picker.itemTitles.map {($0 as NSString).size(withAttributes:[.font:picker.font!]).width}.max() ?? 0
         let effortWidth = (effort.stringValue as NSString).size(withAttributes:[.font:effort.font!]).width
         let marksWidth = effortMarks.map {($0.stringValue as NSString).size(withAttributes:[.font:$0.font!]).width+gap}.max() ?? 0
@@ -328,8 +316,8 @@ final class ModelSelectorContent: NSViewController {
     }
     @discardableResult private func layoutBody(width:CGFloat) -> CGFloat {
         let margin = 16*scale, gap = 8*scale
-        let buttons = [refresh,luna,sync]
-        let footerWidth = buttons.reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+2*gap
+        let buttons = footerButtons
+        let footerWidth = buttons.reduce(CGFloat(0)) {$0+$1.intrinsicContentSize.width}+gap
         let documentWidth = GutterScrollView.documentWidth(for:width), contentWidth = max(1,documentWidth-2*margin)
         var y = margin
         func place(_ control:NSView,_ height:CGFloat,_ spacing:CGFloat) {

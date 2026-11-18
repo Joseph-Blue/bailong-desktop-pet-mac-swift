@@ -116,6 +116,8 @@ final class ProgressMarqueeView:NSView {
     }}
     var font:NSFont? {didSet {needsLayout = true}}
     var textColor:NSColor? {didSet {needsLayout = true}}
+    private var textWidth:CGFloat {ceil((stringValue as NSString).size(withAttributes:[.font:font ?? .systemFont(ofSize:11)]).width)}
+    var textOverflows:Bool {bounds.width > 0 && textWidth > bounds.width}
     override init(frame:NSRect) {
         super.init(frame:frame); wantsLayer = true
         layer?.masksToBounds = true; layer?.addSublayer(content)
@@ -145,7 +147,7 @@ final class ProgressMarqueeView:NSView {
     func refresh() {
         let font = font ?? .systemFont(ofSize:11)
         let color = AppAppearance.resolvedColor(textColor ?? .secondaryLabelColor,for:effectiveAppearance)
-        let width = ceil((stringValue as NSString).size(withAttributes:[.font:font]).width)
+        let width = textWidth
         let overflow = width > bounds.width && bounds.width > 0
         let animate = active && overflow && ProgressTextEffects.enabled && window?.isVisible == true && !isHiddenOrHasHiddenAncestor && !visibleRect.isEmpty
         let scale = window?.backingScaleFactor ?? 2

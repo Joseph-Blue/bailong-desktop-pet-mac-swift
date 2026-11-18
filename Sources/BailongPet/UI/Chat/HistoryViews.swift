@@ -20,14 +20,14 @@ final class FadingTitleField: NSTextField {
         fade.startPoint = CGPoint(x:0,y:0.5); fade.endPoint = CGPoint(x:1,y:0.5)
     }
     required init?(coder:NSCoder) {fatalError()}
+    var textOverflows:Bool {attributedStringValue.size().width > max(0,bounds.width-4)}
     override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        let overflow = attributedStringValue.size().width > max(0,bounds.width-4)
         fade.frame = bounds
         fade.colors = [NSColor.black.cgColor,NSColor.black.cgColor,NSColor.clear.cgColor]
         fade.locations = [0,NSNumber(value:Double(max(0,1-24/max(1,bounds.width)))),1]
-        layer?.mask = overflow ? fade : nil
+        layer?.mask = textOverflows ? fade : nil
         CATransaction.commit()
     }
 }
@@ -67,7 +67,9 @@ final class HistoryConversationCell: NSTableCellView {
         snippetLabel.maximumNumberOfLines = 2; snippetLabel.lineBreakMode = .byTruncatingTail
         sourceIcon.image = NSImage(systemSymbolName:symbol ?? kind.symbol,accessibilityDescription:symbol == nil ? kind.title : title)
         addSubview(sourceIcon); addSubview(titleLabel); textField = titleLabel; imageView = sourceIcon
-        hoverHelp = [title,snippet].compactMap {$0}.joined(separator:"\n")
+        setHoverHelp([title,snippet].compactMap {$0}.joined(separator:"\n")) { [weak titleLabel,weak snippetLabel] in
+            titleLabel?.textOverflows == true || snippetLabel?.hasTruncatedText == true
+        }
         setAccessibilityLabel((symbol == nil ? kind.title+"，" : "")+title+(snippet.map {"，"+$0} ?? ""))
         sourceIcon.translatesAutoresizingMaskIntoConstraints = false; titleLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

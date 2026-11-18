@@ -2,8 +2,10 @@ import AppKit
 
 // 设置表单的控件、编辑回调及定位锚点；不拥有窗口导航、搜索或外部服务。
 final class SettingsForm:NSObject,NSTextFieldDelegate {
+    static let multilineEntryHeight:CGFloat = 52
+    static let multilineEntrySpacing:CGFloat = 8
     let content:NSStackView, preferences:PetPreferences
-    private unowned let window:NSWindow
+    unowned let window:NSWindow
     private var actions = [SettingsAction]()
     private var conditionalRows = [(NSView,(PetPreferences) -> Bool)]()
     private var availabilityUpdates = [(PetPreferences) -> Void]()
@@ -39,9 +41,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         guard let field = client as? SettingsTemplateField else {return nil}
         templateEditor.allowsTokens = field.allowsTokens; return templateEditor
     }
-    func observeValues(_ update:@escaping (PetPreferences) -> Void) {
-        availabilityUpdates.append(update); update(preferences)
-    }
     func refreshAvailability() {
         updateBufferAvailability()
         for update in availabilityUpdates {update(preferences)}
@@ -70,10 +69,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         default:return false
         }
     }
-    func navigationButton(_ title:String,back:Bool = false,action:@escaping () -> Void) -> NSButton {
+    func backButton(_ title:String,action:@escaping () -> Void) -> NSButton {
         let button = ActionButton(title,action)
-        button.image = NSImage(systemSymbolName:back ? "chevron.backward" : "chevron.forward",accessibilityDescription:nil)
-        button.imagePosition = back ? .imageLeading : .imageTrailing
+        button.image = NSImage(systemSymbolName:"chevron.backward",accessibilityDescription:nil)
+        button.imagePosition = .imageLeading
         return button
     }
     func controlTextDidChange(_ notification: Notification) {
@@ -113,14 +112,15 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         let items = NSStackView()
         items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
-        if [.identity,.activity,.messages].contains(self.section) {
-            fill(items,in:section)
-        } else {
-            let surface = SettingsSectionBackground()
-            surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)])
-            fill(surface,in:section)
-        }
+        let surface = SettingsSectionBackground()
+        surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),
+            items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),
+            items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),
+            items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)
+        ])
+        fill(surface,in:section)
         for (index,row) in rows.enumerated() {
             if index > 0 && row.identifier?.rawValue == "settings-explanation" {items.setCustomSpacing(4,after:rows[index-1])}
             if index > 0 && row.identifier?.rawValue != "settings-explanation" {
@@ -256,6 +256,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         return dependent(result,requires:requires,unless:unless,except:accessory)
     }
     func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
+        let menu = popupControl(title,options:options,value:value,width:width,identifier:identifier,changed:changed)
+        return row(title,detail:detail,control:menu)
+    }
+    func popupControl(_ title:String,options:[(String,String)],value:String,width:CGFloat,identifier:String? = nil,changed:@escaping (String)->Void) -> NSPopUpButton {
         let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
         var controlWidth = width
@@ -276,7 +280,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         menu.widthAnchor.constraint(equalToConstant:controlWidth).isActive = true; menu.setAccessibilityLabel(title)
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
-        return row(title,detail:detail,control:menu)
+        return menu
     }
     func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil,requires:[String] = []) -> NSView {
         let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
@@ -364,8 +368,8 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             // 台词标签在上，输入横向铺满；不再给短标签留出大半行空白。
             field.usesSingleLineMode = false; field.maximumNumberOfLines = 0
             field.cell?.wraps = true; field.cell?.isScrollable = false
-            field.heightAnchor.constraint(equalToConstant:52).isActive = true
-            let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = 8
+            field.heightAnchor.constraint(equalToConstant:Self.multilineEntryHeight).isActive = true
+            let row = NSStackView(); row.orientation = .vertical; row.alignment = .leading; row.spacing = Self.multilineEntrySpacing
             let caption = label(title)
             if let action {
                 let heading = NSStackView(views:[caption,action])
@@ -421,6 +425,13 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         if compact {button.controlSize = .small; button.font = .systemFont(ofSize:11)}
         return button
     }
+    func animationWeight(_ clip:Clip) -> NSView {
+        let range = PetPreferences.clipWeightRange(clip.id)
+        let slider = numericSlider(clip.title+"权重",value:preferences.weight(clip.id),range:Double(range.lowerBound)...Double(range.upperBound),step:1,suffix:"") { [weak self] value in
+            self?.preferences.setWeight(Int(value),for:clip.id)
+        }
+        return alignedRow(leading:label("权重"),control:slider)
+    }
     private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,minimumLabel:String? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
         let slider = NSSlider(value:value,minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
         slider.isContinuous = true; slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
@@ -435,8 +446,9 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             number.doubleValue = value; slider.doubleValue = value; changed(value)
         }
         attach(slider) {commit($0.doubleValue)}; attach(number) {commit($0.doubleValue)}
-        let unit = label(suffix); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
-        unit.widthAnchor.constraint(equalToConstant:22).isActive = true
+        let unit = suffix.isEmpty ? nil : label(suffix)
+        unit?.font = .systemFont(ofSize:11); unit?.textColor = .secondaryLabelColor
+        unit?.widthAnchor.constraint(equalToConstant:22).isActive = true
         let ending = suffix.isEmpty ? "" : " "+suffix
         let limits:(String,String)? = suffix == "%" && range.lowerBound == 0 && range.upperBound == 100 ? nil :
             (minimumLabel ?? formatter.string(from:NSNumber(value:range.lowerBound))!+ending,formatter.string(from:NSNumber(value:range.upperBound))!+ending)

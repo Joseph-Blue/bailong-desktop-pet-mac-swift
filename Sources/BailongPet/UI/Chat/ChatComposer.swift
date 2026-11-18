@@ -263,7 +263,9 @@ final class ChatComposer: NSObject {
         composerModel.isEnabled = state.canEdit && !external; composerModelRow.isHidden = external
         modes.select(state.kind.rawValue)
         conversationPicker.title = state.conversation?.title ?? "选择会话…"
-        conversationPicker.hoverHelp = state.conversation?.title
+        conversationPicker.setHoverHelp(state.conversation?.title) { [weak conversationPicker] in
+            conversationPicker?.hasTruncatedTitle == true
+        }
         conversationPicker.conversations = choices
         workspace.update(conversation:state.conversation,executing:state.executing,visible:composerVisible)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"

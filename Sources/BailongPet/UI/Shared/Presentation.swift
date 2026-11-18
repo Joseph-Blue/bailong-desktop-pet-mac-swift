@@ -148,15 +148,15 @@ enum QuotaPresentation {
         }
     }
     static func resetDateText(_ date: Date) -> String {
-        "重置："+date.formatted(date:.abbreviated,time:.shortened)
+        "重置："+date.formatted(date:.abbreviated,time:.shortened).replacingOccurrences(of:"日 ",with:"日")
     }
     static func countdown(until date: Date, now: Date = Date()) -> String {
         let remaining = date.timeIntervalSince(now)
-        if remaining < 60 {return "< 1 分钟"}
+        if remaining < 60 {return "<1分钟"}
         let totalMinutes = Int(remaining/60)
         let days = totalMinutes/1440, hours = (totalMinutes%1440)/60, minutes = totalMinutes%60
-        return [days > 0 ? "\(days) 天" : nil,hours > 0 ? "\(hours) 小时" : nil,minutes > 0 ? "\(minutes) 分钟" : nil]
-            .compactMap {$0}.joined(separator:" ")
+        return [days > 0 ? "\(days)天" : nil,hours > 0 ? "\(hours)小时" : nil,minutes > 0 ? "\(minutes)分钟" : nil]
+            .compactMap {$0}.joined()
     }
     static func reset(_ value: Any?, now: Date = Date()) -> String? {
         guard let seconds = number(value) else {return nil}
@@ -169,7 +169,7 @@ enum QuotaPresentation {
         if abs(minutes-43200) <= 2160 {
             return minutes.truncatingRemainder(dividingBy:1440) == 0 ? String(format:"%.0f 天额度",minutes/1440) : "30 天额度"
         }
-        if abs(minutes-10080) <= 1 {return "每周额度"}
+        if abs(minutes-10080) <= 1 {return "周额度"}
         if minutes >= 1440 && minutes.truncatingRemainder(dividingBy:1440) == 0 {
             return String(format:"%.0f 天额度",minutes/1440)
         }

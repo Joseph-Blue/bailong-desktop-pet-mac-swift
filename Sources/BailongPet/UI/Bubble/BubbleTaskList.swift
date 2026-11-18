@@ -147,7 +147,10 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         activityIcon.update(task.activity,pointSize:15*scale)
         let symbol = task.connectionFailed ? "wifi.slash" : task.status == "completed" ? "checkmark.circle.fill" : task.status == "failed" ? "exclamationmark.triangle.fill" : "xmark.circle.fill"
         stateIcon.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
-        hoverHelp = [name.stringValue,task.activity?.text,"在 Codex 中打开"].compactMap {$0}.joined(separator:"\n")
+        setHoverHelp([name.stringValue,task.activity?.text].compactMap {$0}.joined(separator:"\n")) { [weak self] in
+            guard let self else {return false}
+            return self.name.hasTruncatedText || self.activity.textOverflows
+        }
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
         renderedSweep = Int.min; renderedFrame = -1; needsRowLayout = true

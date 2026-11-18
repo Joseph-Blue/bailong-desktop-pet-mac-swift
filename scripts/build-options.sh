@@ -28,8 +28,8 @@ bailong_parse_options() {
   --download-resources     下载清单指定的资源包
   --help                   显示帮助"
                 if [[ "$bailong_entry" == dev ]]; then
-                    print '  --monitor                从启动时监视 app-server、桌面会话和异常'
-                    print '  --monitor-animation      开启监视，同时显示逐段动画交接'
+                    print '  --monitor                监视协议与会话，收起逐段动画明细'
+                    print '  --monitor-animation      监视协议、会话和逐段动画（默认）'
                     print '终端快捷键：M 开关监视，A 开关动画明细，无需回车。'
                     print '  --build-only             仅编译开发程序，不检查运行资源或启动'
                     print '运行时显示 PID；^C 请求退出，5 秒倒计时后强制结束未退出的进程。'

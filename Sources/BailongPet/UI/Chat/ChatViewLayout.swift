@@ -15,8 +15,6 @@ enum ChatViewLayout {
     }
     static func inputBox(_ editor:MessageEditor) -> MessageInputBox {
         let scroll = editorScroll(editor,reserveReadingGutter:false)
-        editor.textContainerInset = NSSize(width:4,height:4)
-        editor.textContainer?.lineFragmentPadding = 0
         editor.update(font:.systemFont(ofSize:14),editable:true)
         return MessageInputBox(scroll:scroll,editor:editor)
     }

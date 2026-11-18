@@ -477,7 +477,10 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyStop.isEnabled = !historyState.stopping
         historyStop.title = historyState.desktopPreparing ? "取消发送" : historyState.stopping ? "正在停止…" : "停止任务"
         historyStop.isHidden = !historyState.ownsRunningTask && !historyState.desktopPreparing; historyCheck.isHidden = !historyState.unconfirmed
-        historyStatus.stringValue = historyState.historyNote; historyStatus.hoverHelp = historyState.replyNote ?? historyState.historyNote
+        historyStatus.stringValue = historyState.historyNote
+        let statusHelp = historyState.replyNote ?? historyState.historyNote
+        let showsMore = statusHelp != historyState.historyNote
+        historyStatus.setHoverHelp(statusHelp) { [weak historyStatus] in showsMore || historyStatus?.hasTruncatedText == true }
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
         if historyVisible {resizeHistoryInput()}
         modelStateChanged()

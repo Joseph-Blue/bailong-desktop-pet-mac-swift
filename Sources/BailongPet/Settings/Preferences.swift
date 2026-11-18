@@ -212,6 +212,8 @@ final class PetPreferences {
         if text.isEmpty {lines.removeValue(forKey:id)} else {lines[id] = text}
         set(lines,for:"customLines")
     }
+    static let clipSpeedOptions:[Double] = [0.75,1,1.25,1.5]
+    static func clipWeightRange(_ id:String) -> ClosedRange<Int> {(id == "idle" ? 1 : 0)...12}
     private static func defaultAnimationWeight(_ id:String) -> Int {id == "idle" ? 4 : id == "idle2" ? 1 : 3}
     private static func combinedAnimationWeights(_ weights:[String:Int],favorites:[String]) -> [String:Int] {
         var weights = weights
@@ -321,9 +323,12 @@ final class PetPreferences {
     private static func valid(_ value: Any, key: String, baseline: Any, clipIDs: Set<String>) -> Bool {
         if key == "defaultWorkspace",let path = value as? String {return path.isEmpty || (path.hasPrefix("/") && !path.contains("\0") && path.utf8.count <= 4096)}
         if key == "animationWeights", let map = value as? [String:NSNumber] {
-            return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && (0...12).contains($0.value.doubleValue) && $0.value.doubleValue.rounded() == $0.value.doubleValue && ($0.key != "idle" || $0.value.intValue > 0)}
+            return map.allSatisfy { id,number in
+                guard let weight = Int(exactly:number.doubleValue) else {return false}
+                return clipIDs.contains(id) && CFGetTypeID(number) != CFBooleanGetTypeID() && clipWeightRange(id).contains(weight)
+            }
         }
-        if key == "animationSpeeds", let map = value as? [String:NSNumber] {return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && [0.75,1,1.25,1.5].contains($0.value.doubleValue)}}
+        if key == "animationSpeeds", let map = value as? [String:NSNumber] {return map.allSatisfy {clipIDs.contains($0.key) && CFGetTypeID($0.value) != CFBooleanGetTypeID() && clipSpeedOptions.contains($0.value.doubleValue)}}
         if key == "customLines", let map = value as? [String:String] {return map.allSatisfy {clipIDs.contains($0.key) && TemplateSyntax.count($0.value) <= 120}}
         if key == "favorites", let list = value as? [String] {return list.allSatisfy {clipIDs.contains($0)}}
         if key == "accentRGB", let rgb = value as? [NSNumber] {return rgb.count == 3 && rgb.allSatisfy {CFGetTypeID($0) != CFBooleanGetTypeID() && (0...1).contains($0.doubleValue)}}

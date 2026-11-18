@@ -3,7 +3,7 @@ import AppKit
 private enum GitStatusText {
     static let groups:[(group:GitWorkspaceStatus.Group,marker:String,color:NSColor)] = [
         (.conflicted,"~",StatusTextColor.red),(.staged,"+",StatusTextColor.green),
-        (.unstaged,"!",StatusTextColor.orange),(.untracked,"?",StatusTextColor.blue)
+        (.unstaged,"!",StatusTextColor.orange),(.untracked,"?",StatusTextColor.secondary)
     ]
     static func render(_ status:GitWorkspaceStatus,compact:Bool,font:NSFont) -> NSAttributedString {
         let text = NSMutableAttributedString(), counts = status.counts
@@ -296,10 +296,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func makeDetails() -> GitWorkspaceDetails {
         let content = GitWorkspaceDetails(snapshot:snapshot,failure:failure ?? monitor?.observationFailure,loading:monitor?.loading == true)
-        content.onRefresh = { [weak self] in
-            guard let self else {return}
-            self.refreshGit()
-        }
+        content.onRetry = { [weak self] in self?.refreshGit() }
         return content
     }
     func popoverDidClose(_ notification:Notification) {
@@ -314,15 +311,15 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     private enum Row {case heading(GitWorkspaceStatus.Group,Int), file(GitWorkspaceStatus.Entry)}
     private let snapshot:GitWorkspaceStatus?, failure:String?
     private var loading:Bool
-    private var refreshButton:NSButton?
+    private var retryButton:NSButton?
     func setLoading(_ loading:Bool) {
         self.loading = loading
-        refreshButton?.isEnabled = !loading
-        refreshButton?.title = loading ? "刷新中…" : "刷新"
+        retryButton?.isEnabled = !loading
+        retryButton?.title = loading ? "重试中…" : "重试"
     }
     private var rows = [Row]()
     private let table = WorkspaceFileTable()
-    var onRefresh:() -> Void = {}
+    var onRetry:() -> Void = {}
     func restoreReadingPosition(from previous:GitWorkspaceDetails) {
         view.layoutSubtreeIfNeeded()
         if let origin = previous.table.enclosingScrollView?.contentView.bounds.origin,let scroll = table.enclosingScrollView {
@@ -359,13 +356,16 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         source.imageScaling = .scaleProportionallyDown; source.contentTintColor = .secondaryLabelColor
         let title = NSStackView(views:[source,heading]); title.alignment = .centerY; title.spacing = 6
         NSLayoutConstraint.activate([source.widthAnchor.constraint(equalToConstant:16),source.heightAnchor.constraint(equalToConstant:16)])
-        let refresh = ActionButton("刷新") { [weak self] in self?.onRefresh() }
-        refreshButton = refresh
-        refresh.widthAnchor.constraint(greaterThanOrEqualToConstant:70).isActive = true
-        let top = NSStackView(views:[title,NSView(),refresh]); top.alignment = .centerY; top.spacing = 12
-        stack.addArrangedSubview(top)
-        refresh.isEnabled = !loading
-        if loading {refresh.title = "刷新中…"}
+        if failure != nil {
+            let retry = ActionButton("重试") { [weak self] in self?.onRetry() }
+            retryButton = retry
+            retry.widthAnchor.constraint(greaterThanOrEqualToConstant:70).isActive = true
+            let top = NSStackView(views:[title,NSView(),retry]); top.alignment = .centerY; top.spacing = 12
+            stack.addArrangedSubview(top)
+            setLoading(loading)
+        } else {
+            stack.addArrangedSubview(title)
+        }
         if let failure,snapshot != nil {
             let error = NSTextField(wrappingLabelWithString:failure); error.textColor = StatusTextColor.orange
             error.font = .systemFont(ofSize:11); stack.addArrangedSubview(error)

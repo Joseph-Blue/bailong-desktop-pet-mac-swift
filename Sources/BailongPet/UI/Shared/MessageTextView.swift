@@ -14,6 +14,10 @@ final class MessageTextView: LinkTextView {
     private var resizingFrame = false
     private var codeLayoutDirty = true
     private var codeLayoutWidth:CGFloat = -1
+    var hasTruncatedText:Bool {
+        guard let container = textContainer,let manager = layoutManager else {return false}
+        return manager.hasTruncatedText(in:container)
+    }
     private func invalidateCodeLayout() {codeLayoutDirty = true; needsLayout = true}
     override func setFrameSize(_ newSize:NSSize) {
         resizingFrame = true

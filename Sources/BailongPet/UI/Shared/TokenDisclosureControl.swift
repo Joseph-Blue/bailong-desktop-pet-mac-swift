@@ -100,7 +100,7 @@ final class TokenDisclosureControl:NSControl {
     }
 
     private func chevronMetrics() -> (image:NSImage,rect:NSRect,textOpticalCenterY:CGFloat,inkCenterY:CGFloat)? {
-        let symbolName = expanded ? "chevron.down" : "chevron.right"
+        let symbolName = expanded ? "chevron.up" : "chevron.down"
         let config = NSImage.SymbolConfiguration(pointSize:max(9,baseFont.pointSize*0.78),weight:.semibold)
         guard let symbol = NSImage(systemSymbolName:symbolName,accessibilityDescription:nil)?.withSymbolConfiguration(config) else {return nil}
         let textOpticalCenterY = firstLineBaseline-baseFont.capHeight/2

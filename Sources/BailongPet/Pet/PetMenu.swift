@@ -4,7 +4,7 @@ import AppKit
 enum PetMenu {
     static func make(for pet:PetController,includeVisibility:Bool = false,random:@escaping () -> Void) -> NSMenu {
         let menu = NSMenu(); menu.delegate = pet
-        if includeVisibility {
+        func visibilityItem() -> NSMenuItem {
             let visibility = MenuAction("") { [weak pet] in
                 guard let pet else {return}
                 if pet.hidden || NSApp.isHidden {
@@ -13,8 +13,10 @@ enum PetMenu {
                 } else {pet.manualHidden = true; pet.applyVisibility()}
             }
             visibility.identifier = .init("petVisibility")
-            menu.addItem(visibility); menu.addItem(.separator())
-            refreshVisibility(in:menu,pet:pet)
+            return visibility
+        }
+        if includeVisibility {
+            menu.addItem(visibilityItem()); menu.addItem(.separator())
         }
         func submenu(_ title:String,symbol:String) -> NSMenu {
             let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
@@ -24,9 +26,6 @@ enum PetMenu {
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
         menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
-        let workspace = MenuAction(pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条") { [weak pet] in pet?.onWorkspace() }
-        workspace.identifier = .init("workspaceStatus")
-        workspace.image = GitIcons.git; menu.addItem(workspace)
         menu.addItem(MenuAction("查询额度",symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
         let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
         codex.image = AppIcons.openAI?.copy() as? NSImage
@@ -47,8 +46,13 @@ enum PetMenu {
         switches.addItem(MenuAction("播放音效",checked:pet.soundEnabled,symbol:"speaker.wave.2") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
         switches.addItem(MenuAction("任务气泡提醒",checked:pet.taskBubbles,symbol:"bell.badge") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
         switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen,symbol:"eye.slash") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
+        let workspace = MenuAction("") { [weak pet] in pet?.onWorkspace() }
+        workspace.identifier = .init("workspaceStatus")
+        workspace.image = GitIcons.git; switches.addItem(workspace)
         switches.addItem(.separator())
         switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak pet] in pet?.showSettings(section:.general) })
+        switches.addItem(.separator())
+        switches.addItem(visibilityItem())
         menu.addItem(.separator())
         menu.addItem(MenuAction("更改桌宠、气泡与文字大小…",symbol:"textformat.size") { [weak pet] in pet?.showSettings(section:.appearance) })
         menu.addItem(MenuAction("更改桌宠称呼和台词…",symbol:"person.text.rectangle") { [weak pet] in pet?.showSettings(section:.identity) })
@@ -61,17 +65,24 @@ enum PetMenu {
         tools.addItem(MenuAction("关于"+pet.preferences.appName+"…",symbol:"info.circle") { [weak pet] in pet?.showSettings(section:.about) })
         menu.addItem(.separator())
         menu.addItem(MenuAction("退出"+pet.preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak pet] in pet?.onQuit() })
+        refreshVisibility(in:menu,pet:pet)
         menu.showProvidedImages()
+        switches.showProvidedImages()
         return menu
     }
     static func refreshVisibility(in menu:NSMenu,pet:PetController) {
-        if let workspace = menu.items.first(where:{$0.identifier?.rawValue == "workspaceStatus"}) {
-            workspace.title = pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条"
-        }
-        guard let item = menu.items.first,item.identifier?.rawValue == "petVisibility" else {return}
         let show = pet.hidden || NSApp.isHidden
-        item.title = show ? "显示桌宠" : "隐藏桌宠"
-        item.image = NSImage(systemSymbolName:show ? "eye" : "eye.slash",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
-        item.image?.isTemplate = true
+        let workspaceTitle = pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条"
+        let petTitle = show ? "显示桌宠" : "隐藏桌宠"
+        let petIcon = NSImage(systemSymbolName:show ? "eye" : "eye.slash",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
+        petIcon?.isTemplate = true
+        let items = menu.items + menu.items.compactMap(\.submenu).flatMap(\.items)
+        for item in items {
+            switch item.identifier?.rawValue {
+            case "workspaceStatus": item.title = workspaceTitle
+            case "petVisibility": item.title = petTitle; item.image = petIcon
+            default: break
+            }
+        }
     }
 }

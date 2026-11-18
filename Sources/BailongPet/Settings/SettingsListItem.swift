@@ -11,7 +11,18 @@ enum SettingsDetail:Hashable {
     }
 }
 
-// 搜索与管理列表共用项目身份和分组，只有实际显示行时才读取偏好和创建控件。
+enum SettingsLineResetGroup:String {
+    case working = "工作中台词", interaction = "互动台词"
+
+    func restore(in preferences:PetPreferences) {
+        switch self {
+        case .working:preferences.reset(["randomWorkingLines"]+ConversationLines.working.map(\.key))
+        case .interaction:preferences.set([String:String](),for:"customLines")
+        }
+    }
+}
+
+// 首页、管理列表和静态搜索共用项目身份；创建索引时只读取元数据。
 struct SettingsListItem {
     enum Kind {
         case template(String,preview:Clip?)
@@ -43,8 +54,21 @@ struct SettingsListItem {
             return weighted ? speed+"   权重 "+String(preferences.baseWeight(clip.id)) : speed
         }
     }
-    func searchEntry(_ detail:SettingsDetail) -> SettingsSearchEntry {
-        .init(section:detail == .actions ? .activity : .identity,group:group,title:title,
-              keywords:keywords,detail:detail,itemID:id)
+    func searchEntry(in section:SettingsSection) -> SettingsSearchEntry {
+        .init(section:section,group:group,title:title,keywords:keywords,itemID:id,anchorTitle:id)
+    }
+
+    func lineEditor(in form:SettingsForm,onPreview:@escaping () -> Void) -> NSView? {
+        let button = preview.map { _ in form.animationPreviewButton(title,compact:true,action:onPreview) }
+        switch kind {
+        case .template(let key,_):
+            return form.text(title,key,limit:ConversationLines.limit(key),action:button)
+        case .interaction(let clip):
+            let prefs = form.preferences
+            return form.entry(title,value:summary(prefs),emptyFallback:prefs.templateSource(clip.line ?? ""),limit:120,action:button) {
+                prefs.setLine($0,for:clip.id)
+            }
+        case .animation:return nil
+        }
     }
 }

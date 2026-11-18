@@ -42,24 +42,30 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
             }
             return false
         }
-        let backButton = form.navigationButton(section.title,back:true,action:back)
+        let backButton = form.backButton(section.title,action:back)
         addSubview(backButton); addSubview(scroll)
         for view in [backButton,scroll] {view.translatesAutoresizingMaskIntoConstraints = false}
+        let preferredWidth = scroll.widthAnchor.constraint(equalTo:widthAnchor,constant:-48)
+        preferredWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            backButton.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),backButton.topAnchor.constraint(equalTo:topAnchor,constant:12),
-            scroll.topAnchor.constraint(equalTo:backButton.bottomAnchor,constant:10),scroll.leadingAnchor.constraint(equalTo:leadingAnchor,constant:12),
-            scroll.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-12),scroll.bottomAnchor.constraint(equalTo:bottomAnchor)
+            backButton.leadingAnchor.constraint(equalTo:scroll.leadingAnchor),backButton.topAnchor.constraint(equalTo:topAnchor,constant:20),
+            scroll.topAnchor.constraint(equalTo:backButton.bottomAnchor,constant:14),scroll.centerXAnchor.constraint(equalTo:centerXAnchor),
+            scroll.widthAnchor.constraint(lessThanOrEqualToConstant:680),preferredWidth,scroll.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-12)
         ])
         let name = NSTableColumn(identifier:.init("name")); name.title = "动作"; name.minWidth = 115
         name.resizingMask = .autoresizingMask; table.addTableColumn(name)
+        table.style = .fullWidth
         if section == .activity {
-            for (key,title,width) in [("play","试播",CGFloat(54)),("speed","播放速度",92),("weight","随机权重",88)] {
+            table.usesAlternatingRowBackgroundColors = true
+            for (key,title,width) in [("play","试播",CGFloat(56)),("speed","播放速度",98),("weight","权重",88)] {
                 let column = NSTableColumn(identifier:.init(key)); column.title = title
+                column.headerCell.alignment = .center
                 column.width = width; column.minWidth = width; column.maxWidth = width; column.resizingMask = []
                 table.addTableColumn(column)
             }
         } else {table.headerView = nil}
-        table.style = .inset; table.backgroundColor = .clear; table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+        table.floatsGroupRows = false
+        table.backgroundColor = .clear; table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.allowsColumnReordering = false; table.autoresizingMask = [.width]; table.allowsEmptySelection = true
         table.setAccessibilityLabel(section == .identity ? "台词列表" : "动作列表")
         table.dataSource = self; table.delegate = self; table.target = self; table.action = #selector(activateRow)
@@ -79,28 +85,28 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
     func reveal(group:String,id:String) {
         if let row = rows.firstIndex(where:{$0.item?.group == group && $0.item?.id == id}) {select(row,focus:true)}
     }
-    private func restoreGroup(_ group:String) {
+    private func restoreGroup(_ group:SettingsLineResetGroup) {
         window?.makeFirstResponder(nil)
         let saved = position
-        if group == "工作中台词" {form.preferences.reset(["randomWorkingLines"]+ConversationLines.working.map(\.key))}
-        else {form.preferences.set([String:String](),for:"customLines")}
+        group.restore(in:form.preferences)
         table.deselectAll(nil); table.reloadData(); restore(saved)
     }
     func numberOfRows(in tableView:NSTableView) -> Int {rows.count}
     func tableView(_ tableView:NSTableView,isGroupRow row:Int) -> Bool {rows[row].item == nil}
     func tableView(_ tableView:NSTableView,shouldSelectRow row:Int) -> Bool {rows[row].item != nil}
     func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {
-        if rows[row].item == nil {return 32}
-        if section == .activity {return 32}
+        if rows[row].item == nil {return 38}
+        if section == .activity {return 36}
         return row == editingRow ? max(88,ceil(editor.fittingSize.height)+16) : 49
     }
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         switch rows[row] {
         case .heading(let title):
-            let field = NSTextField(labelWithString:title); field.font = .systemFont(ofSize:12,weight:.semibold)
+            let field = NSTextField(labelWithString:title); field.font = .systemFont(ofSize:13,weight:.semibold)
             let stack = NSStackView(views:[field]); stack.alignment = .centerY
-            if section == .identity && ["工作中台词","互动台词"].contains(title) {
-                let restore = ActionButton("恢复本组默认台词") { [weak self] in self?.restoreGroup(title) }
+            stack.edgeInsets = NSEdgeInsets(top:0,left:8,bottom:0,right:8)
+            if section == .identity,let group = SettingsLineResetGroup(rawValue:title) {
+                let restore = ActionButton("恢复本组默认台词") { [weak self] in self?.restoreGroup(group) }
                 restore.controlSize = .small; restore.setAccessibilityLabel("恢复"+title+"默认值")
                 stack.addArrangedSubview(NSView()); stack.addArrangedSubview(restore)
             }
@@ -125,25 +131,38 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
     }
     private func actionCell(_ column:String,item:SettingsListItem,clip:Clip,weighted:Bool) -> NSView {
         let id = NSUserInterfaceItemIdentifier(column == "weight" && !weighted ? "unused-weight" : column)
-        let existing = table.makeView(withIdentifier:id,owner:self)
-        if column == "name" || (column == "weight" && !weighted) {
-            let field = existing as? NSTextField ?? NSTextField(labelWithString:"")
-            field.identifier = id
-            field.stringValue = column == "name" ? clip.title : "—"; field.lineBreakMode = .byTruncatingTail
-            return field
+        let cell:SettingsActionCell
+        if let reused = table.makeView(withIdentifier:id,owner:self) as? SettingsActionCell {
+            cell = reused
+        } else {
+            let control:NSControl
+            switch id.rawValue {
+            case "name","unused-weight":
+                let field = NSTextField(labelWithString:"")
+                field.lineBreakMode = .byTruncatingTail
+                control = field
+            case "play":
+                let button = ActionButton("") {}
+                button.controlSize = .small; button.bezelStyle = .rounded
+                button.image = NSImage(systemSymbolName:"play.fill",accessibilityDescription:nil)
+                button.imagePosition = .imageOnly
+                control = button
+            default:
+                control = SettingsActionChoice(frame:.zero,pullsDown:false)
+            }
+            cell = SettingsActionCell(control:control,leading:column == "name")
+            cell.identifier = id
         }
-        if column == "play" {
-            let button = existing as? ActionButton ?? ActionButton("") {}
-            button.identifier = id; button.controlSize = .small; button.bezelStyle = .inline
-            button.image = NSImage(systemSymbolName:"play.fill",accessibilityDescription:nil); button.imagePosition = .imageOnly
+        if let field = cell.control as? NSTextField {
+            field.stringValue = column == "name" ? clip.title : "—"
+            field.textColor = column == "name" ? .labelColor : .tertiaryLabelColor
+        } else if let button = cell.control as? ActionButton {
             button.setAccessibilityLabel("播放"+clip.title)
             button.callback = { [weak self] in self?.preview(item) }
-            return button
+        } else if let choice = cell.control as? SettingsActionChoice {
+            choice.configure(clip:clip,speed:column == "speed",preferences:form.preferences)
         }
-        let choice = existing as? SettingsActionChoice ?? SettingsActionChoice(frame:.zero,pullsDown:false)
-        choice.identifier = id
-        choice.configure(clip:clip,speed:column == "speed",preferences:form.preferences)
-        return choice
+        return cell
     }
     func tableViewSelectionDidChange(_ notification:Notification) {
         guard section == .identity else {return}
@@ -174,18 +193,25 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
         play(item)
     }
     private func edit(_ item:SettingsListItem) {
-        let preview = item.preview.map { _ in form.animationPreviewButton(item.title,compact:true) { [weak self] in self?.preview(item) } }
-        let view:NSView
-        switch item.kind {
-        case .template(let key,_):
-            view = form.text(item.title,key,limit:ConversationLines.limit(key),action:preview)
-        case .interaction(let clip):
-            let prefs = form.preferences
-            view = form.entry(item.title,value:item.summary(prefs),emptyFallback:prefs.templateSource(clip.line ?? ""),limit:120,action:preview) {prefs.setLine($0,for:clip.id)}
-        case .animation:return
-        }
+        guard let view = item.lineEditor(in:form,onPreview:{ [weak self] in self?.preview(item) }) else {return}
         form.fill(view,in:editor)
     }
+}
+
+// 表格分配整列宽度。控件保持原生高度，名称与标题左对齐，操作居中。
+private final class SettingsActionCell:NSTableCellView {
+    let control:NSControl
+    init(control:NSControl,leading:Bool) {
+        self.control = control
+        super.init(frame:.zero)
+        addSubview(control); control.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            control.centerYAnchor.constraint(equalTo:centerYAnchor),
+            leading ? control.leadingAnchor.constraint(equalTo:leadingAnchor,constant:8) : control.centerXAnchor.constraint(equalTo:centerXAnchor),
+            control.trailingAnchor.constraint(lessThanOrEqualTo:trailingAnchor,constant:-4)
+        ])
+    }
+    required init?(coder:NSCoder) {fatalError()}
 }
 
 // 单元格展示已保存值，打开原生菜单时才生成其余选项。
@@ -194,8 +220,8 @@ private final class SettingsActionChoice:NSPopUpButton,NSMenuDelegate {
     private weak var preferences:PetPreferences?
     func configure(clip:Clip,speed:Bool,preferences:PetPreferences) {
         self.clipID = clip.id; self.speed = speed; self.preferences = preferences
-        controlSize = .small; isBordered = false
-        setAccessibilityLabel(clip.title+(speed ? "播放速度" : "随机权重"))
+        controlSize = .small
+        setAccessibilityLabel(clip.title+(speed ? "播放速度" : "权重"))
         menu?.delegate = nil; removeAllItems(); populated = false
         let current = speed ? preferences.clipSpeed(clip.id) : preferences.weight(clip.id)
         addOption(current); selectItem(at:0)
@@ -207,7 +233,7 @@ private final class SettingsActionChoice:NSPopUpButton,NSMenuDelegate {
     func menuNeedsUpdate(_ menu:NSMenu) {
         guard !populated,let preferences else {return}
         populated = true
-        let values:[Double] = speed ? [0.75,1,1.25,1.5] : ((clipID == "idle" ? 1 : 0)...12).map(Double.init)
+        let values = speed ? PetPreferences.clipSpeedOptions : PetPreferences.clipWeightRange(clipID).map(Double.init)
         let current = speed ? preferences.clipSpeed(clipID) : preferences.weight(clipID)
         removeAllItems(); values.forEach(addOption)
         if let index = values.firstIndex(of:current) {selectItem(at:index)}
