@@ -41,6 +41,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         guard let field = client as? SettingsTemplateField else {return nil}
         templateEditor.allowsTokens = field.allowsTokens; return templateEditor
     }
+    func observeValues(_ update:@escaping (PetPreferences) -> Void) {
+        availabilityUpdates.append(update)
+        update(preferences)
+    }
     func refreshAvailability() {
         updateBufferAvailability()
         for update in availabilityUpdates {update(preferences)}
