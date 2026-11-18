@@ -32,7 +32,7 @@ description: 维护白龙桌宠Swift（Swift + AppKit 原生工程），覆盖�
 | 内置任务与消息聚合 | `Conversation/ChatController.swift`、`Conversation/TaskMessageAccumulator.swift`、`Conversation/CommandSummary.swift` |
 | 外部会话观察与提交 | `Conversation/DesktopConversationSession.swift`、`Codex/DesktopHistoryReader.swift`、`Codex/DesktopSync.swift`、`Codex/DesktopReply.swift`、`Codex/RequestCoordinator.swift` |
 | 公开进展、审批与问答 | `Codex/TaskActivity.swift`、`Codex/DesktopRuntimeProjection.swift`、`Codex/DesktopApprovalReader.swift`、`Codex/DesktopApproval.swift`、`Codex/DesktopQuestionReply.swift` |
-| 历史存储、搜索与输入面板 | `Conversation/History.swift`、`Conversation/HistorySearch.swift`、`UI/Chat/ChatUI.swift`、`UI/Chat/ChatComposer.swift`、`UI/Chat/TranscriptRenderer.swift`、`UI/Chat/TranscriptPresentation.swift` |
+| 历史存储、搜索与输入面板 | `Conversation/History.swift`、`Conversation/HistorySearch.swift`、`Conversation/ConversationOrder.swift`、`UI/Chat/ChatUI.swift`、`UI/Chat/ChatComposer.swift`、`UI/Chat/TranscriptRenderer.swift`、`UI/Chat/TranscriptPresentation.swift` |
 | 用户消息整理与模型选择 | `Codex/UserInputText.swift`、`UI/Chat/ChatComposerComponents.swift`、`UI/Chat/ChatViewLayout.swift`、`Codex/ModelSelection.swift` |
 | 窗口、玻璃材质与公共控件 | `App/InterfaceWindows.swift`、`UI/Shared/NativeControls.swift`、`UI/Shared/GlassEdgeHighlight.swift`、`UI/Shared/PanelPresentation.swift` |
 | 富文本、代码块与动效 | `UI/Shared/MarkdownText.swift`、`MessageTextView.swift`、`CodeBlockRendering.swift`、`ProgressTextEffects.swift`、`InlineStatusLayout.swift`、`CopyFeedback.swift` |
@@ -47,10 +47,11 @@ description: 维护白龙桌宠Swift（Swift + AppKit 原生工程），覆盖�
 
 ### 气泡、文本排版与 Token 控件
 
+- 卡片渲染直接使用 `BubbleCard` 和 `BubbleContent`。外部与内置任务提交 `TurnCompletion` 数据，气泡与历史负责 TextKit 字体、底栏和操作按钮。
 - **卡片与计时**：`BubbleCardStore` 负责卡片去重、上限淘汰与优先级排序，`BubbleCountdown` 管理倒计时；正文视图不持有会话发送生命周期，重排不得丢失未提交问卷草稿。
-- **滚动与首行稳定**：`BubbleBodyScrollView` 与 `BubbleBodyLayout` 保证左右边距对称、纵向滚动条位于右边距内且显隐不改变换行宽度。`MessageTextView` 增量替换变化尾部；无选区写入后将插入点重置到 `{0, 0}` 并拦截容器尺寸变化触发的自动滚向文末，`documentView` 原点固定为 `.zero`。普通气泡打开、切卡或换新内容时在布局完成后单次回顶，用户主动滚动即取消待执行回顶；2 秒短进展气泡按自然高度排版、字素边界截断加 `...`，专用 clip 锁定顶部且禁用滚动。
+- **滚动与首行稳定**：`BubbleBodyScrollView` 与 `BubbleBodyLayout` 保证左右边距对称、纵向滚动条位于右边距内且显隐不改变换行宽度。`MessageTextView` 增量替换变化尾部；无选区写入后将插入点重置到 `{0, 0}` 并拦截容器尺寸变化触发的自动滚向文末，`documentView` 原点固定为 `.zero`。普通气泡打开、切卡或换新内容时在布局完成后单次回顶，用户主动滚动即取消待执行回顶；2 秒短进展气泡按自然高度排版、超宽文本由 TextKit 单行尾部省略，专用 clip 锁定顶部且禁用滚动。
 - **Token 汇总与展开**：额度弹窗、历史底栏与任务完成气泡底栏统一复用 `TokenDisclosureControl`（以文字大写字高中心对齐 SF Symbol `alignmentRect.midY`，悬停文字或箭头呈现整块圆角背景，点击整块切换展开）；展开明细使用独立 TextKit 视图（`TranscriptTokenText`）与真实 `NSTextTab` 对齐列宽并支持文本选择。
-- **动效与代码块**：`ProgressTextEffects` 提供标题扫光与超宽跑马灯，主气泡与任务概览按 `TaskActivity.groupActivity` 展示折叠组标题，短气泡展示单项操作摘要；代码块采用原生 `NSTextTableBlock` 与 `CodeBlockHeaderLayout`。用户输入由 `UserInputText` 剥离附件包装后渲染，外部执行中插话按 `userMessage` ID 合并卡片并沿用原任务计时。
+- **动效与代码块**：`ProgressTextEffects` 提供标题扫光与超宽跑马灯，主气泡进展、任务概览与 2 秒气泡首行共用 `TaskActivity.groupActivity` 的标题、图标及结果角标，短气泡第二行只放新增的公开细节，有内容时显示；代码块采用原生 `NSTextTableBlock` 与 `CodeBlockHeaderLayout`。用户输入由 `UserInputText` 剥离附件包装后渲染，外部执行中插话按 `userMessage` ID 合并卡片并沿用原任务计时。
 
 ### 任务信息栏与工作区状态条
 
@@ -59,13 +60,15 @@ description: 维护白龙桌宠Swift（Swift + AppKit 原生工程），覆盖�
 
 ### 双通道会话、审批与历史
 
+- 外部回复由 `DesktopConversationSession` 按 `ObservedDesktopTurn` 选原轮次，开始新轮与插话共用 `DesktopReply.mode(for:)`，终态集合在 `TaskOutcome`。内置流式刷新走 `ChatInterface.refreshTurn`，历史顺序由 `ConversationOrder` 维护。
+
 - **输入隔离**：`ChatNavigation` 与 `ChatDraftCache` 按入口和会话隔离草稿，异步回执核对目标身份。临时输入与历史回复共用 `MessageEditor`／`MessageInputBox` 与 `SendShortcut`，保持 `.nonactivatingPanel` 非激活交互与中文组字保护。
 - **连接与冷启动**：内置会话复用单条 `codex app-server` 子进程连接；外部会话通过 `DesktopConversationSession` 经桌面 IPC 提交 `start-turn` v2／`steer-turn` v1（沿用原会话模型与权限，不加人设）。桌面端未运行或启动不足 10 秒时进入冷启动准备：受控后台补投递 `codex://threads/<id>`（`activates = false`）以应对冷启动换窗丢路由，配合短窗口 `thread-owner-discovery` 与会话广播即时唤醒，连上后同连接读取设置并提交；提交后回执不明归入 `Unconfirmed`，严禁自动重发。
-- **审批与历史保护**：外部审批兼容 `thread-stream-state-changed` v11～v13，默认拒绝且气泡内无键盘默认允许；敏感提问仅跳转 Codex。历史采用 SQLite schema 3 按需加载正文（`16` 条／`2 MiB` LRU，每页 `20` 轮），关闭记录时冻结快照，损坏或写入失败自动转入只读保护。
+- **审批与历史保护**：外部审批兼容 `thread-stream-state-changed` v11～v13，默认拒绝且气泡内无键盘默认允许；敏感提问仅跳转 Codex。历史采用 SQLite schema 3 按需加载正文（`16` 条／`2 MiB` LRU，每页 `20` 轮），关闭记录时冻结快照，损坏或迁移失败时进入只读保护，写入失败暂停自动保存并提供重试。
 
 ### 原生界面、动画与额度
 
-- **界面与设置**：遵循 `macos-golden-gate-design`，共 9 个设置分类（原“性能”页已整合为“画质与性能”）。增删改设置项须同步 `SettingsSearchEntry.all`（纯静态无副作用）、旧键清理／迁移、导入导出与恢复范围。前景强调文字使用 `AppAccent.foregroundColor` 保证明暗对比度，分段与开关控件经 `contentFilters` 映射 8 组预设取样色。
+- **界面与设置**：遵循 `macos-golden-gate-design`，共 9 个设置分类（原“性能”页已整合为“画质与性能”）。“消息与提醒”通过 `MessageSettingsPage` 的行定义生成表单、静态搜索和本页恢复范围，其余页面在 `SettingsSearchEntry.all` 维护索引。改动偏好键时核对迁移、导入导出与恢复范围。前景强调文字使用 `AppAccent.foregroundColor` 保证明暗对比度，分段与开关控件经 `contentFilters` 映射 8 组预设取样色。
 - **动画与吸边**：`AVAssetReader` + `vImage` 解码透明 HEVC，交由 `SpriteView` `CALayer.contents` 显示；旧流续播至新流满足起播余量后再按 `generation` 交接，默认开启 `24 MiB` 开头缓存、平滑过渡与孤立杂点清理。素材选帧 `Timer` 与几何 `NSView.displayLink` 分离，内建屏幕刘海位置按 `safeAreaInsets.top` 与 auxiliary 区域实时读取。内存指标统一表述为“运行内存 (RAM)”。
 - **多套餐额度**：区分 Free（`ChatGPT 免费用户`＋单条 `30 天额度`）、Go（单条 `30 天额度`）、3 档 Business（`Business Standard`／`Business Premium`／`Business 按量计费`，优先取 `account/read` 具体子档）及双窗口套餐（`≤10%` 橙、`≤5%` 红），支持可选运行内存 (RAM) 缓存与强调色「立即刷新」。不读凭证文件，更新检查仅读取公开正式 Release。
 

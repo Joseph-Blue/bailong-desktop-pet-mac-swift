@@ -21,15 +21,22 @@ struct QuestionPresentation {
     var skip: ((Set<String>) -> Void)? = nil
 }
 
+struct BubbleContent {
+    var title: String
+    var body: String
+    var kind: String
+    var animateHeading = false
+    var timing: TaskTiming?
+    var conversation: String?
+    var failure: AppFailure?
+}
+
 struct BubbleCard {
     enum Priority:Int {case companion, message, request}
     var id:String
-    var title:String, body:String, kind:String
-    var seconds:Double
-    var thread:String?
+    var content: BubbleContent
     var purpose:MessagePurpose
-    var resetText:Bool, animateHeading:Bool, attentionAction:Bool
-    var timing:TaskTiming?
+    var resetText:Bool, attentionAction:Bool
     var question:QuestionPresentation?
     var details:() -> Void
     var codex:() -> Void
@@ -38,13 +45,12 @@ struct BubbleCard {
     var fileEdits = [FileEditSummary]()
     var showsTaskOverview = false
     var isUserInput = false
-    var completionFooter:TranscriptActions? = nil
-    var failure:AppFailure? = nil
+    var completionFooter:TurnCompletion? = nil
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
     var priority:Priority {
         if attentionAction {return .request}
-        if showsTaskOverview || (thread == nil && purpose == .interaction) {return .companion}
+        if showsTaskOverview || (content.conversation == nil && purpose == .interaction) {return .companion}
         return .message
     }
 }

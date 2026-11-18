@@ -1,5 +1,19 @@
 import AppKit
 
+// 桌面观察器提供的本轮状态，只保留发送和任务概览需要的公开字段。
+struct ObservedDesktopTurn {
+    let key: String
+    let threadID: String
+    let turnID: String
+    let status: String
+    let start: Date
+    let end: Date?
+    let title: String
+    let activity: TaskActivity?
+    let connectionFailed: Bool
+    var active: Bool {activeStatuses.contains(status)}
+}
+
 // 外部 Codex 会话的发送、待确认和只读设置状态；不持有内置 CodexConnection。
 final class DesktopConversationSession {
     private enum NavigationRecovery {case existingConnection, none}
@@ -10,7 +24,7 @@ final class DesktopConversationSession {
         let send:(DesktopReply.PreparedConnection) -> Void
     }
     private let store:HistoryStore
-    private let tasks:() -> [BubbleTaskSummary]
+    var observedTurns = [ObservedDesktopTurn]()
     private let canSend:() -> Bool, isClosing:() -> Bool
     var onChange:() -> Void = {}, onPersist:() -> Void = {}
     var onSubmitted:(String,String,ChatEntry) -> Void = {_,_,_ in}
@@ -30,8 +44,8 @@ final class DesktopConversationSession {
     private var desktopUnconfirmed = Set<String>()
     private var desktopReplyNotes = [String:String]()
 
-    init(store:HistoryStore,tasks:@escaping () -> [BubbleTaskSummary],canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
-        self.store = store; self.tasks = tasks
+    init(store:HistoryStore,canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
+        self.store = store
         self.canSend = canSend; self.isClosing = isClosing
     }
     var hasPendingSend:Bool {!desktopSending.isEmpty}
@@ -62,9 +76,9 @@ final class DesktopConversationSession {
         desktopModelNotes.removeAll(); desktopModelChecked.removeAll(); desktopModelRequests.removeAll()
     }
     func target(_ conversation:Conversation) -> (id:String,mode:DesktopReply.Mode,start:Date)? {
-        if let live = tasks().first(where:{$0.threadID == conversation.threadID}) {
-            guard let id = live.turnID,let mode = DesktopReply.mode(for:live.status) else {return nil}
-            return (id,mode,live.start)
+        if let live = observedTurns.first(where:{$0.threadID == conversation.threadID}) {
+            guard let mode = DesktopReply.mode(for:live.status) else {return nil}
+            return (live.turnID,mode,live.start)
         }
         // 读取未完成或失败时，不用旧历史中的执行状态开放插话。
         guard let last = conversation.turns.max(by:{$0.date < $1.date}),let id = last.id,

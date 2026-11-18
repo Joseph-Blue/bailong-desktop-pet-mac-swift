@@ -37,11 +37,10 @@ final class ChatController {
     private var titleRequests = [String:UUID]()
     private var historyInputPage = [String]()
     private var historyInputRequest = UUID()
-    var desktopTasks = [BubbleTaskSummary]()
     var desktopTaskReadStatus:String? = "正在同步 Codex 任务状态…"
     lazy var desktopSession:DesktopConversationSession = {
         let session = DesktopConversationSession(store:store,
-            tasks:{ [unowned self] in self.desktopTasks },canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
+            canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
         session.onSubmitted = { [weak self] key,text,entry in
             guard let self else {return}
             self.ui.clearSubmittedDraft(key:key,fromComposer:entry == .composer,text:text)
@@ -202,7 +201,7 @@ final class ChatController {
         }
         pet.workspaceProvider = { [weak self] key in
             guard let self,let conversation = self.allConversations.first(where:{$0.key == key}) else {return nil}
-            return (conversation,self.running?.0.key == key || self.desktopTasks.contains {conversation.threadID != nil && $0.threadID == conversation.threadID && $0.active})
+            return (conversation,self.running?.0.key == key || self.desktopSession.observedTurns.contains {conversation.threadID != nil && $0.threadID == conversation.threadID && $0.active})
         }
         pet.onReply = { [weak self] key in
             guard let self,let conversation = self.store.conversations.first(where:{$0.key == key}) else {return}
@@ -228,7 +227,7 @@ final class ChatController {
         pet.bubble.taskProvider = { [weak self] in
             guard let self else {return BubbleTaskOverview(status:"任务同步已停止")}
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
-            var tasks = self.desktopTasks.filter {!self.store.deletedThreads.contains($0.threadID ?? "")}.map {task in
+            var tasks = self.desktopSession.observedTurns.filter {!self.store.deletedThreads.contains($0.threadID)}.map {task in
                 let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title
                 return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed)
             }
@@ -237,7 +236,7 @@ final class ChatController {
                 guard !conversation.external || !observed.contains(conversation.threadID ?? ""),
                       let turn = conversation.turns.max(by:{$0.date < $1.date}) else {continue}
                 let live = !conversation.external && self.running?.1 === turn
-                guard live || ["completed","failed","interrupted","cancelled","canceled"].contains(turn.status) else {continue}
+                guard live || TaskOutcome.terminalStatuses.contains(turn.status) else {continue}
                 tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network,directory:conversation.cwd,fileEdits:turn.fileEdits ?? []))
             }
             for index in tasks.indices {
@@ -249,7 +248,7 @@ final class ChatController {
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}
             let active = tasks.filter(\.active).sorted {$0.start < $1.start}
-            let recent = tasks.filter {["completed","failed","interrupted","cancelled","canceled"].contains($0.status)}
+            let recent = tasks.filter {TaskOutcome.terminalStatuses.contains($0.status)}
                 .sorted {($0.end ?? $0.start) > ($1.end ?? $1.start)}
             return BubbleTaskOverview(tasks:active+recent,status:self.desktopTaskReadStatus)
         }
@@ -329,7 +328,7 @@ final class ChatController {
         var state = ChatInputState(conversation:conversation,kind:kind)
         state.runningTitle = running?.0.title; state.ownsRunningTask = conversation != nil && running?.0 === conversation
         state.stopping = state.ownsRunningTask && cancelled
-        state.executing = state.ownsRunningTask || (conversation?.external == true && desktopTasks.contains {$0.threadID == conversation?.threadID && $0.active})
+        state.executing = state.ownsRunningTask || (conversation?.external == true && desktopSession.observedTurns.contains {$0.threadID == conversation?.threadID && $0.active})
         state.newConversation = conversation.map {candidate in candidate.turns.isEmpty && unstartedConversations.contains {$0 === candidate}} ?? false
         state.readOnly = store.isReadOnly
         if let conversation,conversation.external {
@@ -508,8 +507,20 @@ final class ChatController {
     func scheduleUpdate() {
         if updateTimer != nil {return}
         let timer = Timer(timeInterval:1.0/30,repeats:false) { [weak self] _ in
-            guard let self else{return}; self.updateTimer = nil; self.updateText(); self.refresh(); self.scheduleSave()
-            guard let (c,t) = self.running else{return}
+            guard let self else {return}
+            self.updateTimer = nil
+            guard let (c,t) = self.running else {return}
+            let previousMessageAt = t.lastMessageAt, previousEdits = t.fileEdits
+            self.messagesState.apply(to:t)
+            let editsChanged = previousEdits != t.fileEdits
+            self.ui.refreshTurn(t,in:c,previousMessageAt:previousMessageAt,editsChanged:editsChanged)
+            if editsChanged {
+                self.pet.refreshWorkspaceBars()
+                if self.workspacePanel.visible,self.workspacePanel.conversationKey == c.key {
+                    self.workspacePanel.update(conversation:c,executing:true)
+                }
+            }
+            self.scheduleSave()
             guard !["waitingForInput","waitingForApproval"].contains(t.status) else {return}
             if self.messagesState.currentActivity == nil {self.pet.bubble.removeActivity(taskKey:"own")}
             self.presentAgentMessages(conversation:c,turn:t)
@@ -536,7 +547,7 @@ final class ChatController {
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
         messagesState.finalize(t)
         presentAgentMessages(conversation:c,turn:t)
-        let stoppedByUser = cancelled && ["interrupted","cancelled","canceled"].contains(status)
+        let stoppedByUser = cancelled && TaskOutcome.stoppedStatuses.contains(status)
         reminderClock = nil; interruptInFlight = false
         running = nil; requestCoordinator.dismiss(); pet.bubble.resolveQuestions(taskKey:"own"); pet.taskEnded("own",status:status); persist()
         let title = stoppedByUser ? pet.preferences.statusLine("taskStoppedTemplate") : pet.preferences.taskResultLine(status)
@@ -553,7 +564,13 @@ final class ChatController {
                 pet.bubble.showFailure(failure,scale:Double(pet.bubblePercent)/100,taskStartedAt:t.date,taskFinishedAt:Date(),taskStatus:status)
                 pet.placeBubble()
             }
-        } else {pet.say(title, body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final), kind:"task", thread:c.key, purpose:status == "completed" ? .result : .attention, personalizeTitle:false, timing:.init(start:t.date,key:"own",finished:Date(),status:status),messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],completionFooter:TranscriptActions(id:t.key,text:t.final,threadID:c.threadID,font:.systemFont(ofSize:13),status:t.status,completedAt:t.completedAt,usage:t.tokenUsage,usageError:t.tokenUsageError))}
+        } else {
+            pet.say(title,body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final),kind:"task",thread:c.key,
+                    purpose:status == "completed" ? .result : .attention,personalizeTitle:false,
+                    timing:.init(start:t.date,key:"own",finished:t.completedAt,status:status),
+                    messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],
+                    completionFooter:TurnCompletion(t,completedAt:t.completedAt))
+        }
         messagesState = TaskMessageAccumulator()
         if closing {finishShutdown()}
     }

@@ -14,7 +14,7 @@ enum SettingsSection: Int, CaseIterable {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
-        case .messages: return ["taskInfoBarEnabled","gitWindowEnabled","taskReminderEnabled","taskReminderMinutes","approvalButtonOrder","bubbleCardLimit","recentTaskCount","showTaskOverview","showThinkingProgress","showToolProgress","hideToolFailures","progressToastEnabled","progressToastSeconds","recordHistory","sendShortcut","taskBubbles","progressBubbles","resultBubbles","interactionBubbles","interactionSeconds","progressSeconds","resultSeconds","quotaSeconds","autoReadTime","pauseOnHover","countAfterReveal","typingEffect","soundEnabled","quietCompanion","quietSchedule","quietStart","quietEnd"]
+        case .messages: return MessageSettingsPage.preferenceKeys
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
@@ -198,7 +198,7 @@ final class PetPreferences {
     var sensitiveQuestionNotice: String {template("（已隐藏{桌宠名}的敏感信息提问）")}
     var sensitiveInputNotice: String {template("（已隐藏{用户名}的敏感信息输入）")}
     func taskResultLine(_ status:String) -> String {
-        statusLine(status == "completed" ? "taskSuccessTemplate" : ["interrupted","cancelled","canceled"].contains(status) ? "taskInterruptedTemplate" : "taskFailureTemplate")
+        statusLine(status == "completed" ? "taskSuccessTemplate" : TaskOutcome.stoppedStatuses.contains(status) ? "taskInterruptedTemplate" : "taskFailureTemplate")
     }
     // 只传入应用自带文案，不对用户消息、模型正文或历史记录做全局替换。
     func templateSource(_ text:String) -> String {text.replacingOccurrences(of:"白龙娘",with:"{桌宠名}").replacingOccurrences(of:"白龙",with:"{桌宠名}").replacingOccurrences(of:"主人",with:"{用户名}")}

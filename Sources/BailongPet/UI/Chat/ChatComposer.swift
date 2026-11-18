@@ -243,7 +243,12 @@ final class ChatComposer: NSObject {
         if composerMotion.frame.size != size {composerMotion.resize(to:size)}
     }
 
-    func refresh(font:NSFont,state:ChatInputState,conversations:[Conversation]) {
+    func refreshTurn(_ turn:Turn,in conversation:Conversation,editsChanged:Bool) {
+        recentReply.update(turn:turn)
+        if editsChanged {workspace.update(conversation:conversation,executing:true,visible:true)}
+    }
+
+    func refresh(font:NSFont,state:ChatInputState,choices:@escaping () -> [Conversation]) {
         latestState = state
         let external = state.kind == .project
         composerEditor.update(font:font,editable:state.canEdit); status.font = font
@@ -259,7 +264,7 @@ final class ChatComposer: NSObject {
         modes.select(state.kind.rawValue)
         conversationPicker.title = state.conversation?.title ?? "选择会话…"
         conversationPicker.hoverHelp = state.conversation?.title
-        conversationPicker.conversations = { [kind = state.kind] in conversations.filter {$0.kind == kind}}
+        conversationPicker.conversations = choices
         workspace.update(conversation:state.conversation,executing:state.executing,visible:composerVisible)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
         composerInheritedSettings.update(settings:state.modelSettings,error:state.modelNote)

@@ -126,7 +126,7 @@ enum DesktopHistoryReader {
         let history = try ReadDatabase(root+"/thread_history_1.sqlite")
         let turns = try history.rows("SELECT turn_id,status FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 1",[actual])
         guard let latest = turns.first,latest["turn_id"] == previousTurn,
-              (steering ? ["inProgress","running"] : ["completed","failed","interrupted","cancelled","canceled"]).contains(latest["status"] ?? "") else {
+              DesktopReply.mode(for:latest["status"] ?? "") == (steering ? .steer : .start) else {
             throw PetFailure(message:"原会话状态已变化。请查看 Codex 当前对话后再发送。")
         }
     }

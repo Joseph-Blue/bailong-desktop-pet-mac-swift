@@ -5,7 +5,7 @@ enum DesktopReply {
     enum Mode {case start, steer}
     static func mode(for status:String) -> Mode? {
         if ["inProgress","running"].contains(status) {return .steer}
-        if ["completed","failed","interrupted","cancelled","canceled"].contains(status) {return .start}
+        if TaskOutcome.terminalStatuses.contains(status) {return .start}
         return nil
     }
     struct OwnerUnavailable:LocalizedError {

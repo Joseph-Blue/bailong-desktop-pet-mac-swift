@@ -50,7 +50,7 @@ struct SettingsSearchEntry {
         add(.identity,"任务状态台词",["执行任务中"],"台词 模板 我还在留意进展")
         add(.identity,"任务状态台词",["有新进展"],"台词 模板 进度 任务计划 阶段性进展 Codex 项目任务 我忙到这一步啦")
         add(.identity,"任务状态台词",["等待回答","等待批准","任务成功","任务失败","任务中断或取消"],"台词 审批 模板")
-        add(.identity,"任务状态台词",["正在思考","正在调用工具","正在运行命令","已运行命令"],"台词 模板 思考摘要 工具调用 执行命令 运行命令 已运行命令 终端 进展小气泡")
+        add(.identity,"任务状态台词",["正在思考","正在调用工具","正在运行命令","已运行命令"],"台词 模板 思考摘要 工具调用 执行命令 运行命令 已运行命令 终端")
         for line in ConversationLines.task {add(.identity,"任务状态台词",[line.title],"台词 模板 "+line.text)}
         for line in ConversationLines.interface {add(.identity,"聊天窗口台词",[line.title],"台词 模板 "+line.text)}
         add(.identity,"额度查询台词",["正在查询"],"额度 ChatGPT 订阅 台词 动作 播放 预览")
@@ -58,22 +58,7 @@ struct SettingsSearchEntry {
         add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 适中 活泼 自定义 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
-        add(.messages,"任务气泡",["在气泡中显示任务信息栏"],"Git 仓库状态 本轮文件改动 状态栏 进度 工具调用")
-        add(.messages,"工作区状态条",["显示工作区状态条"],"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条")
-        add(.messages,"历史记录",["记录历史"],"聊天 保存 同步")
-        add(.messages,"气泡窗审批",["气泡窗审批按钮顺序"],"批准 允许这一次 允许本轮 拒绝 左拒绝 右允许 左允许 右拒绝 左右 位置 红叉 绿对钩")
-        add(.messages,"气泡卡片与任务概览",["气泡卡片保留数量","互动气泡显示任务概览","近期结束任务数量"],"消息 历史 上一条 下一条 正在执行 最近 完成")
-        add(.messages,"显示哪些消息",["显示思考摘要","显示工具调用"],"显示思考过程 思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关")
-        add(.messages,"显示哪些消息",["隐藏工具执行失败提示"],"工具失败 执行失败 命令失败 报错 错误提示 失败角标 过滤 隐藏 概览 组标题 小气泡")
-        add(.messages,"任务气泡",["思考与工具进展小气泡"],"自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关")
-        add(.messages,"输入快捷键",["发送与换行"],"回车 Return Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 发送 换行 快捷回复 插话 问卷")
-        add(.messages,"任务气泡",["显示任务气泡","任务过程消息","最终回复"],"任务气泡提醒 任务进展 通知 显示 开关")
-        add(.messages,"显示哪些消息",["互动台词"],"通知 显示 开关")
-        add(.messages,"停留时间",["互动台词","任务过程消息","最终回复","额度信息","长回复自动延长阅读时间","鼠标移入时暂停倒计时","预览最终回复气泡"],"气泡 自动关闭 手动关闭 秒 时长 悬停 预览 任务进展 ChatGPT 订阅 额度 重置 倒计时")
-        add(.messages,"停留时间",["思考与工具进展小气泡"],"进展小气泡停留时间 思考 工具调用 短气泡 小窗口 自动关闭 持续 时间 秒 时长 2s 2秒")
-        add(.messages,"声音",["播放音效"],"声音")
-        add(.messages,"安静陪伴",["立即开启安静陪伴","定时开启安静陪伴","开始时间","结束时间"],"安静陪伴模式 启用专注时段 免打扰 时间 夜间 静音")
-        add(.messages,"进展提醒",["久无进展时提醒","提醒间隔"],"任务 执行 无新进度 90秒 5分钟 定时 等待 台词")
+        entries += MessageSettingsPage.searchEntries
         add(.appearance,"大小",["桌宠大小","气泡大小","消息文字大小"],"缩放 字号 字体")
         add(.appearance,"大小",["气泡自定义宽高比","宽 : 高"],"气泡形状 长宽比 宽高比 比例 宽度 高度 排版")
         add(.appearance,"主题",["外观模式","强调色","自定义"],"主题 颜色 浅色 深色 跟随系统 分段选择 蓝色 紫色 粉色 红色 橙色 黄色 绿色 石墨色")
@@ -115,32 +100,6 @@ struct SettingsSearchEntry {
                 entries[index].condition = "开启顶部刘海吸边后可调整"
             } else if entries[index].section == .activity && entries[index].title == "活动范围" {
                 entries[index].condition = "开启自主移动后可调整"
-            } else if entries[index].section == .messages {
-                switch (entries[index].group,entries[index].title) {
-                case (_,"开始时间"),(_,"结束时间"):
-                    entries[index].condition = "开启定时安静陪伴后可调整"
-                case ("进展提醒","久无进展时提醒"):
-                    entries[index].condition = "开启显示任务气泡和任务过程消息后可调整"
-                case ("进展提醒","提醒间隔"):
-                    entries[index].condition = "开启任务气泡、任务过程消息和久无进展提醒后可调整"
-                case (_,"近期结束任务数量"):
-                    entries[index].condition = "开启任务概览后可调整"
-                case ("显示哪些消息","隐藏工具执行失败提示"):
-                    entries[index].condition = "开启显示工具调用后可调整"
-                case ("任务气泡","任务过程消息"),("任务气泡","最终回复"):
-                    entries[index].condition = "开启显示任务气泡后可调整"
-                case ("任务气泡","思考与工具进展小气泡"):
-                    entries[index].condition = "开启显示任务气泡和任务过程消息后可调整"
-                case ("停留时间","任务过程消息"):
-                    entries[index].condition = "开启显示任务气泡和任务过程消息后可调整"
-                case ("停留时间","最终回复"),("停留时间","长回复自动延长阅读时间"):
-                    entries[index].condition = "开启显示任务气泡和最终回复后可调整"
-                case ("停留时间","思考与工具进展小气泡"):
-                    entries[index].condition = "开启显示任务气泡、任务过程消息和进展小气泡后可调整"
-                case ("停留时间","互动台词"):
-                    entries[index].condition = "开启互动台词后可调整"
-                default: break
-                }
             }
         }
         if let catalog {

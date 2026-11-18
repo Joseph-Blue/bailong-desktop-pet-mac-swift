@@ -110,6 +110,22 @@ final class Turn: Codable {
         return t
     }
 }
+struct TurnCompletion: Equatable {
+    let id: String
+    let status: String
+    let completedAt: Date?
+    let usage: TokenUsage?
+    let usageError: String?
+
+    init(_ turn: Turn, completedAt: Date?) {
+        id = turn.key
+        status = turn.status
+        self.completedAt = completedAt
+        usage = turn.tokenUsage
+        usageError = turn.tokenUsageError
+    }
+}
+
 final class Conversation: Codable {
     var key = UUID().uuidString
     var threadID: String? = nil
