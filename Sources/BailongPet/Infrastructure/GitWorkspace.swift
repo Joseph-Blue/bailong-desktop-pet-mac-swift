@@ -3,8 +3,8 @@ import Foundation
 struct GitWorkspaceStatus:Equatable {
     enum Group:String,CaseIterable {case conflicted = "冲突", staged = "已暂存", unstaged = "未暂存", untracked = "未跟踪"}
     struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:String}
-    var root = "", branch = "", commit = "", upstream:String?
-    var ahead = 0, behind = 0, stashes = 0
+    var root = "", branch = "", commit = "", tag:String?, upstream:String?
+    var ahead:Int?, behind:Int?, stashes = 0
     var initial = false, detached = false, operation:String?
     var remoteNames = [String]()
     var remoteName:String?, remoteHost:String?, remoteRepository:String?
@@ -14,7 +14,11 @@ struct GitWorkspaceStatus:Equatable {
     var isGitHub:Bool {remoteHost?.lowercased() == "github.com"}
     var counts:[Group:Int] {entries.reduce(into:[:]) {$0[$1.group,default:0] += 1}}
     var clean:Bool {entries.isEmpty}
-    var title:String {detached ? "@"+commit.prefix(8) : branch}
+    var title:String {
+        guard detached else {return branch}
+        if let tag {return "#"+tag}
+        return "@"+commit.prefix(8)
+    }
     var summary:String {
         let counts = counts
         var parts = Group.allCases.compactMap {group in counts[group].map {group.rawValue+" \($0) 项"}}
@@ -147,13 +151,17 @@ final class GitWorkspaceRequest {
             return value
         }
         let root = try string(["rev-parse","--show-toplevel"])!
-        var result = try GitWorkspaceStatus.parse(run(directory,["status","--porcelain=v2","-z","--branch","--show-stash","--untracked-files=all","--ignore-submodules=none"]).1)
+        var result = try GitWorkspaceStatus.parse(run(directory,["status","--porcelain=v2","-z","--branch","--ahead-behind","--show-stash","--untracked-files=all","--ignore-submodules=none"]).1)
         result.root = root
         let gitDirectory = try string(["rev-parse","--absolute-git-dir"])!
         let commonDirectory = try string(["rev-parse","--path-format=absolute","--git-common-dir"])!
         result.observationPaths = Array(Set([root,gitDirectory,commonDirectory])).sorted()
-        let markers = [("rebase-merge","变基中"),("rebase-apply","变基中"),("MERGE_HEAD","合并中"),("CHERRY_PICK_HEAD","拣选中"),("REVERT_HEAD","还原中"),("BISECT_LOG","二分查找中")]
-        result.operation = markers.first {FileManager.default.fileExists(atPath:URL(fileURLWithPath:gitDirectory).appendingPathComponent($0.0).path)}?.1
+        result.operation = try repositoryOperation(in:URL(fileURLWithPath:gitDirectory))
+        if result.detached,
+           let tag = try string(["for-each-ref","--points-at=\(result.commit)","--sort=refname","--count=1","--format=%(refname:strip=2)","refs/tags"]),
+           !tag.isEmpty {
+            result.tag = tag
+        }
         if result.upstream != nil,!result.detached {
             result.remoteName = try string(["config","--get","branch.\(result.branch).remote"],optional:true)
         }
@@ -179,6 +187,35 @@ final class GitWorkspaceRequest {
             }
         }
         return result
+    }
+    private func repositoryOperation(in gitDirectory:URL) throws -> String? {
+        func exists(_ path:String) -> Bool {
+            FileManager.default.fileExists(atPath:gitDirectory.appendingPathComponent(path).path)
+        }
+        func rebaseStep(_ path:String) throws -> Int? {
+            do {
+                let value = try String(contentsOf:gitDirectory.appendingPathComponent(path),encoding:.utf8)
+                return Int(value.trimmingCharacters(in:.whitespacesAndNewlines))
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                // 变基开始或结束时，步数文件可能尚未创建或已被移除。
+                return nil
+            }
+        }
+        if exists("rebase-apply/applying") {return "应用补丁中"}
+        let progressPaths:(current:String,total:String)
+        if exists("rebase-apply") {
+            progressPaths = ("rebase-apply/next","rebase-apply/last")
+        } else if exists("rebase-merge") {
+            progressPaths = ("rebase-merge/msgnum","rebase-merge/end")
+        } else {
+            let markers = [("MERGE_HEAD","合并中"),("CHERRY_PICK_HEAD","拣选中"),("REVERT_HEAD","还原中"),("BISECT_LOG","二分查找中")]
+            return markers.first {exists($0.0)}?.1
+        }
+        if let current = try rebaseStep(progressPaths.current), let total = try rebaseStep(progressPaths.total),
+           current > 0, current <= total {
+            return "变基中 \(current)/\(total)"
+        }
+        return "变基中"
     }
     func start(directory:String,completion:@escaping (Result<GitWorkspaceStatus?,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async { [self] in

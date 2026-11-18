@@ -20,18 +20,25 @@ private enum GitStatusText {
         if status.clean {append(compact ? "✓" : "工作区干净",color:StatusTextColor.green)}
         if status.stashes > 0 {append(compact ? "*\(status.stashes)" : "暂存栈 \(status.stashes) 份",color:StatusTextColor.purple)}
         if compact {
-            if status.ahead > 0 {append("⇡\(status.ahead)",color:StatusTextColor.blue)}
-            if status.behind > 0 {append("⇣\(status.behind)",color:StatusTextColor.blue)}
+            if let ahead = status.ahead,ahead > 0 {append("⇡\(ahead)",color:StatusTextColor.blue)}
+            if let behind = status.behind,behind > 0 {append("⇣\(behind)",color:StatusTextColor.blue)}
         }
         return text
     }
     static func tracking(_ status:GitWorkspaceStatus,font:NSFont) -> NSAttributedString {
-        let text = NSMutableAttributedString(string:"上游："+(status.upstream ?? ""),attributes:[.font:font,.foregroundColor:NSColor.labelColor])
-        for (label,count) in [("领先",status.ahead),("落后",status.behind)] {
-            text.append(NSAttributedString(string:" · ",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
+        let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
+        guard let upstream = status.upstream else {return NSAttributedString(string:"未设置",attributes:attributes)}
+        let text = NSMutableAttributedString(string:upstream,attributes:attributes)
+        guard let ahead = status.ahead,let behind = status.behind else {
+            let state = status.initial ? "尚无本地提交" : "上游引用缺失"
+            text.append(NSAttributedString(string:" · "+state,attributes:attributes))
+            return text
+        }
+        for (label,count) in [("领先",ahead),("落后",behind)] {
+            text.append(NSAttributedString(string:" · ",attributes:attributes))
             text.append(NSAttributedString(string:label+" \(count)",attributes:[.font:count > 0 ? NSFont.systemFont(ofSize:font.pointSize,weight:.semibold) : font,.foregroundColor:count > 0 ? StatusTextColor.blue : NSColor.labelColor]))
         }
-        text.append(NSAttributedString(string:"（本机记录）",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
+        text.append(NSAttributedString(string:"（本机记录）",attributes:attributes))
         return text
     }
 }
@@ -253,16 +260,16 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         }
         guard let snapshot else {return}
         git.image = sourceIcon(github:snapshot.isGitHub)
-        let text = NSMutableAttributedString()
-        text.append(NSAttributedString(string:snapshot.title+(snapshot.initial ? " · 首次提交前" : "")))
-        if let operation = snapshot.operation {text.append(NSAttributedString(string:" · "+operation))}
-        text.append(NSAttributedString(string:"  "))
-        text.append(GitStatusText.render(snapshot,compact:true,font:git.font!))
-        text.addAttribute(.font,value:git.font!,range:NSRange(location:0,length:text.length))
+        let font = git.font!
+        var heading = snapshot.title+(snapshot.initial ? " · 首次提交前" : "")
+        if let operation = snapshot.operation {heading += " · "+operation}
+        let text = NSMutableAttributedString(string:heading+"  ")
+        text.append(GitStatusText.render(snapshot,compact:true,font:font))
+        text.addAttribute(.font,value:font,range:NSRange(location:0,length:text.length))
         if git.attributedTitle != text {git.attributedTitle = text}
         git.contentTintColor = .secondaryLabelColor
-        let tracking = snapshot.upstream.map {"上游："+$0+" · 领先 \(snapshot.ahead)，落后 \(snapshot.behind)（本机记录）"} ?? "未设置上游"
-        git.setAccessibilityValue(snapshot.title+"，"+snapshot.summary+"，"+tracking)
+        let tracking = GitStatusText.tracking(snapshot,font:font).string
+        git.setAccessibilityValue(heading+"，"+snapshot.summary+"，上游："+tracking)
     }
     @objc private func openDetails() {
         openPopover(changes:false,anchor:git)
@@ -389,11 +396,8 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             else if let remote = snapshot.remoteName {
                 metadata("远端",label(([remote]+[snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}).joined(separator:" · ")))
             } else {metadata("远端",label(snapshot.remoteNames.isEmpty ? "未配置" : snapshot.remoteNames.joined(separator:"、")))}
-            let upstream = label("未设置")
-            if snapshot.upstream != nil {
-                let tracking = GitStatusText.tracking(snapshot,font:upstream.font!)
-                upstream.attributedStringValue = tracking.attributedSubstring(from:NSRange(location:3,length:tracking.length-3))
-            }
+            let upstream = label("")
+            upstream.attributedStringValue = GitStatusText.tracking(snapshot,font:upstream.font!)
             metadata("上游",upstream)
             var states = [String]()
             if snapshot.detached {states.append("HEAD 已分离")}
