@@ -44,7 +44,8 @@
 ./build.command --resources-zip /绝对路径/bailong-dev-assets-2026-11-10.zip
                                   # 导入指定路径的素材包并构建
 ./build.command --check           # 仅检查编译环境与运行素材
-./run-dev.command                 # 增量编译并直接运行开发程序
+./run-dev.command                 # 启动开发程序，在终端按 M 开关监视
+./run-dev.command --monitor       # 从启动时查看 app-server 与桌面会话事件
 ./run-dev.command --build-only    # 仅编译开发可执行文件（无需运行素材）
 
 ```

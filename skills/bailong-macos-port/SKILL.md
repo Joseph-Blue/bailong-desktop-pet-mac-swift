@@ -68,7 +68,7 @@ description: 维护白龙桌宠Swift（Swift + AppKit 原生工程），覆盖�
 
 ### 原生界面、动画与额度
 
-- **界面与设置**：遵循 `macos-golden-gate-design`，共 9 个设置分类（原“性能”页已整合为“画质与性能”）。“消息与提醒”通过 `MessageSettingsPage` 的行定义生成表单、静态搜索和本页恢复范围，管理台词与管理动作通过 `SettingsListItem` 共用表格和搜索项目身份，`SettingsItemList` 只为选中项挂载编辑控件。其余页面在 `SettingsSearchEntry.all` 维护索引。改动偏好键时核对迁移、导入导出与恢复范围。前景强调文字使用 `AppAccent.foregroundColor` 保证明暗对比度，分段与开关控件经 `contentFilters` 映射 8 组预设取样色。
+- **界面与设置**：遵循 `macos-golden-gate-design`，共 9 个设置分类（原“性能”页已整合为“画质与性能”）。“消息与提醒”通过 `MessageSettingsPage` 的行定义生成表单、静态搜索和本页恢复范围，管理台词与管理动作通过 `SettingsListItem` 共用表格和搜索项目身份，`SettingsItemList` 复用可见行，台词选中后原位编辑，动作固定行高并按列直接操作。其余页面在 `SettingsSearchEntry.all` 维护索引。改动偏好键时核对迁移、导入导出与恢复范围。前景强调文字使用 `AppAccent.foregroundColor` 保证明暗对比度，分段与开关控件经 `contentFilters` 映射 8 组预设取样色。
 - **动画与吸边**：`AVAssetReader` + `vImage` 解码透明 HEVC，交由 `SpriteView` `CALayer.contents` 显示；旧流续播至新流满足起播余量后再按 `generation` 交接，默认开启 `24 MiB` 开头缓存、平滑过渡与孤立杂点清理。素材选帧 `Timer` 与几何 `NSView.displayLink` 分离，内建屏幕刘海位置按 `safeAreaInsets.top` 与 auxiliary 区域实时读取。内存指标统一表述为“运行内存 (RAM)”。
 - **多套餐额度**：区分 Free（`ChatGPT 免费用户`＋单条 `30 天额度`）、Go（单条 `30 天额度`）、3 档 Business（`Business Standard`／`Business Premium`／`Business 按量计费`，优先取 `account/read` 具体子档）及双窗口套餐（`≤10%` 橙、`≤5%` 红），支持可选运行内存 (RAM) 缓存与强调色「立即刷新」。不读凭证文件，更新检查仅读取公开正式 Release。
 

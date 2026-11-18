@@ -6,6 +6,32 @@ struct TaskActivity:Equatable {
         case tool, command, read, search, listFiles, edit, webSearch, webOpen, webFind
         case imageGeneration, imageView, compaction, plan, collaboration, waiting, review
         case document, spreadsheet, presentation, mail, calendar, code
+        var monitorName:String {
+            switch self {
+            case .tool:return "工具调用"
+            case .command:return "运行命令"
+            case .read:return "读取文件"
+            case .search:return "搜索内容"
+            case .listFiles:return "列出文件"
+            case .edit:return "修改文件"
+            case .webSearch:return "搜索网页"
+            case .webOpen:return "打开网页"
+            case .webFind:return "页内查找"
+            case .imageGeneration:return "生成图片"
+            case .imageView:return "查看图片"
+            case .compaction:return "压缩上下文"
+            case .plan:return "更新计划"
+            case .collaboration:return "协调子任务"
+            case .waiting:return "等待子任务"
+            case .review:return "代码审查"
+            case .document:return "文档操作"
+            case .spreadsheet:return "表格操作"
+            case .presentation:return "演示文稿操作"
+            case .mail:return "邮件操作"
+            case .calendar:return "日历操作"
+            case .code:return "代码工具"
+            }
+        }
     }
     enum Outcome:String {
         case failed, declined, cancelled, interrupted
@@ -96,6 +122,18 @@ struct TaskActivity:Equatable {
     var statusSymbol:String? = nil
     var outcome:Outcome? = nil
     var commandToastDetails = [CommandField]()
+    // 终端只显示活动类别和结果。标题、命令、路径和工具参数属于界面正文。
+    var monitorLabel:String {
+        let label:String
+        switch kind {
+        case .reasoning:label = "思考"
+        case .reply:label = "正在回复"
+        case .tool:label = toolOperation.monitorName+(finished && outcome == nil ? "结束" : "")
+        case .status:label = isReconnecting ? "正在重连" : "状态提示"
+        case .attention:label = statusSymbol == "hand.raised" ? "等待审批" : "等待回答"
+        }
+        return outcome.map {label+"（"+$0.label+"）"} ?? label
+    }
     static func waiting(approval:Bool) -> TaskActivity {
         .init(title:approval ? "等待批准" : "等待回答",kind:.attention,statusSymbol:approval ? "hand.raised" : "questionmark.bubble")
     }

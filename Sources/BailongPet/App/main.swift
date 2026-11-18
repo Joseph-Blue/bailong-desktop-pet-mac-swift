@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var instanceFD: Int32 = -1
     var localEvents: Any?
     var terminationSignals = [DispatchSourceSignal]()
+    private var monitorKeyboard:DispatchSourceRead?
     var quitReady = false
     var quitInProgress = false
     var awaitingTerminateReply = false
@@ -16,6 +17,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var unfinishedRun: RunLifecycle.UnfinishedRun?
     let revealName = Notification.Name("com.bailongpet.appkit.reveal.\(getuid())")
     func applicationDidFinishLaunching(_ notification: Notification) {
+        TerminalMonitor.active?.start(version:Paths.version)
+        monitorKeyboard = TerminalMonitor.keyboard { [weak self] monitor in
+            monitor.start(version:Paths.version)
+            self?.chat?.connection.reportMonitorState(to:monitor)
+            self?.sync?.reportMonitorState(to:monitor)
+        }
         TextContextMenu.install()
         AppAppearance.apply()
         if let icon = AppIcons.application {NSApp.applicationIconImage = icon}
@@ -38,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if flock(instanceFD,LOCK_EX | LOCK_NB) != 0 {
                     let code = errno; close(instanceFD); instanceFD = -1
                     guard code == EWOULDBLOCK else {throw NSError(domain:NSPOSIXErrorDomain,code:Int(code))}
+                    TerminalMonitor.active?.write(.app,"已有桌宠实例，本次开发进程退出",.warning)
                     DistributedNotificationCenter.default().postNotificationName(revealName,object:nil,userInfo:nil,deliverImmediately:true)
                     explicitQuit = true; NSApp.terminate(nil); return
                 }
@@ -47,7 +55,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FollowSessions.clearManualExit()
             LoginLauncher.refreshExistingRegistration()
             FollowLauncher.refreshExistingRegistration()
-            let pet = PetController(catalog:try Catalog.load()); self.pet = pet
+            let catalog:Catalog
+            do {catalog = try Catalog.load()}
+            catch {
+                TerminalMonitor.active?.write(.app,"读取动画素材清单失败  ·  "+TerminalMonitor.errorCode(error),.error)
+                throw error
+            }
+            let pet = PetController(catalog:catalog); self.pet = pet
             pet.onQuit = { [weak self] in self?.quitFromMenu() }
             localEvents = NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.keyDown,.scrollWheel]) { [weak self, weak pet] event in
                 if event.type == .keyDown, event.charactersIgnoringModifiers?.lowercased() == "q",
@@ -74,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let chat = try ChatController(pet:pet); self.chat = chat
             let sync = DesktopSync(chat:chat); self.sync = sync
+            if let monitor = TerminalMonitor.active {chat.connection.reportMonitorState(to:monitor)}
             pet.settings.onClearLocalData = { [weak chat,weak sync] in
                 guard let chat,let sync else {throw PetFailure(message:"数据管理已停止。")}
                 try chat.clearLocalData(); sync.clearLocalProjection()
@@ -220,6 +235,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
     func applicationWillTerminate(_ notification: Notification) {
+        monitorKeyboard?.cancel(); monitorKeyboard = nil
+        TerminalMonitor.active?.write(.app,"开发进程退出")
         if ownsInstance {lifecycle.finish()}
         sync?.close(); pet?.close(); NotificationCenter.default.removeObserver(self); DistributedNotificationCenter.default().removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)

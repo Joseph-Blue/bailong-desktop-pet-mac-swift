@@ -226,7 +226,10 @@ final class HistoryStore {
             for conversation in conversations {for turn in conversation.turns where turn.owned && (activeStatuses.contains(turn.status) || turn.status == "unknown") {
                 turn.status = "interrupted"; turn.error = "上次程序退出，任务未确认完成。"
             }}
-        } catch {initialReadOnlyReason = "历史读取或升级未完成，原文件保留："+error.localizedDescription}
+        } catch {
+            initialReadOnlyReason = "历史读取或升级未完成，原文件保留："+error.localizedDescription
+            TerminalMonitor.active?.write(.history,"打开或迁移历史失败，进入只读模式  ·  "+TerminalMonitor.errorCode(error),.error)
+        }
         database?.onReadFailure = { [weak self] error in self?.onError(error) }
         if policy.disabled || !recording {
             freezeCurrentTurns()

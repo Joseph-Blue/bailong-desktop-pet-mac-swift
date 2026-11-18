@@ -95,6 +95,10 @@ final class Bubble {
     private var questionSize:NSSize?
     private var questionTaskKey:String?
     private var pendingAttention = false
+    private struct MonitoredPresentation:Equatable {
+        let conversation:String, taskKey:String, turn:String?, source:String, label:String
+    }
+    private var monitoredPresentation:MonitoredPresentation?
     private let resizeDelegate = QuestionResizeDelegate()
     var onQuestionSubmit: (([String:String], @escaping (Error?) -> Void) -> Void)?
     var onClose: () -> Void = {}
@@ -559,7 +563,7 @@ final class Bubble {
         window.defaultButtonCell = nil
         activityTiming = timing
         configureElapsed(start:timing?.start,key:taskKey,finished:timing?.finished,status:timing?.status)
-        refreshTaskProgress(relayout:false)
+        refreshTaskProgress(relayout:false,recordPresentation:false)
         // 只有任务消息正文允许复制；互动、额度加载及一般提示不参与文本选择。
         text.isSelectable = kind == "task"
         if !text.isSelectable {text.setSelectedRange(NSRange(location:0,length:0))}
@@ -652,8 +656,14 @@ final class Bubble {
     }
     private func submitApproval(_ allow:Bool) {
         guard let form = approval,form.ready,!allow || form.request.canAllow else {return}
+        let context = TerminalMonitor.active.flatMap { _ in relatedConversation.map {TerminalMonitor.context($0,turn:form.request.turn)} }
+        if let context {TerminalMonitor.active?.write(.approval,context+"  外部  ·  "+(allow ? "提交允许" : "提交拒绝"))}
         form.isSubmitting = true; renderCard()
         form.request.submit(allow:allow) { [weak self,weak form] error in
+            if let context {
+                if let error {TerminalMonitor.active?.write(.approval,context+"  外部审批未确认  ·  "+TerminalMonitor.errorCode(error),.warning)}
+                else {TerminalMonitor.active?.write(.approval,context+"  外部审批已确认",.success)}
+            }
             guard let self,let form else {return}
             form.isSubmitting = false
             if let error {form.error = error.localizedDescription}
@@ -733,7 +743,7 @@ final class Bubble {
               activityTiming?.key == timing.key,activityTiming?.start == timing.start else {return false}
         refreshTaskProgress(); return true
     }
-    private func refreshTaskProgress(relayout:Bool = true) {
+    private func refreshTaskProgress(relayout:Bool = true,recordPresentation:Bool = true) {
         let activity:TaskActivity?
         // 外部 key 包含会话与轮次；内置 activityKey 是真实轮次身份，再核对开始时间。
         // 仅任务主气泡显示，额度、2 秒进展小气泡与审批／问卷不加这一行。
@@ -757,6 +767,22 @@ final class Bubble {
         let previousIconSize = taskProgressIcon.layoutSize
         taskProgressIcon.update(activity,pointSize:max(15*scale,taskProgress.font!.pointSize*15/11))
         TaskActivityAppearance.apply(activity,icon:taskProgressIcon,text:taskProgress,visible:visible && !taskProgress.isHidden)
+        if recordPresentation,visible,let monitor = TerminalMonitor.active {
+            let shown = headingActivity ?? activity
+            if let timing = activityTiming,let key = timing.key,let conversation = relatedConversation {
+                let source = pendingAttention ? "待处理卡" : kind == "progressToast" ? "短进展" : "主气泡"
+                let turn = key == "own" ? timing.activityKey : key.split(separator:":").last.map(String.init)
+                let label = shown?.monitorLabel ?? timing.status.map(TerminalMonitor.status) ?? "无进展行"
+                let next = MonitoredPresentation(conversation:conversation,taskKey:key,turn:turn,source:source,label:label)
+                if next != monitoredPresentation {
+                    var change = label
+                    if let old = monitoredPresentation,old.conversation == conversation,old.taskKey == key,
+                       old.turn == turn,old.label != label {change = old.label+" → "+label}
+                    monitor.write(.bubble,TerminalMonitor.context(conversation,turn:turn)+"  "+source+"  ·  "+change)
+                    monitoredPresentation = next
+                }
+            } else {monitoredPresentation = nil}
+        }
         if taskProgress.isHidden {taskProgress.stop()}
         else if visible {taskProgress.start()}
         if relayout,(wasHidden != taskProgress.isHidden || previousIconSize != taskProgressIcon.layoutSize),visible {
@@ -1069,5 +1095,5 @@ final class Bubble {
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
+    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
 }

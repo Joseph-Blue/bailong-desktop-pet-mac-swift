@@ -271,6 +271,14 @@ final class PetController: NSObject, NSMenuDelegate {
                 RecoveryWindow.resolve("animation-initialization")
                 self.startup?.orderOut(nil); self.startup = nil
                 // 像素、时间轴和清单校准一起切换，不能用新动作倍率绘制旧帧。
+                if TerminalMonitor.active?.showsAnimation == true {
+                    let previous = self.animation?.loadTiming == nil ? "起播" : TerminalMonitor.clip(self.current.id)
+                    var summary = previous+" → "+TerminalMonitor.clip(clip.id)
+                    if let stats = self.animation?.stream?.statistics(),stats.underflows > 0 {
+                        summary += "  ·  上段等帧 \(stats.underflows) 次，最长 "+TerminalMonitor.milliseconds(stats.longestUnderflow)
+                    }
+                    animation.loadTiming?.monitorTransition = summary
+                }
                 self.view.prepareTransition(to:animation.frames[0],clip:clip)
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id)
                 self.animation = animation; self.frameIndex = 0; self.began = self.now
@@ -285,6 +293,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 if self.mode == "move" { self.planMotion(manual: true) }
                 self.greetOnFirstAppearance()
             case .failure(let error):
+                TerminalMonitor.active?.write(.animation,TerminalMonitor.clip(clip.id)+"  加载失败  ·  "+TerminalMonitor.errorCode(error),.error)
                 self.startup?.orderOut(nil); self.startup = nil
                 self.began = self.now
                 if self.animation == nil {

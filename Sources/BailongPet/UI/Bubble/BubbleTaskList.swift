@@ -62,6 +62,9 @@ final class BubbleTaskList: NSView {
         defer {
             let visible = showInfo && window?.isVisible == true && !isHiddenOrHasHiddenAncestor
             for row in rows {row.setMetadataVisible(visible && (!row.visibleRect.isEmpty || row.hasPresentedDetails))}
+            if let monitor = TerminalMonitor.active,window?.isVisible == true,!isHiddenOrHasHiddenAncestor {
+                for row in rows where row.task.active && !row.visibleRect.isEmpty {row.recordActivity(in:monitor)}
+            }
         }
         guard incoming != overview || limit != recentLimit || showInfo != showsTaskInfo || metadataLayoutDirty || renderedWidth != bounds.width || subviews.isEmpty else {return}
         metadataLayoutDirty = false; renderedWidth = bounds.width
@@ -114,6 +117,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
     private var titleEffectStart = ProcessInfo.processInfo.systemUptime
     private var renderedSweep = Int.min
     private var renderedFrame = -1
+    private var monitoredActivity:String?
     private var needsRowLayout = true
     init(task:BubbleTaskSummary,scale:CGFloat) {
         self.task = task; self.scale = scale
@@ -147,6 +151,13 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
         setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
         renderedSweep = Int.min; renderedFrame = -1; needsRowLayout = true
+    }
+    func recordActivity(in monitor:TerminalMonitor) {
+        let label = activity.isHidden ? "无进展行" : task.activity?.monitorLabel ?? "无进展行"
+        guard monitoredActivity != label else {return}
+        let change = monitoredActivity.map {$0+" → "+label} ?? label
+        monitor.write(.bubble,"轮次#"+TerminalMonitor.tag(task.turnID ?? task.key)+"  任务概览  ·  "+change)
+        monitoredActivity = label
     }
     func setMetadataVisible(_ visible:Bool) {
         guard visible != (metadata != nil) else {return}

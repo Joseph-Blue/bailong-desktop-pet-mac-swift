@@ -118,15 +118,18 @@ final class ChatController {
             guard let self else{return}
             if self.store.isReadOnly {
                 self.refresh()
+                TerminalMonitor.active?.write(.history,"读取历史正文失败，进入只读模式  ·  "+TerminalMonitor.errorCode(error),.error)
                 self.reportHistoryReadFailure(error)
                 return
             }
+            TerminalMonitor.active?.write(.history,"保存失败，暂停自动写入  ·  "+TerminalMonitor.errorCode(error),.error)
             self.saveError = error.localizedDescription; self.ui.status.stringValue = "历史记录未能保存，请查看错误详情。"; self.ui.status.isHidden = false
             guard !self.closing else {return}
             RecoveryWindow.show(id:"history-save",report:RecoveryReport(title:"历史记录未能保存",message:"新记录尚未保存到磁盘，退出应用后会丢失。请检查磁盘空间和写入权限，再点“重新保存”。原有记录保留。",module:"历史记录",operation:"保存历史",error:error),actionTitle:"重新保存") { [weak self] in self?.store.retrySave() }
         }
         store.onSaved = { [weak self] in
             guard let self,self.saveError != nil else {return}
+            TerminalMonitor.active?.write(.history,"历史已重新保存",.success)
             self.saveError = nil; RecoveryWindow.resolve("history-save"); self.refresh()
         }
         ui.onSubmit = { [weak self] key,text,entry in self?.submit(text,to:key,entry:entry) }
@@ -445,28 +448,38 @@ final class ChatController {
         reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
         ui.clearSubmittedDraft(key:c.key,fromComposer:closeComposer,text:text)
         if closeComposer {ui.hideComposer()}
+        let trace = TerminalMonitor.active?.begin(.persona,context:TerminalMonitor.context(c.key,turn:turn.key),event:"连接 app-server")
         pet.taskStarted("own"); showUserMessage(text,in:c,timing:.init(start:turn.date,key:"own",activityKey:turn.key),messageID:"task-received",select:true); persist()
         connection.connect { [weak self, weak turn] error in
             guard let self, let turn, self.running?.1 === turn else{return}
-            if let error {self.finish("failed",error:error.localizedDescription); return}
+            if let error {trace?.step("连接失败  ·  "+TerminalMonitor.errorCode(error),.error); self.finish("failed",error:error.localizedDescription); return}
             if self.cancelled {self.finish("interrupted"); return}
+            trace?.step("连接就绪，准备会话")
             var params: [String:Any] = ["cwd":c.cwd,"sandbox":"workspace-write","approvalPolicy":"on-request","approvalsReviewer":"user","developerInstructions":self.personalizedPersona]
             if let model = modelParams["model"] {params["model"] = model}
             if c.threadID == nil {params["historyMode"] = "legacy"}
             self.connection.prepareThread(c.threadID,params:params) { [weak self, weak turn] result in
                 guard let self, let turn, self.running?.1 === turn else{return}
                 switch result {
-                case .failure(let error): self.finish("failed",error:error.localizedDescription)
+                case .failure(let error):
+                    trace?.step("准备会话失败  ·  "+TerminalMonitor.errorCode(error),.error)
+                    self.finish("failed",error:error.localizedDescription)
                 case .success(let thread):
                     c.threadID = thread
                     if self.cancelled { self.finish("interrupted"); return }
                     var turnParams: [String:Any] = ["threadId":thread,"cwd":c.cwd,"input":[["type":"text","text":text]],"approvalPolicy":"on-request","approvalsReviewer":"user","summary":"concise","sandboxPolicy":["type":"workspaceWrite","writableRoots":[c.cwd],"networkAccess":false]]
                     turnParams.merge(modelParams) {_,selected in selected}
+                    trace?.step("会话就绪，提交回复  ·  协议会话#"+TerminalMonitor.tag(thread))
                     self.connection.call("turn/start",turnParams) { [weak self, weak turn] result in
                         guard let self, let turn, self.running?.1 === turn else{return}
                         switch result {
-                        case .success(let value): turn.id = (value["turn"] as? [String:Any])?["id"] as? String; turn.status = "running"; if self.cancelled {self.interrupt()}; self.persist()
+                        case .success(let value):
+                            turn.id = (value["turn"] as? [String:Any])?["id"] as? String
+                            trace?.step("收到发送回执"+(turn.id.map {"  ·  协议轮次#"+TerminalMonitor.tag($0)} ?? ""),.success)
+                            turn.status = "running"; if self.cancelled {self.interrupt()}; self.persist()
                         case .failure(let error):
+                            let timedOut = (error as? CodexProtocol.Failure)?.isTimeout == true
+                            trace?.step((timedOut ? "等待回执超时" : "发送返回错误")+"  ·  "+TerminalMonitor.errorCode(error),timedOut ? .warning : .error)
                             if turn.id != nil || (error as? CodexProtocol.Failure)?.isTimeout == true { turn.status = "unknown"; turn.error = error.localizedDescription; self.persist() }
                             else {self.finish("failed",error:error.localizedDescription)}
                         }
@@ -539,6 +552,8 @@ final class ChatController {
     }
     func finish(_ status: String, error: String = "") {
         guard let (c,t) = running else{return}
+        TerminalMonitor.active?.write(.persona,TerminalMonitor.context(c.key,turn:t.key)+"  轮次收尾  ·  "+TerminalMonitor.status(status),
+                                      status == "completed" ? .success : status == "failed" ? .error : .warning)
         pet.bubble.removeActivity(taskKey:"own"); messagesState.clearActivity()
         updateTimer?.invalidate(); updateTimer = nil; saveTimer?.invalidate(); saveTimer = nil; updateText(); t.status = status; t.error = error; t.completedAt = Date()
         messagesState.finalize(t)
@@ -563,7 +578,7 @@ final class ChatController {
         } else {
             pet.say(title,body:GeneratedImageLink.appending(messagesState.imageLinks,to:t.final),kind:"task",thread:c.key,
                     purpose:status == "completed" ? .result : .attention,personalizeTitle:false,
-                    timing:.init(start:t.date,key:"own",finished:t.completedAt,status:status),
+                    timing:.init(start:t.date,key:"own",finished:t.completedAt,status:status,activityKey:t.key),
                     messageID:messagesState.finalMessageID ?? "result",fileEdits:t.fileEdits ?? [],
                     completionFooter:TurnCompletion(t,completedAt:t.completedAt))
         }

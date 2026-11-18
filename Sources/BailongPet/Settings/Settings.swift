@@ -267,6 +267,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if entry.itemID == nil,entry.title == entry.detail?.title {return}
         if let itemList {
             if let id = entry.itemID {itemList.reveal(group:entry.group,id:id)}
+            else if entry.detail == .lines && entry.title == IdentitySettingsPage.editWorkingLineTitle {
+                let line = IdentitySettingsPage.workingExample(preferences)
+                itemList.reveal(group:line.group,id:line.key)
+            }
             return
         }
         if entry.section == .about {
@@ -279,6 +283,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let rect = target.convert(target.bounds,to:document)
         let y = max(0,min(rect.midY-scroll.contentView.bounds.height/2,document.bounds.height-scroll.contentView.bounds.height))
         scroll.contentView.scroll(to:NSPoint(x:0,y:y)); scroll.reflectScrolledClipView(scroll.contentView)
+        if let button = target as? SettingsValueButton,button.isEnabled {button.showEditor(focusing:entry.title)}
         let highlight = SettingsSearchHighlight(frame:target.bounds)
         highlight.autoresizingMask = [.width,.height]
         target.addSubview(highlight,positioned:.below,relativeTo:nil); searchHighlight = highlight
@@ -319,7 +324,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .activity where detailPage == .actions:showItemList(ActivitySettingsPage.items(catalog:catalog))
         case .identity:
             IdentitySettingsPage.render(form:form,catalog:catalog,window:window,onLinePreview:onLinePreview,
-                                        manage:{ [weak self] in self?.select(.identity,detail:.lines) })
+                                        manage:{ [weak self] group,id in
+                                            self?.select(.identity,detail:.lines)
+                                            if let group,let id {self?.itemList?.reveal(group:group,id:id)}
+                                        })
         case .activity:activityPage.render { [weak self] in self?.select(.activity,detail:.actions) }
         case .messages:
             let topic:MessageSettingsPage.Topic?

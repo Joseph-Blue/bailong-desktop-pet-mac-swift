@@ -1,6 +1,7 @@
 # 共用终端输出；非终端不输出光标控制，NO_COLOR 关闭配色。
 typeset -g bailong_phase="" bailong_phase_log="" bailong_spinner_pid="" bailong_download_pid=""
 typeset -g bailong_temp_dir="" bailong_diagnostic_dir="" bailong_dev_pid=""
+typeset -g bailong_saved_tty=""
 typeset -gi bailong_started=$SECONDS bailong_phase_started=0 bailong_animated=0 bailong_exit_waited=0
 exec {bailong_ui_fd}>&1
 [[ -t 1 && "${TERM:-dumb}" != dumb ]] && bailong_animated=1
@@ -179,6 +180,7 @@ TRAPEXIT() {
     local result=$?
     (( ZSH_SUBSHELL == 0 )) || return "$result"
     bailong_stop_dev
+    if [[ -n "$bailong_saved_tty" && -t 0 ]]; then stty "$bailong_saved_tty"; fi
     bailong_stop_spinner
     if [[ -n "$bailong_download_pid" ]]; then
         kill "$bailong_download_pid" 2>/dev/null || true

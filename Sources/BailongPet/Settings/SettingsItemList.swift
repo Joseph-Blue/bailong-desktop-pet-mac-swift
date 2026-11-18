@@ -1,115 +1,158 @@
 import AppKit
 
-// 两个管理页共用表格与选中行编辑器。返回上级只保存导航位置。
+// 两页均以表格复用可见行。台词共用一个编辑器，动作的列和行高在操作期间保持固定。
 final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
     struct Position {
         let group:String, id:String?, offset:CGFloat
     }
+    private enum Row {
+        case heading(String), item(SettingsListItem)
+        var item:SettingsListItem? {if case .item(let item) = self {return item}; return nil}
+    }
     let section:SettingsSection
-    private let items:[SettingsListItem]
-    private var groupItems = [SettingsListItem]()
-    private let groups = NSPopUpButton(), table = NSTableView(), scroll = NSScrollView()
+    private let rows:[Row]
+    private let table = NSTableView(), scroll = NSScrollView()
     private let editor = NSStackView(), form:SettingsForm
-    private let restoreButton = NSButton(title:"恢复本组默认台词",target:nil,action:nil)
     private let play:(SettingsListItem) -> Void
     private var editingRow:Int?
-    private var changingGroup = false
-    private var group:String {groups.titleOfSelectedItem ?? ""}
-    var position:Position {Position(group:group,id:editingRow.map {groupItems[$0].id},offset:scroll.contentView.bounds.minY)}
+    var position:Position {
+        let item = rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].item : nil
+        return Position(group:item?.group ?? "",id:item?.id,offset:scroll.contentView.bounds.minY)
+    }
 
     init(items:[SettingsListItem],section:SettingsSection,window:NSWindow,preferences:PetPreferences,
          back:@escaping () -> Void,play:@escaping (SettingsListItem) -> Void) {
-        self.items = items; self.section = section; self.play = play
+        self.section = section; self.play = play
+        var grouped = [Row](), previous:String?
+        for item in items {
+            if item.group != previous {grouped.append(.heading(item.group)); previous = item.group}
+            grouped.append(.item(item))
+        }
+        rows = grouped
         form = SettingsForm(content:editor,preferences:preferences,window:window)
         super.init(frame:.zero)
         editor.orientation = .vertical; editor.alignment = .leading; editor.spacing = 6
+        form.reset(section:section)
         form.moveToAdjacentEntry = { [weak self] step in
-            guard let self,let row = self.editingRow,self.groupItems.indices.contains(row+step) else {return false}
-            self.select(row+step,focus:true)
-            return true
+            guard let self,let row = self.editingRow else {return false}
+            var next = row+step
+            while self.rows.indices.contains(next) {
+                if self.rows[next].item != nil {self.select(next,focus:true); return true}
+                next += step
+            }
+            return false
         }
-        var added = Set<String>()
-        for item in items where added.insert(item.group).inserted {groups.addItem(withTitle:item.group)}
-        groups.target = self; groups.action = #selector(changeGroup)
-        groups.setAccessibilityLabel(section == .identity ? "台词分组" : "动作分组")
-        restoreButton.target = self; restoreButton.action = #selector(restoreGroup)
-        let bar = NSStackView(views:[form.navigationButton(section.title,back:true,action:back),groups,restoreButton])
-        bar.alignment = .centerY; bar.spacing = 12
-        addSubview(bar); addSubview(scroll)
-        for view in [bar,scroll] {view.translatesAutoresizingMaskIntoConstraints = false}
+        let backButton = form.navigationButton(section.title,back:true,action:back)
+        addSubview(backButton); addSubview(scroll)
+        for view in [backButton,scroll] {view.translatesAutoresizingMaskIntoConstraints = false}
         NSLayoutConstraint.activate([
-            bar.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),bar.topAnchor.constraint(equalTo:topAnchor,constant:14),
-            bar.trailingAnchor.constraint(lessThanOrEqualTo:trailingAnchor,constant:-16),
-            scroll.topAnchor.constraint(equalTo:bar.bottomAnchor,constant:12),scroll.leadingAnchor.constraint(equalTo:leadingAnchor,constant:12),
+            backButton.leadingAnchor.constraint(equalTo:leadingAnchor,constant:20),backButton.topAnchor.constraint(equalTo:topAnchor,constant:12),
+            scroll.topAnchor.constraint(equalTo:backButton.bottomAnchor,constant:10),scroll.leadingAnchor.constraint(equalTo:leadingAnchor,constant:12),
             scroll.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-12),scroll.bottomAnchor.constraint(equalTo:bottomAnchor)
         ])
-        table.addTableColumn(NSTableColumn(identifier:.init("item"))); table.headerView = nil; table.style = .inset
-        table.backgroundColor = .clear; table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        table.autoresizingMask = [.width]; table.allowsEmptySelection = true
+        let name = NSTableColumn(identifier:.init("name")); name.title = "动作"; name.minWidth = 115
+        name.resizingMask = .autoresizingMask; table.addTableColumn(name)
+        if section == .activity {
+            for (key,title,width) in [("play","试播",CGFloat(54)),("speed","播放速度",92),("weight","随机权重",88)] {
+                let column = NSTableColumn(identifier:.init(key)); column.title = title
+                column.width = width; column.minWidth = width; column.maxWidth = width; column.resizingMask = []
+                table.addTableColumn(column)
+            }
+        } else {table.headerView = nil}
+        table.style = .inset; table.backgroundColor = .clear; table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+        table.allowsColumnReordering = false; table.autoresizingMask = [.width]; table.allowsEmptySelection = true
         table.setAccessibilityLabel(section == .identity ? "台词列表" : "动作列表")
         table.dataSource = self; table.delegate = self; table.target = self; table.action = #selector(activateRow)
         scroll.drawsBackground = false; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.documentView = table
-        changeGroup()
     }
     required init?(coder:NSCoder) {fatalError()}
 
     func restore(_ position:Position?) {
-        guard let position,groups.item(withTitle:position.group) != nil else {return}
-        groups.selectItem(withTitle:position.group); changeGroup()
-        if let row = groupItems.firstIndex(where:{$0.id == position.id}) {select(row,focus:false)}
+        guard let position else {return}
+        if let row = rows.firstIndex(where:{$0.item?.id == position.id && $0.item?.group == position.group}) {select(row,focus:false)}
         layoutSubtreeIfNeeded()
         let clip = scroll.contentView
         clip.scroll(to:clip.constrainBoundsRect(NSRect(origin:NSPoint(x:0,y:position.offset),size:clip.bounds.size)).origin)
         scroll.reflectScrolledClipView(clip)
     }
     func reveal(group:String,id:String) {
-        if self.group != group {groups.selectItem(withTitle:group); changeGroup()}
-        if let row = groupItems.firstIndex(where:{$0.id == id}) {select(row,focus:true)}
+        if let row = rows.firstIndex(where:{$0.item?.group == group && $0.item?.id == id}) {select(row,focus:true)}
     }
-    @objc private func changeGroup() {
-        window?.makeFirstResponder(nil)
-        changingGroup = true
-        editingRow = nil; editor.removeFromSuperview(); form.reset(section:section)
-        table.deselectAll(nil); groupItems = items.filter {$0.group == group}
-        restoreButton.isHidden = section != .identity || !["工作中台词","互动台词"].contains(group)
-        restoreButton.setAccessibilityLabel("恢复"+group+"默认值")
-        table.reloadData(); scroll.contentView.scroll(to:.zero)
-        changingGroup = false
-    }
-    @objc private func restoreGroup() {
+    private func restoreGroup(_ group:String) {
         window?.makeFirstResponder(nil)
         let saved = position
         if group == "工作中台词" {form.preferences.reset(["randomWorkingLines"]+ConversationLines.working.map(\.key))}
-        else if group == "互动台词" {form.preferences.set([String:String](),for:"customLines")}
-        restore(saved)
+        else {form.preferences.set([String:String](),for:"customLines")}
+        table.deselectAll(nil); table.reloadData(); restore(saved)
     }
-    func numberOfRows(in tableView:NSTableView) -> Int {groupItems.count}
-    func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {row == editingRow ? max(88,ceil(editor.fittingSize.height)+16) : 49}
+    func numberOfRows(in tableView:NSTableView) -> Int {rows.count}
+    func tableView(_ tableView:NSTableView,isGroupRow row:Int) -> Bool {rows[row].item == nil}
+    func tableView(_ tableView:NSTableView,shouldSelectRow row:Int) -> Bool {rows[row].item != nil}
+    func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {
+        if rows[row].item == nil {return 32}
+        if section == .activity {return 32}
+        return row == editingRow ? max(88,ceil(editor.fittingSize.height)+16) : 49
+    }
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
-        if row == editingRow {
-            let cell = NSTableCellView()
-            editor.removeFromSuperview(); cell.addSubview(editor); editor.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([editor.leadingAnchor.constraint(equalTo:cell.leadingAnchor,constant:8),
-                editor.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-8),editor.centerYAnchor.constraint(equalTo:cell.centerYAnchor)])
+        switch rows[row] {
+        case .heading(let title):
+            let field = NSTextField(labelWithString:title); field.font = .systemFont(ofSize:12,weight:.semibold)
+            let stack = NSStackView(views:[field]); stack.alignment = .centerY
+            if section == .identity && ["工作中台词","互动台词"].contains(title) {
+                let restore = ActionButton("恢复本组默认台词") { [weak self] in self?.restoreGroup(title) }
+                restore.controlSize = .small; restore.setAccessibilityLabel("恢复"+title+"默认值")
+                stack.addArrangedSubview(NSView()); stack.addArrangedSubview(restore)
+            }
+            return stack
+        case .item(let item):
+            if case .animation(let clip,let weighted) = item.kind {
+                return actionCell(tableColumn?.identifier.rawValue ?? "name",item:item,clip:clip,weighted:weighted)
+            }
+            if row == editingRow {
+                let cell = NSTableCellView()
+                editor.removeFromSuperview(); cell.addSubview(editor); editor.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([editor.leadingAnchor.constraint(equalTo:cell.leadingAnchor,constant:8),
+                    editor.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-8),editor.centerYAnchor.constraint(equalTo:cell.centerYAnchor)])
+                return cell
+            }
+            let reuse = NSUserInterfaceItemIdentifier("setting-summary")
+            let cell = table.makeView(withIdentifier:reuse,owner:self) as? SettingsSummaryCell ?? SettingsSummaryCell()
+            cell.identifier = reuse
+            cell.update(item,preferences:form.preferences) { [weak self] in self?.preview(item) }
             return cell
         }
-        let reuse = NSUserInterfaceItemIdentifier("setting-summary")
-        let cell = table.makeView(withIdentifier:reuse,owner:self) as? SettingsSummaryCell ?? SettingsSummaryCell()
-        cell.identifier = reuse
-        let item = groupItems[row]
-        cell.update(item,preferences:form.preferences,showsTokens:section == .identity) { [weak self] in self?.preview(item) }
-        return cell
+    }
+    private func actionCell(_ column:String,item:SettingsListItem,clip:Clip,weighted:Bool) -> NSView {
+        let id = NSUserInterfaceItemIdentifier(column == "weight" && !weighted ? "unused-weight" : column)
+        let existing = table.makeView(withIdentifier:id,owner:self)
+        if column == "name" || (column == "weight" && !weighted) {
+            let field = existing as? NSTextField ?? NSTextField(labelWithString:"")
+            field.identifier = id
+            field.stringValue = column == "name" ? clip.title : "—"; field.lineBreakMode = .byTruncatingTail
+            return field
+        }
+        if column == "play" {
+            let button = existing as? ActionButton ?? ActionButton("") {}
+            button.identifier = id; button.controlSize = .small; button.bezelStyle = .inline
+            button.image = NSImage(systemSymbolName:"play.fill",accessibilityDescription:nil); button.imagePosition = .imageOnly
+            button.setAccessibilityLabel("播放"+clip.title)
+            button.callback = { [weak self] in self?.preview(item) }
+            return button
+        }
+        let choice = existing as? SettingsActionChoice ?? SettingsActionChoice(frame:.zero,pullsDown:false)
+        choice.identifier = id
+        choice.configure(clip:clip,speed:column == "speed",preferences:form.preferences)
+        return choice
     }
     func tableViewSelectionDidChange(_ notification:Notification) {
-        guard !changingGroup else {return}
-        let row = table.selectedRow
-        let next = groupItems.indices.contains(row) ? row : nil
+        guard section == .identity else {return}
+        let next = table.selectedRow >= 0 ? table.selectedRow : nil
         guard editingRow != next else {return}
         window?.makeFirstResponder(table)
         let old = editingRow
         editor.removeFromSuperview(); form.reset(section:section); editingRow = next
-        if let next {edit(groupItems[next])}
+        if let next,let item = rows[next].item {edit(item)}
         let changed = IndexSet([old,next].compactMap {$0})
         table.noteHeightOfRows(withIndexesChanged:changed)
         table.reloadData(forRowIndexes:changed,columnIndexes:IndexSet(integer:0))
@@ -117,16 +160,14 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
     private func select(_ row:Int,focus:Bool) {
         table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)
         table.scrollRowToVisible(row)
-        if focus {focusEditor()}
+        if focus {
+            if section == .activity {window?.makeFirstResponder(table)} else {activateRow()}
+        }
     }
     @objc private func activateRow() {
-        if table.clickedRow >= 0 || table.selectedRow >= 0 {focusEditor()}
-    }
-    private func focusEditor() {
-        guard let row = editingRow else {return}
+        guard section == .identity,let row = editingRow else {return}
         _ = table.view(atColumn:0,row:row,makeIfNecessary:true)
         if let field = form.currentTemplateField {window?.makeFirstResponder(field)}
-        else {window?.makeFirstResponder(table)}
     }
     private func preview(_ item:SettingsListItem) {
         guard window?.makeFirstResponder(nil) == true else {return}
@@ -141,13 +182,39 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
         case .interaction(let clip):
             let prefs = form.preferences
             view = form.entry(item.title,value:item.summary(prefs),emptyFallback:prefs.templateSource(clip.line ?? ""),limit:120,action:preview) {prefs.setLine($0,for:clip.id)}
-        case .animation(let clip,let weighted):
-            if let preview {form.fill(form.row(item.title,control:preview),in:editor)}
-            if weighted {form.fill(form.row("随机播放权重",control:form.animationWeight(clip)),in:editor)}
-            let prefs = form.preferences
-            view = form.popup("此动作播放速度",options:[("0.75","0.75×"),("1.0","1×（默认）"),("1.25","1.25×"),("1.5","1.5×")],value:String(prefs.clipSpeed(clip.id))) {prefs.setSpeed(Double($0)!,for:clip.id)}
+        case .animation:return
         }
         form.fill(view,in:editor)
+    }
+}
+
+// 单元格展示已保存值，打开原生菜单时才生成其余选项。
+private final class SettingsActionChoice:NSPopUpButton,NSMenuDelegate {
+    private var clipID = "", speed = false, populated = false
+    private weak var preferences:PetPreferences?
+    func configure(clip:Clip,speed:Bool,preferences:PetPreferences) {
+        self.clipID = clip.id; self.speed = speed; self.preferences = preferences
+        controlSize = .small; isBordered = false
+        setAccessibilityLabel(clip.title+(speed ? "播放速度" : "随机权重"))
+        menu?.delegate = nil; removeAllItems(); populated = false
+        let current = speed ? preferences.clipSpeed(clip.id) : preferences.weight(clip.id)
+        addOption(current); selectItem(at:0)
+        menu?.delegate = self; target = self; action = #selector(changeValue)
+    }
+    private func addOption(_ value:Double) {
+        addItem(withTitle:value.formatted()+(speed ? "×" : "")); lastItem?.representedObject = value
+    }
+    func menuNeedsUpdate(_ menu:NSMenu) {
+        guard !populated,let preferences else {return}
+        populated = true
+        let values:[Double] = speed ? [0.75,1,1.25,1.5] : ((clipID == "idle" ? 1 : 0)...12).map(Double.init)
+        let current = speed ? preferences.clipSpeed(clipID) : preferences.weight(clipID)
+        removeAllItems(); values.forEach(addOption)
+        if let index = values.firstIndex(of:current) {selectItem(at:index)}
+    }
+    @objc private func changeValue() {
+        guard let value = selectedItem?.representedObject as? Double,let preferences else {return}
+        if speed {preferences.setSpeed(value,for:clipID)} else {preferences.setWeight(Int(value),for:clipID)}
     }
 }
 
@@ -170,11 +237,10 @@ private final class SettingsSummaryCell:NSTableCellView {
             summary.widthAnchor.constraint(equalTo:labels.widthAnchor)])
     }
     required init?(coder:NSCoder) {fatalError()}
-    func update(_ item:SettingsListItem,preferences:PetPreferences,showsTokens:Bool,onPlay:@escaping () -> Void) {
+    func update(_ item:SettingsListItem,preferences:PetPreferences,onPlay:@escaping () -> Void) {
         name.stringValue = item.title; summary.stringValue = item.summary(preferences); summary.hoverHelp = summary.stringValue
         setAccessibilityLabel(item.title+"，"+summary.stringValue)
-        summary.allowsTokens = showsTokens
-        if showsTokens {summary.refreshHighlight()}
+        summary.refreshHighlight()
         button.isHidden = item.preview == nil; button.setAccessibilityLabel("播放"+item.title); self.onPlay = onPlay
     }
     @objc private func play() {onPlay?()}

@@ -30,7 +30,8 @@ struct SettingsSearchEntry {
     var condition = ""
     var detail:SettingsDetail?
     var itemID:String?
-    var anchor:String {group+"/"+title}
+    var anchorTitle:String?
+    var anchor:String {group+"/"+(anchorTitle ?? title)}
     var location:String {[section.title,detail?.title,detail?.title == group ? nil : group].compactMap {$0}.joined(separator:" › ")}
 
     // 索引只保存设置文案，不创建页面或触发预览、磁盘统计、登录项查询。
@@ -48,6 +49,7 @@ struct SettingsSearchEntry {
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 动作 播放 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
+        entries.append(.init(section:.identity,group:"工作中台词",title:IdentitySettingsPage.editWorkingLineTitle,keywords:"台词示例 任务概览",detail:.lines))
         entries.append(.init(section:.identity,group:SettingsDetail.lines.title,title:SettingsDetail.lines.title,detail:.lines))
         entries += IdentitySettingsPage.items(catalog:catalog).map {$0.searchEntry(.lines)}
         if catalog != nil {entries.append(.init(section:.activity,group:SettingsDetail.actions.title,title:SettingsDetail.actions.title,detail:.actions))}
