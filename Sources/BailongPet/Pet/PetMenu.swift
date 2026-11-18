@@ -42,13 +42,20 @@ enum PetMenu {
             item.submenu = group; animations.addItem(item)
         }
         let switches = submenu("快捷开关",symbol:"switch.2")
+        switches.autoenablesItems = false
         switches.addItem(MenuAction("自主移动",checked:pet.autoMove,symbol:"figure.walk.motion") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
         switches.addItem(MenuAction("播放音效",checked:pet.soundEnabled,symbol:"speaker.wave.2") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
         switches.addItem(MenuAction("任务气泡提醒",checked:pet.taskBubbles,symbol:"bell.badge") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
-        switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen,symbol:"eye.slash") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
+        let progressToast = MenuAction("思考与工具进展小气泡",checked:pet.preferences.bool("progressToastEnabled"),symbol:"bubble.left") { [weak pet] in
+            guard let pet else {return}
+            pet.preferences.set(!pet.preferences.bool("progressToastEnabled"),for:"progressToastEnabled")
+        }
+        progressToast.isEnabled = pet.taskBubbles && pet.preferences.bool("progressBubbles")
+        switches.addItem(progressToast)
         let workspace = MenuAction("") { [weak pet] in pet?.onWorkspace() }
         workspace.identifier = .init("workspaceStatus")
         workspace.image = GitIcons.git; switches.addItem(workspace)
+        switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen,symbol:"square.arrowtriangle.4.outward") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
         switches.addItem(.separator())
         switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak pet] in pet?.showSettings(section:.general) })
         switches.addItem(.separator())

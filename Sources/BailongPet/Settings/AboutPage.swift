@@ -41,8 +41,8 @@ final class AboutPageController: NSViewController {
         title.font = .systemFont(ofSize:23,weight:.semibold)
         title.alignment = .center
         let version = NSTextField(labelWithString:"版本 \(Paths.version) · \(Self.architecture)")
-        version.font = .systemFont(ofSize:13)
-        version.textColor = .secondaryLabelColor
+        version.font = .systemFont(ofSize:16)
+        version.textColor = .labelColor
         version.alignment = .center
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
