@@ -9,10 +9,19 @@ macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消�
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
 <p align="center">
-  <a href=".github/images/task-progress.png"><img src=".github/images/task-progress.png" alt="桌宠与任务气泡（0.5.0 界面）" width="380"></a>
+  <a href=".github/images/task-progress.svg"><img src=".github/images/task-progress.svg" alt="桌宠与任务气泡" width="380"></a>
 </p>
 
-**当前源码：0.8.0。** 下文介绍当前源码的功能；下载包的版本与功能请查看对应的发布说明。上图为旧版界面展示。
+**当前源码：0.8.0。** 下文介绍当前源码的功能；下载包的版本与功能请查看对应的发布说明。
+
+## 目录
+
+- [下载与安装](#下载与安装)
+- [先试试这些操作](#先试试这些操作)
+- [特色功能](#特色功能)
+- [升级与常见问题](#升级与常见问题)
+- [开发](#开发)
+- [来源与致谢](#来源与致谢)
 
 ## 下载与安装
 
@@ -29,7 +38,7 @@ macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消�
 2. 将 `白龙桌宠Swift.app` 拖到“应用程序”或你选择的固定目录，再从访达打开。
 3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。
 
-App 使用本地签名，未进行苹果公证。首次打开若被系统拦截，可在“系统设置 → 隐私与安全性”中找到该应用并选择“仍要打开”。操作步骤见 [Apple 说明](https://support.apple.com/zh-cn/102445)。
+App 使用本地签名，未进行苹果公证。首次打开一定会被系统拦截。点击完成按钮，在"→系统设置→隐私与安全性"中找到"白龙桌宠Swift.app"并选择“仍要打开”。操作步骤见 [Apple 说明](https://support.apple.com/zh-cn/102445)。
 
 ## 先试试这些操作
 
@@ -41,9 +50,8 @@ App 使用本地签名，未进行苹果公证。首次打开若被系统拦截�
 | 右键双击 | 打开临时聊天 |
 | 吸边或刘海收纳后单击、拖出 | 召回桌宠 |
 | 桌宠隐藏后再次打开 App | 找回桌宠，保留当前任务 |
-| `⌘↩` / `↩` | 发送消息 / 换行 |
-| `⌘,` | 打开设置 |
-| 设置或历史中的 `⌘F` | 搜索 |
+| `⌘↩` | 气泡窗中发送消息 |
+| `↩`  | 气泡窗中换行 |
 
 鼠标动作、发送快捷键和气泡停留时间都可以在设置中调整。
 
@@ -61,17 +69,22 @@ App 使用本地签名，未进行苹果公证。首次打开若被系统拦截�
 
 Codex 工作时，桌宠会显示进展和回复。任务概览列出正在执行与最近结束的任务，点击即可回到对应的 Codex 会话。
 
-- **进展提醒**：思考与工具进展可分别开关，小气泡默认显示 2 秒。相同内容不重复弹出；任务久无新进展时，也可按设定间隔提醒。
+- **思考与工具进展小气泡**默认显示 2 秒，思考摘要和工具调用可分别开关。相同内容不重复弹出。任务久无新进展时，也可按设定间隔提醒。
 - **继续对话**：在气泡中点“快捷回复”，继续原会话；任务执行中也可补充要求。已有 Codex 项目对话沿用原会话的模型与思考等级。
 - **桌宠人设对话**：选择工作文件夹、模型和思考等级，开启独立对话。支持快速档的官方模型可开启“1.5倍速度”；外部会话也会显示原会话的快速模式状态。
 - **审批与问答**：查看理由和命令后选择拒绝或允许这一次，审批不会被回车误触。问卷支持选择、填写、翻页和跳过，保留草稿后统一提交。
 
 <p align="center">
-  <a href=".github/images/quick-chat.png"><img src=".github/images/quick-chat.png" alt="桌宠人设对话" width="400"></a>
-  <a href=".github/images/project-chat.png"><img src=".github/images/project-chat.png" alt="Codex 项目对话" width="400"></a>
+  <a href=".github/images/quick-chat.svg"><img src=".github/images/quick-chat.svg" alt="桌宠人设对话" width="400"></a>
+  <a href=".github/images/project-chat.svg"><img src=".github/images/project-chat.svg" alt="Codex 项目对话" width="400"></a>
 </p>
 
-<details>
+<p align="center">
+  <a href=".github/images/thinking-tool-progress.svg"><img src=".github/images/thinking-tool-progress.svg" alt="思考与工具进展小气泡" width="352"></a>
+  <a href=".github/images/approval.svg"><img src=".github/images/approval.svg" alt="审批气泡" width="220"></a>
+</p>
+
+
 <summary>气泡和会话的使用细节</summary>
 
 - 气泡默认保留本次运行的 20 张消息卡片，可调整为 5～100 张；正在翻页或填写问卷时，新消息不会打断当前操作。
@@ -90,7 +103,13 @@ Codex 工作时，桌宠会显示进展和回复。任务概览列出正在执�
 回复支持标题、列表、表格、链接和代码块。代码可整块复制，图片和附件提供文件入口；文件修改摘要显示路径及新增、删除行数，点击可在访达中定位。
 
 <p align="center">
-  <a href=".github/images/history.png"><img src=".github/images/history.png" alt="历史窗口：搜索消息并继续回复" width="800"></a>
+  <a href=".github/images/persona-history.svg"><img src=".github/images/persona-history.svg" alt="桌宠人设对话历史" width="760"></a>
+  <br><sub>桌宠人设对话历史</sub>
+</p>
+
+<p align="center">
+  <a href=".github/images/project-history.svg"><img src=".github/images/project-history.svg" alt="Codex 项目对话历史" width="760"></a>
+  <br><sub>Codex 项目对话历史</sub>
 </p>
 
 会话可重命名、重新同步 Codex 标题或删除桌宠保存的记录。删除记录不会删除 Codex 原会话；关闭历史记录后，已有内容保留，关闭期间的新内容不再保存，也不会在重新开启时补录。
@@ -101,9 +120,17 @@ Codex 工作时，桌宠会显示进展和回复。任务概览列出正在执�
 
 Git 详情可以查看分支、各类文件改动及本机记录的上游提交差，支持选中文件、在访达定位和拷贝路径。文件变更自动刷新，不会自动联网拉取。
 
+<p align="center">
+  <a href=".github/images/workspace-status.svg"><img src=".github/images/workspace-status.svg" alt="工作区状态条" width="620"></a>
+</p>
+
 任务结果可展开本轮输入、缓存命中与输出 Token；额度面板另有“今日用量”，按这台 Mac 保存的日志汇总。
 
 双击桌宠即可查询 Codex 套餐、剩余额度和重置时间，并打开对应平台的订阅管理页面。可选择缓存最近一次查询结果，也可随时手动刷新。
+
+<p align="center">
+  <a href=".github/images/codex-quota.svg"><img src=".github/images/codex-quota.svg" alt="Codex 额度查询和今日 Token 用量" width="380"></a>
+</p>
 
 ### 名字、台词与外观自己定
 
@@ -112,6 +139,10 @@ Git 详情可以查看分支、各类文件改动及本机记录的上游提交�
 桌宠、文字与气泡的大小可分别调整，强调色可以自定义。外观支持跟随系统、浅色和深色；macOS 26 起可使用液态玻璃，也可选择普通材质。macOS 14、15 使用普通材质。
 
 设置内支持搜索：输入选项、动作或台词名称，点击结果即可定位。
+
+<p align="center">
+  <a href=".github/images/personality.svg"><img src=".github/images/personality.svg" alt="设置中的称呼与个性页面" width="680"></a>
+</p>
 
 ## 升级与常见问题
 
