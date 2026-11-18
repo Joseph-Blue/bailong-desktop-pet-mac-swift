@@ -2,9 +2,9 @@
 
 **陪你工作，也把 Codex 的任务进展带到桌面。**
 
-macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消息回复、审批处理与本机历史记录。
+基于 [風-隐的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，使用 Swift + AppKit 重写并独立维护的 macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消息回复、审批处理与本机历史记录。
 
-基于 [風-隐的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，使用 Swift + AppKit 重写并独立维护。
+
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
