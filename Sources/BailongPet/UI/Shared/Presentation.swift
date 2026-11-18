@@ -45,6 +45,19 @@ struct TaskAttention {
     }
 }
 
+extension NSAlert {
+    func setScrollableDetail(_ value:String,size:NSSize) {
+        let scroll = GutterScrollView(frame:NSRect(origin:.zero,size:size))
+        scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        let text = AppTextView(frame:scroll.contentView.bounds)
+        text.isEditable = false; text.isSelectable = true
+        text.isHorizontallyResizable = false; text.isVerticallyResizable = true
+        text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
+        text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = value
+        scroll.documentView = text; accessoryView = scroll
+    }
+}
+
 struct AppFailure {
     let title: String, message: String, detail: String
     var openDesktop = false
@@ -61,11 +74,7 @@ struct AppFailure {
 
     func showDetails() {
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
-        let scroll = GutterScrollView(frame:NSRect(x:0,y:0,width:480,height:180))
-        let text = AppTextView(frame:scroll.bounds); text.isEditable = false; text.isSelectable = true
-        text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = detail
-        text.isHorizontallyResizable = false; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
-        scroll.documentView = text; scroll.hasVerticalScroller = true; alert.accessoryView = scroll
+        alert.setScrollableDetail(detail,size:NSSize(width:480,height:180))
         alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"拷贝详情")
         alert.applyAccent(primary:1,keyboardDefault:1)
         CopyFeedback.attach(to:alert.buttons[1]) {self.detail}

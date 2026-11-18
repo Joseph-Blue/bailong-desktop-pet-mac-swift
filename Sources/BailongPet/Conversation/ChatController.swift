@@ -228,8 +228,10 @@ final class ChatController {
             guard let self else {return BubbleTaskOverview(status:"任务同步已停止")}
             // 执行中取实时来源，不能从历史快照的旧状态推断当前任务。
             var tasks = self.desktopSession.observedTurns.filter {!self.store.deletedThreads.contains($0.threadID)}.map {task in
-                let title = self.store.conversations.first(where:{$0.external && $0.threadID == task.threadID})?.title ?? task.title
-                return BubbleTaskSummary(key:task.key,title:title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed)
+                let conversation = self.store.conversations.first {$0.external && $0.threadID == task.threadID}
+                let edits = task.fileEdits.isEmpty ? conversation?.turns.first {$0.key == task.key || $0.id == task.turnID || $0.date == task.start}?.fileEdits ?? [] : task.fileEdits
+                return BubbleTaskSummary(key:task.key,title:conversation?.title ?? task.title,threadID:task.threadID,status:task.status,start:task.start,end:task.end,
+                    turnID:task.turnID,activity:task.activity,connectionFailed:task.connectionFailed,directory:task.directory.isEmpty ? conversation?.cwd ?? "" : task.directory,fileEdits:edits)
             }
             let observed = Set(tasks.compactMap(\.threadID))
             for conversation in self.store.conversations {
@@ -238,12 +240,6 @@ final class ChatController {
                 let live = !conversation.external && self.running?.1 === turn
                 guard live || TaskOutcome.terminalStatuses.contains(turn.status) else {continue}
                 tasks.append(BubbleTaskSummary(key:turn.key,title:conversation.title,threadID:conversation.threadID,status:turn.status,start:turn.date,end:turn.completedAt,activity:live ? (turn.status == "waitingForApproval" ? TaskActivity.waiting(approval:true) : turn.status == "waitingForInput" ? TaskActivity.waiting(approval:false) : self.messagesState.currentActivity) : nil,connectionFailed:!live && turn.status != "completed" && CodexErrorMessage(turn.error)?.category == .network,directory:conversation.cwd,fileEdits:turn.fileEdits ?? []))
-            }
-            for index in tasks.indices {
-                guard let conversation = self.store.conversations.first(where:{$0.threadID == tasks[index].threadID && tasks[index].threadID != nil}) else {continue}
-                tasks[index].directory = conversation.cwd
-                let task = tasks[index]
-                tasks[index].fileEdits = conversation.turns.first(where:{$0.key == task.key || (task.turnID != nil && $0.id == task.turnID) || $0.date == task.start})?.fileEdits ?? []
             }
             // 去重只作用于实时任务行，不合并任何消息或历史卡片。
             tasks = Dictionary(grouping:tasks,by:{$0.threadID ?? $0.key}).values.compactMap {$0.max(by:{$0.start < $1.start})}

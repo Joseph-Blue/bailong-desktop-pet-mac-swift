@@ -9,7 +9,13 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     private var availabilityUpdates = [(PetPreferences) -> Void]()
     private var textActions = [ObjectIdentifier:(String)->Void]()
     private var textEndActions = [ObjectIdentifier:(String)->Void]()
-    private let templateEditor = SettingsTemplateEditor()
+    private lazy var templateEditor:SettingsTemplateEditor = {
+        let editor = SettingsTemplateEditor()
+        editor.isFieldEditor = true; editor.isRichText = false; editor.allowsUndo = true
+        return editor
+    }()
+    private(set) weak var currentTemplateField:SettingsTemplateField?
+    var moveToAdjacentEntry:((Int) -> Bool)?
     private var bufferControls = [NSControl]()
     private weak var bufferRow:NSView?
     private(set) var searchAnchors = [String:NSView]()
@@ -19,10 +25,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     init(content:NSStackView,preferences:PetPreferences,window:NSWindow) {
         self.content = content; self.preferences = preferences; self.window = window
         super.init()
-        templateEditor.isFieldEditor = true; templateEditor.isRichText = false; templateEditor.allowsUndo = true
     }
     func reset(section:SettingsSection) {
         self.section = section
+        currentTemplateField = nil
         searchAnchors.removeAll()
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
         actions.removeAll(); textActions.removeAll(); textEndActions.removeAll()
@@ -52,6 +58,20 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     }
     func controlTextDidBeginEditing(_ notification:Notification) {
         (notification.object as? SettingsTemplateField)?.refreshHighlight()
+    }
+    func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector) -> Bool {
+        guard !textView.hasMarkedText(),let moveToAdjacentEntry else {return false}
+        switch selector {
+        case #selector(NSResponder.insertTab(_:)):return moveToAdjacentEntry(1)
+        case #selector(NSResponder.insertBacktab(_:)):return moveToAdjacentEntry(-1)
+        default:return false
+        }
+    }
+    func navigationButton(_ title:String,back:Bool = false,action:@escaping () -> Void) -> NSButton {
+        let button = ActionButton(title,action)
+        button.image = NSImage(systemSymbolName:back ? "chevron.backward" : "chevron.forward",accessibilityDescription:nil)
+        button.imagePosition = back ? .imageLeading : .imageTrailing
+        return button
     }
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else {return}
@@ -267,6 +287,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
         let field: NSTextField = section == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
         let templateField = field as? SettingsTemplateField
+        currentTemplateField = templateField
         templateField?.allowsTokens = allowsTokens
         field.placeholderString = placeholder; field.delegate = self
         templateField?.refreshHighlight(); field.setAccessibilityLabel(title)

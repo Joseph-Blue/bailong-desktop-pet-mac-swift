@@ -120,6 +120,8 @@ private enum DeviceIdentity {
 }
 
 final class DiagnosticsPanel: NSObject, NSWindowDelegate {
+    private static let underflowTitle = "本段动画等帧次数"
+
     private struct Reading {
         var fps: Double?
         var draws: Double?
@@ -158,15 +160,31 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         window.contentView = container
         let rows = [
             ("更新 FPS", fpsValue), ("CPU 总体", cpuValue), ("运行内存 (RAM)", ramValue),
-            ("GPU（应用组）", gpuValue), ("本段缺帧等待", underflowValue)
+            ("GPU（应用组）", gpuValue), (Self.underflowTitle, underflowValue)
         ]
-        let grid = NSGridView(views: rows.map { name, value in
+        let grid = NSGridView(views: rows.map { name, value -> [NSView] in
             let title = NSTextField(labelWithString: name)
             title.textColor = .secondaryLabelColor
             value.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
             value.alignment = .right
             value.setAccessibilityLabel(name)
-            return [title, value]
+            guard value === underflowValue else { return [title, value] }
+
+            let help = NSImageView()
+            help.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "\(name)说明")
+            help.contentTintColor = .secondaryLabelColor
+            help.imageScaling = .scaleProportionallyDown
+            help.setAccessibilityElement(true)
+            help.setAccessibilityLabel("\(name)说明")
+            help.hoverHelp = "播放时，到了该换帧的时间，新画面还没准备好，暂时停在上一帧。每次连续等待记为 1 次。"
+            help.translatesAutoresizingMaskIntoConstraints = false
+            let titleWithHelp = NSStackView(views: [title, help])
+            titleWithHelp.orientation = .horizontal; titleWithHelp.alignment = .centerY; titleWithHelp.spacing = 5
+            NSLayoutConstraint.activate([
+                help.widthAnchor.constraint(equalToConstant: 16),
+                help.heightAnchor.constraint(equalToConstant: 16)
+            ])
+            return [titleWithHelp, value]
         })
         grid.column(at: 0).xPlacement = .leading
         grid.column(at: 1).xPlacement = .fill
@@ -181,7 +199,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let copyButton = ActionButton("拷贝完整诊断") {}
         copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "拷贝")
         copyButton.imagePosition = .imageLeading; copyButton.emphasize()
-        CopyFeedback.attach(to:copyButton) { [weak self] in self?.copyInformation() }
+        CopyFeedback.attach(to:copyButton,didCopy:{ [weak self] text in self?.showCopiedInformation(text) }) { [weak self] in self?.copyInformation() }
         let actions = NSStackView(views: [closeButton, copyButton]); actions.orientation = .horizontal; actions.spacing = 8
         container.addSubview(actions); actions.translatesAutoresizingMaskIntoConstraints = false
         let pinIcon = NSImageView(image: NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "置顶")!)
@@ -241,6 +259,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     func resetStatistics() { if timer != nil { beginSampling() } }
     func stop() {
         timer?.invalidate(); timer = nil; previousGPU = nil
+        if let sheet = window.attachedSheet {window.endSheet(sheet)}
         window.orderOut(nil); InterfaceWindows.shared.closed(window)
     }
     func shutdown() {
@@ -301,6 +320,29 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     private func number(_ value: Double?) -> String {
         value.map { String(format: "%.1f", $0) } ?? "—"
     }
+    private func showCopiedInformation(_ text:String) {
+        Self.copiedInformationAlert(text).beginSheetModal(for:window)
+    }
+    static func copiedInformationAlert(_ text:String) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "已将当前的完整诊断拷贝至剪贴板"
+        let symbol = NSImage(systemSymbolName:"chart.xyaxis.line",accessibilityDescription:"应用性能信息统计")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize:36,weight:.semibold).applying(.init(paletteColors:[.white])))
+        alert.icon = NSImage(size:NSSize(width:64,height:64),flipped:false) { rect in
+            AppAccent.color.setFill()
+            NSBezierPath(roundedRect:rect.insetBy(dx:2,dy:2),xRadius:14,yRadius:14).fill()
+            if let symbol {
+                let size = symbol.size
+                symbol.draw(in:NSRect(x:rect.midX-size.width/2,y:rect.midY-size.height/2,width:size.width,height:size.height))
+            }
+            return true
+        }
+        alert.setScrollableDetail(text,size:NSSize(width:450,height:230))
+        let dismiss = alert.addButton(withTitle:"知道了")
+        alert.applyAccent()
+        if dismiss.bezelColor == nil && AppAccent.selection != "system" {NativeAccentTint.apply(to:dismiss)}
+        return alert
+    }
     private func copyInformation() -> String {
         guard let pet else { return window.title }
         let count = pet.animation?.frameCount ?? 0
@@ -333,7 +375,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             }
         } else if let stream = pet.animation?.stream {
             let buffer = stream.statistics()
-            preloadText = "流式缓冲 \(buffer.buffered)/\(stream.capacity) 帧\n本段缺帧等待 \(buffer.underflows) 次 · 最长 \(milliseconds(buffer.longestUnderflow))\n本段读取 \(buffer.decoded) 帧 · 像素处理 \(buffer.converted) 帧 · 跳过 \(buffer.skipped) 帧\n本段回调跨过可用帧 \(buffer.expired) 帧\n整段预加载：关闭"
+            preloadText = "流式缓冲 \(buffer.buffered)/\(stream.capacity) 帧\n\(Self.underflowTitle) \(buffer.underflows) 次 · 最长等待 \(milliseconds(buffer.longestUnderflow))\n本段读取 \(buffer.decoded) 帧 · 像素处理 \(buffer.converted) 帧 · 跳过 \(buffer.skipped) 帧\n本段回调跨过可用帧 \(buffer.expired) 帧\n整段预加载：关闭"
             if let startup = stream.startup {
                 preloadText += "\n起播 \(startup.frames) 帧 · 余量 \(milliseconds(startup.seconds))"
                 if startup.reused > 0 {

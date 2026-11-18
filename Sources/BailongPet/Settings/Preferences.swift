@@ -12,7 +12,7 @@ enum SettingsSection: Int, CaseIterable {
     var keys: [String] {
         switch self {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
-        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
+        case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
         case .messages: return MessageSettingsPage.preferenceKeys
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
@@ -70,7 +70,7 @@ final class PetPreferences {
         "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),"randomWorkingLines":true,
-        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskThinkingTemplate":"{桌宠名}正在思考","taskToolTemplate":"{桌宠名}正在调用工具","taskCommandTemplate":"{桌宠名}正在运行命令","taskCommandCompletedTemplate":"{桌宠名}已运行命令","taskSuccessTemplate":"{用户名}，完成啦！",
+        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskSuccessTemplate":"{用户名}，完成啦！",
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
@@ -290,6 +290,10 @@ final class PetPreferences {
         }
         values = TemplateSyntax.migrate(values)
         values = ConversationLines.migrateReceivedLine(values)
+        // 旧短进展标题已由共用进展取代。导入时跳过旧字段，本机旧版保存的值保留。
+        for key in ["taskThinkingTemplate","taskToolTemplate","taskCommandTemplate","taskCommandCompletedTemplate","taskWarningTemplate"] {
+            values.removeValue(forKey:key)
+        }
         values.removeValue(forKey:"addressMode")
         values.removeValue(forKey:"showOnLaunch")
         values.removeValue(forKey:"gitWindowPinned")

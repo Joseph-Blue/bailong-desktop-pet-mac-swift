@@ -15,7 +15,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private lazy var appearancePage = AppearanceSettingsPage(form:form,window:window,
         onPreviewDetails:{ [weak self] in self?.onPreviewDetails() })
     private lazy var activityPage = ActivitySettingsPage(form:form,catalog:catalog,
-        reload:{ [weak self] in self?.render() },onPreview:{ [weak self] in self?.onPreview($0) })
+        reload:{ [weak self] in self?.render() })
     private let aboutPage = AboutPageController()
     private lazy var workspacePage = WorkspaceSettingsPage(form:form,window:window,reload:{ [weak self] in self?.render() },clear:{ [weak self] completion in
         guard let action = self?.onClearDefaultWorkspace else {completion(.failure(PetFailure(message:"会话管理尚未就绪，无法清理工作区。"))); return}
@@ -33,6 +33,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private lazy var searchIndex = SettingsSearchEntry.all(catalog:catalog)
     private var searchHighlight:SettingsSearchHighlight?
     private var selected: SettingsSection = .general
+    private var detailPage:SettingsDetail?
+    private var itemList:SettingsItemList?
+    private var listPositions = [SettingsSection:SettingsItemList.Position]()
     private var renderedSection: SettingsSection?
     private var selectingSidebar = false
     private var hasShown = false
@@ -172,14 +175,16 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
         InterfaceWindows.shared.focus(window)
     }
-    func select(_ section: SettingsSection) {
+    func select(_ section:SettingsSection,detail:SettingsDetail? = nil) {
         guard let index = SettingsSection.allCases.firstIndex(of:section) else {return}
+        let changed = renderedSection != section || detailPage != detail
+        if changed,!window.makeFirstResponder(nil) {return}
         clearSearch()
-        selected = section
+        selected = section; detailPage = detail
         selectingSidebar = true
         sidebar.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)
         selectingSidebar = false
-        if renderedSection != section {render()}
+        if changed {render()}
     }
     func numberOfRows(in tableView: NSTableView) -> Int {SettingsSection.allCases.count}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {AccentHistoryRow()}
@@ -194,13 +199,14 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let next = SettingsSection.allCases[sidebar.selectedRow]
         window.makeFirstResponder(nil); clearSearch()
         guard next != selected || renderedSection != next else {return}
-        selected = next; render()
+        selected = next; detailPage = nil; render()
     }
     func windowWillClose(_ notification: Notification) {
         window.makeFirstResponder(nil)
         searchHighlight?.removeFromSuperview(); searchHighlight = nil
         appearancePage.dismissPreview()
         appearancePage.reset()
+        releaseItemList(); detailPage = nil
         form.reset(section:selected)
         renderedSection = nil
         NSApp.removeWindowsItem(window)
@@ -238,10 +244,11 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private func updateSearchPresentation() {
         let searching = !searchField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
         searchResults.isHidden = !searching
-        scroll.isHidden = searching || selected == .about
+        scroll.isHidden = searching || selected == .about || itemList != nil
+        itemList?.isHidden = searching
         aboutPage.view.isHidden = searching || selected != .about
         resetButton.isEnabled = !searching && !selected.keys.isEmpty
-        window.title = searching ? "搜索设置" : selected.title
+        window.title = searching ? "搜索设置" : detailPage?.title ?? selected.title
     }
     private func clearSearch() {
         searchField.stringValue = ""; searchResults.show([]); updateSearchPresentation()
@@ -256,7 +263,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func revealSetting(_ entry:SettingsSearchEntry) {
-        window.makeFirstResponder(nil); select(entry.section)
+        window.makeFirstResponder(nil); select(entry.section,detail:entry.detail)
+        if entry.itemID == nil,entry.title == entry.detail?.title {return}
+        if let itemList {
+            if let id = entry.itemID {itemList.reveal(group:entry.group,id:id)}
+            return
+        }
         if entry.section == .about {
             aboutPage.selectTab(entry.title == "关于" ? "about" : "credits")
             return
@@ -293,6 +305,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func render() {
         guard window.contentView != nil else {return}
+        releaseItemList()
         renderedSection = selected
         searchHighlight?.removeFromSuperview(); searchHighlight = nil
         appearancePage.reset()
@@ -302,9 +315,19 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         scroll.isHidden = selected == .about; aboutPage.view.isHidden = selected != .about
         switch selected {
         case .general: general()
-        case .identity: IdentitySettingsPage.render(form:form,catalog:catalog,window:window,onLinePreview:{ [weak self] in self?.onLinePreview($0,$1) },onAnimationPreview:{ [weak self] in self?.onPreview($0) },reload:{ [weak self] in self?.render() })
-        case .activity: activityPage.render()
-        case .messages: MessageSettingsPage.render(form:form,onPreview:onMessagePreview)
+        case .identity where detailPage == .lines:showItemList(IdentitySettingsPage.items(catalog:catalog))
+        case .activity where detailPage == .actions:showItemList(ActivitySettingsPage.items(catalog:catalog))
+        case .identity:
+            IdentitySettingsPage.render(form:form,catalog:catalog,window:window,onLinePreview:onLinePreview,
+                                        manage:{ [weak self] in self?.select(.identity,detail:.lines) })
+        case .activity:activityPage.render { [weak self] in self?.select(.activity,detail:.actions) }
+        case .messages:
+            let topic:MessageSettingsPage.Topic?
+            if case .messages(let current) = detailPage {
+                topic = current
+                content.addArrangedSubview(form.navigationButton(selected.title,back:true) { [weak self] in self?.select(.messages) })
+            } else {topic = nil}
+            MessageSettingsPage.render(form:form,topic:topic,open:{ [weak self] in self?.select(.messages,detail:.messages($0)) },onPreview:onMessagePreview)
         case .appearance: appearancePage.render()
         case .advanced: advanced()
         case .updates: updates()
@@ -327,6 +350,28 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
         scroll.contentView.scroll(to:.zero)
         updateSearchPresentation()
+    }
+    private func releaseItemList() {
+        guard let itemList else {return}
+        listPositions[itemList.section] = itemList.position
+        itemList.removeFromSuperview(); self.itemList = nil
+    }
+    private func showItemList(_ items:[SettingsListItem]) {
+        guard let host = scroll.superview else {return}
+        let section = selected
+        let list = SettingsItemList(items:items,section:section,window:window,preferences:preferences,
+            back:{ [weak self] in self?.select(section) },
+            play:{ [weak self] item in
+                guard let self,let clip = item.preview else {return}
+                if case .template(let key,_) = item.kind {self.onLinePreview(clip,self.preferences.statusLine(key))}
+                else {self.onPreview(clip)}
+            })
+        itemList = list
+        host.addSubview(list,positioned:.below,relativeTo:searchResults); list.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([list.topAnchor.constraint(equalTo:host.safeAreaLayoutGuide.topAnchor),list.bottomAnchor.constraint(equalTo:host.bottomAnchor),
+            list.leadingAnchor.constraint(equalTo:host.leadingAnchor),list.trailingAnchor.constraint(equalTo:host.trailingAnchor)])
+        host.layoutSubtreeIfNeeded()
+        list.restore(listPositions[section])
     }
     private func general() {
         if let notice = preferences.compatibilityNotice ?? SettingsStorage.compatibilityNotice {

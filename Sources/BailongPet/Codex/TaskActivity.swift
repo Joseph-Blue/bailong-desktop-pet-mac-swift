@@ -92,7 +92,6 @@ struct TaskActivity:Equatable {
     var detail:String = ""
     var kind:Kind = .tool
     var finished = false
-    var templateKey:String? = nil
     var toolOperation:ToolOperation = .tool
     var statusSymbol:String? = nil
     var outcome:Outcome? = nil
@@ -122,7 +121,7 @@ struct TaskActivity:Equatable {
     }
     var symbolName:String {
         switch kind {
-        case .reasoning:return "atom"
+        case .reasoning:return "lightbulb.max"
         case .reply:return "text.bubble"
         case .status,.attention:return statusSymbol ?? "exclamationmark.triangle"
         case .tool:
@@ -151,10 +150,6 @@ struct TaskActivity:Equatable {
             case .tool:return "wrench.and.screwdriver"
             }
         }
-    }
-    var displayTitle:String {
-        if let templateKey {return PetPreferences.shared.statusLine(templateKey)}
-        return finished || kind == .reply || kind == .status || kind == .attention ? title : PetPreferences.shared.statusLine(kind == .reasoning ? "taskThinkingTemplate" : "taskToolTemplate")
     }
     var line:String {
         // 跑马灯使用公开摘要和操作状态，不使用气泡标题的个性台词。
@@ -280,9 +275,7 @@ struct TaskActivity:Equatable {
         else if type == "enteredReviewMode" {title = "已进入代码审查"}
         else if type == "exitedReviewMode" {title = "代码审查已结束"}
         else {title = (succeeded ? "已" : "正在")+action}
-        let template:String? = outcome == .failed ? "taskWarningTemplate" : outcome != nil ? nil :
-            type == "commandExecution" ? (ended ? "taskCommandCompletedTemplate" : "taskCommandTemplate") : nil
-        return .init(title:title,detail:detail,finished:ended || type == "enteredReviewMode" || type == "exitedReviewMode",templateKey:template,toolOperation:operation,outcome:outcome)
+        return .init(title:title,detail:detail,finished:ended || type == "enteredReviewMode" || type == "exitedReviewMode",toolOperation:operation,outcome:outcome)
     }
     static func from(item:[String:Any]) -> TaskActivity? {
         var status = item["status"] as? String
@@ -313,12 +306,12 @@ struct TaskActivity:Equatable {
         if actions.count > 3 {fields.append(.text("另有 \(actions.count-3) 项"))}
         return fields
     }
-    static func current(items:[[String:Any]],replyTemplateKey:String = "taskReplyTemplate") -> TaskActivity? {
+    static func current(items:[[String:Any]]) -> TaskActivity? {
         typealias Entry = (item:[String:Any],activity:TaskActivity)
         var result:Entry?, runningTool:Entry?
         for item in items {
             if item["type"] as? String == "agentMessage" {
-                result = (item,.init(title:"正在回复",kind:.reply,templateKey:replyTemplateKey)); continue
+                result = (item,.init(title:"正在回复",kind:.reply)); continue
             }
             guard let next = from(item:item) else {continue}
             if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = (item,next)}

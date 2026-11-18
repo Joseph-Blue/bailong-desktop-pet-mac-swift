@@ -5,19 +5,20 @@ import ObjectiveC
 final class CopyFeedback:NSObject {
     private static var association:UInt8 = 0
     private weak var button:NSButton?
+    private let didCopy:((String) -> Void)?
     private let value:() -> String?
     private let originalTitle:String, originalHelp:String?
     private let originalImage:NSImage?, originalTint:NSColor?
     private let originalPosition:NSControl.ImagePosition
     private var timer:Timer?
 
-    static func attach(to button:NSButton,value:@escaping () -> String?) {
-        let feedback = CopyFeedback(button:button,value:value)
+    static func attach(to button:NSButton,didCopy:((String) -> Void)? = nil,value:@escaping () -> String?) {
+        let feedback = CopyFeedback(button:button,didCopy:didCopy,value:value)
         objc_setAssociatedObject(button,&association,feedback,.OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         button.target = feedback; button.action = #selector(copyValue)
     }
-    private init(button:NSButton,value:@escaping () -> String?) {
-        self.button = button; self.value = value
+    private init(button:NSButton,didCopy:((String) -> Void)?,value:@escaping () -> String?) {
+        self.button = button; self.value = value; self.didCopy = didCopy
         originalTitle = button.imagePosition == .imageOnly ? "" : button.title; originalHelp = button.hoverHelp
         originalImage = button.image; originalTint = button.contentTintColor; originalPosition = button.imagePosition
         super.init()
@@ -29,7 +30,8 @@ final class CopyFeedback:NSObject {
         guard let button else {return}
         timer?.invalidate()
         let success:Bool
-        if let text = value() {
+        let text = value()
+        if let text {
             NSPasteboard.general.clearContents()
             success = NSPasteboard.general.setString(text,forType:.string)
         } else {success = false}
@@ -45,6 +47,7 @@ final class CopyFeedback:NSObject {
         button.needsDisplay = true
         let timer = Timer(timeInterval:1.5,repeats:false) { [weak self] _ in self?.restore() }
         self.timer = timer; RunLoop.main.add(timer,forMode:.common)
+        if success,let text {didCopy?(text)}
     }
     private func restore() {
         guard let button else {return}

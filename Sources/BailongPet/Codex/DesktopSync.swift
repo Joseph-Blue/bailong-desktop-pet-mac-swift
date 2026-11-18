@@ -35,7 +35,8 @@ struct PublicSnapshot {
         ObservedDesktopTurn(key:key,threadID:logical,turnID:turn,status:status,start:Date(timeIntervalSince1970:started),
             end:completed.flatMap {$0 > 0 ? Date(timeIntervalSince1970:$0) : nil},title:title,
             activity:attention.map {TaskActivity.waiting(approval:$0.kind == .approval)} ?? activity,
-            connectionFailed:!activeStatuses.contains(status) && status != "completed" && CodexErrorMessage(error)?.category == .network)
+            connectionFailed:!activeStatuses.contains(status) && status != "completed" && CodexErrorMessage(error)?.category == .network,
+            directory:cwd,fileEdits:fileEdits)
     }
     var fingerprint:[String] {
         var result = steeringMessages.flatMap {[$0.id,$0.text]}

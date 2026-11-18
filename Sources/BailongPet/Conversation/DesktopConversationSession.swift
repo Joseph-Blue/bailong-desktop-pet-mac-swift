@@ -11,6 +11,8 @@ struct ObservedDesktopTurn {
     let title: String
     let activity: TaskActivity?
     let connectionFailed: Bool
+    let directory:String
+    let fileEdits:[FileEditSummary]
     var active: Bool {activeStatuses.contains(status)}
 }
 

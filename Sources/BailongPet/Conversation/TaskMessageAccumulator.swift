@@ -64,7 +64,7 @@ final class TaskMessageAccumulator {
                 let state = labels[step["status"] as? String ?? ""] ?? "状态未提供"
                 return state+" · "+(step["step"] as? String ?? "")
             }.joined(separator:"\n")
-            taskActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",templateKey:"taskUpdateTemplate",toolOperation:.plan)
+            taskActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",toolOperation:.plan)
         default:return false
         }
         return true

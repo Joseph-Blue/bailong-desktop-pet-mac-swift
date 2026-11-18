@@ -28,8 +28,10 @@ struct SettingsSearchEntry {
     let title:String
     var keywords = ""
     var condition = ""
+    var detail:SettingsDetail?
+    var itemID:String?
     var anchor:String {group+"/"+title}
-    var location:String {section.title+" › "+group}
+    var location:String {[section.title,detail?.title,detail?.title == group ? nil : group].compactMap {$0}.joined(separator:" › ")}
 
     // 索引只保存设置文案，不创建页面或触发预览、磁盘统计、登录项查询。
     static func all(catalog:Catalog?) -> [Self] {
@@ -46,18 +48,15 @@ struct SettingsSearchEntry {
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 动作 播放 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
-        for line in ConversationLines.working {add(.identity,"工作中台词",[line.title],"随机 工作中 任务概览 台词 模板 "+line.text)}
-        add(.identity,"任务状态台词",["执行任务中"],"台词 模板 我还在留意进展")
-        add(.identity,"任务状态台词",["有新进展"],"台词 模板 进度 任务计划 阶段性进展 Codex 项目任务 我忙到这一步啦")
-        add(.identity,"任务状态台词",["等待回答","等待批准","任务成功","任务失败","任务中断或取消"],"台词 审批 模板")
-        add(.identity,"任务状态台词",["正在思考","正在调用工具","正在运行命令","已运行命令"],"台词 模板 思考摘要 工具调用 执行命令 运行命令 已运行命令 终端")
-        for line in ConversationLines.task {add(.identity,"任务状态台词",[line.title],"台词 模板 "+line.text)}
-        for line in ConversationLines.interface {add(.identity,"聊天窗口台词",[line.title],"台词 模板 "+line.text)}
-        add(.identity,"额度查询台词",["正在查询"],"额度 ChatGPT 订阅 台词 动作 播放 预览")
+        entries.append(.init(section:.identity,group:SettingsDetail.lines.title,title:SettingsDetail.lines.title,detail:.lines))
+        entries += IdentitySettingsPage.items(catalog:catalog).map {$0.searchEntry(.lines)}
+        if catalog != nil {entries.append(.init(section:.activity,group:SettingsDetail.actions.title,title:SettingsDetail.actions.title,detail:.actions))}
+        entries += ActivitySettingsPage.items(catalog:catalog).map {$0.searchEntry(.actions)}
         add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天面板 查看额度 查看历史消息 显示任务进度 播放随机动画 单句台词 无动作")
         add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 适中 活泼 自定义 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
+        entries += MessageSettingsPage.Topic.allCases.map {Self(section:.messages,group:$0.rawValue,title:$0.rawValue,detail:.messages($0))}
         entries += MessageSettingsPage.searchEntries
         add(.appearance,"大小",["桌宠大小","气泡大小","消息文字大小"],"缩放 字号 字体")
         add(.appearance,"大小",["气泡自定义宽高比","宽 : 高"],"气泡形状 长宽比 宽高比 比例 宽度 高度 排版")
@@ -71,7 +70,7 @@ struct SettingsSearchEntry {
         add(.developer,"动画效果改善",["动作平滑过渡","孤立杂点清理"],"画质与性能 性能 淡化 淡入淡出 轮廓 边缘净化 透明 残留 动态效果")
         add(.developer,"动画效果改善",["轮廓阴影"],"画质与性能 性能 桌宠轮廓 桌宠 描边 外发光 阴影 投影 边缘")
         add(.developer,"额度查询",["额度查询缓存","缓存时长"],"画质与性能 性能 额度 ChatGPT 订阅 立即刷新 重置 倒计时 5小时 每周额度 缓存 有效期 秒 15 60 300 5分钟 刷新")
-        add(.developer,"应用统计",["开启应用性能信息统计浮窗"],"画质与性能 性能 CPU GPU 运行内存 RAM Swap 性能监视器 统计浮窗")
+        add(.developer,"应用统计",["开启应用性能信息统计浮窗"],"画质与性能 性能 CPU GPU FPS 运行内存 RAM Swap 性能监视器 统计浮窗 本段动画等帧次数 缺帧 最长等待时间 拷贝完整诊断 剪贴板")
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
@@ -100,12 +99,6 @@ struct SettingsSearchEntry {
                 entries[index].condition = "开启顶部刘海吸边后可调整"
             } else if entries[index].section == .activity && entries[index].title == "活动范围" {
                 entries[index].condition = "开启自主移动后可调整"
-            }
-        }
-        if let catalog {
-            add(.identity,"互动台词",(catalog.variants+catalog.work).filter {$0.line != nil}.map(\.title),"台词 模板 动作 播放 预览")
-            for (group,clips) in [("待机动作",catalog.idles+catalog.extras),("互动动作",catalog.variants),("工作动作",catalog.work),("移动动作",catalog.movementAnimations),("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation])] {
-                add(.activity,group,clips.map(\.title),"动画 播放速度 倍速 频率 偏爱 权重 ❤ ❤️ 爱心 标尺 预览")
             }
         }
         return entries

@@ -206,7 +206,7 @@ final class Bubble {
             list.onResize = { [weak self,weak list] height in
                 guard let self,let list else {return}
                 self.scroll.setBody(list,height:height)
-                self.layout(bodyHeight:min(320*self.scale,height)); self.scroll.showTop(); self.onCardLayout()
+                self.layout(bodyHeight:min(320*self.scale,height)); self.onCardLayout()
             }
             scroll.setBody(list,height:list.frame.height)
             layout(bodyHeight:min(320*scale,list.frame.height)); list.start(); scroll.showTop()

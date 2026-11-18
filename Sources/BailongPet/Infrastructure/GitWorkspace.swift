@@ -79,7 +79,7 @@ struct GitWorkspaceFailure:LocalizedError {
     var errorDescription:String? {message}
 }
 
-// 每个可见入口仅保留一次请求。关闭、切换会话时取消；不启动 shell、不写索引、不访问远端。
+// 只读查询由目录监听器调度。最后一个可见入口退出时取消。
 final class GitWorkspaceRequest {
     private let lock = NSLock()
     private var process:Process?
