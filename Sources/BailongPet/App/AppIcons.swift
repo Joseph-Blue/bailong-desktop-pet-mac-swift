@@ -6,7 +6,10 @@ enum AppIcons {
         return "dollarsign"
     }
 
-    // 第三方供应商图标来自各自开放平台，缺失时保持纯文字。
+    private static let providerIconsURL = Bundle.main.bundleURL.pathExtension == "app"
+        ? Paths.resources : Paths.project.appendingPathComponent("Assets/ProviderIcons")
+
+    // 无图标的供应商使用文字名称。
     static let deepSeek:NSImage? = bundledProviderIcon("deepseek-logo.png","DeepSeek")
     static let xai:NSImage? = bundledProviderIcon("xai-logo.png","xAI")
     static let mistral:NSImage? = bundledProviderIcon("mistral-logo.png","Mistral")
@@ -35,12 +38,9 @@ enum AppIcons {
         }
     }
 
-    // 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png；原图随本地资源打包。
+    // 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png。
     static let openAI: NSImage? = {
-        if let image = NSImage(contentsOf:Paths.resources.appendingPathComponent("openai-logo.png")) {
-            image.size = NSSize(width:18,height:18); image.isTemplate = true
-            image.accessibilityDescription = "OpenAI"; return image
-        }
+        if let image = bundledProviderIcon("openai-logo.png","OpenAI",template:true) {return image}
         for app in CodexConnection.desktopApplications() {
             for name in ["chatgptTemplate@2x.png","chatgptTemplate.png"] {
                 if let image = NSImage(contentsOf:app.appendingPathComponent("Contents/Resources/"+name)) {
@@ -52,7 +52,7 @@ enum AppIcons {
         return nil
     }()
     private static func bundledProviderIcon(_ file:String,_ name:String,template:Bool = false) -> NSImage? {
-        guard let image = NSImage(contentsOf:Paths.resources.appendingPathComponent(file)) else {return nil}
+        guard let image = NSImage(contentsOf:providerIconsURL.appendingPathComponent(file)) else {return nil}
         image.size = NSSize(width:18,height:18); image.isTemplate = template
         image.accessibilityDescription = name
         return image

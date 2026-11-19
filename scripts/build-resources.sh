@@ -1,6 +1,7 @@
 # 资源清单、下载和导入共用于 App 与开发入口。
 typeset -g bailong_resource_manifest="scripts/resource-manifest.json"
 typeset -g bailong_resource_tool=".build/resource-tools/BuildResources"
+typeset -ga bailong_provider_icons=(Assets/ProviderIcons/{openai,deepseek,xai,mistral,kimi,zhipu,bailian,openrouter,groq,bedrock,vertexai}-logo.png)
 bailong_prepare_resource_tool() {
     bailong_check_output .build/resource-tools
     mkdir -p .build/module-cache
@@ -114,7 +115,10 @@ bailong_import_resources() {
     bailong_phase_end
 }
 bailong_ensure_resources() {
-    local zip="$1" mode="$2" download="$3" report
+    local zip="$1" mode="$2" download="$3" report icon
+    for icon in "${bailong_provider_icons[@]}"; do
+        [[ -f "$icon" && -s "$icon" ]] || { bailong_error "供应商图标缺失或为空：$icon"; return 1; }
+    done
     bailong_resource_source
     bailong_prepare_resource_tool
     if [[ "$download" == 1 ]]; then
