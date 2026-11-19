@@ -1,14 +1,19 @@
 {
-  "archive": "bailong-dev-assets-2026-11-10.zip",
-  "bytes": 117730879,
-  "development": [
+  "archive" : "bailong-dev-assets-2026-11-19.zip",
+  "bytes" : 117749407,
+  "development" : [
     "native-hevc/catalog/samples.json",
     "资源来源.md"
   ],
-  "published": true,
-  "runtime": [
+  "published" : false,
+  "runtime" : [
     "BailongPet.icns",
     "openai-logo.png",
+    "deepseek-logo.png",
+    "xai-logo.png",
+    "mistral-logo.png",
+    "kimi-logo.png",
+    "zhipu-logo.png",
     "pet-status-template.png",
     "pet-avatar-template.png",
     "sounds/click.wav",
@@ -17,6 +22,6 @@
     "glass-symbols/capsule.on.rectangle.liquid.glass.pdf",
     "glass-symbols/capsule.on.rectangle.liquid.glass.fill.pdf"
   ],
-  "url": "https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/download/dev-assets-2026-11-10/bailong-dev-assets-2026-11-10.zip",
-  "version": "2026-11-10"
+  "url" : "",
+  "version" : "2026-11-19"
 }

@@ -286,6 +286,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     @objc private func modelStateChanged() {
         updateShortcuts()
+        applyModelLayout()
+        // 模型按钮与 ChatUI 订阅同一通知；下一轮再按新标题测量一次，避免观察顺序造成旧宽度。
+        DispatchQueue.main.async { [weak self] in self?.applyModelLayout() }
+    }
+    private func applyModelLayout() {
         composerView.updateLayout()
         guard history.isVisible && !history.isMiniaturized else {return}
         let detailWidth = max(520,historyModel.layoutWidth+historyButton.intrinsicContentSize.width+64)
@@ -453,7 +458,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
         let historyVisible = history.isVisible && !history.isMiniaturized
         if historyVisible {order.update(conversationSource)}
-        inheritedSettings.update(settings:historyState.modelSettings,error:historyState.modelNote)
+        inheritedSettings.update(settings:historyState.modelSettings,provider:selected.modelProvider,error:historyState.modelNote)
         refreshList()
         sourceLabel.stringValue = selected.title
         sourceLabel.hoverHelp = selected.kind.title+" · 共 \(selected.turns.count) 轮记录\n"+selected.title

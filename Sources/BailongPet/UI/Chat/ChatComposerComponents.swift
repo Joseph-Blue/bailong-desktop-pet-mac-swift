@@ -41,13 +41,15 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
         setAccessibilityRole(.staticText)
     }
     required init?(coder:NSCoder) {fatalError()}
-    func update(settings:DesktopReply.Settings?,error:String?) {
+    func update(settings:DesktopReply.Settings?,provider:String?,error:String?) {
         if let settings {
             let effort = settings.effort.map(ChatModelSettings.effortName) ?? "未提供"
-            setSummary(ModelPresentation.summary(model:settings.model,effort:effort)+" · 只读",lightning:CodexServiceTier.hasLightning(settings.serviceTier))
+            let provider = ModelPresentation.provider(provider) ?? "供应商未记录"
+            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:provider)+" · 只读",lightning:CodexServiceTier.hasLightning(settings.serviceTier))
             let source = settings.effortFromHistory ? "思考等级来自会话记录。" : ""
-            hoverHelp = "沿用 Codex 原会话设置，当前只读。"+source+"\n模型："+settings.model+"\n思考等级："+effort
-            if let tier = settings.serviceTier {hoverHelp = (hoverHelp ?? "")+"\n速度档位："+CodexServiceTier.displayName(tier)}
+            var help = "沿用 Codex 原会话设置，当前只读。"+source+"\n供应商："+provider+"\n模型："+settings.model+"\n思考等级："+effort
+            if let tier = settings.serviceTier {help += "\n速度档位："+CodexServiceTier.displayName(tier)}
+            hoverHelp = help
         } else {
             setSummary(error ?? "正在读取 Codex 会话设置…",lightning:false)
             setHoverHelp(title) { [weak self] in self?.hasTruncatedTitle == true }

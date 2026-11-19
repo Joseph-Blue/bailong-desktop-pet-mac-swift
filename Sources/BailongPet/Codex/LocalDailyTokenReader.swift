@@ -2,6 +2,15 @@ import Foundation
 
 // 仅在查询额度时运行。索引用于发现日志，按文件增量读取；内存只留当天计数、事件身份和读取位置。
 final class LocalDailyTokenReader {
+    struct Source:Equatable {
+        let path:String
+        let provider:String?
+        let createdAt:Date?
+        init(path:String,provider:String? = nil,createdAt:Date? = nil) {
+            self.path = URL(fileURLWithPath:path).standardizedFileURL.resolvingSymlinksInPath().path
+            self.provider = provider; self.createdAt = createdAt
+        }
+    }
     private struct FileState {
         var offset:UInt64 = 0
         var previous:TokenUsage?
@@ -9,12 +18,14 @@ final class LocalDailyTokenReader {
         var inode:UInt64
         var size:UInt64
         var modified:Date
+        let source:Source
     }
     private let queue = DispatchQueue(label:"白龙娘本机每日用量",qos:.utility,autoreleaseFrequency:.workItem)
     private var day:DateInterval?
     private var files = [String:FileState]()
     private var seen = Set<String>()
     private var total = TokenUsage.zero
+    private var selectedProvider:String?
     private let fractional:ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime,.withFractionalSeconds]; return f
     }()
@@ -22,26 +33,49 @@ final class LocalDailyTokenReader {
     private static let markers = ["\"token_count\"","\"task_started\"","\"turn_context\""].map {Data($0.utf8)}
     private static let chunkSize = 65536
 
-    func query(_ completion:@escaping (DailyTokenUsage) -> Void) {
+    func query(provider:String? = nil,_ completion:@escaping (DailyTokenUsage) -> Void) {
         queue.async { [self] in
             let result:DailyTokenUsage
             do {
                 let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
                 let database = try ReadDatabase(root+"/state_5.sqlite")
-                // 不按账号、归档、CLI 或子任务过滤，统计当前 Codex 数据目录内已有的本机日志。
-                let paths = try database.rows("SELECT DISTINCT rollout_path FROM threads WHERE rollout_path<>''").compactMap {$0["rollout_path"]}
-                result = .available(usage:try read(paths:paths))
+                // 供应商取会话索引的真实标识；普通查询继续汇总当前 CODEX_HOME 内的全部日志。
+                let columns = provider == nil ? "rollout_path" : "rollout_path,model_provider,created_at,created_at_ms"
+                let filter = provider == nil ? "" : " AND model_provider=?"
+                let rows = try database.rows("SELECT DISTINCT "+columns+" FROM threads WHERE rollout_path<>''"+filter,
+                    provider.map {[$0]} ?? [])
+                let sources = try rows.map {row -> Source in
+                    guard let path = row["rollout_path"] else {throw PetFailure(message:"本机会话索引缺少日志路径。")}
+                    guard provider != nil else {return Source(path:path)}
+                    guard let seconds = row["created_at"].flatMap(Double.init) else {
+                        throw PetFailure(message:"本机会话索引缺少创建时间。")
+                    }
+                    let created = row["created_at_ms"].flatMap(Double.init).map {$0/1000} ?? seconds
+                    return Source(path:path,provider:row["model_provider"],createdAt:Date(timeIntervalSince1970:created))
+                }
+                result = .available(usage:try read(sources:sources,provider:provider))
             } catch {reset(); result = .failed(error.localizedDescription)}
             DispatchQueue.main.async {completion(result)}
         }
     }
     // 测试与后台查询共用；调用者须在同一串行队列使用该实例。
     func read(paths:[String],now:Date = Date(),calendar:Calendar = .current) throws -> TokenUsage {
+        try read(sources:paths.map {Source(path:$0)},now:now,calendar:calendar)
+    }
+    func read(sources:[Source],provider:String? = nil,now:Date = Date(),calendar:Calendar = .current) throws -> TokenUsage {
         let interval = DateInterval(start:calendar.startOfDay(for:now),end:calendar.date(byAdding:.day,value:1,to:calendar.startOfDay(for:now))!)
-        if day != interval {reset(); day = interval}
+        if day != interval || selectedProvider != provider {reset(); day = interval; selectedProvider = provider}
         do {
-            var candidates = [(String,UInt64,UInt64,Date)]()
-            for path in Set(paths.map {URL(fileURLWithPath:$0).standardizedFileURL.resolvingSymlinksInPath().path}).sorted() {
+            var unique = [String:Source]()
+            for source in sources where provider == nil || source.provider == provider {
+                if let previous = unique[source.path],previous != source {
+                    throw PetFailure(message:"本机日志的供应商或会话来源不一致。")
+                }
+                unique[source.path] = source
+            }
+            var candidates = [(Source,UInt64,UInt64,Date)]()
+            for source in unique.values.sorted(by:{$0.path < $1.path}) {
+                let path = source.path
                 let attributes:[FileAttributeKey:Any]
                 do {attributes = try FileManager.default.attributesOfItem(atPath:path)}
                 catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {continue}
@@ -50,23 +84,23 @@ final class LocalDailyTokenReader {
                     throw PetFailure(message:"无法读取本机用量日志的文件信息。")
                 }
                 guard modified >= interval.start || files[path] != nil else {continue}
-                candidates.append((path,inode.uint64Value,size.uint64Value,modified))
+                candidates.append((source,inode.uint64Value,size.uint64Value,modified))
             }
-            let present = Set(candidates.map {$0.0})
-            let replaced = candidates.contains {path,inode,size,modified in
-                guard let old = files[path] else {return false}
-                return old.inode != inode || size < old.size || (size == old.size && modified != old.modified)
+            let present = Set(candidates.map {$0.0.path})
+            let replaced = candidates.contains {source,inode,size,modified in
+                guard let old = files[source.path] else {return false}
+                return old.source != source || old.inode != inode || size < old.size || (size == old.size && modified != old.modified)
             }
-            if replaced || !Set(files.keys).isSubset(of:present) {reset(); day = interval}
-            for (path,inode,size,modified) in candidates {
-                var state = files[path] ?? FileState(inode:inode,size:size,modified:modified)
-                if state.offset < size {try scan(path:path,size:size,state:&state,interval:interval)}
-                state.size = size; state.modified = modified; files[path] = state
+            if replaced || !Set(files.keys).isSubset(of:present) {reset(); day = interval; selectedProvider = provider}
+            for (source,inode,size,modified) in candidates {
+                var state = files[source.path] ?? FileState(inode:inode,size:size,modified:modified,source:source)
+                if state.offset < size {try scan(path:source.path,size:size,state:&state,interval:interval)}
+                state.size = size; state.modified = modified; files[source.path] = state
             }
             return total
         } catch {reset(); throw error}
     }
-    private func reset() {files.removeAll(); seen.removeAll(); total = .zero; day = nil}
+    private func reset() {files.removeAll(); seen.removeAll(); total = .zero; day = nil; selectedProvider = nil}
     private func scan(path:String,size:UInt64,state:inout FileState,interval:DateInterval) throws {
         let file = try FileHandle(forReadingFrom:URL(fileURLWithPath:path)); defer {try? file.close()}
         try file.seek(toOffset:state.offset)
@@ -110,6 +144,8 @@ final class LocalDailyTokenReader {
             throw PetFailure(message:"本机用量事件缺少有效时间。")
         }
         guard timestamp >= interval.start && timestamp < interval.end else {return}
+        // 分叉保留原事件时间；创建前的继承事件不计入当前供应商。
+        if selectedProvider != nil,let created = state.source.createdAt,timestamp < created {return}
         guard let increment else {throw PetFailure(message:"本机用量事件缺少请求计数。")}
         guard increment.total > 0 else {return}
         guard let turn = state.turn else {throw PetFailure(message:"本机用量事件缺少轮次标识。")}

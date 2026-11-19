@@ -24,10 +24,12 @@ final class QuotaCoordinator {
         }
     }
     private let pet:PetController, connection:CodexConnection
+    private let directory:() -> String?
     private let isClosing:() -> Bool
     private let localUsage = LocalDailyTokenReader()
     private var quotaSerial = 0, quotaRequestInFlight = false
     private var quotaAccount:[String:Any]?
+    private var apiProvider:APIProviderIdentity?
     private var quotaValue:Result<[String:Any],Error>?
     private var dailyUsage = DailyTokenUsage.loading
     private var presented = false, localUsageRequested = false
@@ -35,8 +37,8 @@ final class QuotaCoordinator {
     private var cachedAt:Date?
     private var cacheGeneration = 0
     private var preferencesObserver:NSObjectProtocol?
-    init(pet:PetController,connection:CodexConnection,isClosing:@escaping () -> Bool) {
-        self.pet = pet; self.connection = connection; self.isClosing = isClosing
+    init(pet:PetController,connection:CodexConnection,directory:@escaping () -> String?,isClosing:@escaping () -> Bool) {
+        self.pet = pet; self.connection = connection; self.directory = directory; self.isClosing = isClosing
         preferencesObserver = NotificationCenter.default.addObserver(forName:PetPreferences.didChange,object:pet.preferences,queue:.main) { [weak self] note in
             let keys = note.userInfo?["keys"] as? [String] ?? []
             guard keys.contains("quotaCacheEnabled") || keys.contains("quotaCacheSeconds"),let self else {return}
@@ -47,7 +49,7 @@ final class QuotaCoordinator {
         if let preferencesObserver {NotificationCenter.default.removeObserver(preferencesObserver)}
     }
     func cancel() {
-        quotaSerial += 1; quotaRequestInFlight = false; quotaAccount = nil; quotaValue = nil
+        quotaSerial += 1; quotaRequestInFlight = false; quotaAccount = nil; apiProvider = nil; quotaValue = nil
         cachedQuota = nil; cachedAt = nil; cacheGeneration += 1
         if pet.quotaActive && pet.bubble.kind.hasPrefix("quota") {pet.bubble.hide()}
         pet.quotaActive = false
@@ -56,7 +58,7 @@ final class QuotaCoordinator {
     func query(forceRefresh:Bool = false) {
         guard !(quotaRequestInFlight && pet.quotaActive) else {return}
         quotaRequestInFlight = true; pet.quotaActive = true; quotaSerial += 1; let serial = quotaSerial
-        quotaAccount = nil; quotaValue = nil; cachedAt = nil; dailyUsage = .loading; presented = false; localUsageRequested = false
+        quotaAccount = nil; apiProvider = nil; quotaValue = nil; cachedAt = nil; dailyUsage = .loading; presented = false; localUsageRequested = false
         let cacheGeneration = self.cacheGeneration
         if forceRefresh {cachedQuota = nil}
         if pet.dock == nil {pet.play(pet.catalog.quotaAnimation,"quota")}
@@ -65,6 +67,30 @@ final class QuotaCoordinator {
             guard let self else{return}
             if let error {self.quotaResult(serial,.failure(error));return}
             guard serial == self.quotaSerial, self.pet.quotaActive, !self.isClosing() else {return}
+            self.readAPIProvider(serial) { provider in
+                guard serial == self.quotaSerial,self.pet.quotaActive,!self.isClosing() else {return}
+                if let provider {
+                    self.apiProvider = provider
+                    self.quotaResult(serial,.success([:]))
+                    return
+                }
+                self.continueSubscriptionQuery(serial,cacheGeneration:cacheGeneration,forceRefresh:forceRefresh)
+            }
+        }
+    }
+    private func readAPIProvider(_ serial:Int,_ completion:@escaping (APIProviderIdentity?) -> Void) {
+        var params:[String:Any] = ["includeLayers":false]
+        if let directory = directory()?.trimmingCharacters(in:.whitespacesAndNewlines),!directory.isEmpty {params["cwd"] = directory}
+        connection.call("config/read",params) { result in
+            guard serial == self.quotaSerial else {return}
+            guard case .success(let value) = result,let config = value["config"] as? [String:Any] else {
+                completion(nil);return
+            }
+            completion(APIProviderDirectory.thirdParty(in:config))
+        }
+    }
+    private func continueSubscriptionQuery(_ serial:Int,cacheGeneration:Int,forceRefresh:Bool) {
+        guard serial == quotaSerial,pet.quotaActive,!isClosing() else {return}
             if !forceRefresh,let cached = self.freshCache() {
                 // 只复用同一连接、同一账号的额度；不读取登录文件或凭证。
                 self.connection.call("account/read",["refreshToken":false]) { [weak self] result in
@@ -82,7 +108,6 @@ final class QuotaCoordinator {
                     }
                 }
             } else {self.requestQuota(serial,cacheGeneration:cacheGeneration)}
-        }
     }
     private func freshCache() -> CachedQuota? {
         guard pet.preferences.bool("quotaCacheEnabled"),let cachedQuota,connection.isConnected,
@@ -100,7 +125,7 @@ final class QuotaCoordinator {
             switch result {
             case .success(let snapshot):
                 self.quotaAccount = snapshot.account
-                if self.pet.preferences.bool("quotaCacheEnabled"),cacheGeneration == self.cacheGeneration,
+                if self.apiProvider == nil,self.pet.preferences.bool("quotaCacheEnabled"),cacheGeneration == self.cacheGeneration,
                    connectionGeneration == self.connection.connectionGeneration,snapshot.account != nil {
                     self.cachedQuota = CachedQuota(snapshot:snapshot,connectionGeneration:connectionGeneration)
                 }
@@ -119,7 +144,7 @@ final class QuotaCoordinator {
         DispatchQueue.main.async { [weak self] in
             guard let self,serial == self.quotaSerial,self.pet.quotaActive,!self.isClosing(),
                   self.pet.bubble.visible,self.pet.bubble.kind == "quota" else {return}
-            self.localUsage.query { [weak self] usage in
+            self.localUsage.query(provider:self.apiProvider?.id) { [weak self] usage in
                 guard let self,serial == self.quotaSerial,self.pet.quotaActive,!self.isClosing() else {return}
                 self.dailyUsage = usage; self.render(serial)
             }
@@ -131,13 +156,19 @@ final class QuotaCoordinator {
         if presented && (!pet.bubble.visible || pet.bubble.kind != "quota") {return}
         var overview:QuotaOverview
         var failure:AppFailure?
-        switch result {
-        case .success(let value):overview = QuotaPresentation.overview(value,account:quotaAccount)
-        case .failure(let error):
-            overview = QuotaPresentation.unavailable(account:quotaAccount)
-            failure = AppFailure.codex(error.localizedDescription)
+        if let apiProvider {
+            overview = QuotaPresentation.api(apiProvider,usage:dailyUsage)
+        } else {
+            switch result {
+            case .success(let value):overview = QuotaPresentation.overview(value,account:quotaAccount)
+            case .failure(let error):
+                overview = QuotaPresentation.unavailable(account:quotaAccount)
+                failure = AppFailure.codex(error.localizedDescription)
+            }
         }
-        overview.rows.append(QuotaRow(title:"今日用量",value:dailyUsage.value,detail:dailyUsage.detail,remaining:nil,retry:dailyUsage.failed,wrapsValue:true,loading:dailyUsage.isLoading,usage:dailyUsage.usage,subtitle:"（本机日志）"))
+        if apiProvider == nil {
+            overview.rows.append(QuotaRow(title:"今日用量",value:dailyUsage.value,detail:dailyUsage.detail,remaining:nil,retry:dailyUsage.failed,wrapsValue:true,loading:dailyUsage.isLoading,usage:dailyUsage.usage,subtitle:"（本机日志）"))
+        }
         if pet.bubble.kind != "quota" {pet.say("Codex 额度",body:" ",kind:"quota")}
         let preserveScroll = presented
         presented = true

@@ -147,9 +147,9 @@ enum DesktopHistoryReader {
     static func read(excluded: Set<String>, watched: [PublicSnapshot], additionalThreads:Set<String> = []) throws -> [PublicSnapshot] {
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
         let state = try ReadDatabase(root+"/state_5.sqlite"), history = try ReadDatabase(root+"/thread_history_1.sqlite")
-        var threads = try state.rows("SELECT id,rollout_path,COALESCE(NULLIF(TRIM(name),''),title) AS title,cwd,history_mode FROM threads WHERE archived=0 AND updated_at>=? AND (thread_source='user' OR thread_source IS NULL) AND (source IS NULL OR source NOT LIKE '%subagent%') ORDER BY updated_at DESC LIMIT 40",[String(Int(Date().timeIntervalSince1970)-86400)])
+        var threads = try state.rows("SELECT id,rollout_path,COALESCE(NULLIF(TRIM(name),''),title) AS title,cwd,history_mode,model_provider FROM threads WHERE archived=0 AND updated_at>=? AND (thread_source='user' OR thread_source IS NULL) AND (source IS NULL OR source NOT LIKE '%subagent%') ORDER BY updated_at DESC LIMIT 40",[String(Int(Date().timeIntervalSince1970)-86400)])
         for logical in Set(watched.map{$0.logical}).union(additionalThreads) where !threads.contains(where:{$0["id"] == logical}) {
-            threads += try state.rows("SELECT id,rollout_path,COALESCE(NULLIF(TRIM(name),''),title) AS title,cwd,history_mode FROM threads WHERE id=?",[logical])
+            threads += try state.rows("SELECT id,rollout_path,COALESCE(NULLIF(TRIM(name),''),title) AS title,cwd,history_mode,model_provider FROM threads WHERE id=?",[logical])
         }
         let pattern = try NSRegularExpression(pattern:"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
         var result = [PublicSnapshot]()
@@ -258,7 +258,7 @@ enum DesktopHistoryReader {
                 if !activeStatuses.contains(turn["status"] ?? "") {attention = nil; activity = nil}
                 let step = activity?.text ?? ""
                 alert = attention?.body ?? ""
-                result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion))
+                result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion,modelProvider:thread["model_provider"]))
                 result[result.count-1].agentMessages = agentMessages
                 if !activeStatuses.contains(turn["status"] ?? "") {
                     do {

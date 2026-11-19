@@ -16,7 +16,10 @@ final class CodexConnection {
     private var pending = [Int:PendingCall]()
     private var waiting = [(Error?) -> Void]()
     private var ready = false
-    private var loadedThreads = Set<String>()
+    struct PreparedThread {
+        let id:String, provider:String?, model:String?, effort:String?
+    }
+    private var loadedThreads = [String:PreparedThread]()
     private var closing = false
     private var generation = 0
     private var expiration: Timer?
@@ -183,10 +186,10 @@ final class CodexConnection {
         } catch { fail(error,stage:"启动子进程") }
     }
     // 同一服务进程内复用已加载的会话；恢复只用于本次连接尚未加载的历史会话。
-    func prepareThread(_ id:String?,params:[String:Any],completion:@escaping (Result<String,Error>) -> Void) {
-        if let id,loadedThreads.contains(id) {
+    func prepareThread(_ id:String?,params:[String:Any],completion:@escaping (Result<PreparedThread,Error>) -> Void) {
+        if let id,let prepared = loadedThreads[id] {
             TerminalMonitor.active?.write(.server,"复用已加载会话  ·  会话#"+TerminalMonitor.tag(id))
-            completion(.success(id)); return
+            completion(.success(prepared)); return
         }
         var params = params
         if let id {params["threadId"] = id}
@@ -194,11 +197,13 @@ final class CodexConnection {
             switch result {
             case .failure(let error): completion(.failure(error))
             case .success(let value):
-                guard let thread = (value["thread"] as? [String:Any])?["id"] as? String,!thread.isEmpty else {
+                guard let thread = value["thread"] as? [String:Any],let id = thread["id"] as? String,!id.isEmpty else {
                     completion(.failure(CodexProtocol.Failure.malformed("缺少会话 ID"))); return
                 }
-                self?.loadedThreads.insert(thread)
-                completion(.success(thread))
+                let prepared = PreparedThread(id:id,provider:value["modelProvider"] as? String ?? thread["modelProvider"] as? String,
+                    model:value["model"] as? String,effort:value["reasoningEffort"] as? String)
+                self?.loadedThreads[id] = prepared
+                completion(.success(prepared))
             }
         }
     }
@@ -251,7 +256,7 @@ final class CodexConnection {
                 if let id = value["id"] {reject(id,error.localizedDescription)} else {fail(error)}
                 return
             }
-            if method == "thread/closed",let thread = params["threadId"] as? String {loadedThreads.remove(thread)}
+            if method == "thread/closed",let thread = params["threadId"] as? String {loadedThreads.removeValue(forKey:thread)}
             if let id = value["id"] { request(id,method,params) }
             else {TerminalMonitor.active?.serverEvent(method,params,connection:generation); event(method,params)}
         } else if let id = value["id"] as? Int {

@@ -9,10 +9,11 @@ final class QuotaTokenUsageView:NSView {
     private let detail = SelectableRichText(frame:.zero)
     private let scale:CGFloat, expanded:Bool
     var onToggle:() -> Void = {}
-    init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat) {
+    init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat,headingText:String = "今日用量") {
         self.scale = scale; self.expanded = expanded
         super.init(frame:.zero)
         autoresizesSubviews = false
+        heading.stringValue = headingText
         let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
         heading.font = .systemFont(ofSize:12*fontScale,weight:.medium); heading.textColor = .labelColor
         source.font = .systemFont(ofSize:11*fontScale); source.textColor = .labelColor
@@ -21,7 +22,7 @@ final class QuotaTokenUsageView:NSView {
         disclosure.baseFont = amountFont
         disclosure.chevronTint = primaryTextColor.withAlphaComponent(0.82)
         disclosure.expanded = expanded
-        disclosure.accessibilityTitle = "今日 Token 明细"
+        disclosure.accessibilityTitle = headingText+" Token 明细"
         disclosure.attributedTitle = NSAttributedString(string:TokenUsage.amount(usage.total),attributes:[.font:amountFont,.foregroundColor:primaryTextColor])
         disclosure.onToggle = { [weak self] in self?.onToggle() }
         detail.isHidden = !expanded

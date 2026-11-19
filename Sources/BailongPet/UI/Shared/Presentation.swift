@@ -99,7 +99,10 @@ struct QuotaOverview {
     var rows: [QuotaRow]
     var notice: String?
     var management:SubscriptionManagement = .personal
+    var apiProvider:APIProviderIdentity? = nil
+    var usageHeading:String = "今日用量"
     var subscriptionHeading: String {
+        if let apiProvider {return apiProvider.heading}
         if plan == "Free" {return "ChatGPT 免费用户"}
         if management == .api || management == .bedrock || management == .gcp {return "计费方式 · "+plan}
         return "ChatGPT 订阅 · "+plan
@@ -243,6 +246,12 @@ enum QuotaPresentation {
     }
     static func unavailable(account: [String:Any]?) -> QuotaOverview {
         QuotaOverview(plan:plan(nil,account:account),rows:[QuotaRow(title:"使用额度",value:"暂时无法获取",detail:emptyMessage(account),remaining:nil)],notice:nil,management:.forAccount(account,plan:plan(nil,account:account)))
+    }
+    static func api(_ provider:APIProviderIdentity,usage:DailyTokenUsage) -> QuotaOverview {
+        QuotaOverview(plan:provider.name,rows:[
+            QuotaRow(title:"当前 API 今日用量",value:usage.value,detail:usage.detail,remaining:nil,
+                retry:usage.failed,wrapsValue:true,loading:usage.isLoading,usage:usage.usage,subtitle:"（本机日志）")
+        ],apiProvider:provider,usageHeading:"当前 API 今日用量")
     }
 }
 

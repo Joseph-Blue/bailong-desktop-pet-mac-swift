@@ -9,8 +9,12 @@ enum ModelPresentation {
             index == 0 ? "GPT" : part.prefix(1).uppercased()+part.dropFirst()
         }.joined(separator:"-")
     }
-    static func summary(model:String,displayName:String? = nil,effort:String) -> String {
-        name(model,displayName:displayName)+" · "+effort
+    static func provider(_ id:String?,name:String? = nil) -> String? {
+        if let name,!name.isEmpty {return name}
+        return id == "openai" ? "OpenAI" : id
+    }
+    static func summary(model:String,displayName:String? = nil,effort:String,provider:String? = nil) -> String {
+        [provider,name(model,displayName:displayName),effort].compactMap {$0}.joined(separator:" · ")
     }
 }
 
@@ -23,6 +27,8 @@ class ModelSummaryButton:NSButton {
         title = text
         setAccessibilityValue((lightning ? "快速模式 · " : "")+text)
         if lightning {applyLightning(to:text)}
+        invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
     }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

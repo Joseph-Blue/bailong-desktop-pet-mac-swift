@@ -34,7 +34,17 @@ final class ChatModelSettings {
     }
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
-    private var configuredProvider = "openai", configuredServiceTier:String?
+    private(set) var configuredProvider:String?
+    private var configuredServiceTier:String?, providerName:String?
+    private weak var conversation:Conversation?
+    var providerTitle:String? {
+        let id = conversation?.modelProvider ?? configuredProvider
+        return ModelPresentation.provider(id,name:id == configuredProvider ? providerName : nil)
+    }
+    var providerMismatch:Bool {
+        guard let original = conversation?.modelProvider,let configuredProvider else {return false}
+        return original != configuredProvider
+    }
     private(set) var selectedFast:Bool?
     var supportsFastMode:Bool {configuredProvider == "openai" && currentModel?.fastTier != nil}
     var fastMode:Bool {
@@ -48,7 +58,9 @@ final class ChatModelSettings {
     private(set) var selectedModel:String?, selectedEffort:String?
     private var selectionKey:String?
     private var selections = [String:(model:String?,effort:String?,fast:Bool?)]()
-    func activate(_ key:String) {
+    func activate(_ conversation:Conversation) {
+        self.conversation = conversation
+        let key = conversation.key
         guard selectionKey != key else {return}
         if let selectionKey {selections[selectionKey] = (selectedModel,selectedEffort,selectedFast)}
         selectionKey = key
@@ -56,7 +68,7 @@ final class ChatModelSettings {
         selectedModel = choice.0; selectedEffort = choice.1; selectedFast = choice.2
         notify()
     }
-    func clearSelections() {selections.removeAll(); selectionKey = nil}
+    func clearSelections() {selections.removeAll(); selectionKey = nil; conversation = nil}
     func forget(_ key:String) {selections.removeValue(forKey:key)}
     @objc private func preferencesChanged(_ note:Notification) {
         guard (note.userInfo?["keys"] as? [String])?.contains("petChatFastMode") == true else {return}
@@ -68,12 +80,21 @@ final class ChatModelSettings {
         guard !enabled || supportsFastMode else {return}
         selectedFast = enabled; defaults.set(enabled,forKey:"petChatFastMode"); notify()
     }
-    var currentModelID: String? {selectedModel ?? configuredModel ?? models.first(where:{$0.isDefault})?.model}
-    var currentModel: ChatModel? {models.first(where:{$0.model == currentModelID})}
+    var currentModelID: String? {
+        if providerMismatch {return recordedTurn?.model}
+        return modelOverride ?? configuredModel ?? models.first(where:{$0.isDefault})?.model
+    }
+    private var recordedTurn:Turn? {conversation?.turns.last(where:{$0.id != nil})}
+    private var modelOverride:String? {
+        guard let selectedModel else {return nil}
+        return configuredProvider == "openai" || models.contains(where:{$0.model == selectedModel}) ? selectedModel : nil
+    }
+    var currentModel: ChatModel? {providerMismatch ? nil : models.first(where:{$0.model == currentModelID})}
     var supportedEfforts: [ChatModel.Effort] {currentModel?.supportedReasoningEfforts ?? []}
     var currentEffort: String? {
-        guard let model = currentModel else {return nil}
-        let preferred = selectedEffort ?? (selectedModel == nil ? configuredEffort : nil)
+        if providerMismatch {return recordedTurn?.effort}
+        guard let model = currentModel else {return modelOverride == nil ? configuredEffort : nil}
+        let preferred = selectedEffort ?? (modelOverride == nil ? configuredEffort : nil)
         if let preferred, supportedEfforts.contains(where:{$0.reasoningEffort == preferred}) {return preferred}
         if supportedEfforts.contains(where:{$0.reasoningEffort == model.defaultReasoningEffort}) {return model.defaultReasoningEffort}
         return supportedEfforts.first?.reasoningEffort
@@ -82,7 +103,7 @@ final class ChatModelSettings {
     static func effortName(_ raw: String) -> String {
         ["none":"无","minimal":"极低","low":"轻度","medium":"中","high":"高","xhigh":"极高","max":"Max","ultra":"Ultra","persistent":"持续"][raw] ?? raw
     }
-    var effortTitle: String {currentEffort.map(Self.effortName) ?? "不可调"}
+    var effortTitle: String {currentEffort.map(Self.effortName) ?? (providerMismatch ? "未记录" : "不可调")}
     var effortExplanation: String {
         guard let effort = currentEffort else {return "跟随 Codex 的模型与推理强度设置。"}
         let descriptions = ["none":"直接作答，不额外展开推理。", "minimal":"尽量减少思考，适合简单任务。",
@@ -102,16 +123,15 @@ final class ChatModelSettings {
         selectedModel = nil; selectedEffort = nil; selectedFast = nil
         notify(); onLoad(true)
     }
-    var title: String {
-        let name = selectedModel == nil ? defaultTitle : currentModel?.displayName ?? selectedModel!
-        return name+" · "+effortTitle
-    }
     func setLoading() {loading = true; error = nil; notify()}
-    func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?, configuredProvider:String = "openai", configuredServiceTier:String? = nil) {
-        self.models = models.filter {!$0.hidden}; self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
-        self.configuredProvider = configuredProvider; self.configuredServiceTier = configuredServiceTier
-        if selectedFast == nil {defaults.set(fastMode,forKey:"petChatFastMode")}
-        if let effort = selectedEffort, !supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
+    func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?, configuredProvider:String = "openai", configuredServiceTier:String? = nil,providerName:String? = nil) {
+        let visibleModels = models.filter {!$0.hidden}
+        if configuredProvider != "openai",let configuredModel,!visibleModels.contains(where:{$0.model == configuredModel}) {self.models = []}
+        else {self.models = visibleModels}
+        self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
+        self.configuredProvider = configuredProvider; self.configuredServiceTier = configuredServiceTier; self.providerName = providerName
+        if selectedFast == nil,configuredProvider == "openai" {defaults.set(fastMode,forKey:"petChatFastMode")}
+        if configuredProvider == "openai",!providerMismatch,let effort = selectedEffort,!supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
             defaults.removeObject(forKey:"petChatEffort")
             selectedEffort = nil
         }
@@ -133,7 +153,10 @@ final class ChatModelSettings {
         selectedEffort = effort; notify()
     }
     func parameters() throws -> [String:Any] {
-        if let selectedModel, !models.contains(where:{$0.model == selectedModel}) {
+        if providerMismatch {
+            throw PetFailure(message:"此对话使用 \(providerTitle ?? "原供应商")。请在 Codex 切回该供应商并刷新模型，或新建桌宠对话。")
+        }
+        if let modelOverride, !models.contains(where:{$0.model == modelOverride}) {
             throw PetFailure(message:"所选模型暂不可用，请打开模型选择器刷新或选择其他模型。")
         }
         var result = [String:Any]()
@@ -170,9 +193,11 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     }
     required init?(coder:NSCoder) {fatalError()}
     @objc private func updateTitle() {
-        setSummary(ModelPresentation.summary(model:settings.currentModelID ?? "未获取模型",displayName:settings.currentModel?.displayName,effort:settings.effortTitle),lightning:settings.fastMode)
+        let summary = ModelPresentation.summary(model:settings.currentModelID ?? "未获取模型",displayName:settings.currentModel?.displayName,
+            effort:settings.effortTitle,provider:settings.providerTitle)
+        setSummary(summary,lightning:settings.fastMode)
         let fastMode = settings.fastMode
-        setHoverHelp(settings.title+(fastMode ? " · 1.5倍速度" : "")) { [weak self] in
+        setHoverHelp(summary+(fastMode ? " · 1.5倍速度" : "")) { [weak self] in
             fastMode || self?.hasTruncatedTitle == true
         }
     }
@@ -261,7 +286,7 @@ final class ModelSelectorContent: NSViewController {
         picker.removeAllItems(); picker.addItem(withTitle:settings.defaultTitle)
         for model in settings.models {picker.addItem(withTitle:model.displayName); picker.lastItem?.representedObject = model.model}
         if let model = settings.selectedModel, let index = settings.models.firstIndex(where:{$0.model == model}) {picker.selectItem(at:index+1)}
-        picker.isEnabled = !settings.loading
+        picker.isEnabled = !settings.loading && !settings.providerMismatch
         options = settings.supportedEfforts
         slider.isHidden = options.count < 2
         slider.minValue = 0; slider.maxValue = Double(max(1,options.count-1)); slider.numberOfTickMarks = options.count
@@ -269,8 +294,9 @@ final class ModelSelectorContent: NSViewController {
         slider.integerValue = options.firstIndex(where:{$0.reasoningEffort == settings.currentEffort}) ?? 0
         effortMarks.forEach {$0.removeFromSuperview()}
         effortMarks = options.map {option in
-            let mark = NSTextField(wrappingLabelWithString:ChatModelSettings.effortName(option.reasoningEffort))
+            let mark = NSTextField(labelWithString:ChatModelSettings.effortName(option.reasoningEffort))
             mark.font = .systemFont(ofSize:11*scale); mark.alignment = .center
+            mark.usesSingleLineMode = true; mark.maximumNumberOfLines = 1; mark.lineBreakMode = .byClipping
             mark.textColor = option.reasoningEffort == settings.currentEffort ? AppAccent.color : .secondaryLabelColor
             body.addSubview(mark); return mark
         }
@@ -284,6 +310,7 @@ final class ModelSelectorContent: NSViewController {
         speedSwitch.hoverHelp = speedHelp
         if settings.loading {explanation.stringValue = "正在读取可用模型…"}
         else if let error = settings.error {explanation.stringValue = "模型读取失败："+error}
+        else if settings.providerMismatch {explanation.stringValue = "请在 Codex 切回原供应商并刷新模型，或新建桌宠对话。"}
         else {explanation.stringValue = options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation}
         explanation.setHoverHelp(settings.error) { [weak explanation] in explanation?.hasTruncatedText == true }
         picker.setHoverHelp(picker.title) { [weak picker] in picker?.hasTruncatedTitle == true }
@@ -343,11 +370,17 @@ final class ModelSelectorContent: NSViewController {
             var marksHeight:CGFloat = 18*scale
             for (index,mark) in effortMarks.enumerated() {
                 let tick = slider.rectOfTickMark(at:index)
-                let previous = index == 0 ? CGFloat(0) : (slider.rectOfTickMark(at:index-1).midX+tick.midX)/2
-                let next = index == effortMarks.count-1 ? contentWidth : (tick.midX+slider.rectOfTickMark(at:index+1).midX)/2
-                let width = max(1,next-previous-4*scale)
+                let width = min(contentWidth,max(1,ceil((mark.stringValue as NSString).size(withAttributes:[.font:mark.font!]).width)+8*scale))
+                let x:CGFloat
+                if index == 0 {
+                    x = margin; mark.alignment = .left
+                } else if index == effortMarks.count-1 {
+                    x = documentWidth-margin-width; mark.alignment = .right
+                } else {
+                    x = margin+tick.midX-width/2; mark.alignment = .center
+                }
                 let height = textHeight(mark,width:width,minimum:18*scale)
-                mark.frame = NSRect(x:margin+previous+2*scale,y:y+32*scale,width:width,height:height)
+                mark.frame = NSRect(x:max(margin,min(x,documentWidth-margin-width)),y:y+32*scale,width:width,height:height)
                 mark.isHidden = false; marksHeight = max(marksHeight,height)
             }
             y += 32*scale+marksHeight+gap

@@ -6,6 +6,25 @@ enum AppIcons {
         return "dollarsign"
     }
 
+    // 第三方供应商图标来自各自开放平台，缺失时保持纯文字。
+    static let deepSeek:NSImage? = bundledProviderIcon("deepseek-logo.png","DeepSeek")
+    static let xai:NSImage? = bundledProviderIcon("xai-logo.png","xAI",template:true)
+    static let mistral:NSImage? = bundledProviderIcon("mistral-logo.png","Mistral")
+    static let kimi:NSImage? = bundledProviderIcon("kimi-logo.png","Kimi")
+    static let zhipu:NSImage? = bundledProviderIcon("zhipu-logo.png","智谱 GLM")
+
+    static func apiProvider(_ id:String?) -> NSImage? {
+        switch id {
+        case "openai":return openAI
+        case "deepseek":return deepSeek
+        case "xai":return xai
+        case "mistral":return mistral
+        case "kimi":return kimi
+        case "zhipu":return zhipu
+        default:return nil
+        }
+    }
+
     // 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png；原图随本地资源打包。
     static let openAI: NSImage? = {
         if let image = NSImage(contentsOf:Paths.resources.appendingPathComponent("openai-logo.png")) {
@@ -22,6 +41,12 @@ enum AppIcons {
         }
         return nil
     }()
+    private static func bundledProviderIcon(_ file:String,_ name:String,template:Bool = false) -> NSImage? {
+        guard let image = NSImage(contentsOf:Paths.resources.appendingPathComponent(file)) else {return nil}
+        image.size = NSSize(width:18,height:18); image.isTemplate = template
+        image.accessibilityDescription = name
+        return image
+    }
 
     static var application: NSImage? {NSImage(contentsOf:Paths.resources.appendingPathComponent("BailongPet.icns"))}
     // 托盘使用简化头像；设置与历史使用保留花饰细节的头像。

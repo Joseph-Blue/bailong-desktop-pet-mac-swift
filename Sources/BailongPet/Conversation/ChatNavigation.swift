@@ -62,7 +62,7 @@ extension ChatController {
     func loadModels(entry:ChatEntry,force:Bool = false) {
         let conversation = entry == .composer ? composerSelection : selected
         guard !closing,let conversation,!conversation.external else {return}
-        let settings = ui.modelSettings(entry); settings.activate(conversation.key)
+        let settings = ui.modelSettings(entry); settings.activate(conversation)
         modelLoaders[entry]?.load(directory:conversation.cwd,settings:settings,force:force)
     }
 }

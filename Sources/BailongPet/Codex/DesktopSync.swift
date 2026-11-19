@@ -22,6 +22,7 @@ struct PublicSnapshot {
     var activity:TaskActivity?
     var hasSensitiveInput = false
     var hasSensitiveQuestion = false
+    var modelProvider:String?
     var agentMessages = [PublicAgentMessage]()
     var fileEdits = [FileEditSummary]()
     var tokenUsage:TokenUsage?
@@ -205,6 +206,9 @@ final class DesktopSync {
                 if chat.store.recordsAutomatically,!chat.store.isReadOnly,
                    let conversation = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical}),
                    let turn = conversation.turns.first(where:{$0.id == value.turn}) {
+                    if let provider = value.modelProvider,conversation.modelProvider != provider {
+                        conversation.modelProvider = provider; changed = true
+                    }
                     if chat.store.canEnrichInput(turn,in:conversation),let input = value.receivedText,turn.input.isEmpty,!input.isEmpty {turn.input = input; changed = true}
                     let enriched = GeneratedImageLink.appending(value.agentMessages.filter(\.isImage).map(\.text),to:turn.messages)
                     if enriched != turn.messages {turn.messages = enriched; changed = true}
@@ -219,6 +223,9 @@ final class DesktopSync {
             var c = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical})
             if c == nil {c = chat.store.create(cwd:value.cwd,external:true); c!.title = value.title; c!.threadID = value.logical}
             let conversation = c!; conversation.historyMode = value.historyMode
+            if let provider = value.modelProvider,conversation.modelProvider != provider {
+                conversation.modelProvider = provider; changed = true
+            }
             if chat.store.recordsAutomatically && conversation.localTitle == nil && !value.title.isEmpty && conversation.title != value.title {conversation.title = value.title; changed = true}
             var t = conversation.turns.first(where:{$0.id == value.turn})
             if t == nil {t = Turn(); t!.id = value.turn; t!.owned = false; t!.date = Date(timeIntervalSince1970:value.started); conversation.turns.append(t!); changed = true}

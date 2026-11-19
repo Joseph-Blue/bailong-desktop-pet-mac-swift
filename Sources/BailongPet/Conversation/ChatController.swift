@@ -28,7 +28,9 @@ final class ChatController {
     var saveTimer: Timer?
     private var shutdownTimer: Timer?
     lazy var requestCoordinator = RequestCoordinator(chat:self)
-    private lazy var quotaCoordinator = QuotaCoordinator(pet:pet,connection:connection,isClosing:{ [unowned self] in self.closing })
+    private lazy var quotaCoordinator = QuotaCoordinator(pet:pet,connection:connection,
+        directory:{ [unowned self] in self.composerSelection?.cwd ?? self.selected.cwd },
+        isClosing:{ [unowned self] in self.closing })
     func quota() {quotaCoordinator.query()}
     lazy var modelLoaders:[ChatEntry:ChatModelLoader] = [.composer:ChatModelLoader(connection:connection),.history:ChatModelLoader(connection:connection)]
     var onFinishedShutdown: (() -> Void)?
@@ -436,13 +438,13 @@ final class ChatController {
         let modelParams: [String:Any]
         do {modelParams = try settings.parameters()}
         catch {showError("请确认模型选择",error); return}
+        let configuredProvider = settings.configuredProvider
         ui.clearFailure()
         if unstartedConversations.contains(where:{$0 === c}) {
             unstartedConversations.removeAll {$0 === c}; store.conversations.append(c)
         }
         let turn = Turn(); turn.input = text; c.turns.append(turn)
         if c.turns.count == 1 && c.localTitle == nil { c.title = String(text.prefix(36)) }
-        turn.model = modelParams["model"] as? String; turn.effort = modelParams["effort"] as? String
         tokenAccumulator = TurnTokenAccumulator()
         running = (c,turn); cancelled = false; interruptInFlight = false; messagesState = TaskMessageAccumulator()
         reminderClock = TaskReminderClock(now:Date().timeIntervalSince1970)
@@ -457,16 +459,27 @@ final class ChatController {
             trace?.step("连接就绪，准备会话")
             var params: [String:Any] = ["cwd":c.cwd,"sandbox":"workspace-write","approvalPolicy":"on-request","approvalsReviewer":"user","developerInstructions":self.personalizedPersona]
             if let model = modelParams["model"] {params["model"] = model}
-            if c.threadID == nil {params["historyMode"] = "legacy"}
+            if c.threadID == nil {
+                params["historyMode"] = "legacy"
+                params["modelProvider"] = configuredProvider
+            }
             self.connection.prepareThread(c.threadID,params:params) { [weak self, weak turn] result in
                 guard let self, let turn, self.running?.1 === turn else{return}
                 switch result {
                 case .failure(let error):
                     trace?.step("准备会话失败  ·  "+TerminalMonitor.errorCode(error),.error)
                     self.finish("failed",error:error.localizedDescription)
-                case .success(let thread):
+                case .success(let prepared):
+                    let thread = prepared.id
                     c.threadID = thread
+                    if let provider = prepared.provider {c.modelProvider = provider}
                     if self.cancelled { self.finish("interrupted"); return }
+                    if let provider = c.modelProvider,let configuredProvider,provider != configuredProvider {
+                        self.finish("failed",error:"此对话使用 \(ModelPresentation.provider(provider) ?? provider)。请在 Codex 切回该供应商并刷新模型，或新建桌宠对话。")
+                        return
+                    }
+                    turn.model = modelParams["model"] as? String ?? prepared.model
+                    turn.effort = modelParams["effort"] as? String ?? (prepared.model == turn.model ? prepared.effort : nil)
                     var turnParams: [String:Any] = ["threadId":thread,"cwd":c.cwd,"input":[["type":"text","text":text]],"approvalPolicy":"on-request","approvalsReviewer":"user","summary":"concise","sandboxPolicy":["type":"workspaceWrite","writableRoots":[c.cwd],"networkAccess":false]]
                     turnParams.merge(modelParams) {_,selected in selected}
                     trace?.step("会话就绪，提交回复  ·  协议会话#"+TerminalMonitor.tag(thread))

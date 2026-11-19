@@ -269,7 +269,7 @@ final class ChatComposer: NSObject {
         conversationPicker.conversations = choices
         workspace.update(conversation:state.conversation,executing:state.executing,visible:composerVisible)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
-        composerInheritedSettings.update(settings:state.modelSettings,error:state.modelNote)
+        composerInheritedSettings.update(settings:state.modelSettings,provider:state.conversation?.modelProvider,error:state.modelNote)
         composerInheritedSettings.superview?.isHidden = !external || state.conversation == nil
         retrySettings.isHidden = state.desktopReady || state.modelNote == nil
         retrySettings.isEnabled = !state.sending

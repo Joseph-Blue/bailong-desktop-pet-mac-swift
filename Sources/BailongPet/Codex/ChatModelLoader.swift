@@ -7,7 +7,7 @@ final class ChatModelLoader {
     init(connection:CodexConnection) {self.connection = connection}
     func invalidate() {directory = nil; request = nil}
     func load(directory:String,settings:ChatModelSettings,force:Bool = false) {
-        guard force || self.directory != directory || (request == nil && settings.models.isEmpty) else {return}
+        guard force || self.directory != directory else {return}
         self.directory = directory
         let id = UUID(); request = id; settings.setLoading()
         func finish(_ result:Result<([ChatModel],[String:Any]),Error>) {
@@ -15,8 +15,10 @@ final class ChatModelLoader {
             self.request = nil
             switch result {
             case .success(let (models,config)):
+                let provider = config["model_provider"] as? String ?? "openai"
+                let providers = config["model_providers"] as? [String:[String:Any]]
                 settings.loaded(models,configuredModel:config["model"] as? String,configuredEffort:config["model_reasoning_effort"] as? String,
-                    configuredProvider:config["model_provider"] as? String ?? "openai",configuredServiceTier:config["service_tier"] as? String)
+                    configuredProvider:provider,configuredServiceTier:config["service_tier"] as? String,providerName:providers?[provider]?["name"] as? String)
             case .failure(let error): self.directory = nil; settings.failed(error)
             }
         }
@@ -34,7 +36,12 @@ final class ChatModelLoader {
                         let models = collected + (try JSONDecoder().decode([ChatModel].self,from:data))
                         if let next = value["nextCursor"] as? String {page(next,models); return}
                         self.connection.call("config/read",["includeLayers":false,"cwd":directory]) { response in
-                            finish(response.map {(models,$0["config"] as? [String:Any] ?? [:])})
+                            finish(response.flatMap { value in
+                                guard let config = value["config"] as? [String:Any] else {
+                                    return .failure(CodexProtocol.Failure.malformed("缺少工作区模型配置"))
+                                }
+                                return .success((models,config))
+                            })
                         }
                     } catch {finish(.failure(error))}
                 }

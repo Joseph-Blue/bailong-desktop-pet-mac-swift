@@ -1,6 +1,6 @@
 # 白龙桌宠Swift · Dev
 
-本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。开发版本为 [`0.8.1-rc.1`](VERSION)，应用源码和构建脚本已与 0.8.0 对齐。[下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)
+本分支（`joseph/dev`）维护白龙桌宠Swift 的开发源码、架构文档与构建资源。开发版本见 [VERSION](VERSION)。[下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest)
 
 本项目基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)（参考基线 `v0.5.1 / b102e73`），使用 Swift + AppKit 原生重写并独立维护。角色动画采用透明 HEVC（HEVC with Alpha）与 AVFoundation 解码，由 CPU／vImage 完成线性光缩放与色彩转换；界面采用原生 AppKit 分栏与液态玻璃材质。
 

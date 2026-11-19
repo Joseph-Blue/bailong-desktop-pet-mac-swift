@@ -325,8 +325,8 @@ final class Bubble {
         codexButton.keepsAccentWhenInactive = true
         retryButton = ActionButton("重试") {}; retryButton.keepsAccentWhenInactive = true; retryButton.emphasize(); retryButton.isHidden = true
         elapsedIcon.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"任务已处理时间")
-        elapsedIcon.contentTintColor = .secondaryLabelColor
-        elapsedLabel.alignment = .right; elapsedLabel.textColor = .secondaryLabelColor
+        elapsedIcon.contentTintColor = .labelColor
+        elapsedLabel.alignment = .right; elapsedLabel.textColor = .labelColor
         elapsedIcon.isHidden = true; elapsedLabel.isHidden = true
         taskProgress.isHidden = true; taskProgress.textColor = .secondaryLabelColor
         taskProgressIcon.isHidden = true
@@ -796,7 +796,7 @@ final class Bubble {
         return elapsedLabel.fittingSize.width+16*scale
     }
     private func setElapsedColor(_ status: String?) {
-        let color = status == "completed" ? StatusTextColor.green : ["failed","interrupted","cancelled","canceled"].contains(status ?? "") ? StatusTextColor.red : StatusTextColor.secondary
+        let color = taskFinishedAt == nil ? NSColor.labelColor : status == "completed" ? StatusTextColor.green : ["failed","interrupted","cancelled","canceled"].contains(status ?? "") ? StatusTextColor.red : StatusTextColor.secondary
         elapsedIcon.contentTintColor = color; elapsedLabel.textColor = color
     }
     private func layoutElapsed(in size: NSSize) {
@@ -905,7 +905,34 @@ final class Bubble {
             text.frame = NSRect(x:0,y:y,width:width,height:height); content.addSubview(text); y += height
             return height
         }
-        addText(overview.subscriptionHeading,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
+        func addProviderHeading(_ provider:APIProviderIdentity,font:NSFont) {
+            let iconSide = 18*scale
+            let icon = AppIcons.apiProvider(provider.catalogID)
+            let height = max(font.pointSize+8,iconSide)
+            let row = NSStackView()
+            row.orientation = .horizontal; row.alignment = .centerY; row.distribution = .fill
+            row.spacing = 6*scale
+            if let icon {
+                let image = NSImageView()
+                image.image = icon; image.imageScaling = .scaleProportionallyDown
+                image.contentTintColor = .labelColor
+                image.widthAnchor.constraint(equalToConstant:iconSide).isActive = true
+                image.heightAnchor.constraint(equalToConstant:iconSide).isActive = true
+                row.addArrangedSubview(image)
+            }
+            let text = label(provider.heading)
+            text.font = font; text.textColor = .labelColor
+            text.maximumNumberOfLines = 1; text.usesSingleLineMode = true; text.lineBreakMode = .byTruncatingTail
+            text.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+            row.addArrangedSubview(text)
+            row.frame = NSRect(x:0,y:y,width:width,height:height)
+            content.addSubview(row); y += height
+        }
+        if let provider = overview.apiProvider {
+            addProviderHeading(provider,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
+        } else {
+            addText(overview.subscriptionHeading,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
+        }
         if let cachedAt {
             addText("缓存 · 更新于 "+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale))
         }
@@ -927,7 +954,7 @@ final class Bubble {
                 let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
             }
             if let usage = row.usage {
-                let usageView = QuotaTokenUsageView(usage:usage,expanded:quotaUsageExpanded,scale:scale,fontScale:fontScale)
+                let usageView = QuotaTokenUsageView(usage:usage,expanded:quotaUsageExpanded,scale:scale,fontScale:fontScale,headingText:overview.usageHeading)
                 let height = usageView.arrange(width:width)
                 usageView.frame.origin.y = y; content.addSubview(usageView)
                 y += height+12*scale
@@ -1003,8 +1030,16 @@ final class Bubble {
         if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
         let actionFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
         let actionSymbol = NSImage.SymbolConfiguration(pointSize:11*fontScale,weight:.semibold)
-        let management = SubscriptionManagementButton(management:overview.management,font:actionFont)
-        management.symbolConfiguration = actionSymbol
+        let management:SubscriptionManagementButton? = overview.apiProvider == nil
+            ? SubscriptionManagementButton(management:overview.management,font:actionFont) : nil
+        management?.symbolConfiguration = actionSymbol
+        let providerPage:ActionButton? = overview.apiProvider.flatMap {provider in
+            guard let address = provider.pageURL,let url = URL(string:address) else {return nil}
+            let button = ActionButton(provider.pageTitle) {NSWorkspace.shared.open(url)}
+            button.font = actionFont
+            button.setAccessibilityLabel(provider.pageTitle)
+            return button
+        }
         let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
         if let refresh {
             refresh.font = actionFont
@@ -1014,12 +1049,15 @@ final class Bubble {
             refresh.keepsAccentWhenInactive = true
             refresh.emphasize()
         }
-        let managementSize = management.intrinsicContentSize, refreshSize = refresh?.intrinsicContentSize ?? .zero
-        let actionHeight = max(26*scale,managementSize.height,refreshSize.height)
+        let leading:NSView? = providerPage ?? management
+        let leadingSize = leading?.intrinsicContentSize ?? .zero, refreshSize = refresh?.intrinsicContentSize ?? .zero
+        let actionHeight = max(26*scale,leadingSize.height,refreshSize.height)
         let refreshWidth = min(width,refreshSize.width)
-        let managementWidth = max(0,min(managementSize.width,width-refreshWidth))
-        management.frame = NSRect(x:0,y:y,width:managementWidth,height:actionHeight)
-        content.addSubview(management)
+        let leadingWidth = max(0,min(leadingSize.width,width-refreshWidth-8*scale))
+        if let leading {
+            leading.frame = NSRect(x:0,y:y,width:leadingWidth,height:actionHeight)
+            content.addSubview(leading)
+        }
         if let refresh {
             refresh.frame = NSRect(x:width-refreshWidth,y:y,width:refreshWidth,height:actionHeight)
             content.addSubview(refresh)

@@ -254,7 +254,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         }
         guard needsRowLayout else {return}
         needsRowLayout = false
-        let textColor = task.active ? StatusTextColor.secondary : task.connectionFailed ? StatusTextColor.red : task.status == "completed" ? StatusTextColor.green : task.status == "failed" ? StatusTextColor.yellow : StatusTextColor.red
+        let textColor = task.active ? NSColor.labelColor : task.connectionFailed ? StatusTextColor.red : task.status == "completed" ? StatusTextColor.green : task.status == "failed" ? StatusTextColor.yellow : StatusTextColor.red
         elapsed.textColor = textColor; watch.contentTintColor = textColor; stateIcon.contentTintColor = textColor
         let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
         let headingY = bounds.height-h, metadataHeight = self.metadataHeight
