@@ -23,6 +23,7 @@ struct PublicSnapshot {
     var hasSensitiveInput = false
     var hasSensitiveQuestion = false
     var modelProvider:String?
+    var createdWithChatGPT = false
     var agentMessages = [PublicAgentMessage]()
     var fileEdits = [FileEditSummary]()
     var tokenUsage:TokenUsage?
@@ -200,11 +201,15 @@ final class DesktopSync {
             guard value.started > clearedBefore else {continue}
             if excluded.contains(value.logical) || excluded.contains(value.actual) {continue}
             let key = value.key, active = value.isLatest && activeStatuses.contains(value.status)
-            let previouslyFinished = chat.store.conversations.first(where:{$0.threadID == value.logical})?.turns.first(where:{$0.id == value.turn})?.finished == true
+            let existing = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical})
+            let previouslyFinished = existing?.turns.first(where:{$0.id == value.turn})?.finished == true
+            if let existing,value.createdWithChatGPT,existing.createdWithChatGPT != true {
+                existing.createdWithChatGPT = true; changed = true
+            }
             if tracked[key] == nil && !active && (initial || value.started < born || previouslyFinished) {
                 // 补齐扫描范围内已有历史的图片入口与文件摘要，不把旧任务重新弹出或新增为历史。
                 if chat.store.recordsAutomatically,!chat.store.isReadOnly,
-                   let conversation = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical}),
+                   let conversation = existing,
                    let turn = conversation.turns.first(where:{$0.id == value.turn}) {
                     if let provider = value.modelProvider,conversation.modelProvider != provider {
                         conversation.modelProvider = provider; changed = true
@@ -220,8 +225,11 @@ final class DesktopSync {
                 continue
             }
             if tracked[key] == nil && active && value.started < born-86400 {continue}
-            var c = chat.store.conversations.first(where:{$0.external && $0.threadID == value.logical})
-            if c == nil {c = chat.store.create(cwd:value.cwd,external:true); c!.title = value.title; c!.threadID = value.logical}
+            var c = existing
+            if c == nil {
+                c = chat.store.create(cwd:value.cwd,external:true); c!.title = value.title; c!.threadID = value.logical
+                if value.createdWithChatGPT {c!.createdWithChatGPT = true}
+            }
             let conversation = c!; conversation.historyMode = value.historyMode
             if let provider = value.modelProvider,conversation.modelProvider != provider {
                 conversation.modelProvider = provider; changed = true

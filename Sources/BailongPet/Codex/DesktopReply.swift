@@ -55,6 +55,7 @@ enum DesktopReply {
         let effort:String?
         let effortFromHistory:Bool
         var serviceTier:String? = nil
+        var modelProvider:String? = nil
     }
     struct PreparedConnection {
         let settings:Settings
@@ -75,7 +76,8 @@ enum DesktopReply {
                 let recordedEffort = liveEffort == nil ? try DesktopHistoryReader.recordedReasoningEffort(thread:thread,model:model) : nil
                 // read-model-settings v1 不返回速度；从同一 owner 的实时快照读取，不能按模型名推断。
                 let tier = try readServiceTier(connection,thread:thread,owner:target,deadline:min(deadline,Date().addingTimeInterval(3)))
-                return PreparedConnection(settings:Settings(model:model,effort:liveEffort ?? recordedEffort,effortFromHistory:recordedEffort != nil,serviceTier:tier),thread:thread,socket:connection,owner:target)
+                return PreparedConnection(settings:Settings(model:model,effort:liveEffort ?? recordedEffort,effortFromHistory:recordedEffort != nil,
+                    serviceTier:tier,modelProvider:settings["modelProvider"] as? String),thread:thread,socket:connection,owner:target)
             }
             DispatchQueue.main.async {completion(result)}
         }

@@ -35,11 +35,20 @@ final class ChatModelSettings {
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
     private(set) var configuredProvider:String?
-    private var configuredServiceTier:String?, providerName:String?
+    private var configuredServiceTier:String?, providerName:String?, configuredProviderIconID:String?
+    private var usesChatGPTAccount = false
     private weak var conversation:Conversation?
+    private var providerID:String? {conversation?.modelProvider ?? configuredProvider}
     var providerTitle:String? {
-        let id = conversation?.modelProvider ?? configuredProvider
+        let id = providerID
         return ModelPresentation.provider(id,name:id == configuredProvider ? providerName : nil)
+    }
+    var summaryProvider:String? {
+        ModelPresentation.provider(providerID,name:providerID == configuredProvider ? providerName : nil,usesChatGPTAccount:usesChatGPTAccount)
+    }
+    var providerIconID:String? {
+        guard let id = providerID,id != "openai" else {return nil}
+        return id == configuredProvider ? configuredProviderIconID ?? id : id
     }
     var providerMismatch:Bool {
         guard let original = conversation?.modelProvider,let configuredProvider else {return false}
@@ -124,18 +133,24 @@ final class ChatModelSettings {
         notify(); onLoad(true)
     }
     func setLoading() {loading = true; error = nil; notify()}
-    func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?, configuredProvider:String = "openai", configuredServiceTier:String? = nil,providerName:String? = nil) {
+    func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?, configuredProvider:String = "openai", configuredServiceTier:String? = nil,providerName:String? = nil,providerIconID:String? = nil) {
         let visibleModels = models.filter {!$0.hidden}
         if configuredProvider != "openai",let configuredModel,!visibleModels.contains(where:{$0.model == configuredModel}) {self.models = []}
         else {self.models = visibleModels}
         self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
+        if self.configuredProvider != configuredProvider {usesChatGPTAccount = false}
         self.configuredProvider = configuredProvider; self.configuredServiceTier = configuredServiceTier; self.providerName = providerName
+        configuredProviderIconID = providerIconID
         if selectedFast == nil,configuredProvider == "openai" {defaults.set(fastMode,forKey:"petChatFastMode")}
         if configuredProvider == "openai",!providerMismatch,let effort = selectedEffort,!supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
             defaults.removeObject(forKey:"petChatEffort")
             selectedEffort = nil
         }
         loading = false; error = nil; notify()
+    }
+    func setUsesChatGPTAccount(_ active:Bool) {
+        guard usesChatGPTAccount != active else {return}
+        usesChatGPTAccount = active; notify()
     }
     func failed(_ error: Error) {loading = false; self.error = error.localizedDescription; notify()}
     func chooseModel(_ model: String?) {
@@ -178,10 +193,7 @@ final class ChatModelSettings {
 final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     let settings: ChatModelSettings
     private let popover = NSPopover()
-    private var controls: ModelSelectorContent!
-    private var anchorWidth:NSLayoutConstraint?
-    private var restingHugging:NSLayoutConstraint.Priority?
-    var layoutWidth:CGFloat {anchorWidth?.constant ?? min(320,intrinsicContentSize.width.rounded(.up))}
+    var onSummaryChange:() -> Void = {}
     init(_ settings: ChatModelSettings) {
         self.settings = settings; super.init(frame:.zero)
         popover.delegate = self
@@ -194,19 +206,17 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     required init?(coder:NSCoder) {fatalError()}
     @objc private func updateTitle() {
         let summary = ModelPresentation.summary(model:settings.currentModelID ?? "未获取模型",displayName:settings.currentModel?.displayName,
-            effort:settings.effortTitle,provider:settings.providerTitle)
-        setSummary(summary,lightning:settings.fastMode)
+            effort:settings.effortTitle,provider:settings.summaryProvider)
         let fastMode = settings.fastMode
+        let changed = setSummary(summary,lightning:fastMode,providerIcon:AppIcons.apiProvider(settings.providerIconID))
         setHoverHelp(summary+(fastMode ? " · 1.5倍速度" : "")) { [weak self] in
             fastMode || self?.hasTruncatedTitle == true
         }
+        if changed {onSummaryChange()}
     }
     func closeChoices() {popover.performClose(nil)}
     func popoverDidClose(_ notification:Notification) {
-        anchorWidth?.isActive = false; anchorWidth = nil
-        if let restingHugging {setContentHuggingPriority(restingHugging,for:.horizontal)}
-        restingHugging = nil; invalidateIntrinsicContentSize()
-        popover.contentViewController = nil; controls = nil
+        popover.contentViewController = nil
     }
     func containsInteraction(at point: NSPoint, window: NSWindow?) -> Bool {
         guard popover.isShown else{return false}
@@ -216,13 +226,9 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     }
     @objc private func openChoices() {
         if popover.isShown {popover.performClose(nil); return}
-        // 弹窗展开时固定锚点宽度，档位标题变化不推动弹窗。关闭后恢复内容定宽。
-        restingHugging = contentHuggingPriority(for:.horizontal)
-        setContentHuggingPriority(.defaultLow,for:.horizontal)
-        anchorWidth = widthAnchor.constraint(equalToConstant:bounds.width); anchorWidth?.isActive = true
         settings.onLoad(false)
         let available = window?.screen?.visibleFrame.size ?? NSSize(width:1024,height:768)
-        controls = ModelSelectorContent(settings,fontSize:font?.pointSize ?? 13,
+        let controls = ModelSelectorContent(settings,fontSize:font?.pointSize ?? 13,
             maximumSize:NSSize(width:max(1,available.width-48),height:max(1,available.height-80)))
         controls.onResize = { [weak self] size in
             guard let self,self.popover.contentSize != size else {return}
@@ -230,7 +236,8 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
         }
         popover.contentViewController = controls; popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
         _ = controls.view; popover.contentSize = controls.preferredContentSize
-        popover.show(relativeTo:bounds,of:self,preferredEdge:.maxY)
+        // 使用 AppKit 的视图边界锚点，弹窗随按钮的实际尺寸更新位置。
+        popover.show(relativeTo:.zero,of:self,preferredEdge:.maxY)
     }
 }
 final class ModelSelectorContent: NSViewController {

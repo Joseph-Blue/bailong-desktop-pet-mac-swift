@@ -130,6 +130,7 @@ final class Conversation: Codable {
     var key = UUID().uuidString
     var threadID: String? = nil
     var modelProvider: String? = nil
+    var createdWithChatGPT: Bool? = nil
     var title = "新对话"
     var localTitle: String? = nil
     var cwd = ""
@@ -142,6 +143,7 @@ final class Conversation: Codable {
     func snapshot() -> Conversation {
         let copy = Conversation()
         copy.key = key; copy.threadID = threadID; copy.modelProvider = modelProvider; copy.title = title; copy.localTitle = localTitle
+        copy.createdWithChatGPT = createdWithChatGPT
         copy.cwd = cwd; copy.external = external; copy.historyMode = historyMode
         copy.turns = turns.map {$0.snapshot()}
         return copy
@@ -282,6 +284,7 @@ final class HistoryStore {
             let oldTurns = Dictionary(uniqueKeysWithValues:(old?.turns ?? []).map {($0.key,$0)})
             let copy = Conversation()
             copy.key = c.key; copy.threadID = c.threadID; copy.modelProvider = c.modelProvider; copy.title = c.title; copy.localTitle = c.localTitle
+            copy.createdWithChatGPT = c.createdWithChatGPT
             copy.cwd = c.cwd; copy.external = c.external; copy.historyMode = c.historyMode
             var frozen = false
             for t in c.turns {
@@ -340,6 +343,7 @@ final class HistoryStore {
             copy.title = title; copy.localTitle = manual ? title : nil
         } else {
             let copy = Conversation(); copy.key = conversation.key; copy.threadID = conversation.threadID; copy.modelProvider = conversation.modelProvider
+            copy.createdWithChatGPT = conversation.createdWithChatGPT
             copy.cwd = conversation.cwd; copy.external = conversation.external; copy.historyMode = conversation.historyMode
             copy.title = title; copy.localTitle = manual ? title : nil
             document.conversations.append(copy)

@@ -72,6 +72,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var inputStates = [ChatEntry:ChatInputState]()
     private let drafts = ChatDraftCache()
     private var historyStop:ActionButton!, historyCheck:ActionButton!, historyRetrySettings:ActionButton!
+    private var historyModelRow:NSStackView!
     private let sourceLabel = label("",bold:true)
     func targetKey(_ entry:ChatEntry) -> String? {drafts.target(entry)}
     func modelSettings(_ entry:ChatEntry) -> ChatModelSettings {entry == .composer ? composerModels : models}
@@ -165,6 +166,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyCheck = ActionButton("检查发送结果") { [weak self] in self?.checkTarget(.history) }
         historyRetrySettings = ActionButton("重新读取") { [weak self] in self?.onRetrySettings(.history) }
         let preferences = NSStackView(views:[historyModel,inheritedSettings,historyRetrySettings!,NSView(),historyStop,historyCheck,historyButton]); preferences.spacing = 12; preferences.alignment = .centerY
+        historyModelRow = preferences
+        historyModel.onSummaryChange = { [weak self] in self?.layoutHistoryModel() }
         let inputArea = NSStackView(views:[drafting,preferences]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
         for view in [drafting,preferences] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
         workspaceStatus.onOpen = { [weak self] in self?.onOpenWorkspace($0) }
@@ -217,7 +220,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         history.setFrameAutosaveName("BailongHistory")
         NotificationCenter.default.addObserver(self,selector:#selector(accentChanged),name:AppAccent.didChange,object:nil)
         for settings in [models,composerModels] {
-            NotificationCenter.default.addObserver(self,selector:#selector(modelStateChanged),name:ChatModelSettings.changed,object:settings)
+            NotificationCenter.default.addObserver(self,selector:#selector(updateShortcuts),name:ChatModelSettings.changed,object:settings)
         }
         NotificationCenter.default.addObserver(self,selector:#selector(updateShortcuts),name:PetPreferences.didChange,object:nil)
     }
@@ -284,20 +287,18 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         guard let height = historyInputHeight else {return}
         height.constant = min(160,max(76,historyInput.contentHeight.rounded(.up)))
     }
-    @objc private func modelStateChanged() {
-        updateShortcuts()
-        applyModelLayout()
-        // 模型按钮与 ChatUI 订阅同一通知；下一轮再按新标题测量一次，避免观察顺序造成旧宽度。
-        DispatchQueue.main.async { [weak self] in self?.applyModelLayout() }
-    }
-    private func applyModelLayout() {
-        composerView.updateLayout()
+    private func layoutHistoryModel() {
         guard history.isVisible && !history.isMiniaturized else {return}
-        let detailWidth = max(520,historyModel.layoutWidth+historyButton.intrinsicContentSize.width+64)
+        let model:ModelSummaryButton = historyModel.isHidden ? inheritedSettings : historyModel
+        let actions = [historyRetrySettings!,historyStop!,historyCheck!,historyButton!].filter {!$0.isHidden}
+        let actionWidth = actions.reduce(CGFloat.zero) {$0+$1.intrinsicContentSize.width.rounded(.up)}
+        // 输入区两侧各留 20pt，同一行还有模型框、弹性间隔与当前可见的按钮。
+        let detailWidth = max(520,model.layoutWidth+actionWidth+historyModelRow.spacing*CGFloat(actions.count+1)+40)
         historyDetailItem.minimumThickness = detailWidth
         let historyWidth = max(800,detailWidth+180)
         history.contentMinSize = NSSize(width:historyWidth,height:600)
         if let content = history.contentView, content.bounds.width < historyWidth {history.setContentSize(NSSize(width:historyWidth,height:content.bounds.height))}
+        history.contentView?.layoutSubtreeIfNeeded()
     }
     func windowDidResize(_ notification: Notification) {if notification.object as? NSWindow === composer {onComposerResize()} else {resizeHistoryInput()}}
     @objc private func goCodex() {onGoCodex()}
@@ -458,7 +459,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
         let historyVisible = history.isVisible && !history.isMiniaturized
         if historyVisible {order.update(conversationSource)}
-        inheritedSettings.update(settings:historyState.modelSettings,provider:selected.modelProvider,error:historyState.modelNote)
+        inheritedSettings.update(settings:historyState.modelSettings,conversation:selected,error:historyState.modelNote)
         refreshList()
         sourceLabel.stringValue = selected.title
         sourceLabel.hoverHelp = selected.kind.title+" · 共 \(selected.turns.count) 轮记录\n"+selected.title
@@ -488,7 +489,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyStatus.setHoverHelp(statusHelp) { [weak historyStatus] in showsMore || historyStatus?.hasTruncatedText == true }
         history.title = selected.title.split(whereSeparator:{$0.isWhitespace}).joined(separator:" "); history.subtitle = selected.kind.title
         if historyVisible {resizeHistoryInput()}
-        modelStateChanged()
+        updateShortcuts()
+        composerView.updateLayout()
+        layoutHistoryModel()
         composerEditor.placeholder = composerState.kind == .project ? "发送到这条 Codex 项目对话…" : PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…")
         let messageDirectory = selected.cwd.isEmpty ? nil : URL(fileURLWithPath:selected.cwd,isDirectory:true)
         transcript.linkBaseDirectory = {messageDirectory}

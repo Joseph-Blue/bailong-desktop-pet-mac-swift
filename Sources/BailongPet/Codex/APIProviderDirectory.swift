@@ -48,8 +48,11 @@ enum APIProviderDirectory {
         guard !id.isEmpty,!builtInProviders.contains(id.lowercased()) else {return nil}
         let providers = config["model_providers"] as? [String:[String:Any]]
         let definition = providers?[id]
-        let configuredName = (definition?["name"] as? String)?.trimmingCharacters(in:.whitespacesAndNewlines)
-        let baseURL = definition?["base_url"] as? String
+        return identity(id:id,name:definition?["name"] as? String,baseURL:definition?["base_url"] as? String)
+    }
+
+    static func identity(id:String,name:String? = nil,baseURL:String? = nil) -> APIProviderIdentity {
+        let configuredName = name?.trimmingCharacters(in:.whitespacesAndNewlines)
         let entry = entry(id:id,name:configuredName,baseURL:baseURL)
         return APIProviderIdentity(id:id,catalogID:entry?.id ?? id,
             name:configuredName.flatMap {$0.isEmpty ? nil : $0} ?? entry?.name ?? id,

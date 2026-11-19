@@ -34,6 +34,7 @@ final class ChatMetadataRow: NSStackView {
 
 // 临时输入与历史共用只读显示，不拥有连接、设置缓存或模型写入。
 final class ChatReadOnlyModelField: ModelSummaryButton {
+    override var preservesProviderIconColor:Bool {true}
     init() {
         super.init(frame:.zero)
         isEnabled = false
@@ -41,13 +42,20 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
         setAccessibilityRole(.staticText)
     }
     required init?(coder:NSCoder) {fatalError()}
-    func update(settings:DesktopReply.Settings?,provider:String?,error:String?) {
+    func update(settings:DesktopReply.Settings?,conversation:Conversation?,error:String?) {
         if let settings {
             let effort = settings.effort.map(ChatModelSettings.effortName) ?? "未提供"
-            let provider = ModelPresentation.provider(provider) ?? "供应商未记录"
-            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:provider)+" · 只读",lightning:CodexServiceTier.hasLightning(settings.serviceTier))
+            let provider = settings.modelProvider ?? conversation?.modelProvider
+            let identity = provider.map {APIProviderDirectory.identity(id:$0)}
+            let providerIcon = provider == "openai" ? nil : AppIcons.apiProvider(identity?.catalogID)
+            let providerTitle = provider == nil ? "供应商未记录" : ModelPresentation.provider(provider,name:identity?.name,
+                usesChatGPTAccount:conversation?.createdWithChatGPT == true)
+            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:providerTitle)+" · 只读",
+                lightning:CodexServiceTier.hasLightning(settings.serviceTier),providerIcon:providerIcon)
             let source = settings.effortFromHistory ? "思考等级来自会话记录。" : ""
-            var help = "沿用 Codex 原会话设置，当前只读。"+source+"\n供应商："+provider+"\n模型："+settings.model+"\n思考等级："+effort
+            var help = "沿用 Codex 原会话设置，当前只读。"+source
+            if let providerTitle {help += "\n供应商："+providerTitle}
+            help += "\n模型："+settings.model+"\n思考等级："+effort
             if let tier = settings.serviceTier {help += "\n速度档位："+CodexServiceTier.displayName(tier)}
             hoverHelp = help
         } else {

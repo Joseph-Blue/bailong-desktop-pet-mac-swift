@@ -133,6 +133,7 @@ final class ChatComposer: NSObject {
         [composerInput!,recovery,workspaceRow,recentReply,modelStrip,inputStatus,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
         inputHeight = composerInput.heightAnchor.constraint(equalToConstant:140); inputHeight.isActive = true
         composerEditor.onTextChange = { [weak self] in self?.updateLayout() }
+        composerModel.onSummaryChange = { [weak self] in self?.updateLayout() }
         composerEditor.send = { [weak self] in guard let self else{return}; self.onSubmit() }
 
     }
@@ -226,10 +227,8 @@ final class ChatComposer: NSObject {
         // 先确定正文宽度再测量换行；只有编辑区随草稿增长，元信息和操作区按内容排版。
         if abs(content.bounds.width-width)>0.5 {composerMotion.resize(to:NSSize(width:width,height:composerMotion.frame.height))}
         let model = externalModel ? composerInheritedSettings : composerModel!
-        // 模型摘要可截断；先为短状态留位置，不按模型完整标题宽度提前另起一行。
-        let modelWidth = min(model.intrinsicContentSize.width,max(120,(model.font?.pointSize ?? 13)*10))
         let retryWidth = retrySettings.isHidden ? 0 : retrySettings.intrinsicContentSize.width+8
-        let available = width-32-ChatMetadataRow.captionWidth-16-modelWidth-retryWidth-12
+        let available = width-32-ChatMetadataRow.captionWidth-16-model.layoutWidth-retryWidth-12
         let noteWidth = ceil((statusText as NSString).size(withAttributes:[.font:inlineStatus.font!]).width)+4
         let inline = allowsInlineStatus && !statusText.isEmpty && !statusText.contains(where:{$0.isNewline}) && noteWidth <= available
         inlineStatus.stringValue = inline ? statusText : ""; inlineStatus.isHidden = !inline
@@ -269,7 +268,7 @@ final class ChatComposer: NSObject {
         conversationPicker.conversations = choices
         workspace.update(conversation:state.conversation,executing:state.executing,visible:composerVisible)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
-        composerInheritedSettings.update(settings:state.modelSettings,provider:state.conversation?.modelProvider,error:state.modelNote)
+        composerInheritedSettings.update(settings:state.modelSettings,conversation:state.conversation,error:state.modelNote)
         composerInheritedSettings.superview?.isHidden = !external || state.conversation == nil
         retrySettings.isHidden = state.desktopReady || state.modelNote == nil
         retrySettings.isEnabled = !state.sending

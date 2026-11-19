@@ -12,14 +12,26 @@ final class ChatModelLoader {
         let id = UUID(); request = id; settings.setLoading()
         func finish(_ result:Result<([ChatModel],[String:Any]),Error>) {
             guard self.request == id else {return}
-            self.request = nil
             switch result {
             case .success(let (models,config)):
                 let provider = config["model_provider"] as? String ?? "openai"
+                let identity = APIProviderDirectory.thirdParty(in:config)
                 let providers = config["model_providers"] as? [String:[String:Any]]
                 settings.loaded(models,configuredModel:config["model"] as? String,configuredEffort:config["model_reasoning_effort"] as? String,
-                    configuredProvider:provider,configuredServiceTier:config["service_tier"] as? String,providerName:providers?[provider]?["name"] as? String)
-            case .failure(let error): self.directory = nil; settings.failed(error)
+                    configuredProvider:provider,configuredServiceTier:config["service_tier"] as? String,
+                    providerName:identity?.name ?? providers?[provider]?["name"] as? String,providerIconID:identity?.catalogID)
+                if provider == "openai" {
+                    self.connection.call("account/read",["refreshToken":false]) { response in
+                        guard self.request == id else {return}
+                        self.request = nil
+                        if case .success(let value) = response {
+                            let account = value["account"] as? [String:Any]
+                            settings.setUsesChatGPTAccount(account?["type"] as? String == "chatgpt")
+                        } else {settings.setUsesChatGPTAccount(false)}
+                    }
+                } else {self.request = nil}
+            case .failure(let error):
+                self.request = nil; self.directory = nil; settings.failed(error)
             }
         }
         connection.connect { [weak self] error in
