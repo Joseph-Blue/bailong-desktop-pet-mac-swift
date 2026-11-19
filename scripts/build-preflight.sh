@@ -69,3 +69,14 @@ bailong_check_output() {
     probe="$(mktemp "$directory/.write-check-XXXXXX")" || { bailong_error "目录不可写：$directory"; return 1; }
     rm "$probe"
 }
+
+bailong_local_build_plist_entry() {
+    local ci="${CI:-}" branch commit
+    [[ -z "$ci" || "$ci" == false || "$ci" == 0 ]] || return 0
+    [[ -e .git ]] || return 0
+    branch="$(git branch --show-current)" || return 1
+    [[ -n "$branch" && "$branch" != main ]] || return 0
+    if commit="$(git rev-parse --verify --quiet HEAD)"; then
+        print -r -- "<key>BailongLocalBuildCommit</key><string>$commit</string>"
+    fi
+}

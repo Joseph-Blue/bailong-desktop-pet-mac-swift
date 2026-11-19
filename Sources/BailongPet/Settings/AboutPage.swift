@@ -44,6 +44,25 @@ final class AboutPageController: NSViewController {
         version.font = .systemFont(ofSize:16)
         version.textColor = .labelColor
         version.alignment = .center
+        let versionDetails = NSStackView(views:[version])
+        versionDetails.orientation = .vertical
+        versionDetails.alignment = .centerX
+        versionDetails.spacing = 4
+        if let commit = Bundle.main.object(forInfoDictionaryKey:"BailongLocalBuildCommit") as? String {
+            let commitLabel = NSTextField(labelWithString:"本地构建 \(commit.prefix(8))")
+            commitLabel.font = .systemFont(ofSize:12)
+            commitLabel.textColor = .secondaryLabelColor
+            let copy = HoverIconButton(symbol:"doc.on.doc",label:"拷贝提交号")
+            copy.bezelStyle = .inline
+            copy.hoverHelp = "拷贝提交号"
+            copy.widthAnchor.constraint(equalToConstant:20).isActive = true
+            copy.heightAnchor.constraint(equalToConstant:20).isActive = true
+            CopyFeedback.attach(to:copy) {commit}
+            let commitRow = NSStackView(views:[commitLabel,copy])
+            commitRow.alignment = .centerY
+            commitRow.spacing = 4
+            versionDetails.addArrangedSubview(commitRow)
+        }
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
         tabs.font = .systemFont(ofSize:13)
@@ -53,7 +72,7 @@ final class AboutPageController: NSViewController {
             item.view = readingView(text)
             tabs.addTabViewItem(item)
         }
-        for view in [icon,title,version,tabs] {
+        for view in [icon,title,versionDetails,tabs] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
@@ -65,9 +84,9 @@ final class AboutPageController: NSViewController {
             title.centerXAnchor.constraint(equalTo:root.centerXAnchor),
             title.leadingAnchor.constraint(greaterThanOrEqualTo:root.leadingAnchor,constant:24),
             title.trailingAnchor.constraint(lessThanOrEqualTo:root.trailingAnchor,constant:-24),
-            version.topAnchor.constraint(equalTo:title.bottomAnchor,constant:6),
-            version.centerXAnchor.constraint(equalTo:root.centerXAnchor),
-            tabs.topAnchor.constraint(equalTo:version.bottomAnchor,constant:22),
+            versionDetails.topAnchor.constraint(equalTo:title.bottomAnchor,constant:6),
+            versionDetails.centerXAnchor.constraint(equalTo:root.centerXAnchor),
+            tabs.topAnchor.constraint(equalTo:versionDetails.bottomAnchor,constant:22),
             tabs.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24),
             tabs.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24),
             tabs.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-24)

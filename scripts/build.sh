@@ -22,6 +22,7 @@ if [[ "${BAILONG_BUILD_PROFILE:-auto}" != auto ]]; then
 fi
 bailong_check_output "$output"
 if (( bailong_check_only )); then bailong_ok "检查通过"; exit 0; fi
+local_build_entry="$(bailong_local_build_plist_entry)"
 mkdir -p ".build/$target_arch" .build/module-cache
 bailong_phase_begin "1/4" "编译主程序"
 bailong_compile "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
@@ -55,6 +56,7 @@ cat > "$staging/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
 <key>BailongVersion</key><string>$version</string>
+$local_build_entry
 <key>BailongAuthor</key><string>Joseph Blue</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
