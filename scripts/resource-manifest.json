@@ -1,6 +1,6 @@
 {
-  "archive" : "bailong-dev-assets-2026-11-19.zip",
-  "bytes" : 117749407,
+  "archive" : "bailong-dev-assets-2026-11-19-r2.zip",
+  "bytes" : 117753905,
   "development" : [
     "native-hevc/catalog/samples.json",
     "资源来源.md"
@@ -14,6 +14,11 @@
     "mistral-logo.png",
     "kimi-logo.png",
     "zhipu-logo.png",
+    "bailian-logo.png",
+    "openrouter-logo.png",
+    "groq-logo.png",
+    "bedrock-logo.png",
+    "vertexai-logo.png",
     "pet-status-template.png",
     "pet-avatar-template.png",
     "sounds/click.wav",
@@ -23,5 +28,5 @@
     "glass-symbols/capsule.on.rectangle.liquid.glass.fill.pdf"
   ],
   "url" : "",
-  "version" : "2026-11-19"
+  "version" : "2026-11-19-r2"
 }

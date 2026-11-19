@@ -2,6 +2,30 @@
 
 本文件记录 `joseph/dev` 的开发迭代。提交与历史快照见 [开发变更索引](docs/开发变更索引.md)，正式版说明见 [`main` 分支变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/main/CHANGELOG.md)。
 
+## [0.8.2-dev.2] — 2026-11-19
+
+### 第三方 API 额度
+
+- DeepSeek 作为当前 API 供应商时，第三方额度气泡在本机今日 Tokens 后补充高峰／空闲时段和下一时段开始时间；高峰使用红色、空闲使用绿色，时间按北京时间显示。
+- 气泡打开期间在峰谷边界或午夜更新状态，不重新发送额度或模型请求；其他 API 供应商的额度气泡保持不变。
+- 供应商名称按官方品牌显示；Kimi 分中国站与国际站，智谱分 BigModel 中国站与 Z.AI 国际站，按 Base URL 选择名称、图标族和官方计费／用量入口。模型摘要另行使用 `Kimi CN`、`Kimi Global`、`智谱 GLM`、`Z.AI` 等短名。
+- 新增阿里云百炼北京／新加坡区域目录，摘要使用“百炼 CN／百炼 SG”，共用百炼图标并打开对应官方控制台。图标采用用户提供的 LobeHub `lobe-icons` Bailian.Color 社区重绘（MIT），不标为阿里云官方资产。
+- xAI 供应商图标使用官方原图，不再作为模板图着色；Kimi 保持官方彩色图标。
+- OpenRouter、Groq、Amazon Bedrock 与 Google Cloud Vertex AI 补齐 PNG 图标；运行时供应商图标统一为 36×36 PNG，64×64 母版保留在本地资源目录。
+- 第三方额度气泡使用「打开供应商开放平台」按钮。优先按 Base URL 主机识别，未匹配时按供应商 ID、别名或完整名称回退；有官方入口才显示按钮。未知反代仍可通过已知 ID 识别，完全未知的供应商显示配置名称。
+- “额度查询缓存”现在也覆盖第三方 API 视图：同一供应商、同一缓存代次、同一天内的成功本机用量结果可在有效期内复用；关闭缓存或点击“立即刷新”会重新扫描本机 Token 日志。
+
+### 模型选择与输入布局
+
+- 模型摘要在右侧状态需要显示时先为完整状态保留宽度，再限制模型摘要；状态最多使用可用宽度的 55%，模型至少保留 45%。空间不足时完整状态改到下一行，不截断报错。
+- 模型摘要、下拉选择和只读模型框继续使用同一 `ModelSummaryButton`；短供应商名只影响摘要，完整名称保留在悬停提示。
+
+### 验证
+
+- `DeepSeekPricingRegression` 覆盖峰谷边界、周末、法定节假日、跨年、未知年份和刷新时间；`APIProviderQuotaRegression` 覆盖 DeepSeek 显示、Kimi／智谱区域拆分、固定开放平台入口及其他供应商不显示峰谷定价。
+- `ModelSummaryLayoutRegression` 覆盖状态优先宽度、模型摘要压缩、状态换行和内置供应商短名；`APIProviderUsageCacheRegression` 覆盖第三方用量缓存的供应商、代次、日期、有效期和失败结果边界。
+- 全源码 `swiftc -typecheck` 与 `git diff --check` 通过；本地 `ModelSelectionRegression` 夹具仍引用已移除接口，未用于本轮结果。未启动应用、未做视觉验收，未访问真实 API。
+
 ## [0.8.2-dev.1] — 2026-11-19
 
 ### 模型与供应商

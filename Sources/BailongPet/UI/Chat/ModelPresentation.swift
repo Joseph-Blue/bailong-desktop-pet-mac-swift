@@ -12,25 +12,57 @@ enum ModelPresentation {
     static func provider(_ id:String?,name:String? = nil,usesChatGPTAccount:Bool = false) -> String? {
         if id == "openai",usesChatGPTAccount {return nil}
         if let name,!name.isEmpty {return name}
-        return id == "openai" ? "OpenAI" : id
+        switch id?.lowercased() {
+        case "openai":return "OpenAI"
+        case "amazonbedrock","amazon-bedrock","bedrock":return "Bedrock"
+        case "gcp","google","vertex","vertexai":return "Vertex AI"
+        default:return id
+        }
     }
     static func summary(model:String,displayName:String? = nil,effort:String,provider:String? = nil) -> String {
         [provider,name(model,displayName:displayName),effort].compactMap {$0}.joined(separator:" · ")
     }
 }
 
+enum ModelSummaryLayout {
+    static let maximumModelWidth:CGFloat = 320
+    static let minimumModelWidth:CGFloat = 180
+    static let maximumStatusFraction:CGFloat = 0.55
+
+    static func arrange(available:CGFloat,statusWidth:CGFloat,desiredModelWidth:CGFloat) -> (modelWidth:CGFloat,statusInline:Bool) {
+        let usable = max(1,available)
+        let desired = max(1,min(maximumModelWidth,desiredModelWidth))
+        guard statusWidth > 0 else {return (desired,false)}
+        let minimum = min(minimumModelWidth,desired)
+        let canInline = statusWidth <= floor(usable*maximumStatusFraction) && statusWidth+minimum <= usable
+        guard canInline else {return (desired,false)}
+        return (max(minimum,min(desired,usable-statusWidth)),true)
+    }
+}
+
 // 两类会话共用原生模型字段的尺寸、字体和轮廓；交互能力由各子类决定。
 class ModelSummaryButton:NSButton {
-    private static let maximumWidth:CGFloat = 320
     private var summaryText:String?
     private var showsLightning = false
     private var providerIcon:NSImage?
+    private var widthLimit:NSLayoutConstraint!
     var preservesProviderIconColor:Bool {false}
     private var separateProviderIcon:NSImage? {
         guard preservesProviderIconColor,let providerIcon,!providerIcon.isTemplate else {return nil}
         return providerIcon
     }
-    var layoutWidth:CGFloat {min(Self.maximumWidth,intrinsicContentSize.width.rounded(.up))}
+    var maximumLayoutWidth:CGFloat = ModelSummaryLayout.maximumModelWidth {
+        didSet {
+            let value = max(1,min(ModelSummaryLayout.maximumModelWidth,maximumLayoutWidth))
+            if abs(value-maximumLayoutWidth) > 0.5 {maximumLayoutWidth = value; return}
+            guard abs(value-oldValue) > 0.5 else {return}
+            widthLimit?.constant = value
+            invalidateIntrinsicContentSize()
+            superview?.needsLayout = true
+        }
+    }
+    var naturalLayoutWidth:CGFloat {min(ModelSummaryLayout.maximumModelWidth,intrinsicContentSize.width.rounded(.up))}
+    var layoutWidth:CGFloat {min(maximumLayoutWidth,intrinsicContentSize.width.rounded(.up))}
 
     @discardableResult func setSummary(_ text:String,lightning:Bool,providerIcon:NSImage? = nil) -> Bool {
         guard summaryText != text || showsLightning != lightning || self.providerIcon !== providerIcon else {return false}
@@ -101,7 +133,8 @@ class ModelSummaryButton:NSButton {
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         setContentHuggingPriority(.required,for:.horizontal)
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
-        widthAnchor.constraint(lessThanOrEqualToConstant:Self.maximumWidth).isActive = true
+        widthLimit = widthAnchor.constraint(lessThanOrEqualToConstant:ModelSummaryLayout.maximumModelWidth)
+        widthLimit.isActive = true
     }
     required init?(coder:NSCoder) {fatalError()}
 }

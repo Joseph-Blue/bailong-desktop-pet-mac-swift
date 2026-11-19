@@ -84,10 +84,13 @@ struct AppFailure {
 
 // 显示数据保持可选值：额度缺失不等于零，也不等于不限额。
 struct QuotaRow {
+    enum Tone {case normal,positive,negative}
     let title: String, value: String, detail: String?
     let remaining: Double?
     var resetsAt: Date? = nil
     var retry = false
+    var tone:Tone = .normal
+    var startsSection = true
     var wrapsValue = false
     var loading = false
     var usage:TokenUsage?
@@ -248,10 +251,27 @@ enum QuotaPresentation {
         QuotaOverview(plan:plan(nil,account:account),rows:[QuotaRow(title:"使用额度",value:"暂时无法获取",detail:emptyMessage(account),remaining:nil)],notice:nil,management:.forAccount(account,plan:plan(nil,account:account)))
     }
     static func api(_ provider:APIProviderIdentity,usage:DailyTokenUsage) -> QuotaOverview {
-        QuotaOverview(plan:provider.name,rows:[
+        var rows = [
             QuotaRow(title:"当前 API 今日用量",value:usage.value,detail:usage.detail,remaining:nil,
                 retry:usage.failed,wrapsValue:true,loading:usage.isLoading,usage:usage.usage,subtitle:"（本机日志）")
-        ],apiProvider:provider,usageHeading:"当前 API 今日用量")
+        ]
+        if provider.catalogID == "deepseek" {rows += deepSeekPricingRows()}
+        return QuotaOverview(plan:provider.name,rows:rows,apiProvider:provider,usageHeading:"当前 API 今日用量")
+    }
+    static func deepSeekPricingRows(at date:Date = Date()) -> [QuotaRow] {
+        guard let pricing = DeepSeekPricing.snapshot(at:date) else {
+            return [QuotaRow(title:"峰谷定价",value:"时段未提供",detail:nil,remaining:nil)]
+        }
+        var rows = [QuotaRow(title:"峰谷定价",value:pricing.title,detail:nil,remaining:nil,
+            tone:pricing.period == .peak ? .negative : .positive)]
+        if let next = pricing.next {
+            let nextPeriod:DeepSeekPricing.Period = pricing.period == .peak ? .offPeak : .peak
+            let formatter = DateFormatter(); formatter.locale = Locale(identifier:"en_US_POSIX")
+            formatter.timeZone = DeepSeekPricing.calendar.timeZone; formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            rows.append(QuotaRow(title:"下一个"+nextPeriod.title,value:formatter.string(from:next)+"\n（北京时间）",
+                detail:nil,remaining:nil,startsSection:false))
+        }
+        return rows
     }
 }
 

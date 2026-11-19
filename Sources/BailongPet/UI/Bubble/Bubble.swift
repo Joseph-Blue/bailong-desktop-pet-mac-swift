@@ -59,6 +59,7 @@ final class Bubble {
     private let countdown = BubbleCountdown()
     private var headingTimer: Timer?
     private var quotaLoadingTimer:Timer?
+    private var quotaPricingTimer:Timer?
     private weak var quotaLoadingAmount:NSTextField?
     private var quotaLoadingPhase = 0
     private var plainHeading = ""
@@ -524,6 +525,7 @@ final class Bubble {
         if kind == "quotaLoading" {quotaUsageExpanded = false}
         if kind != "quota" {quotaRequiredContentWidth = 0}
         stopQuotaLoading()
+        quotaPricingTimer?.invalidate(); quotaPricingTimer = nil
         taskList?.stop(); taskList = nil
         userInputPrefixLength = 0
         if (attentionAction && !questions.isEmpty || !laysOutBody) && !text.string.isEmpty {text.releaseRenderedContent()}
@@ -877,6 +879,12 @@ final class Bubble {
         let readingOrigin = scroll.contentView.bounds.origin
         var usageEnd:CGFloat?
         stopQuotaLoading()
+        quotaPricingTimer?.invalidate(); quotaPricingTimer = nil
+        var overview = overview
+        if overview.apiProvider?.catalogID == "deepseek",
+           let index = overview.rows.firstIndex(where:{$0.title == "峰谷定价"}) {
+            overview.rows.replaceSubrange(index..<overview.rows.endIndex,with:QuotaPresentation.deepSeekPricingRows())
+        }
         retryButton.isHidden = true
         let fontScale = scale*preferences.number("messageFontSize")/13
         if let failure {
@@ -945,8 +953,9 @@ final class Bubble {
             content.addSubview(view); y += height
         }
         y += 12*scale
+        let deepSeekAPI = overview.apiProvider?.catalogID == "deepseek"
         for (index,row) in overview.rows.enumerated() {
-            if index > 0 {
+            if index > 0 && row.startsSection {
                 let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
             }
             if let usage = row.usage {
@@ -979,7 +988,8 @@ final class Bubble {
             }
             let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
             let quotaColor: NSColor? = row.remaining.flatMap {$0 <= 5 ? .systemRed : $0 <= 10 ? .systemOrange : nil}
-            amount.textColor = row.remaining.map {$0 <= 5 ? StatusTextColor.red : $0 <= 10 ? StatusTextColor.orange : .labelColor} ?? .labelColor
+            amount.textColor = row.tone == .positive ? StatusTextColor.green : row.tone == .negative ? StatusTextColor.red
+                : row.remaining.map {$0 <= 5 ? StatusTextColor.red : $0 <= 10 ? StatusTextColor.orange : .labelColor} ?? .labelColor
             if row.loading {quotaLoadingAmount = amount; renderQuotaLoading(); amount.setAccessibilityLabel("本机今日用量加载中")}
             for field in [heading,amount] where field !== heading || row.subtitle == nil {
                 field.maximumNumberOfLines = 1; field.usesSingleLineMode = true
@@ -989,7 +999,19 @@ final class Bubble {
             let headingMinimum = min(heading.fittingSize.width,96*scale)
             let amountWidth = min(amount.fittingSize.width.rounded(.up),width-headingMinimum-gap)
             let rowHeight = max(22*scale,max(heading.fittingSize.height,amount.fittingSize.height).rounded(.up))
-            if row.wrapsValue,amount.fittingSize.width+heading.fittingSize.width+gap > width {
+            if deepSeekAPI {
+                let headingWidth = floor(max(1,width-gap)*0.42)
+                let valueWidth = max(1,width-gap-headingWidth)
+                for field in [heading,amount] {
+                    field.usesSingleLineMode = false; field.maximumNumberOfLines = 0; field.lineBreakMode = .byWordWrapping
+                    field.cell?.wraps = true; field.cell?.isScrollable = false
+                }
+                let height = max(rowHeight,max(
+                    heading.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:10000)).height,
+                    amount.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:valueWidth,height:10000)).height).rounded(.up))
+                heading.frame = NSRect(x:0,y:y,width:headingWidth,height:height)
+                amount.frame = NSRect(x:headingWidth+gap,y:y,width:valueWidth,height:height); y += height
+            } else if row.wrapsValue,amount.fittingSize.width+heading.fittingSize.width+gap > width {
                 heading.frame = NSRect(x:0,y:y,width:width,height:rowHeight); y += rowHeight
                 amount.usesSingleLineMode = false; amount.maximumNumberOfLines = 0; amount.lineBreakMode = .byWordWrapping
                 let height = max(rowHeight,amount.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:10000)).height.rounded(.up))
@@ -1021,7 +1043,7 @@ final class Bubble {
                 button.frame = NSRect(x:0,y:y,width:60*scale,height:26*scale)
                 content.addSubview(button); y += button.frame.height
             }
-            y += 12*scale
+            y += (deepSeekAPI && index+1 < overview.rows.count && !overview.rows[index+1].startsSection ? 4 : 12)*scale
         }
         if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
         let actionFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
@@ -1031,9 +1053,14 @@ final class Bubble {
         management?.symbolConfiguration = actionSymbol
         let providerPage:ActionButton? = overview.apiProvider.flatMap {provider in
             guard let address = provider.pageURL,let url = URL(string:address) else {return nil}
-            let button = ActionButton(provider.pageTitle) {NSWorkspace.shared.open(url)}
+            let button = ActionButton("\u{00A0}打开供应商开放平台") {NSWorkspace.shared.open(url)}
             button.font = actionFont
-            button.setAccessibilityLabel(provider.pageTitle)
+            button.image = NSImage(systemSymbolName:"globe",accessibilityDescription:nil)?
+                .withSymbolConfiguration(actionSymbol)
+            button.imagePosition = .imageLeading
+            button.keepsAccentWhenInactive = true
+            button.emphasize()
+            button.setAccessibilityLabel("打开供应商开放平台")
             return button
         }
         let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
@@ -1078,6 +1105,15 @@ final class Bubble {
             self.show(title:heading,body:" ",kind:"quota",scale:scale,seconds:0,preserveCountdown:true)
             self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry)
         }
+        if deepSeekAPI,let change = DeepSeekPricing.nextDisplayChange() {
+            let timer = Timer(fire:change.addingTimeInterval(0.05),interval:0,repeats:false) { [weak self] _ in
+                guard let self,self.window.isVisible,self.kind.hasPrefix("quota") else {return}
+                let origin = self.scroll.contentView.bounds.origin
+                self.refreshStandalone?()
+                self.scroll.contentView.scroll(to:origin)
+            }
+            quotaPricingTimer = timer; RunLoop.main.add(timer,forMode:.common)
+        }
     }
     private var placementObstacles = [CGRect]()
     func place(near rect: CGRect, screen: NSScreen, dock: String?, avoiding:[CGRect] = []) {
@@ -1121,7 +1157,7 @@ final class Bubble {
         }
         placement = (rect,dock,area,size)
     }
-    deinit { countdown.stop(); headingTimer?.invalidate(); quotaLoadingTimer?.invalidate(); elapsedTimer?.invalidate() }
+    deinit { countdown.stop(); headingTimer?.invalidate(); quotaLoadingTimer?.invalidate(); quotaPricingTimer?.invalidate(); elapsedTimer?.invalidate() }
     private func releaseHiddenDisplay() {
         // 卡片及问卷草稿已由 cardStore 保存；淡出结束后释放当前显示的独立持有。
         window.makeFirstResponder(nil)
@@ -1135,5 +1171,5 @@ final class Bubble {
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
+    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); quotaPricingTimer?.invalidate(); quotaPricingTimer = nil; window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
 }

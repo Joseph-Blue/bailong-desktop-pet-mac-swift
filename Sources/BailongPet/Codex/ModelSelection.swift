@@ -35,20 +35,26 @@ final class ChatModelSettings {
     private(set) var models = [ChatModel]()
     private(set) var configuredModel: String?, configuredEffort: String?
     private(set) var configuredProvider:String?
-    private var configuredServiceTier:String?, providerName:String?, configuredProviderIconID:String?
+    private var configuredServiceTier:String?, providerName:String?, providerSummaryName:String?, configuredProviderIconID:String?
     private var usesChatGPTAccount = false
     private weak var conversation:Conversation?
     private var providerID:String? {conversation?.modelProvider ?? configuredProvider}
     var providerTitle:String? {
-        let id = providerID
-        return ModelPresentation.provider(id,name:id == configuredProvider ? providerName : nil)
+        guard let id = providerID else {return nil}
+        let identity = APIProviderDirectory.identity(id:id)
+        let fullName = id == configuredProvider ? providerName ?? identity.name : identity.name
+        return ModelPresentation.provider(id,name:fullName)
     }
     var summaryProvider:String? {
-        ModelPresentation.provider(providerID,name:providerID == configuredProvider ? providerName : nil,usesChatGPTAccount:usesChatGPTAccount)
+        guard let id = providerID else {return nil}
+        let identity = APIProviderDirectory.identity(id:id)
+        let summaryName = id == configuredProvider ? providerSummaryName ?? identity.summaryName : identity.summaryName
+        return ModelPresentation.provider(id,name:summaryName,usesChatGPTAccount:usesChatGPTAccount)
     }
     var providerIconID:String? {
         guard let id = providerID,id != "openai" else {return nil}
-        return id == configuredProvider ? configuredProviderIconID ?? id : id
+        let identity = APIProviderDirectory.identity(id:id)
+        return id == configuredProvider ? configuredProviderIconID ?? identity.catalogID : identity.catalogID
     }
     var providerMismatch:Bool {
         guard let original = conversation?.modelProvider,let configuredProvider else {return false}
@@ -133,13 +139,14 @@ final class ChatModelSettings {
         notify(); onLoad(true)
     }
     func setLoading() {loading = true; error = nil; notify()}
-    func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?, configuredProvider:String = "openai", configuredServiceTier:String? = nil,providerName:String? = nil,providerIconID:String? = nil) {
+    func loaded(_ models: [ChatModel], configuredModel: String?, configuredEffort: String?, configuredProvider:String = "openai", configuredServiceTier:String? = nil,providerName:String? = nil,providerSummaryName:String? = nil,providerIconID:String? = nil) {
         let visibleModels = models.filter {!$0.hidden}
         if configuredProvider != "openai",let configuredModel,!visibleModels.contains(where:{$0.model == configuredModel}) {self.models = []}
         else {self.models = visibleModels}
         self.configuredModel = configuredModel; self.configuredEffort = configuredEffort
         if self.configuredProvider != configuredProvider {usesChatGPTAccount = false}
-        self.configuredProvider = configuredProvider; self.configuredServiceTier = configuredServiceTier; self.providerName = providerName
+        self.configuredProvider = configuredProvider; self.configuredServiceTier = configuredServiceTier
+        self.providerName = providerName; self.providerSummaryName = providerSummaryName
         configuredProviderIconID = providerIconID
         if selectedFast == nil,configuredProvider == "openai" {defaults.set(fastMode,forKey:"petChatFastMode")}
         if configuredProvider == "openai",!providerMismatch,let effort = selectedEffort,!supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
@@ -209,7 +216,9 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
             effort:settings.effortTitle,provider:settings.summaryProvider)
         let fastMode = settings.fastMode
         let changed = setSummary(summary,lightning:fastMode,providerIcon:AppIcons.apiProvider(settings.providerIconID))
-        setHoverHelp(summary+(fastMode ? " · 1.5倍速度" : "")) { [weak self] in
+        var details = [summary,settings.providerTitle.map {"供应商："+$0}].compactMap {$0}.joined(separator:"\n")
+        if fastMode {details += "\n速度档位：1.5倍速度"}
+        setHoverHelp(details) { [weak self] in
             fastMode || self?.hasTruncatedTitle == true
         }
         if changed {onSummaryChange()}

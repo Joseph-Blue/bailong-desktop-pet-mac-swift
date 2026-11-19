@@ -50,7 +50,9 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
             let providerIcon = provider == "openai" ? nil : AppIcons.apiProvider(identity?.catalogID)
             let providerTitle = provider == nil ? "供应商未记录" : ModelPresentation.provider(provider,name:identity?.name,
                 usesChatGPTAccount:conversation?.createdWithChatGPT == true)
-            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:providerTitle)+" · 只读",
+            let providerSummary = provider == nil ? "供应商未记录" : ModelPresentation.provider(provider,name:identity?.summaryName,
+                usesChatGPTAccount:conversation?.createdWithChatGPT == true)
+            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:providerSummary)+" · 只读",
                 lightning:CodexServiceTier.hasLightning(settings.serviceTier),providerIcon:providerIcon)
             let source = settings.effortFromHistory ? "思考等级来自会话记录。" : ""
             var help = "沿用 Codex 原会话设置，当前只读。"+source

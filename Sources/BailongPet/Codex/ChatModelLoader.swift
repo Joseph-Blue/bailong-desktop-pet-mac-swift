@@ -15,11 +15,13 @@ final class ChatModelLoader {
             switch result {
             case .success(let (models,config)):
                 let provider = config["model_provider"] as? String ?? "openai"
-                let identity = APIProviderDirectory.thirdParty(in:config)
                 let providers = config["model_providers"] as? [String:[String:Any]]
+                let definition = providers?[provider]
+                let identity = APIProviderDirectory.thirdParty(in:config) ??
+                    APIProviderDirectory.identity(id:provider,name:definition?["name"] as? String,baseURL:definition?["base_url"] as? String)
                 settings.loaded(models,configuredModel:config["model"] as? String,configuredEffort:config["model_reasoning_effort"] as? String,
                     configuredProvider:provider,configuredServiceTier:config["service_tier"] as? String,
-                    providerName:identity?.name ?? providers?[provider]?["name"] as? String,providerIconID:identity?.catalogID)
+                    providerName:identity.name,providerSummaryName:identity.summaryName,providerIconID:identity.catalogID)
                 if provider == "openai" {
                     self.connection.call("account/read",["refreshToken":false]) { response in
                         guard self.request == id else {return}

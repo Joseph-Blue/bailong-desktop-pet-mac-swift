@@ -358,7 +358,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 form.toggle("动作平滑过渡", "animationSmoothTransition", detail:"轮廓相近的动作交接时短暂淡化。", requires:["bubbleMotion"]),
                 form.toggle("孤立杂点清理", "animationEdgeCleanup", detail:"清除与主体断开的微小低透明度杂点。"),
                 form.toggle("轮廓阴影", "petShadow")],symbol:"sparkles")
-            let quotaRows = [form.toggle("额度查询缓存", "quotaCacheEnabled", detail:"有效期内复用 Codex 额度，可点击“立即刷新”获取最新额度。"),
+            let quotaRows = [form.toggle("额度查询缓存", "quotaCacheEnabled", detail:"有效期内复用额度与供应商本机用量结果，可点击“立即刷新”获取最新数据。"),
                 form.conditional(form.slider("缓存时长", "quotaCacheSeconds", range:PetPreferences.ranges["quotaCacheSeconds"]!, suffix:"秒"),when:{$0.bool("quotaCacheEnabled")})]
             form.group("额度查询",quotaRows,symbol:AppIcons.quotaSymbol)
             form.group("应用统计", [form.toggle("开启应用性能信息统计浮窗", "showDiagnostics")],symbol:"chart.xyaxis.line")

@@ -228,9 +228,15 @@ final class ChatComposer: NSObject {
         if abs(content.bounds.width-width)>0.5 {composerMotion.resize(to:NSSize(width:width,height:composerMotion.frame.height))}
         let model = externalModel ? composerInheritedSettings : composerModel!
         let retryWidth = retrySettings.isHidden ? 0 : retrySettings.intrinsicContentSize.width+8
-        let available = width-32-ChatMetadataRow.captionWidth-16-model.layoutWidth-retryWidth-12
+        let sharedWidth = max(1,width-32-ChatMetadataRow.captionWidth-16-retryWidth-12)
         let noteWidth = ceil((statusText as NSString).size(withAttributes:[.font:inlineStatus.font!]).width)+4
-        let inline = allowsInlineStatus && !statusText.isEmpty && !statusText.contains(where:{$0.isNewline}) && noteWidth <= available
+        let statusRequested = allowsInlineStatus && !statusText.isEmpty && !statusText.contains(where:{$0.isNewline})
+        let arrangement = ModelSummaryLayout.arrange(available:sharedWidth,
+            statusWidth:statusRequested ? noteWidth : 0,desiredModelWidth:model.naturalLayoutWidth)
+        model.maximumLayoutWidth = arrangement.modelWidth
+        content.layoutSubtreeIfNeeded()
+        let available = max(0,width-32-ChatMetadataRow.captionWidth-16-model.layoutWidth-retryWidth-12)
+        let inline = statusRequested && arrangement.statusInline && noteWidth <= available
         inlineStatus.stringValue = inline ? statusText : ""; inlineStatus.isHidden = !inline
         inputStatus.update(inline ? "" : statusText)
         inputStatus.measure(width:width-32)

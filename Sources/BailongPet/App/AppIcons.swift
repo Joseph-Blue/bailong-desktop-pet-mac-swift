@@ -8,10 +8,15 @@ enum AppIcons {
 
     // 第三方供应商图标来自各自开放平台，缺失时保持纯文字。
     static let deepSeek:NSImage? = bundledProviderIcon("deepseek-logo.png","DeepSeek")
-    static let xai:NSImage? = bundledProviderIcon("xai-logo.png","xAI",template:true)
+    static let xai:NSImage? = bundledProviderIcon("xai-logo.png","xAI")
     static let mistral:NSImage? = bundledProviderIcon("mistral-logo.png","Mistral")
     static let kimi:NSImage? = bundledProviderIcon("kimi-logo.png","Kimi")
     static let zhipu:NSImage? = bundledProviderIcon("zhipu-logo.png","智谱 GLM")
+    static let bailian:NSImage? = bundledProviderIcon("bailian-logo.png","阿里云百炼")
+    static let openRouter:NSImage? = bundledProviderIcon("openrouter-logo.png","OpenRouter")
+    static let groq:NSImage? = bundledProviderIcon("groq-logo.png","Groq")
+    static let bedrock:NSImage? = bundledProviderIcon("bedrock-logo.png","Amazon Bedrock")
+    static let vertexAI:NSImage? = bundledProviderIcon("vertexai-logo.png","Google Cloud Vertex AI")
 
     static func apiProvider(_ id:String?) -> NSImage? {
         switch id {
@@ -21,6 +26,11 @@ enum AppIcons {
         case "mistral":return mistral
         case "kimi":return kimi
         case "zhipu":return zhipu
+        case "bailian":return bailian
+        case "openrouter":return openRouter
+        case "groq":return groq
+        case "bedrock":return bedrock
+        case "gcp":return vertexAI
         default:return nil
         }
     }
