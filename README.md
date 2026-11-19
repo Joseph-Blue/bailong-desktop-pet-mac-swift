@@ -2,7 +2,7 @@
 
 **陪你工作，也把 Codex 的任务进展带到桌面。**
 
-基于 [風-隐的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，使用 Swift + AppKit 重写并独立维护的 macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消息回复、审批处理与本机历史记录。
+基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)，使用 Swift + AppKit 重写并独立维护的 macOS 非官方原生移植版。支持桌面互动、Codex 进展提醒、消息回复、审批处理与本机历史记录。
 
 
 
@@ -38,7 +38,7 @@
 2. 将 `白龙桌宠Swift.app` 拖到“应用程序”或你选择的固定目录，再从访达打开。
 3. 在“设置 → 通用”中选择是否随登录或 Codex 启动。
 
-App 使用本地签名，未进行苹果公证。首次打开一定会被系统拦截。点击完成按钮，在"→系统设置→隐私与安全性"中找到"白龙桌宠Swift.app"并选择“仍要打开”。操作步骤见 [Apple 说明](https://support.apple.com/zh-cn/102445)。
+App 使用本地签名，未进行苹果公证。首次打开一定会被系统拦截。点击完成按钮，在"苹果菜单→系统设置→隐私与安全性"中找到"白龙桌宠Swift.app"并选择“仍要打开”。操作步骤见 [Apple 说明](https://support.apple.com/zh-cn/102445)。
 
 ## 先试试这些操作
 
