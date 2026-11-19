@@ -312,7 +312,7 @@ final class Bubble {
         }
         cardCount.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); cardCount.textColor = .secondaryLabelColor; cardCount.alignment = .center
         [previousCard!,nextCard!,replyButton!,cardCount].forEach {$0.isHidden = true}
-        previousQuestion = ActionButton("上一题") { [weak self] in self?.questionForm?.previousPage() }
+        previousQuestion = ActionButton("< 上一题") { [weak self] in self?.questionForm?.previousPage() }
         skipQuestion = ActionButton("跳过") { [weak self] in self?.questionForm?.skipPage() }
         previousQuestion.isHidden = true; skipQuestion.isHidden = true
         details.keepsAccentWhenInactive = true
@@ -414,7 +414,9 @@ final class Bubble {
         let headingHeight = max(firstLineHeight,title.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
         let buttonHeight = self.buttonHeight, gap = 8*scale
         let columnWidth = (w-2*margin-gap)/2
-        let actionsHeight = details.isHidden && codexButton.isHidden && retryButton.isHidden ? 0 : buttonHeight+gap+(previousQuestion.isHidden ? 0 : buttonHeight+gap)
+        let codexInNavigation = pendingAttention && !codexButton.isHidden
+        let hasActionRow = !details.isHidden || !retryButton.isHidden || (!codexButton.isHidden && !codexInNavigation)
+        let actionsHeight = hasActionRow ? buttonHeight+gap : 0
         let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+gap
         let approvalHeight:CGFloat = approvalReject.isHidden ? 0 : buttonHeight+gap
         let workspaceHeight = workspaceAttached ? max(20*scale,workspace.fittingSize.height)+4*scale : 0
@@ -468,26 +470,20 @@ final class Bubble {
             let allowOnLeft = self.preferences.string("approvalButtonOrder") == "allowLeft"
             self.approvalReject.frame = NSRect(x:allowOnLeft ? margin+columnWidth+gap : margin,y:actionY+actionsHeight,width:columnWidth,height:buttonHeight)
             self.approvalAllow.frame = NSRect(x:allowOnLeft ? margin : margin+columnWidth+gap,y:actionY+actionsHeight,width:columnWidth,height:buttonHeight)
-            self.previousQuestion.frame = NSRect(x:margin,y:actionY+buttonHeight+gap,width:columnWidth,height:buttonHeight)
-            self.skipQuestion.frame = NSRect(x:margin+columnWidth+gap,y:actionY+buttonHeight+gap,width:columnWidth,height:buttonHeight)
             self.previousCard.frame = NSRect(x:margin,y:navigationY,width:buttonHeight,height:buttonHeight)
             let countHeight = self.cardCount.intrinsicContentSize.height
             self.cardCount.frame = NSRect(x:margin+buttonHeight+gap,y:navigationY+(buttonHeight-countHeight)/2,width:columnWidth-2*(buttonHeight+gap),height:countHeight)
             self.nextCard.frame = NSRect(x:margin+columnWidth-buttonHeight,y:navigationY,width:buttonHeight,height:buttonHeight)
             self.replyButton.frame = NSRect(x:margin+columnWidth+gap,y:navigationY,width:columnWidth,height:buttonHeight)
+            if codexInNavigation {self.codexButton.frame = self.replyButton.frame}
             self.retryButton.frame = NSRect(x:margin+columnWidth+gap,y:actionY,width:columnWidth,height:buttonHeight)
             if !self.previousQuestion.isHidden {
-                // 题目导航固定一行：上一题、跳过、下一题／提交；Codex 跳转独立一行。
                 let questionColumn = (w-2*margin-2*gap)/3
-                let questionY = actionY+buttonHeight+gap
-                self.previousQuestion.frame = NSRect(x:margin,y:questionY,width:questionColumn,height:buttonHeight)
-                self.skipQuestion.frame = NSRect(x:margin+questionColumn+gap,y:questionY,width:questionColumn,height:buttonHeight)
-                self.details.frame = NSRect(x:margin+2*(questionColumn+gap),y:questionY,width:questionColumn,height:buttonHeight)
-                self.codexButton.frame = NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight)
-            } else if !self.codexButton.isHidden && self.details.isHidden {
-                self.codexButton.frame = NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight)
-            } else if !self.codexButton.isHidden {
-                self.codexButton.frame = NSRect(x:margin,y:actionY,width:columnWidth,height:buttonHeight)
+                self.previousQuestion.frame = NSRect(x:margin,y:actionY,width:questionColumn,height:buttonHeight)
+                self.skipQuestion.frame = NSRect(x:margin+questionColumn+gap,y:actionY,width:questionColumn,height:buttonHeight)
+                self.details.frame = NSRect(x:margin+2*(questionColumn+gap),y:actionY,width:questionColumn,height:buttonHeight)
+            } else if !self.codexButton.isHidden && !codexInNavigation {
+                self.codexButton.frame = NSRect(x:margin,y:actionY,width:self.details.isHidden ? w-2*margin : columnWidth,height:buttonHeight)
                 self.details.frame = NSRect(x:margin+columnWidth+gap,y:actionY,width:columnWidth,height:buttonHeight)
             } else {
                 self.details.frame = self.retryButton.isHidden ? NSRect(x:margin,y:actionY,width:w-2*margin,height:buttonHeight) : NSRect(x:margin,y:actionY,width:columnWidth,height:buttonHeight)

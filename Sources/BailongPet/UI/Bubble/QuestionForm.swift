@@ -37,7 +37,7 @@ final class QuestionForm: NSView {
     }
     var isLast:Bool {currentIndex == questions.count-1}
     var complete:Bool {isLast && questions.enumerated().allSatisfy {skipped.contains($0.element.id) || !answer(at:$0.offset).isEmpty}}
-    var actionTitle:String {isLast ? (answers.isEmpty && complete ? "关闭" : "提交回答") : "下一题"}
+    var actionTitle:String {isLast ? (answers.isEmpty && complete ? "关闭" : "提交回答") : "下一题 >"}
     var canAdvance:Bool {enabled && (isLast ? complete : !answer(at:currentIndex).isEmpty || skipped.contains(questions[currentIndex].id))}
     init(questions:[TaskQuestion],width:CGFloat,scale:CGFloat,fontSize:CGFloat) {
         self.questions = questions; self.scale = scale; self.fontSize = fontSize
@@ -100,33 +100,33 @@ final class QuestionForm: NSView {
         let page = text("第 \(qi+1) / \(questions.count) 题"+(skipped.contains(q.id) ? " · 已跳过" : ""),11*scale,usable,true)
         pageLabel = page; page.frame.origin = NSPoint(x:inset,y:y); add(page); y += page.frame.height+10*scale
         let prompt = text(q.prompt,fontSize,usable); prompt.frame.origin = NSPoint(x:inset,y:y); add(prompt); y += prompt.frame.height+8*scale
-        for (oi,option) in q.options.enumerated() {
-            let button = radios.first {$0.tag == qi*1000+oi}!
+        for button in radios where button.tag/1000 == qi {
+            let oi = button.tag % 1000
+            let option = oi < q.options.count ? q.options[oi] : nil
             let x = inset+24*scale
-            let name = QuestionOptionLabel(wrappingLabelWithString:"\(oi+1). "+option.title+(option.recommended ? "（推荐）" : ""))
-            name.font = .systemFont(ofSize:fontSize)
+            let title = option.map {"\(oi+1). "+$0.title+($0.recommended ? "（推荐）" : "")} ?? "其他"
+            let name = QuestionOptionLabel(wrappingLabelWithString:title)
+            let font = NSFont.systemFont(ofSize:fontSize)
+            name.font = font
             name.frame.size = NSSize(width:usable-24*scale,height:ceil(name.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:usable-24*scale,height:100000)).height))
             name.select = { [weak button] in button?.performClick(nil) }
-            name.frame.origin = NSPoint(x:x,y:y)
-            button.frame = NSRect(x:inset,y:y,width:20*scale,height:20*scale); button.isHidden = false; addSubview(button)
-            add(name); y += max(20*scale,name.frame.height)
-            if let detail = option.detail,!detail.isEmpty {
+            let firstLineHeight = min(name.frame.height,ceil(font.ascender-font.descender+font.leading))
+            let side = 20*scale, rowTop = y, firstRowHeight = max(side,firstLineHeight)
+            name.frame.origin = NSPoint(x:x,y:rowTop+(firstRowHeight-firstLineHeight)/2)
+            button.frame = NSRect(x:inset,y:rowTop+(firstRowHeight-side)/2,width:side,height:side)
+            button.isHidden = false; addSubview(button); add(name)
+            y = max(button.frame.maxY,name.frame.maxY)
+            if let detail = option?.detail,!detail.isEmpty {
                 let field = text(detail,max(10*scale,fontSize-2*scale),usable-24*scale,true)
                 field.frame.origin = NSPoint(x:x,y:y+3*scale); add(field); y += field.frame.height+3*scale
             }
             y += 8*scale
         }
-        if !q.options.isEmpty {
-            let button = radios.first {$0.tag == qi*1000+q.options.count}!
-            button.title = "其他"; button.font = .systemFont(ofSize:fontSize)
-            button.frame = NSRect(x:inset,y:y,width:usable,height:24*scale); button.isHidden = false; addSubview(button); y += 28*scale
-        }
         let editor = editors[qi]; editor.frame = NSRect(x:inset,y:y,width:usable,height:80*scale)
         editor.layoutSubtreeIfNeeded()
         let input = inputs[qi]
         input.setFrameSize(NSSize(width:editor.contentSize.width,height:max(input.frame.height,editor.contentSize.height)))
-        y += editor.frame.height+8*scale
-        frame.size = NSSize(width:width,height:y+5*scale)
+        frame.size = NSSize(width:width,height:editor.frame.maxY)
         window?.invalidateCursorRects(for:self)
     }
 
@@ -165,7 +165,6 @@ final class QuestionForm: NSView {
         enabled = value
         for radio in radios {radio.isEnabled = value}
         for input in inputs {input.update(font:.systemFont(ofSize:fontSize),editable:value)}
-        for button in generated.compactMap({$0 as? NSButton}) {button.isEnabled = value && (button.title != "上一题" || currentIndex > 0)}
     }
 }
 
