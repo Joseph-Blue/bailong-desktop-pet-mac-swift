@@ -136,7 +136,7 @@ final class SpriteView: NSView, CAAnimationDelegate {
     override func mouseDown(with event: NSEvent) {
         NSApp.preventWindowOrdering(); pet?.mouseDown(event)
     }
-    override func mouseDragged(with event: NSEvent) {pet?.mouseDragged(event)}
+    override func mouseDragged(with event: NSEvent) {pet?.mouseDragged(to:NSEvent.mouseLocation)}
     override func pressureChange(with event:NSEvent) {
         if event.stage == 2 {pet?.forceClick()}
     }

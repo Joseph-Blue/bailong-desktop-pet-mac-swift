@@ -94,14 +94,7 @@ final class PetController: NSObject, NSMenuDelegate {
     private var greetingPending = true
     private var exiting = false
     var pauseTime: Double?
-    var press: CGPoint?, pressOrigin = CGPoint.zero
-    var dragged = false, dragFromDock = false
-    var dockRecallAt: Double?
-    var dockDoubleClick = false
-    var leftDoubleClick = false
-    private var forceClicked = false
-    private var lastContextPress:(button:Int,time:TimeInterval,point:NSPoint)?
-    private var consumedContextPress:(button:Int,through:TimeInterval)?
+    private var gestures = PetGestureState()
     var timer: Timer?, desktopTimer: Timer?
     var playbackScheduling = PlaybackSchedulingStatistics()
     private var motionDisplayLink: CADisplayLink?
@@ -333,7 +326,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         play(preferences.choose(catalog.idles,previous:current.id,selection:.idle) ?? catalog.idle,"idle")
     }
-    func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !(quotaActive && bubble.kind == "quotaLoading") && press == nil && !menuOpen && now >= max(nextLeisure,lastInteraction+preferences.activityInterval) }
+    func leisureAllowed() -> Bool { !hidden && dock == nil && activeTasks.isEmpty && !(quotaActive && bubble.kind == "quotaLoading") && !gestures.isPressed && !menuOpen && now >= max(nextLeisure,lastInteraction+preferences.activityInterval) }
     func route(_ clip: Clip) -> CGPoint? {
         guard preferences.string("movementRange") != "still" else {return nil}
         let a = area(screen)
@@ -377,13 +370,13 @@ final class PetController: NSObject, NSMenuDelegate {
             // 等待解码或末帧期间保留原档位频率的鼠标命中检查，不忙等空队列。
             deadline = min(deadline,reference+interval)
             let end = began + duration/playbackRate
-            if !loading, press == nil || dragged, end > reference { deadline = min(deadline,end) }
+            if !loading, gestures.allowsMovement, end > reference { deadline = min(deadline,end) }
         }
-        if let recall = dockRecallAt, press == nil { deadline = min(deadline,max(reference,recall)) }
+        if let recall = gestures.recallDeadline { deadline = min(deadline,max(reference,recall)) }
         armAnimationTimer(at:deadline)
     }
     private func updateMotionDisplayLink() {
-        let active = !hidden && (dockAnimating || motion != nil && (press == nil || dragged))
+        let active = !hidden && (dockAnimating || motion != nil && gestures.allowsMovement)
         if active && motionDisplayLink == nil {
             let link = view.displayLink(target:PetMotionDisplayTarget(self),selector:#selector(PetMotionDisplayTarget.refresh(_:)))
             link.add(to:.main,forMode:.common)
@@ -413,7 +406,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 }
             }
         }
-        if motion != nil, press == nil || dragged {
+        if motion != nil, gestures.allowsMovement {
             updateMovement(at:(now-began)*playbackRate)
         }
         if wasDockAnimating {
@@ -436,12 +429,10 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         defer { if !hidden { scheduleAnimationTick(after:tickTime) } }
         // 吸边单击沿用作者的 250ms 判定；到期仅召回，不执行普通单击动作。
-        if let deadline = dockRecallAt, now >= deadline, press == nil {
-            dockRecallAt = nil; undock()
-        }
+        if gestures.recallDue(at:now) {undock()}
         if !hidden, let animation {
             let elapsed = (tickTime-began)*playbackRate, duration = current.durationMs/1000
-            if elapsed >= duration && !loading && (press == nil || dragged) {
+            if elapsed >= duration && !loading && gestures.allowsMovement {
                 if motion != nil {updateMovement(at:elapsed); movementReady = now + 10; motion = nil}
                 if mode == "drag" { began = now; selectFrame(at: 0, animation: animation) }
                 else if mode == "opening" && !activeTasks.isEmpty, let clip = preferences.choose(catalog.work.filter({$0.id != "work01"}),previous:nil,selection:.task) { play(clip,"working") }
@@ -456,7 +447,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if !hidden {
             view.refreshFrame()
             if bubbleAnchor != BubbleAnchor(frame:bubbleAttachmentFrame,screen:screen.visibleFrame,dock:dock) { placeBubble() }
-            if press != nil { window.ignoresMouseEvents = false }
+            if gestures.isPressed { window.ignoresMouseEvents = false }
             else {
                 let point = view.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation),from:nil).applying(transform.inverted())
                 let rect = drawRect
@@ -474,56 +465,37 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func mouseDown(_ event: NSEvent) {
         if event.modifierFlags.contains(.control) {rightMouseDown(event); return}
-        lastContextPress = nil
-        forceClicked = false
-        // 只有吸边状态保留召回判定期；普通点击仍立即响应。
-        leftDoubleClick = dock == nil && event.clickCount > 1 && event.clickCount % 2 == 0
-        dockDoubleClick = dock != nil && dockRecallAt.map {now <= $0} == true
-        dockRecallAt = nil
         interaction()
-        if motion != nil { idle() }
-        press = NSEvent.mouseLocation; pressOrigin = position; dragged = false; dragFromDock = dock != nil
-        // 按下仅进入点击／拖拽判定，素材画面继续播放。
-        if dockDoubleClick {performGesture(preferences.string("doubleClickAction"))}
+        if motion != nil {idle()}
+        if let gesture = gestures.begin(at:NSEvent.mouseLocation, petOrigin:position, docked:dock != nil,
+                                        clickCount:event.clickCount, now:now) {
+            performGesture(gesture)
+        }
         updateMotionDisplayLink()
     }
     func forceClick() {
-        guard press != nil, !dragged, !dockDoubleClick, !forceClicked else {return}
-        forceClicked = true
-        performGesture(preferences.string("forceClickAction"))
+        if let gesture = gestures.forceClick() {performGesture(gesture)}
     }
-    func mouseDragged(_ event: NSEvent) {
-        guard let press, !forceClicked else {return}
-        let p = NSEvent.mouseLocation, delta = CGPoint(x:p.x-press.x,y:press.y-p.y)
-        if !dragged && abs(delta.x)+abs(delta.y) >= 8 {
-            leftDoubleClick = false; dockDoubleClick = false
-            dragged = true
-            if dragFromDock {
-                // 吸边拖动与召回一致，不切换到跟随鼠标的拖拽动作。
-                undock(); return
-            }
-            pending = nil; play(catalog.dragAnimation,"drag")
-        }
-        if dragged && !dragFromDock {
-            let screen = preferredScreen ?? NSScreen.screens.first(where:{$0.frame.contains(p)}) ?? self.screen
-            move(constrained(CGPoint(x:pressOrigin.x+delta.x,y:pressOrigin.y+delta.y),screen:screen))
-            // 窗口位置跟随鼠标事件；动画画面统一由播放定时器推进，避免绕过 FPS 上限。
+    func mouseDragged(to point:CGPoint) {
+        switch gestures.drag(to:point) {
+        case .recall: undock()
+        case let .move(target, began):
+            if began {pending = nil; play(catalog.dragAnimation,"drag")}
+            let screen = preferredScreen ?? NSScreen.screens.first(where:{$0.frame.contains(point)}) ?? self.screen
+            move(constrained(target,screen:screen))
+        case nil: break
         }
     }
     func mouseUp(_ event: NSEvent) {
-        guard press != nil else {return}; press = nil; interaction()
-        defer {activityOrigin = position; savePosition(); updateMotionDisplayLink()}
-        if forceClicked {return}
-        if dragged {
-            dragged = false
-            if !dragFromDock && !snap() {play(catalog.landingAnimation,"landing")}
-        } else if dockDoubleClick {
-            dockDoubleClick = false
-        } else if dragFromDock {
-            if dock != nil {dockRecallAt = now + 0.25}
-        } else if leftDoubleClick {
-            leftDoubleClick = false; performGesture(preferences.string("doubleClickAction"))
-        } else {performGesture(preferences.string("singleClickAction"))}
+        guard let release = gestures.release(docked:dock != nil, now:now) else {return}
+        interaction()
+        switch release {
+        case let .click(gesture): performGesture(gesture)
+        case .finishDrag:
+            if !snap() {play(catalog.landingAnimation,"landing")}
+        case .handled: break
+        }
+        activityOrigin = position; savePosition(); updateMotionDisplayLink()
     }
     func snap() -> Bool {
         guard !composerVisible else { return false }
@@ -536,7 +508,7 @@ final class PetController: NSObject, NSMenuDelegate {
         dockProgress = 0; dockFrom = 0; dockTarget = 1; dockBegan = now; dockAnimating = true
         play(catalog.idle,"idle"); return true
     }
-    func undock() { dockRecallAt = nil; guard dock != nil else { return }; dockRecallOrigin = position; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
+    func undock() { gestures.cancelRecall(); guard dock != nil else { return }; dockRecallOrigin = position; dockFrom = dockProgress; dockTarget = 0; dockBegan = now; dockAnimating = true; interaction() }
     func preview(_ clip: Clip, taskOverview:Bool = false, line:String? = nil) {
         interaction(); soundOnce()
         let wasHidden = hidden
@@ -665,20 +637,20 @@ final class PetController: NSObject, NSMenuDelegate {
         if dock != nil {let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y))}
     }
     func taskStarted(_ key: String) { let first = activeTasks.isEmpty; activeTasks.insert(key); interaction()
-        if preferences.bool("taskOpening") && first && !hidden && dock == nil && press == nil, let clip = catalog.work.first(where:{$0.id == "work01"}) { play(clip,"opening") }
+        if preferences.bool("taskOpening") && first && !hidden && dock == nil && !gestures.isPressed, let clip = catalog.work.first(where:{$0.id == "work01"}) { play(clip,"opening") }
     }
     func stopObservingTask(_ key:String) {
         toastActivities.removeValue(forKey:key)
         if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
         activeTasks.remove(key)
-        if activeTasks.isEmpty && !hidden && dock == nil && press == nil {idle()}
+        if activeTasks.isEmpty && !hidden && dock == nil && !gestures.isPressed {idle()}
     }
     func taskEnded(_ key: String, status: String) {
         toastActivities.removeValue(forKey:key)
         if progressToastKey == key {progressBubble.hide(); progressToastKey = nil}
         bubble.finishTask(key,status:status); activeTasks.remove(key); interaction()
         if status == "completed" { soundOnce() }
-        guard !hidden && dock == nil && press == nil else { return }
+        guard !hidden && dock == nil && !gestures.isPressed else { return }
         if status == "completed" && preferences.bool("taskCelebration"), let clip = catalog.variants.first(where:{$0.id == "18"}) { play(clip,"celebration") }
         else if activeTasks.isEmpty { idle() }
     }
@@ -726,7 +698,7 @@ final class PetController: NSObject, NSMenuDelegate {
             timer?.invalidate(); timer = nil
         }
         if hidden {
-            dockRecallAt = nil; dockDoubleClick = false; leftDoubleClick = false; press = nil; dragged = false
+            gestures = PetGestureState()
             if pauseTime == nil {pauseTime = now}
             window.ignoresMouseEvents = true
             visibilityFade.hide { [weak self] in
@@ -766,8 +738,8 @@ final class PetController: NSObject, NSMenuDelegate {
     private func randomAnimation(taskOverview:Bool = false) {
         if let clip = preferences.choose(catalog.variants+catalog.work,previous:current.id) {preview(clip,taskOverview:taskOverview)}
     }
-    func performGesture(_ action: String) {
-        switch action {
+    private func performGesture(_ gesture: PetGesture) {
+        switch preferences.string(gesture.setting.key) {
         case "chat": soundOnce(); onComposer()
         case "quota": soundOnce(); onQuota()
         case "history": soundOnce(); onHistory(nil)
@@ -778,41 +750,32 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func rightMouseDown(_ event: NSEvent) {
-        dockRecallAt = nil
         interaction()
         if motion != nil {idle()}
-        // AppKit 可把 Control 点击直接分派到右键入口，菜单跟踪仍使用实际按下的鼠标键。
+        // Control 点按可由 AppKit 直接分派到右键入口，菜单跟踪需采样实际按下的键。
         let button = event.modifierFlags.contains(.control) && NSEvent.pressedMouseButtons & 1 != 0 ? 0 : event.buttonNumber
-        if let consumed = consumedContextPress,consumed.button == button,event.timestamp <= consumed.through {return}
-        consumedContextPress = nil
-        let point = NSEvent.mouseLocation
-        if let first = lastContextPress,first.button == button,event.timestamp-first.time <= NSEvent.doubleClickInterval,
-           hypot(point.x-first.point.x,point.y-first.point.y) <= 8 {
-            lastContextPress = nil
-            performGesture(preferences.string("rightDoubleClickAction"))
-        } else {
-            lastContextPress = (button,event.timestamp,point)
-            showContextMenu(firstClick:event,button:button)
+        let interval = NSEvent.doubleClickInterval
+        switch gestures.contextDown(button:button, at:NSEvent.mouseLocation, time:event.timestamp, interval:interval) {
+        case .menu: showContextMenu(button:button,deadline:event.timestamp + interval)
+        case .doubleClick: performGesture(.rightDoubleClick)
+        case .handled: break
         }
     }
-    private func showContextMenu(firstClick:NSEvent,button:Int) {
+    private func showContextMenu(button:Int, deadline:TimeInterval) {
         let menu = makeMenu(); menu.update()
         let cursor = NSEvent.mouseLocation
         let target = NSScreen.screens.first(where:{$0.frame.contains(cursor)}) ?? screen
         let frame = MenuPlacement.frame(size:menu.size,cursor:cursor,screen:target.visibleFrame,pet:visiblePetFrame)
         // NSMenu 的嵌套事件循环不会经过本地事件监视器。
         // 只在本次双击识别时间内读取按键状态，不延迟菜单显示，不申请全局输入权限。
-        var wasPressed = true, doubleClicked = false
-        let deadline = firstClick.timestamp + NSEvent.doubleClickInterval
+        var doubleClicked = false
         func captureSecondPress() {
-            guard ProcessInfo.processInfo.systemUptime <= deadline else {return}
             let pressed = NSEvent.pressedMouseButtons & (1 << button) != 0
-            let point = NSEvent.mouseLocation
-            if pressed && !wasPressed && (button != 0 || NSEvent.modifierFlags.contains(.control)) && hypot(point.x-cursor.x,point.y-cursor.y) <= 8 {
-                consumedContextPress = (button,ProcessInfo.processInfo.systemUptime)
-                doubleClicked = true; menu.cancelTrackingWithoutAnimation()
+            if gestures.sampleMenuButton(button, pressed:pressed, control:NSEvent.modifierFlags.contains(.control),
+                                         at:NSEvent.mouseLocation, time:now) {
+                doubleClicked = true
+                menu.cancelTrackingWithoutAnimation()
             }
-            wasPressed = pressed
         }
         let tracking = Timer(timeInterval:1/120,repeats:true) { timer in
             if ProcessInfo.processInfo.systemUptime > deadline {timer.invalidate(); return}
@@ -824,10 +787,7 @@ final class PetController: NSObject, NSMenuDelegate {
         // 原生菜单可能先消费第二次按下并退出；返回时也处理该按下。
         captureSecondPress()
         tracking.invalidate()
-        if doubleClicked {
-            lastContextPress = nil
-            performGesture(preferences.string("rightDoubleClickAction"))
-        }
+        if doubleClicked {performGesture(.rightDoubleClick)}
     }
     func makeMenu() -> NSMenu {PetMenu.make(for:self,random:{ [weak self] in self?.randomAnimation() })}
     func savePosition() {
@@ -929,7 +889,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu:NSMenu) {
         PetMenu.refreshVisibility(in:menu,pet:self)
     }
-    func menuWillOpen(_ menu: NSMenu) {dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
+    func menuWillOpen(_ menu: NSMenu) {gestures.cancelRecall(); menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
     deinit {
         motionDisplayLink?.invalidate()
@@ -950,7 +910,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if let visibleActivity {ProcessInfo.processInfo.endActivity(visibleActivity); self.visibleActivity = nil}
         diagnostics?.stop(); visibilityFade.stop(); view.releaseDisplayTracking()
         motionDisplayLink?.invalidate(); motionDisplayLink = nil
-        startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); dockRecallAt = nil; decoder.close(); bubble.hide(); progressBubble.hide(); settings.window.orderOut(nil)
+        startup?.orderOut(nil); timer?.invalidate(); desktopTimer?.invalidate(); gestures.cancelRecall(); decoder.close(); bubble.hide(); progressBubble.hide(); settings.window.orderOut(nil)
         for token in observationTokens { NSWorkspace.shared.notificationCenter.removeObserver(token); NotificationCenter.default.removeObserver(token) }
         NSStatusBar.system.removeStatusItem(status); window.orderOut(nil)
     }

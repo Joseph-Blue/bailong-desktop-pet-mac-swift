@@ -58,16 +58,12 @@ final class Bubble {
     private var taskList:BubbleTaskList?
     private let countdown = BubbleCountdown()
     private var headingTimer: Timer?
-    private var quotaLoadingTimer:Timer?
-    private var quotaPricingTimer:Timer?
-    private weak var quotaLoadingAmount:NSTextField?
-    private var quotaLoadingPhase = 0
+    private var quotaBody: QuotaBubbleBody?
     private var plainHeading = ""
     private var headingPhase = 0
     private var headingStarted = 0.0
     private var headingAnimated = false
     private var renderedHeadingSignature = ""
-    private static let quotaResetTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
     private let elapsedIcon = NSImageView()
     private let elapsedLabel = NSTextField(labelWithString:"00:00")
     private var elapsedTimer: Timer?
@@ -81,7 +77,6 @@ final class Bubble {
     private var timedTaskKey: String?
     private var layoutBodyHeight = 0.0
     private var elapsedLayoutWidth = 0.0
-    private let headingFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     private var scale = 1.0
     var preferences = PetPreferences.shared
     var purpose: MessagePurpose = .interaction
@@ -244,7 +239,7 @@ final class Bubble {
             guard let self else {return}
             self.renderedHeadingSignature = ""
             if self.headingAnimated {self.setHeading(self.plainHeading,animated:true)}
-            self.refreshQuotaLoading()
+            self.quotaBody?.refreshLoadingAppearance()
             self.refreshTaskProgress()
             if self.userInputPrefixLength > 0,let storage = self.text.textStorage,storage.length >= self.userInputPrefixLength {
                 let accent = NSColor(cgColor:AppAppearance.resolvedColor(AppAccent.foregroundColor,for:self.window.effectiveAppearance))!
@@ -394,7 +389,7 @@ final class Bubble {
         }
         let questionWidth = previousQuestion.isHidden ? 0 : 32*scale+2*gap+3*([previousQuestion!,skipQuestion!,details!].map {$0.intrinsicContentSize.width}.max() ?? 0)
         let quotaInset = BubbleBodyLayout(width:320*scale,scale:scale).inset
-        let quotaWidth = kind == "quota" ? max(360*scale,quotaRequiredContentWidth+2*quotaInset) : 0
+        let quotaWidth = kind == "quota" ? max(360*scale,(quotaBody?.requiredContentWidth ?? 0)+2*quotaInset) : 0
         return max(usesCustomAspect ? aspectWidth : 320*scale,320*scale,quotaWidth,32*scale+gap+2*column,questionWidth)
     }
     private var layoutWidth:CGFloat {min(max(questionSize?.width ?? 0,minimumLayoutWidth),kind == "progressToast" ? 360*scale : .greatestFiniteMagnitude,placementArea?.width ?? .greatestFiniteMagnitude)}
@@ -523,9 +518,7 @@ final class Bubble {
         let laysOutBody = card?.showsTaskOverview != true || !preferences.bool("showTaskOverview")
         preparingDisplay = true
         defer {preparingDisplay = false; onVisibilityChange()}
-        if kind != "quota" {quotaRequiredContentWidth = 0}
-        stopQuotaLoading()
-        quotaPricingTimer?.invalidate(); quotaPricingTimer = nil
+        quotaBody?.stop(); quotaBody = nil
         taskList?.stop(); taskList = nil
         userInputPrefixLength = 0
         if (attentionAction && !questions.isEmpty || !laysOutBody) && !text.string.isEmpty {text.releaseRenderedContent()}
@@ -694,7 +687,7 @@ final class Bubble {
         guard headingTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0/30, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.headingPhase = Int((ProcessInfo.processInfo.systemUptime-self.headingStarted)*10) % self.headingFrames.count
+            self.headingPhase = Int((ProcessInfo.processInfo.systemUptime-self.headingStarted)*10) % InlineStatusLayout.brailleFrames.count
             self.renderAnimatedHeading()
         }
         headingTimer = timer; RunLoop.main.add(timer, forMode: .common)
@@ -710,14 +703,14 @@ final class Bubble {
         if hasActivity {
             let previousTitleOnly = renderedHeadingSignature.split(separator:"\u{0}",omittingEmptySubsequences:false)
             headingSpinner.font = font
-            headingSpinner.attributedStringValue = InlineStatusLayout.braille(headingFrames[headingPhase],font:font,color:AppAccent.foregroundColor)
+            headingSpinner.attributedStringValue = InlineStatusLayout.braille(InlineStatusLayout.brailleFrames[headingPhase],font:font,color:AppAccent.foregroundColor)
             let titleKey = "\(plainHeading)|\(sweep)|\(font.fontName)|\(font.pointSize)|\(appearanceName)"
             let oldTitleKey = previousTitleOnly.count == 7 ? "\(previousTitleOnly[0])|\(previousTitleOnly[2])|\(previousTitleOnly[4])|\(previousTitleOnly[5])|\(previousTitleOnly[6])" : ""
             if titleKey != oldTitleKey || previousTitleOnly.count != 7 || previousTitleOnly[3] != "true" {
                 title.attributedStringValue = ProgressTextEffects.title(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed)
             }
         } else {
-            title.attributedStringValue = ProgressTextEffects.heading(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed,frame:headingFrames[headingPhase])
+            title.attributedStringValue = ProgressTextEffects.heading(plainHeading,font:font,appearance:title.effectiveAppearance,elapsed:elapsed,frame:InlineStatusLayout.brailleFrames[headingPhase])
         }
         renderedHeadingSignature = signature
     }
@@ -847,281 +840,35 @@ final class Bubble {
             self.showFailure(failure,scale:self.preferences.number("bubblePercent")/100,retry:retry,taskStartedAt:taskStartedAt,taskFinishedAt:taskFinishedAt,taskStatus:taskStatus)
         }
     }
-    private func stopQuotaLoading() {
-        quotaLoadingTimer?.invalidate(); quotaLoadingTimer = nil; quotaLoadingAmount = nil; quotaLoadingPhase = 0
-    }
-    private func renderQuotaLoading() {
-        guard let field = quotaLoadingAmount else {return}
-        let font = field.font ?? .systemFont(ofSize:13)
-        let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(headingFrames[quotaLoadingPhase],font:font,color:AppAccent.foregroundColor))
-        value.append(NSAttributedString(string:" 加载中",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
-        let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .right
-        value.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:value.length))
-        field.attributedStringValue = value
-    }
-    private func refreshQuotaLoading() {
-        guard quotaLoadingAmount != nil else {return}
-        if !ProgressTextEffects.enabled {
-            quotaLoadingTimer?.invalidate(); quotaLoadingTimer = nil; quotaLoadingPhase = 0
-        }
-        renderQuotaLoading()
-        guard ProgressTextEffects.enabled,quotaLoadingTimer == nil else {return}
-        let timer = Timer(timeInterval:0.1,repeats:true) { [weak self] _ in
-            guard let self else {return}
-            self.quotaLoadingPhase = (self.quotaLoadingPhase+1) % self.headingFrames.count
-            self.renderQuotaLoading()
-        }
-        quotaLoadingTimer = timer; RunLoop.main.add(timer,forMode:.common)
-    }
-    private var quotaRequiredContentWidth:CGFloat = 0
-    func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, cachedAt:Date? = nil, retry: (() -> Void)? = nil,preserveScroll:Bool = false,revealUsage:Bool = false) {
-        let readingOrigin = scroll.contentView.bounds.origin
-        var usageEnd:CGFloat?
-        stopQuotaLoading()
-        quotaPricingTimer?.invalidate(); quotaPricingTimer = nil
-        var overview = overview
-        let now = Date()
-        var pricingCountdown:NSTextField?
-        var pricingTarget:Date?
-        if overview.apiProvider?.catalogID == "deepseek",
-           let index = overview.rows.firstIndex(where:{$0.title == "峰谷定价"}) {
-            overview.rows.replaceSubrange(index..<overview.rows.endIndex,with:QuotaPresentation.deepSeekPricingRows(at:now))
-        }
+    func quotaRows(_ overview:QuotaOverview, scale:Double, failure:AppFailure? = nil, cachedAt:Date? = nil,
+                   retry:(() -> Void)? = nil, preserveScroll:Bool = false) {
+        quotaBody?.stop()
         retryButton.isHidden = true
-        let fontScale = scale*preferences.number("messageFontSize")/13
         if let failure {
             purpose = .attention; countdown.stop()
             codexButton.isHidden = true
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
         }
         configureButtons()
-        let resetFont = NSFont.monospacedDigitSystemFont(ofSize:12.5*fontScale,weight:.medium)
-        let resetDates = overview.rows.compactMap(\.resetsAt)
-        let resetTab = ceil(resetDates.map {(QuotaPresentation.resetDateText($0) as NSString).size(withAttributes:[.font:resetFont]).width}.max() ?? 0)+16*fontScale
-        let resetTail = ceil(resetDates.map {(QuotaPresentation.countdown(until:$0,now:now) as NSString).size(withAttributes:[.font:resetFont]).width}.max() ?? 0)
-        quotaRequiredContentWidth = resetDates.isEmpty ? 0 : resetTab+resetTail+8
-        let width = bodyLayout.contentWidth
-        let content = TopDownView(frame:NSRect(x:0,y:0,width:width,height:1))
-        content.autoresizesSubviews = false
-        var y = 0.0
-        @discardableResult func addText(_ value: String, font: NSFont, color: NSColor = .labelColor) -> CGFloat {
-            let text = label(value); text.font = font; text.textColor = color
-            let height = max(font.pointSize+5,(value as NSString).boundingRect(with:NSSize(width:width,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font]).height.rounded(.up)+3)
-            text.frame = NSRect(x:0,y:y,width:width,height:height); content.addSubview(text); y += height
-            return height
+        let body = QuotaBubbleBody(overview,scale:scale,preferences:preferences,cachedAt:cachedAt,failed:failure != nil,retry:retry)
+        quotaBody = body
+        body.onLayoutChange = { [weak self,weak body] height, reveal in
+            guard let self, let body, self.quotaBody === body else {return}
+            self.scroll.setBody(body,height:height)
+            self.layout(bodyHeight:height)
+            if let reveal {body.scrollToVisible(reveal)}
+            self.onCardLayout()
         }
-        func addProviderHeading(_ provider:APIProviderIdentity,font:NSFont) {
-            let iconSide = 18*scale
-            let icon = AppIcons.apiProvider(provider.catalogID)
-            let height = max(font.pointSize+8,iconSide)
-            let row = NSStackView()
-            row.orientation = .horizontal; row.alignment = .centerY; row.distribution = .fill
-            row.spacing = 6*scale
-            if let icon {
-                let image = NSImageView()
-                image.image = icon; image.imageScaling = .scaleProportionallyDown
-                image.contentTintColor = .labelColor
-                image.widthAnchor.constraint(equalToConstant:iconSide).isActive = true
-                image.heightAnchor.constraint(equalToConstant:iconSide).isActive = true
-                row.addArrangedSubview(image)
-            }
-            let text = label(provider.heading)
-            text.font = font; text.textColor = .labelColor
-            text.maximumNumberOfLines = 1; text.usesSingleLineMode = true; text.lineBreakMode = .byTruncatingTail
-            text.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-            row.addArrangedSubview(text)
-            row.frame = NSRect(x:0,y:y,width:width,height:height)
-            content.addSubview(row); y += height
-        }
-        if let provider = overview.apiProvider {
-            addProviderHeading(provider,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
-        } else {
-            addText(overview.subscriptionHeading,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
-        }
-        if let cachedAt {
-            addText("缓存 · 更新于 "+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale))
-        }
-        func addReset(_ date: Date) {
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.tabStops = [NSTextTab(textAlignment:.left,location:resetTab)]
-            let line = QuotaPresentation.resetDateText(date)+"\t"+QuotaPresentation.countdown(until:date,now:now)
-            let view = SelectableRichText(frame:.zero)
-            view.textContainer?.lineFragmentPadding = 2
-            view.font = resetFont
-            view.attributedStringValue = NSAttributedString(string:line,attributes:[.font:resetFont,.foregroundColor:Self.quotaResetTextColor,.paragraphStyle:paragraph])
-            let height = max(ceil(resetFont.pointSize+5),view.height(for:width))
-            view.frame = NSRect(x:0,y:y,width:width,height:height)
-            content.addSubview(view); y += height
-        }
-        y += 12*scale
-        let deepSeekAPI = overview.apiProvider?.catalogID == "deepseek"
-        for (index,row) in overview.rows.enumerated() {
-            if index > 0 && row.startsSection {
-                let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
-            }
-            if let usage = row.usage {
-                let expanded = preferences.bool(PetPreferences.tokenDetailsKey)
-                let usageView = QuotaTokenUsageView(usage:usage,expanded:expanded,scale:scale,fontScale:fontScale,headingText:overview.usageHeading,format:preferences.tokenCountFormat)
-                let height = usageView.arrange(width:width)
-                usageView.frame.origin.y = y; content.addSubview(usageView)
-                y += height+12*scale
-                usageEnd = y
-                usageView.onToggle = { [weak self,weak usageView] in
-                    self?.preferences.set(!expanded,for:PetPreferences.tokenDetailsKey,from:usageView)
-                }
-                usageView.onExpansionChange = { [weak self] reveal in
-                    guard let self,self.visible,self.kind == "quota" else {return}
-                    // 气泡高度由 BubbleMotion 负责，文档几何不再叠加隐式布局动画。
-                    DisclosureMotion.update(in:self.scroll,animatesLayout:false) {
-                        self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry,preserveScroll:true,revealUsage:reveal)
-                        self.onCardLayout()
-                    }
-                }
-                continue
-            }
-            let amountFont = NSFont.monospacedDigitSystemFont(ofSize:13*fontScale,weight:.semibold)
-            let headingFont = NSFont.systemFont(ofSize:row.subtitle == nil ? amountFont.pointSize : 12*fontScale,weight:.medium)
-            // 使用单行原生标签的 fittingSize，包含文字单元格内边距；
-            // 只按 NSString 字宽分配空间会让“剩余 55%”换行并被固定行高裁掉。
-            let heading = NSTextField(labelWithString:row.title); heading.font = headingFont; heading.textColor = .labelColor
-            if let subtitle = row.subtitle {
-                heading.usesSingleLineMode = false; heading.maximumNumberOfLines = 0; heading.lineBreakMode = .byWordWrapping
-                let title = NSMutableAttributedString(string:row.title+"\n",attributes:[.font:headingFont,.foregroundColor:NSColor.labelColor])
-                title.append(NSAttributedString(string:subtitle,attributes:[.font:NSFont.systemFont(ofSize:11*fontScale),.foregroundColor:NSColor.labelColor]))
-                heading.attributedStringValue = title
-            }
-            let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
-            if let target = row.countdownTarget {pricingCountdown = amount; pricingTarget = target}
-            let quotaColor: NSColor? = row.remaining.flatMap {$0 <= 5 ? .systemRed : $0 <= 10 ? .systemOrange : nil}
-            amount.textColor = row.tone == .positive ? StatusTextColor.green : row.tone == .negative ? StatusTextColor.red
-                : row.remaining.map {$0 <= 5 ? StatusTextColor.red : $0 <= 10 ? StatusTextColor.orange : .labelColor} ?? .labelColor
-            if row.loading {quotaLoadingAmount = amount; renderQuotaLoading(); amount.setAccessibilityLabel("本机今日用量加载中")}
-            for field in [heading,amount] where field !== heading || row.subtitle == nil {
-                field.maximumNumberOfLines = 1; field.usesSingleLineMode = true
-                field.lineBreakMode = .byTruncatingTail
-            }
-            let gap = 12*scale
-            let headingMinimum = min(heading.fittingSize.width,96*scale)
-            let amountWidth = min(amount.fittingSize.width.rounded(.up),width-headingMinimum-gap)
-            let rowHeight = max(22*scale,max(heading.fittingSize.height,amount.fittingSize.height).rounded(.up))
-            if deepSeekAPI {
-                let headingWidth = floor(max(1,width-gap)*0.42)
-                let valueWidth = max(1,width-gap-headingWidth)
-                for field in [heading,amount] {
-                    field.usesSingleLineMode = false; field.maximumNumberOfLines = 0; field.lineBreakMode = .byWordWrapping
-                    field.cell?.wraps = true; field.cell?.isScrollable = false
-                }
-                let height = max(rowHeight,max(
-                    heading.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:10000)).height,
-                    amount.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:valueWidth,height:10000)).height).rounded(.up))
-                heading.frame = NSRect(x:0,y:y,width:headingWidth,height:height)
-                amount.frame = NSRect(x:headingWidth+gap,y:y,width:valueWidth,height:height); y += height
-            } else if row.wrapsValue,amount.fittingSize.width+heading.fittingSize.width+gap > width {
-                heading.frame = NSRect(x:0,y:y,width:width,height:rowHeight); y += rowHeight
-                amount.usesSingleLineMode = false; amount.maximumNumberOfLines = 0; amount.lineBreakMode = .byWordWrapping
-                let height = max(rowHeight,amount.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:10000)).height.rounded(.up))
-                amount.frame = NSRect(x:0,y:y,width:width,height:height); y += height
-            } else {
-                heading.frame = NSRect(x:0,y:y,width:width-amountWidth-gap,height:rowHeight)
-                amount.frame = NSRect(x:width-amountWidth,y:y,width:amountWidth,height:rowHeight); y += rowHeight
-            }
-            content.addSubview(heading); content.addSubview(amount)
-            if let amount = row.remaining {
-                y += 4*scale
-                let bar = AccentProgressIndicator(frame:NSRect(x:0,y:y,width:width,height:9*scale))
-                bar.progressColor = quotaColor
-                bar.style = .bar; bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 100; bar.doubleValue = amount
-                content.addSubview(bar); y += 16*scale
-            }
-            if let resetDate = row.resetsAt {
-                addReset(resetDate)
-                if row.detail != nil {y += 4*scale}
-            }
-            if let detail = row.detail {addText(detail,font:.systemFont(ofSize:11*fontScale))}
-            if let footnote = row.footnote {
-                y += 4*scale
-                addText(footnote,font:.systemFont(ofSize:11*fontScale))
-            }
-            if row.retry,let retry {
-                let button = ActionButton("重试",retry); button.bezelStyle = .inline
-                button.font = .systemFont(ofSize:12*fontScale)
-                button.frame = NSRect(x:0,y:y,width:60*scale,height:26*scale)
-                content.addSubview(button); y += button.frame.height
-            }
-            y += (deepSeekAPI && index+1 < overview.rows.count && !overview.rows[index+1].startsSection ? 4 : 12)*scale
-        }
-        if let notice = overview.notice {addText(notice,font:.systemFont(ofSize:11*fontScale,weight:.medium))}
-        let actionFont = NSFont.systemFont(ofSize:12*fontScale,weight:.medium)
-        let actionSymbol = NSImage.SymbolConfiguration(pointSize:11*fontScale,weight:.semibold)
-        let management:SubscriptionManagementButton? = overview.apiProvider == nil
-            ? SubscriptionManagementButton(management:overview.management,font:actionFont) : nil
-        management?.symbolConfiguration = actionSymbol
-        let providerPage:ActionButton? = overview.apiProvider.flatMap {provider in
-            guard let address = provider.pageURL,let url = URL(string:address) else {return nil}
-            let button = ActionButton("打开供应商开放平台") {NSWorkspace.shared.open(url)}
-            button.font = actionFont
-            button.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil)?
-                .withSymbolConfiguration(actionSymbol)
-            button.imagePosition = .imageLeading
-            button.setAccessibilityLabel("打开供应商开放平台")
-            return button
-        }
-        let refresh = retry.map {ActionButton(failure == nil ? "立即刷新" : "重试",$0)}
-        if let refresh {
-            refresh.font = actionFont
-            refresh.image = NSImage(systemSymbolName:"arrow.clockwise",accessibilityDescription:nil)?
-                .withSymbolConfiguration(actionSymbol)
-            refresh.imagePosition = .imageLeading
-            refresh.keepsAccentWhenInactive = true
-            refresh.emphasize()
-        }
-        let leading:NSView? = providerPage ?? management
-        let leadingSize = leading?.intrinsicContentSize ?? .zero, refreshSize = refresh?.intrinsicContentSize ?? .zero
-        let actionHeight = max(26*scale,leadingSize.height,refreshSize.height)
-        let refreshWidth = min(width,refreshSize.width)
-        let leadingWidth = max(0,min(leadingSize.width,width-refreshWidth-8*scale))
-        if let leading {
-            leading.frame = NSRect(x:0,y:y,width:leadingWidth,height:actionHeight)
-            content.addSubview(leading)
-        }
-        if let refresh {
-            refresh.frame = NSRect(x:width-refreshWidth,y:y,width:refreshWidth,height:actionHeight)
-            content.addSubview(refresh)
-        }
-        y += actionHeight+4*scale
-        content.frame.size.height = y
-        scroll.setBody(content,height:y)
-        layout(bodyHeight:y)
-        if preserveScroll {
-            scroll.contentView.scroll(to:scroll.contentView.constrainBoundsRect(NSRect(origin:readingOrigin,size:scroll.contentView.bounds.size)).origin)
-            scroll.reflectScrolledClipView(scroll.contentView)
-        } else {scroll.showTop()}
-        if revealUsage,let usageEnd {
-            let lastLineHeight = 24*fontScale
-            content.scrollToVisible(NSRect(x:0,y:max(0,usageEnd-lastLineHeight),width:1,height:lastLineHeight))
-        }
-        refreshQuotaLoading()
+        let height = body.arrange(width:bodyLayout.contentWidth)
+        scroll.setBody(body,height:height)
+        layout(bodyHeight:height)
+        if !preserveScroll {scroll.showTop()}
         let heading = plainHeading
         refreshStandalone = { [weak self] in
             guard let self else {return}
             let scale = self.preferences.number("bubblePercent")/100
             self.show(title:heading,body:" ",kind:"quota",scale:scale,seconds:0,preserveCountdown:true)
             self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry)
-        }
-        if deepSeekAPI,let change = DeepSeekPricing.nextDisplayChange(at:now) {
-            let ticks = pricingTarget != nil
-            let firstFire = ticks ? Date(timeIntervalSince1970:floor(now.timeIntervalSince1970)+1) : change
-            let timer = Timer(fire:firstFire,interval:ticks ? 1 : 0,repeats:ticks) { [weak self,weak pricingCountdown] timer in
-                guard let self,self.visible,self.kind == "quota" else {timer.invalidate(); return}
-                let current = Date()
-                if current >= change || current < now {
-                    self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry,preserveScroll:true)
-                    self.onCardLayout()
-                } else if let pricingTarget {
-                    pricingCountdown?.stringValue = DeepSeekPricing.countdown(until:pricingTarget,now:current)
-                }
-            }
-            quotaPricingTimer = timer; RunLoop.main.add(timer,forMode:.common)
         }
     }
     private var placementObstacles = [CGRect]()
@@ -1166,7 +913,7 @@ final class Bubble {
         }
         placement = (rect,dock,area,size)
     }
-    deinit { countdown.stop(); headingTimer?.invalidate(); quotaLoadingTimer?.invalidate(); quotaPricingTimer?.invalidate(); elapsedTimer?.invalidate() }
+    deinit { countdown.stop(); headingTimer?.invalidate(); quotaBody?.stop(); elapsedTimer?.invalidate() }
     private func releaseHiddenDisplay() {
         // 卡片及问卷草稿已由 cardStore 保存；淡出结束后释放当前显示的独立持有。
         window.makeFirstResponder(nil)
@@ -1180,5 +927,5 @@ final class Bubble {
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); stopQuotaLoading(); quotaPricingTimer?.invalidate(); quotaPricingTimer = nil; window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
+    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); quotaBody?.stop(); quotaBody = nil; window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
 }

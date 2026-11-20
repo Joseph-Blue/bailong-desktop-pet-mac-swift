@@ -264,27 +264,24 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let menu = AccentPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
         var controlWidth = width
-        if identifier == "animationQuality" || identifier == "sendShortcut" {
+        if options.contains(where: {$0.1.contains("\t")}) {
             let font = NSFont.systemFont(ofSize:NSFont.systemFontSize)
             let columns = options.map {$0.1.components(separatedBy:"\t")}
-            let tab:CGFloat = identifier == "sendShortcut"
-                ? (columns.map {(($0[0]) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)+24 : 64
+            let firstWidth = columns.map {($0[0] as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
+            let tab = max(64,firstWidth+24)
             let paragraph = NSMutableParagraphStyle()
             paragraph.tabStops = [NSTextTab(textAlignment:.left,location:tab)]
             for item in menu.itemArray {
                 item.attributedTitle = NSAttributedString(string:item.title,attributes:[.font:font,.paragraphStyle:paragraph])
             }
-            if identifier == "sendShortcut" {
-                let trailingWidth = columns.map {(($0.last!) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
-                controlWidth = max(width,tab+trailingWidth+40)
-            }
+            let trailingWidth = columns.map {($0.last! as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
+            controlWidth = max(width,tab+trailingWidth+40)
         }
         menu.widthAnchor.constraint(equalToConstant:controlWidth).isActive = true; menu.setAccessibilityLabel(title)
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
         return menu
     }
-    func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil,help:String? = nil,requires:[String] = []) -> NSView {
-        let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction","forceClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
+    func choice(_ title: String, _ key: String, _ options: [(String,String)],width:CGFloat = 190,detail:String? = nil,help:String? = nil,requires:[String] = []) -> NSView {
         let result = popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail,help:help) { [weak self] value in
             self?.preferences.set(value,for:key)
         }

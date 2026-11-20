@@ -57,14 +57,14 @@ enum MessageSettingsPage {
 
     private enum Control {
         case toggle(String,Value? = nil)
-        case choice(String,[(String,String)])
+        case choice(String,[(String,String)],width:CGFloat = 190)
         case slider(String,suffix:String,minimumLabel:String? = nil)
         case time(String)
         case preview
 
         var key:String? {
             switch self {
-            case let .toggle(key,_),let .choice(key,_),let .slider(key,_,_),let .time(key): return key
+            case let .toggle(key,_),let .choice(key,_,_),let .slider(key,_,_),let .time(key): return key
             case .preview: return nil
             }
         }
@@ -115,7 +115,7 @@ enum MessageSettingsPage {
             Row("气泡窗审批按钮顺序",.choice("approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")]),detail:"只调整气泡中的按钮位置。红叉拒绝、绿对钩允许；审批需点击按钮，不能用键盘提交。"),
         ]),
         Group(title:"输入快捷键",topic:.input,symbol:"keyboard",keywords:"回车 Return Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 发送 换行 快捷回复 插话 问卷",rows:[
-            Row("发送与换行",.choice("sendShortcut",SendShortcut.options)),
+            Row("发送与换行",.choice("sendShortcut",SendShortcut.options,width:260)),
         ]),
         Group(title:"任务气泡",topic:.content,symbol:"bubble.left.and.bubble.right",keywords:"任务气泡提醒 任务进展 通知 显示 开关",rows:[
             Row("显示任务气泡",.toggle("taskBubbles"),detail:"关闭后仍会显示审批、待回答的问题和错误提示。"),
@@ -222,8 +222,8 @@ enum MessageSettingsPage {
                 case let .toggle(key,adjustment):
                     let button = topic == nil ? nil : adjustment?.button(for:row.title,requires:row.quickRequires,form:form)
                     return form.toggle(row.title,key,detail:row.detail,requires:row.requires,accessory:button)
-                case let .choice(key,options):
-                    return form.choice(row.title,key,options,detail:row.detail,requires:row.requires)
+                case let .choice(key,options,width):
+                    return form.choice(row.title,key,options,width:width,detail:row.detail,requires:row.requires)
                 case let .slider(key,suffix,minimumLabel):
                     if topic != nil,let value = row.quickValue {
                         return form.row(value.title(for:row.title),control:value.button(for:row.title,requires:row.requires,form:form))

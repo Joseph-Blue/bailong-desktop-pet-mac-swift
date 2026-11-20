@@ -13,7 +13,7 @@ enum SettingsSection: Int, CaseIterable {
         switch self {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
-        case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","forceClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
+        case .activity: return PetGestureSetting.all.map(\.key) + ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
         case .messages: return MessageSettingsPage.preferenceKeys + [PetPreferences.tokenDetailsKey]
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
@@ -75,7 +75,7 @@ final class PetPreferences {
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
-        "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,"singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat","forceClickAction":"chat",
+        "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
         "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"taskOpening":true,"taskCelebration":true,
         "sendShortcut":"commandReturn","taskBubbles":true,"progressBubbles":true,"resultBubbles":true,"interactionBubbles":true,
@@ -83,7 +83,8 @@ final class PetPreferences {
         "autoReadTime":true,"pauseOnHover":true,"countAfterReveal":true,"typingEffect":true,"soundEnabled":true,
         "quietCompanion":false,"quietSchedule":false,"quietStart":22*60,"quietEnd":8*60,
         "petPercent":100,"petShadow":false,"bubblePercent":100,"bubbleAspectEnabled":false,"bubbleAspectRatio":1.5,"messageFontSize":13.0,"appearanceMode":"system","accentStyle":"system","accentRGB":[149.0/255,61.0/255,150.0/255]
-    ].merging(ConversationLines.defaults) {existing,_ in existing}
+    ].merging(PetGestureSetting.all.map {($0.key,$0.defaultAction)}) {_, gesture in gesture}
+     .merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
         "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
         "sideExposurePercent":40...85,"notchExposurePercent":40...85,"glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
@@ -104,11 +105,10 @@ final class PetPreferences {
         #endif
     }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
-    static let mouseActions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),
-                              ("workspace","显示或隐藏工作区状态条"),("random","显示任务进度、播放随机动画"),("randomAnimation","播放随机动画")]
-    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":mouseActions.map(\.0),"doubleClickAction":mouseActions.map(\.0),"rightDoubleClickAction":mouseActions.map(\.0),"forceClickAction":mouseActions.map(\.0),"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
+    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
         TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue)]
+        .merging(PetGestureSetting.all.map {($0.key,PetGestureSetting.actions.map(\.0))}) {_, gesture in gesture}
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
     init(defaults: UserDefaults = SettingsStorage.defaults) {

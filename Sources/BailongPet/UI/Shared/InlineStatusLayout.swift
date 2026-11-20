@@ -3,6 +3,7 @@ import CoreText
 
 // 文字以原生第一行基线对齐；图标以相邻文字的大写字高中心对齐。
 enum InlineStatusLayout {
+    static let brailleFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     private struct FontKey:Hashable {
         let name:String
         let size:CGFloat
