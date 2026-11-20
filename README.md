@@ -21,7 +21,7 @@
 | 设置与外观 | 支持自定义称呼变量、台词试播、字号比例与强调色；前景文字按背景对比度动态适配明暗，配备无副作用的静态设置搜索索引与 JSON 导入导出。 | [设置与个性](docs/来源与架构.md#current-settings) |
 | 系统集成 | 支持指定显示器或随拖动跨屏、登录自启、随 Codex 桌面端启动、默认工作区管理与 GitHub 正式版更新检查。 | [构建与集成](docs/来源与架构.md#current-build) |
 
-默认构建 Apple Silicon（`arm64`），最低支持 macOS 14 Sonoma。基准机型为 13 英寸 M1 MacBook Air。
+默认构建 Apple Silicon（`arm64`），最低支持 macOS 14 Sonoma。界面布局和动画性能以 13 英寸 M1 MacBook Air 为最低工程标准。
 
 ## 分支与发布规则
 

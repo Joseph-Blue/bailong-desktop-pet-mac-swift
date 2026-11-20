@@ -3,64 +3,28 @@
 - 日期：2026-11-19
 - 分支：`joseph/dev`
 - 版本：`0.8.2-dev.2`
-- 状态：功能已进入开发线，真实第三方 API 与界面验收待完成
-- 边界：未读取或保存任何 API Key，未访问真实第三方 API，未构建或启动应用
+- 后续验收：2026-11-20，用户确认模型摘要与第三方额度窗通过 P0 验收。[验收归档](../todo.md#p0-核心窗口与双通道交互回归)
 
-## 摘要
-
-本轮实验确认了两条独立边界：
-
-1. Codex 的模型基础指令高于桌宠通过 `developerInstructions` 注入的人设。人设只能塑造表达层，不能覆盖基础任务、工具和权限规则。
-2. 第三方余额查询不能脱离凭证持有者完成。DeepSeek 余额接口要求 Bearer API Key；让桌宠重新收集 Key 不是合理产品方案。可行方向是由已经持有 provider 凭证的受信层代查。
-
-本轮没有实现 Key 输入或余额代查，而是完成了一个不依赖 Key 的可用子集：DeepSeek 峰谷定价、供应商区域识别、固定开放平台入口，以及模型摘要与右侧状态的空间分配。
-
-## 背景
-
-桌宠支持通过 Codex 自定义 provider 接入多个第三方 API。不同供应商存在不同账户体系、端点、计费入口和区域隔离，不能只按品牌名称合并。
-
-此前实验通过 API Key 直接请求 DeepSeek `/user/balance`。该实现可以工作，但要求主应用持有明文 Key，因此本轮决定不把这条路径作为正式功能。
-
-## 关键结论
+## 实验结论
 
 ### Codex 基础指令与桌宠人设
 
-- `models.json` 的模型基础指令位于更高层。
-- 桌宠 `persona` 通过 app-server `developerInstructions` 注入，不能覆盖基础身份和任务规则。
-- 在任务模式中继续要求桌宠执行代码、调用工具时，基础 Codex 行为会优先保留；人设适合作为面向用户正文的语气层。
+在本轮任务模式实验中，Codex 按模型基础指令执行代码任务和工具调用。桌宠通过 app-server 的 `developerInstructions` 设置面向用户的回复语气。
 
-### 余额查询与凭据
+### DeepSeek 余额查询
 
-- DeepSeek 余额接口：`GET https://api.deepseek.com/user/balance`
-- 认证方式：`Authorization: Bearer <API_KEY>`
-- 请求方必须在内存中取得明文 Key，才能构造认证头。
-- “只存运行内存 (RAM)”可以避免磁盘持久化，但不能让主应用完全不接触 Key。
-- 不读取明文 Key 且保留结构化余额，需要受信凭据代理或上游 provider 能力。
+早期原型通过 `GET /user/balance` 取得余额。该接口使用 `Authorization: Bearer <API_KEY>` 认证，请求方需在运行内存 (RAM) 中持有明文 Key。本轮开发采用本机 Token 统计和官方平台入口。
 
-### DSH 代查边界
-
-DeepSeek Harness 已具备凭据服务和本地插件机制，适合作为个人场景的凭据代理原型，但存在发布风险：
-
-- 插件初始化失败会拒绝整个 DSH profile 启动，而不是只禁用该插件。
-- 把余额插件安装进主 `web`／desktop profile，会让一个小功能影响整个 DSH 启动。
-- DSH 本地凭据文件只隔离其他 OS 用户，不能隔离同一 macOS 用户下的 agent 或工具进程。
-
-若继续验证，应使用独立、固定版本的 sidecar profile，而不是修改用户主 DSH profile。该 sidecar 尚未实现。
-
-### 余额入口不统一
-
-第三方开放平台并不都提供可直接打开的“余额查询”页面。现有页面可能是用量、充值、账户、点数或计费页。因此按钮不写具体供应商名，也不宣称统一余额接口。
+实验也考察了由 DeepSeek Harness（DSH）代查余额的方案。DSH 提供凭据服务和本地插件，同一 macOS 用户下的进程可以读取其本地凭据文件。插件初始化失败会中止所属 profile 的启动。实验提出使用独立、固定版本的 sidecar profile 承载插件，进度停在方案阶段。
 
 ## 本轮实现
 
 ### DeepSeek 峰谷定价
 
-- 仅在 Codex 当前 `model_provider` 识别为 DeepSeek 时显示。
-- 在本机今日 Token 用量后补充“峰谷定价”和“下一时段”。
-- 工作日北京时间 `9:00–12:00`、`14:00–18:00` 为高峰，其余时间、周末和中国法定节假日为空闲。
-- 高峰使用红色，空闲使用绿色；下一时段按北京时间显示。
-- 已维护 2026／2027 年国务院放假安排；未知年份显示“时段未提供”。
-- 气泡可见期间只在峰谷边界或午夜重新排版，不重新查询额度、Token 或模型。
+- Codex 当前供应商为 DeepSeek 时，在本机今日 Token 用量下方显示当前时段与下一次切换时间。
+- 北京时间工作日 9:00–12:00、14:00–18:00 为高峰，显示红色。其余时段、周末和中国法定节假日为空闲，显示绿色。
+- 本版收录 2026、2027 年国务院放假安排。其他年份显示“时段未提供”。
+- 峰谷切换和午夜更新取本机时间。气泡打开期间，时段变化只刷新显示。
 
 ### 供应商区域拆分
 
@@ -87,7 +51,7 @@ DeepSeek Harness 已具备凭据服务和本地插件机制，适合作为个人
 
 ### 官方开放平台入口
 
-额度气泡底栏使用地球图标和强调色文字「打开供应商开放平台」。按钮采用目录中的官方页面地址，仅在有对应地址时显示。
+额度气泡底栏的「打开供应商开放平台」指向目录收录的官方用量、充值、账户或计费页面。有官方地址时显示按钮。
 
 供应商目录优先匹配 `base_url` 的主机。主机必须与目录域名相同，或以点号加目录域名结尾。主机未命中时按 provider ID、别名或完整名称回退。
 
@@ -112,8 +76,6 @@ DeepSeek Harness 已具备凭据服务和本地插件机制，适合作为个人
 | 阿里云百炼新加坡 | `https://modelstudio.console.alibabacloud.com/` | Model Studio 控制台 |
 | OpenRouter | `https://openrouter.ai/settings/credits` | Credits |
 | Groq | `https://console.groq.com/settings/billing` | 计费 |
-
-入口涵盖用量、充值、账户和计费页面。Token 统计仍按 Codex 配置的原始 provider ID 归属。
 
 ### 模型摘要与状态宽度
 
@@ -146,31 +108,17 @@ DeepSeek Harness 已具备凭据服务和本地插件机制，适合作为个人
 - 离线核对了未知反代、已知 ID 与完整名称回退、官方主机优先及域名边界；通用 Kimi 在区域未识别时无官方入口。
 - 拆分供应商图标后，复核了 `2026-11-10` 开发素材包。35 段动画在内的 44 个运行文件与 r3 逐字节一致，继续沿用已有素材包。[开发资源获取](开发资源获取.md)
 
-未执行：
+2026-11-19 的验证使用本地配置和用量样例。旧 `ModelSelectionRegression` 引用已移除的接口，模型摘要布局由 `ModelSummaryLayoutRegression` 验证。
 
-- App 构建、启动和视觉验收。
-- 真实 Kimi／智谱／DeepSeek API 请求。
-- 13 英寸 M1 MacBook Air 实机验收。
-- DSH sidecar 插件或凭据代理。
-
-本地旧 `ModelSelectionRegression` 仍引用当前源码中不存在的接口，因此未作为本轮验证结果。
-
-## 后续
-
-- 正式版不恢复主应用 API Key 输入。
-- 若重新研究结构化余额，优先推动 provider／Codex 上游能力，或实现隔离的 DSH sidecar。
-- 区域 provider 需要用户配置不同原始 ID，才能分别统计历史 Token。
-- 本轮界面改动仍需在真实输入窗与额度气泡中做视觉和交互验收。
-
-## 相关代码
+## 当前源码入口
 
 - `Sources/BailongPet/Infrastructure/DeepSeekPricing.swift`
 - `Sources/BailongPet/Codex/APIProviderDirectory.swift`
 - `Sources/BailongPet/UI/Shared/Presentation.swift`
-- `Sources/BailongPet/UI/Bubble/Bubble.swift`
+- [额度正文](../Sources/BailongPet/UI/Bubble/QuotaBubbleBody.swift) 与[查询协调器](../Sources/BailongPet/Conversation/QuotaCoordinator.swift)
 - `Sources/BailongPet/UI/Chat/ModelPresentation.swift`
 - `Sources/BailongPet/UI/Chat/ChatComposer.swift`
-- `Sources/BailongPet/Codex/ModelSelection.swift`
+- [模型配置](../Sources/BailongPet/Codex/ModelSelection.swift) 与[模型选择器](../Sources/BailongPet/UI/Chat/ModelSelector.swift)
 
 ## 官方资料
 
