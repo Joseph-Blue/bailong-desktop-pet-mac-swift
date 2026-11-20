@@ -2,7 +2,7 @@
 
 本文件记录 `joseph/dev` 的开发迭代。提交与历史快照见 [开发变更索引](docs/开发变更索引.md)，正式版说明见 [`main` 分支变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/main/CHANGELOG.md)。
 
-## 未发布
+## [0.9.0-dev1] — 2026-11-21
 
 - 设置新增「Git 状态显示风格」，默认使用 Powerlevel10k 符号风格，也可切换为「缩写字母风格」（如 `C2 S12 M37 ?9 ST3`）。选项下方的彩色图例随风格更新，并说明仓库图标和干净工作区的绿色对勾。
 - Git 状态胶囊在分支名截断或仅显示图标时，悬停显示完整分支名和状态。工作区名称及 Git 详情中的分支、路径和远端在截断时也可悬停查看全文。
