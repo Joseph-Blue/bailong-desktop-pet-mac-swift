@@ -108,9 +108,6 @@ enum MessageSettingsPage {
     }
 
     private static let groups: [Group] = [
-        Group(title:"Token 用量",topic:.reading,symbol:"number",rows:[
-            Row("Token 计数格式",.choice(TokenCountFormat.key,TokenCountFormat.options),keywords:"千 百万 十亿 K M B 万 亿 缩写 小数 千分位",detail:"额度、任务气泡和历史共用此格式。缩写保留两位小数。"),
-        ]),
         Group(title:"历史记录",symbol:"book",keywords:"聊天 保存 同步",rows:[
             Row("记录历史",.toggle("recordHistory"),detail:"关闭后保留已有记录，停止保存新内容；重新开启不会补录。Codex 自身的记录不受影响。"),
         ]),
@@ -153,6 +150,9 @@ enum MessageSettingsPage {
         ]),
         Group(title:"声音",symbol:"speaker.wave.2",keywords:"声音",rows:[
             Row("播放音效",.toggle("soundEnabled")),
+        ]),
+        Group(title:"Token 用量",topic:.reading,symbol:"number",rows:[
+            Row("Token 计数格式",.choice(TokenCountFormat.key,TokenCountFormat.options),keywords:"千 百万 十亿 K M B 万 亿 缩写 小数 千分位",detail:"额度、任务气泡和历史共用此格式。缩写保留两位小数。"),
         ]),
         Group(title:"安静陪伴",topic:.reading,symbol:"moon",keywords:"安静陪伴模式 启用专注时段 免打扰 时间 夜间 静音",detail:"按本机时间执行，可跨天；开始和结束时间相同表示全天。",rows:[
             Row("立即开启安静陪伴",.toggle("quietCompanion"),detail:"减少活动并停止自动移动，隐藏互动台词和进展气泡，关闭音效。最终回复和待处理通知照常显示。"),

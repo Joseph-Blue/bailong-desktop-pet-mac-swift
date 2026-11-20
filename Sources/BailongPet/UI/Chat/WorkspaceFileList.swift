@@ -37,7 +37,7 @@ final class WorkspaceFileTable:NSTableView {
         let index = row(at:convert(event.locationInWindow,from:nil))
         guard index >= 0,let file = fileURLForRow(index) else {return nil}
         selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)
-        let menu = AccentMenuRows.menu()
+        let menu = NSMenu()
         let reveal = NSMenuItem(title:"在访达中显示",action:#selector(revealFile(_:)),keyEquivalent:"")
         let finder = AppIcons.finder.copy() as! NSImage; finder.size = NSSize(width:16,height:16)
         reveal.image = finder

@@ -6,7 +6,7 @@ protocol TemplateContextMenu {}
 enum TextContextMenu {
     private static let commands = [("剪切",#selector(NSText.cut(_:)),"x","scissors"),("拷贝",#selector(NSText.copy(_:)),"c","doc.on.doc"),("粘贴",#selector(NSText.paste(_:)),"v","doc.on.clipboard"),("全选",#selector(NSResponder.selectAll(_:)),"a","")]
     static func menu(for target: NSTextView) -> NSMenu {
-        let menu = AccentMenuRows.menu(); menu.allowsContextMenuPlugIns = false
+        let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
         for (title,action,key,symbol) in commands {
             if action == #selector(NSResponder.selectAll(_:)) {menu.addItem(.separator())}
             let item = NSMenuItem(title:title,action:action,keyEquivalent:key)

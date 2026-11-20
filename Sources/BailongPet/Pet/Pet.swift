@@ -920,9 +920,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func refreshMenu() { status.menu = PetMenu.make(for:self,includeVisibility:true,random:{ [weak self] in self?.randomAnimation() }) }
     func menuNeedsUpdate(_ menu:NSMenu) {
         PetMenu.refreshVisibility(in:menu,pet:self)
-        AccentMenuRows.shared.menuNeedsUpdate(menu)
     }
-    func menu(_ menu:NSMenu,willHighlight item:NSMenuItem?) {AccentMenuRows.shared.menu(menu,willHighlight:item)}
     func menuWillOpen(_ menu: NSMenu) {dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
     deinit {
