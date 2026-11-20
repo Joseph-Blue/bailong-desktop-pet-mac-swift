@@ -14,19 +14,22 @@ enum ChatViewLayout {
         NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo:parent.leadingAnchor,constant:inset),view.trailingAnchor.constraint(equalTo:parent.trailingAnchor,constant:-inset),view.topAnchor.constraint(equalTo:parent.topAnchor,constant:verticalInset ?? inset),view.bottomAnchor.constraint(equalTo:parent.bottomAnchor,constant:-(verticalInset ?? inset))])
     }
     static func inputBox(_ editor:MessageEditor) -> MessageInputBox {
-        let scroll = editorScroll(editor,reserveReadingGutter:false)
+        let scroll = NSScrollView()
+        // 编辑区按实际视口换行，阅读正文使用独立的滚动条留白。
+        let clip = VerticalReadingClipView(); clip.drawsBackground = false
+        scroll.contentView = clip
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.hasHorizontalScroller = false; scroll.horizontalScrollElasticity = .none
+        configure(editor, in:scroll)
         editor.update(font:.systemFont(ofSize:14),editable:true)
         return MessageInputBox(scroll:scroll,editor:editor)
     }
-    static func editorScroll(_ editor: NSTextView,reserveReadingGutter:Bool = true) -> NSScrollView {
-        let scroll:NSScrollView = reserveReadingGutter ? GutterScrollView() : NSScrollView()
-        if !reserveReadingGutter {
-            // 编辑区跟随原生 clip 宽度；不为隐藏的覆盖式滚动条常驻预留阅读轨道。
-            let clip = VerticalReadingClipView(); clip.drawsBackground = false
-            scroll.contentView = clip
-            scroll.automaticallyAdjustsContentInsets = false
-            scroll.hasHorizontalScroller = false; scroll.horizontalScrollElasticity = .none
-        }
+    static func editorScroll(_ editor: NSTextView) -> NSScrollView {
+        let scroll = GutterScrollView()
+        configure(editor, in:scroll)
+        return scroll
+    }
+    private static func configure(_ editor:NSTextView, in scroll:NSScrollView) {
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
         editor.frame = NSRect(x:0,y:0,width:300,height:100)
         editor.isVerticallyResizable = true; editor.isHorizontallyResizable = false; editor.autoresizingMask = [.width]
@@ -36,6 +39,5 @@ enum ChatViewLayout {
         editor.isAutomaticQuoteSubstitutionEnabled = false; editor.isAutomaticDashSubstitutionEnabled = false
         editor.minSize = .zero; editor.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
         scroll.documentView = editor
-        return scroll
     }
 }

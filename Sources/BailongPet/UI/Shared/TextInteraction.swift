@@ -134,25 +134,21 @@ final class MessageTextBoxSurface: NSBox {
     required init?(coder:NSCoder) {fatalError()}
 }
 
-// NSBox 会把 addSubview 重定向到 contentView；焦点层必须与 NSBox 同级。
 final class MessageInputBox: NSView {
     private let surface:MessageTextBoxSurface
     let scroll: NSScrollView
     private let editor:MessageEditor
     var contentHeight:CGFloat {editor.contentHeight+max(0,bounds.height-contentSize.height)}
     var fillColor:NSColor {get {surface.fillColor} set {surface.fillColor = newValue}}
-    var contentSize:NSSize {
-        var size = scroll.contentSize
-        if let scroll = scroll as? GutterScrollView {size.width = scroll.documentLayoutWidth}
-        return size
-    }
+    var contentSize:NSSize {scroll.contentSize}
     init(scroll:NSScrollView,editor:MessageEditor) {
         self.scroll = scroll; self.editor = editor
         surface = MessageTextBoxSurface(scroll:scroll)
         super.init(frame:.zero)
         addSubview(surface); surface.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([surface.leadingAnchor.constraint(equalTo:leadingAnchor,constant:4),surface.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-4),surface.topAnchor.constraint(equalTo:topAnchor,constant:4),surface.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-4)])
-        EditorFocusRing.attach(to:self,editor:editor,radius:8)
+        editor.focusRingType = .none
+        TextInputFocusRing(surface:surface,input:editor,in:self)
     }
     required init?(coder:NSCoder) {fatalError()}
     override func layout() {
@@ -163,35 +159,4 @@ final class MessageInputBox: NSView {
         let editorSize = NSSize(width:size.width,height:max(editor.frame.height,size.height))
         if editor.frame.size != editorSize {editor.setFrameSize(editorSize)}
     }
-}
-
-// 保留旧版独立焦点层：使用 AppKit 焦点环绘制 API，但状态和圆角遮罩由本组件管理。
-final class EditorFocusRing: NSView {
-    private weak var editor: MessageEditor?
-    private var radius: CGFloat = 8
-    static func attach(to container: NSView, editor: MessageEditor, radius: CGFloat) {
-        let ring = EditorFocusRing(frame:.zero)
-        ring.editor = editor; ring.radius = radius
-        ring.focusRingType = .none; container.addSubview(ring)
-        // NSBox 及滚动容器初始尺寸尚未确定，不能从零尺寸 frame 推导 autoresizing。
-        ring.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([ring.leadingAnchor.constraint(equalTo:container.leadingAnchor),ring.trailingAnchor.constraint(equalTo:container.trailingAnchor),ring.topAnchor.constraint(equalTo:container.topAnchor),ring.bottomAnchor.constraint(equalTo:container.bottomAnchor)])
-        editor.focusRingType = .none
-        editor.onFocusChange = { [weak ring] in ring?.needsDisplay = true }
-        for name in [NSWindow.didBecomeKeyNotification,NSWindow.didResignKeyNotification,AppAccent.didChange] {
-            NotificationCenter.default.addObserver(ring,selector:#selector(ring.refresh),name:name,object:nil)
-        }
-        ring.refresh()
-    }
-    override func hitTest(_ point: NSPoint) -> NSView? {nil}
-    @objc private func refresh() {NativeAccentTint.apply(to:self); needsDisplay = true}
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); refresh()}
-    override func draw(_ dirtyRect:NSRect) {
-        guard let editor, editor.isEditable, window?.isKeyWindow == true, window?.firstResponder === editor else {return}
-        NSGraphicsContext.saveGraphicsState()
-        NSFocusRingPlacement.only.set()
-        NSBezierPath(roundedRect:bounds.insetBy(dx:4,dy:4),xRadius:radius,yRadius:radius).fill()
-        NSGraphicsContext.restoreGraphicsState()
-    }
-    deinit {NotificationCenter.default.removeObserver(self)}
 }

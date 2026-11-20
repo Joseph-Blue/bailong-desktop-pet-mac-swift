@@ -1,14 +1,10 @@
 import AppKit
 
-// 沿用旧版多行编辑器；系统负责文本编辑、插入点与输入法，外框由 MessageInputBox 承载。
 final class MessageEditor: AccentTextView {
-    var onFocusChange: () -> Void = {}
-    override func becomeFirstResponder() -> Bool {let result = super.becomeFirstResponder(); onFocusChange(); return result}
-    override func resignFirstResponder() -> Bool {let result = super.resignFirstResponder(); onFocusChange(); return result}
     func update(font:NSFont,editable:Bool) {
         let inputFont = NSFontManager.shared.convert(font,toSize:font.pointSize+1)
         if self.font != inputFont {self.font = inputFont}
-        if isEditable != editable {isEditable = editable; onFocusChange()}
+        if isEditable != editable {isEditable = editable}
     }
     var contentHeight:CGFloat {
         guard let container = textContainer,let manager = layoutManager else {return 0}

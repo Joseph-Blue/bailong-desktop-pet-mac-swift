@@ -43,6 +43,7 @@ private final class ConversationPickerContent:NSViewController,NSTableViewDataSo
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
         view = NSView(frame:NSRect(x:0,y:0,width:400,height:320))
+        search.focusRingType = .none
         search.placeholderString = "搜索会话标题或工作区"; search.target = self; search.action = #selector(filter)
         search.sendsSearchStringImmediately = true
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
@@ -57,6 +58,7 @@ private final class ConversationPickerContent:NSViewController,NSTableViewDataSo
             scroll.topAnchor.constraint(equalTo:search.bottomAnchor,constant:8),scroll.leadingAnchor.constraint(equalTo:view.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:view.trailingAnchor),scroll.bottomAnchor.constraint(equalTo:view.bottomAnchor),
             empty.centerXAnchor.constraint(equalTo:scroll.centerXAnchor),empty.topAnchor.constraint(equalTo:scroll.topAnchor,constant:16)
         ])
+        TextInputFocusRing(surface:search,input:search,in:view)
     }
     @objc private func filter() {
         let query = search.stringValue.trimmingCharacters(in:.whitespacesAndNewlines)
