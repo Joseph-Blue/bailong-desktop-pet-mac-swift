@@ -99,6 +99,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var dockRecallAt: Double?
     var dockDoubleClick = false
     var leftDoubleClick = false
+    private var forceClicked = false
     private var lastContextPress:(button:Int,time:TimeInterval,point:NSPoint)?
     private var consumedContextPress:(button:Int,through:TimeInterval)?
     var timer: Timer?, desktopTimer: Timer?
@@ -474,6 +475,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func mouseDown(_ event: NSEvent) {
         if event.modifierFlags.contains(.control) {rightMouseDown(event); return}
         lastContextPress = nil
+        forceClicked = false
         // 只有吸边状态保留召回判定期；普通点击仍立即响应。
         leftDoubleClick = dock == nil && event.clickCount > 1 && event.clickCount % 2 == 0
         dockDoubleClick = dock != nil && dockRecallAt.map {now <= $0} == true
@@ -485,8 +487,13 @@ final class PetController: NSObject, NSMenuDelegate {
         if dockDoubleClick {performGesture(preferences.string("doubleClickAction"))}
         updateMotionDisplayLink()
     }
+    func forceClick() {
+        guard press != nil, !dragged, !dockDoubleClick, !forceClicked else {return}
+        forceClicked = true
+        performGesture(preferences.string("forceClickAction"))
+    }
     func mouseDragged(_ event: NSEvent) {
-        guard let press else {return}
+        guard let press, !forceClicked else {return}
         let p = NSEvent.mouseLocation, delta = CGPoint(x:p.x-press.x,y:press.y-p.y)
         if !dragged && abs(delta.x)+abs(delta.y) >= 8 {
             leftDoubleClick = false; dockDoubleClick = false
@@ -505,6 +512,8 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     func mouseUp(_ event: NSEvent) {
         guard press != nil else {return}; press = nil; interaction()
+        defer {activityOrigin = position; savePosition(); updateMotionDisplayLink()}
+        if forceClicked {return}
         if dragged {
             dragged = false
             if !dragFromDock && !snap() {play(catalog.landingAnimation,"landing")}
@@ -515,7 +524,6 @@ final class PetController: NSObject, NSMenuDelegate {
         } else if leftDoubleClick {
             leftDoubleClick = false; performGesture(preferences.string("doubleClickAction"))
         } else {performGesture(preferences.string("singleClickAction"))}
-        activityOrigin = position; savePosition(); updateMotionDisplayLink()
     }
     func snap() -> Bool {
         guard !composerVisible else { return false }

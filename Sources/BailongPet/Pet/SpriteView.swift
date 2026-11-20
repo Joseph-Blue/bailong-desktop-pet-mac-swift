@@ -26,6 +26,7 @@ final class SpriteView: NSView, CAAnimationDelegate {
 
     override init(frame frameRect: NSRect) {
         super.init(frame:frameRect)
+        pressureConfiguration = NSPressureConfiguration(pressureBehavior:.primaryDeepClick)
         imageLayer.anchorPoint = .zero
         imageLayer.contentsGravity = .resize
         imageLayer.minificationFilter = .linear
@@ -136,6 +137,9 @@ final class SpriteView: NSView, CAAnimationDelegate {
         NSApp.preventWindowOrdering(); pet?.mouseDown(event)
     }
     override func mouseDragged(with event: NSEvent) {pet?.mouseDragged(event)}
+    override func pressureChange(with event:NSEvent) {
+        if event.stage == 2 {pet?.forceClick()}
+    }
     override func mouseUp(with event: NSEvent) {pet?.mouseUp(event)}
     override func rightMouseDown(with event: NSEvent) {
         NSApp.preventWindowOrdering(); pet?.rightMouseDown(event)

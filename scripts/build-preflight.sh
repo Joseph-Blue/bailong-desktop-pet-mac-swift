@@ -70,13 +70,21 @@ bailong_check_output() {
     rm "$probe"
 }
 
-bailong_local_build_plist_entry() {
-    local ci="${CI:-}" branch commit
-    [[ -z "$ci" || "$ci" == false || "$ci" == 0 ]] || return 0
+bailong_source_commit() {
     [[ -e .git ]] || return 0
+    # macOS 自带的 git 会在缺少开发工具时唤起安装窗口，安装询问交给后续预检。
+    xcode-select -p >/dev/null 2>&1 || return 0
+    local commit
+    if commit="$(git rev-parse --verify --quiet HEAD)"; then
+        print -r -- "$commit"
+    fi
+}
+
+bailong_local_build_plist_entry() {
+    local commit="$1" ci="${CI:-}" branch
+    [[ -n "$commit" ]] || return 0
+    [[ -z "$ci" || "$ci" == false || "$ci" == 0 ]] || return 0
     branch="$(git branch --show-current)" || return 1
     [[ -n "$branch" && "$branch" != main ]] || return 0
-    if commit="$(git rev-parse --verify --quiet HEAD)"; then
-        print -r -- "<key>BailongLocalBuildCommit</key><string>$commit</string>"
-    fi
+    print -r -- "<key>BailongLocalBuildCommit</key><string>$commit</string>"
 }

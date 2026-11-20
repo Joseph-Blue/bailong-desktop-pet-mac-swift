@@ -170,20 +170,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             value.setAccessibilityLabel(name)
             guard value === underflowValue else { return [title, value] }
 
-            let help = NSImageView()
-            help.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "\(name)说明")
-            help.contentTintColor = .secondaryLabelColor
-            help.imageScaling = .scaleProportionallyDown
-            help.setAccessibilityElement(true)
-            help.setAccessibilityLabel("\(name)说明")
-            help.hoverHelp = "播放时，到了该换帧的时间，新画面还没准备好，暂时停在上一帧。每次连续等待记为 1 次。"
-            help.translatesAutoresizingMaskIntoConstraints = false
-            let titleWithHelp = NSStackView(views: [title, help])
-            titleWithHelp.orientation = .horizontal; titleWithHelp.alignment = .centerY; titleWithHelp.spacing = 5
-            NSLayoutConstraint.activate([
-                help.widthAnchor.constraint(equalToConstant: 16),
-                help.heightAnchor.constraint(equalToConstant: 16)
-            ])
+            let titleWithHelp = title.withHoverHelpIcon("播放时，到了该换帧的时间，新画面还没准备好，暂时停在上一帧。每次连续等待记为 1 次。")
             return [titleWithHelp, value]
         })
         grid.column(at: 0).xPlacement = .leading

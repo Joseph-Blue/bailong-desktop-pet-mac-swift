@@ -54,7 +54,12 @@ struct SettingsSearchEntry {
         entries += IdentitySettingsPage.items(catalog:catalog).map {$0.searchEntry(in:.identity)}
         if catalog != nil {entries.append(.init(section:.activity,group:SettingsDetail.actions.title,title:SettingsDetail.actions.title,detail:.actions))}
         entries += ActivitySettingsPage.items(catalog:catalog).map {$0.searchEntry(in:.activity)}
-        add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 单句台词 Control ⌃ 右键 "+PetPreferences.mouseActions.map(\.1).joined(separator:" "))
+        let interactionGroup = "鼠标与触控板互动"
+        let actionNames = PetPreferences.mouseActions.map(\.1).joined(separator:" ")
+        let clickKeywords = "点击 点按 单句台词 Control ⌃ ^ 右键 "+actionNames
+        add(.activity,interactionGroup,["单击桌宠","双击桌宠"],clickKeywords)
+        add(.activity,interactionGroup,["右键双击桌宠"],clickKeywords+" "+ActivitySettingsPage.rightDoubleClickHelp)
+        add(.activity,interactionGroup,["触控板用力点按"],"触控板重按 第二段下沉 压感 Force Touch Force Click "+actionNames)
         add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 适中 活泼 自定义 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")

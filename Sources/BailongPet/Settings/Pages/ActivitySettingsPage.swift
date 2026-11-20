@@ -1,6 +1,12 @@
 import AppKit
 
 final class ActivitySettingsPage {
+    static let rightDoubleClickHelp = """
+        如使用触控板：
+
+        1. 按住 ^（control 键）点按或双击点按（一段下沉）桌宠，等同于鼠标右键点击或双击。
+        2. 无论 macOS 系统设置中，触控板的辅助点按触发方式如何设置，只有点按（一段下沉）才可正确触发双击鼠标右键效果
+        """
     private let form:SettingsForm, catalog:Catalog?
     private let reload:() -> Void, onPreview:(Clip) -> Void
     private(set) var viewport:SettingsRowViewport?
@@ -11,7 +17,12 @@ final class ActivitySettingsPage {
     func reset() {viewport = nil}
     func render() {
         let actions = PetPreferences.mouseActions
-        form.group("鼠标互动",[form.choice("单击桌宠","singleClickAction",actions),form.choice("双击桌宠","doubleClickAction",actions),form.choice("右键双击桌宠","rightDoubleClickAction",actions,detail:"按住 ⌃ 点击或双击桌宠，等同于右键点击或双击。")],symbol:"computermouse")
+        form.group("鼠标与触控板互动",[
+            form.choice("单击桌宠","singleClickAction",actions),
+            form.choice("双击桌宠","doubleClickAction",actions),
+            form.choice("右键双击桌宠","rightDoubleClickAction",actions,help:Self.rightDoubleClickHelp),
+            form.choice("触控板用力点按","forceClickAction",actions)
+        ],symbol:"computermouse")
         form.group("桌宠吸边",[
             form.toggle("屏幕左右边缘吸边","sideDockEnabled"),
             form.slider("左右露出比例","sideExposurePercent",range:40...85,step:5,suffix:"%",requires:["sideDockEnabled"]),

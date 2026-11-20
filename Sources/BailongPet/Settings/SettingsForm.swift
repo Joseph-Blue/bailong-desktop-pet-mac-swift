@@ -165,9 +165,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         text.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         return titleRow
     }
-    func row(_ title: String, detail: String? = nil, symbol:String? = nil, control: NSView) -> NSView {
+    func row(_ title: String, detail: String? = nil, help:String? = nil, symbol:String? = nil, control: NSView) -> NSView {
         let texts = NSStackView(); texts.orientation = .vertical; texts.alignment = .leading; texts.spacing = 4
-        fill(label(title),in:texts)
+        let titleLabel = label(title)
+        if let help {texts.addArrangedSubview(titleLabel.withHoverHelpIcon(help))}
+        else {fill(titleLabel,in:texts)}
         if let detail {let explanation = label(detail); explanation.font = .systemFont(ofSize:11); explanation.textColor = .secondaryLabelColor; fill(explanation,in:texts)}
         let leading:NSView = symbol.map {iconLeading(texts,symbol:$0)} ?? texts
         return searchable(alignedRow(leading:leading,control:control),title:title)
@@ -254,9 +256,9 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let result = row(title,detail:detail,symbol:symbol,control:controls)
         return dependent(result,requires:requires,unless:unless)
     }
-    func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
+    func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, help:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = popupControl(title,options:options,value:value,width:width,identifier:identifier,changed:changed)
-        return row(title,detail:detail,control:menu)
+        return row(title,detail:detail,help:help,control:menu)
     }
     func popupControl(_ title:String,options:[(String,String)],value:String,width:CGFloat,identifier:String? = nil,changed:@escaping (String)->Void) -> NSPopUpButton {
         let menu = AccentPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
@@ -281,9 +283,9 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         attach(menu) {sender in let index = (sender as! NSPopUpButton).indexOfSelectedItem; if options.indices.contains(index) {changed(options[index].0)}}
         return menu
     }
-    func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil,requires:[String] = []) -> NSView {
-        let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
-        let result = popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail) { [weak self] value in
+    func choice(_ title: String, _ key: String, _ options: [(String,String)],detail:String? = nil,help:String? = nil,requires:[String] = []) -> NSView {
+        let width:CGFloat = ["sendShortcut","singleClickAction","doubleClickAction","rightDoubleClickAction","forceClickAction"].contains(key) ? 260 : key == "animationQuality" ? 250 : 190
+        let result = popup(title,options:options,value:preferences.string(key),width:width,identifier:key,detail:detail,help:help) { [weak self] value in
             self?.preferences.set(value,for:key)
         }
         return dependent(result,requires:requires)

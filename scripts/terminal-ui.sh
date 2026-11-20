@@ -32,14 +32,19 @@ bailong_wait_key() {
     print
 }
 bailong_header() {
-    local architecture="$2"
+    local architecture="$2" version_label="$(<VERSION)"
+    local separator="────────────────────────────────────────"
+    if (( $# >= 3 )); then
+        separator+="────────────────────────"
+        if [[ -n "$3" ]]; then version_label+="（${3[1,8]}）"; fi
+    fi
     case "$2" in
         arm64) architecture="Apple Silicon · arm64" ;;
         x86_64) architecture="Intel · x86_64" ;;
     esac
     print -ru "$bailong_ui_fd" -- "
-${bl_heading}白龙桌宠Swift${bl_reset}     版本：${bl_accent}$(<VERSION)${bl_reset}"
-    print -ru "$bailong_ui_fd" -- "${bl_dim}────────────────────────────────────────${bl_reset}"
+${bl_heading}白龙桌宠Swift${bl_reset}     版本：${bl_accent}${version_label}${bl_reset}"
+    print -ru "$bailong_ui_fd" -- "${bl_dim}${separator}${bl_reset}"
     print -ru "$bailong_ui_fd" -- "$1  ·  $architecture
 "
 }

@@ -8,7 +8,8 @@ source scripts/build-resources.sh
 source scripts/build-options.sh
 bailong_entry=dev; bailong_entry_command=run-dev.command
 bailong_parse_options "$@"
-bailong_header "开发程序" "$target_arch"
+source_commit="$(bailong_source_commit)"
+bailong_header "开发程序" "$target_arch" "$source_commit"
 bailong_check_tools
 source scripts/swift-sources.sh
 (( ${#swift_sources} > 0 )) || { bailong_error "未找到 Swift 源码。请完整解压仓库。"; exit 1; }
@@ -23,7 +24,7 @@ dev_dir=".build/dev"
 binary="$dev_dir/BailongPetDev"
 bailong_check_output "$dev_dir"
 if (( bailong_check_only )); then bailong_ok "检查通过"; exit 0; fi
-local_build_entry="$(bailong_local_build_plist_entry)"
+local_build_entry="$(bailong_local_build_plist_entry "$source_commit")"
 dev_build_environment="$bailong_build_environment
 local_build_entry=$local_build_entry"
 mkdir -p .build/module-cache

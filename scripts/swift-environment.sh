@@ -52,7 +52,7 @@ for bailong_profile_option in full glass plain; do
     fi
     print -r -- "  $bailong_profile_mark $bailong_profile_option · $bailong_profile_label · SDK $bailong_profile_minimum+ · $bailong_profile_description"
 done
-print -r -- "三档均以 macOS 14 为最低运行目标；液态玻璃需 macOS 26+，菜单图标优先显示需 27+。"
+print -r -- "液态玻璃需 macOS 26+，菜单图标优先显示需 27+。"
 if (( bailong_sdk_major < 14 )); then
     print -u2 -- "需要 macOS 14 或更新的 SDK，当前为：$bailong_sdk_version"
     bailong_tools_help update
@@ -100,12 +100,12 @@ ${bailong_swift_version}
 ${(F)bailong_sdk_flags}"
 
 bailong_show_build_environment() {
-    print -r -- "构建 SDK：macOS $bailong_sdk_version"
-    print -r -- "SDK 路径：$bailong_sdk_path"
-    print -r -- "Swift 编译器：${bailong_swift_version%%$'\n'*}"
     case "$bailong_build_profile" in
         full) print -r -- "本次采用：full（完整）" ;;
         glass) print -r -- "本次采用：glass（玻璃）" ;;
         plain) print -r -- "本次采用：plain（普通）" ;;
     esac
+    print -r -- "构建 SDK：macOS $bailong_sdk_version"
+    print -r -- "SDK 路径：$bailong_sdk_path"
+    print -r -- "Swift 编译器：${bailong_swift_version%%$'\n'*}"
 }

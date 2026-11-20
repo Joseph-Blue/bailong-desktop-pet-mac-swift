@@ -13,7 +13,7 @@ enum SettingsSection: Int, CaseIterable {
         switch self {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
-        case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
+        case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","forceClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
         case .messages: return MessageSettingsPage.preferenceKeys + [PetPreferences.tokenDetailsKey]
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
@@ -75,7 +75,7 @@ final class PetPreferences {
         "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
         "quotaLoadingTemplate":"让我看看额度还有多少……",
         "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
-        "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,"singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat",
+        "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,"singleClickAction":"random","doubleClickAction":"quota","rightDoubleClickAction":"chat","forceClickAction":"chat",
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
         "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"taskOpening":true,"taskCelebration":true,
         "sendShortcut":"commandReturn","taskBubbles":true,"progressBubbles":true,"resultBubbles":true,"interactionBubbles":true,
@@ -106,7 +106,7 @@ final class PetPreferences {
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
     static let mouseActions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),
                               ("workspace","显示或隐藏工作区状态条"),("random","显示任务进度、播放随机动画"),("randomAnimation","播放随机动画")]
-    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":mouseActions.map(\.0),"doubleClickAction":mouseActions.map(\.0),"rightDoubleClickAction":mouseActions.map(\.0),"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
+    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":mouseActions.map(\.0),"doubleClickAction":mouseActions.map(\.0),"rightDoubleClickAction":mouseActions.map(\.0),"forceClickAction":mouseActions.map(\.0),"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
         TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue)]
     private(set) var compatibilityNotice:String?

@@ -23,6 +23,25 @@ extension NSView {
 }
 
 extension NSTextField {
+    func withHoverHelpIcon(_ message:String) -> NSStackView {
+        let description = stringValue+"说明"
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName:"questionmark.circle",accessibilityDescription:description)
+        icon.contentTintColor = .secondaryLabelColor
+        icon.imageScaling = .scaleProportionallyDown
+        icon.setAccessibilityElement(true)
+        icon.setAccessibilityLabel(description)
+        icon.hoverHelp = message
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant:16),
+            icon.heightAnchor.constraint(equalToConstant:16)
+        ])
+        let stack = NSStackView(views:[self,icon])
+        stack.orientation = .horizontal; stack.alignment = .centerY; stack.spacing = 5
+        return stack
+    }
+
     var hasTruncatedText:Bool {
         guard !stringValue.isEmpty,let cell else {return false}
         let area = cell.titleRect(forBounds:bounds)

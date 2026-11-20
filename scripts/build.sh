@@ -7,7 +7,8 @@ source scripts/build-resources.sh
 source scripts/build-options.sh
 bailong_entry=app; bailong_entry_command=build.command
 bailong_parse_options "$@"
-bailong_header "构建应用" "$target_arch"
+source_commit="$(bailong_source_commit)"
+bailong_header "构建应用" "$target_arch" "$source_commit"
 bailong_check_tools
 source scripts/swift-sources.sh
 (( ${#swift_sources} > 0 )) || { bailong_error "未找到 Swift 源码。请完整解压仓库。"; exit 1; }
@@ -22,7 +23,7 @@ if [[ "${BAILONG_BUILD_PROFILE:-auto}" != auto ]]; then
 fi
 bailong_check_output "$output"
 if (( bailong_check_only )); then bailong_ok "检查通过"; exit 0; fi
-local_build_entry="$(bailong_local_build_plist_entry)"
+local_build_entry="$(bailong_local_build_plist_entry "$source_commit")"
 mkdir -p ".build/$target_arch" .build/module-cache
 bailong_phase_begin "1/4" "编译主程序"
 bailong_compile "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 -target "$target_arch-apple-macosx14.0" \
