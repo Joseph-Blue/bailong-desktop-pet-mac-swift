@@ -3,7 +3,7 @@ import AppKit
 private enum GitStatusText {
     static let groups:[(group:GitWorkspaceStatus.Group,marker:String,color:NSColor)] = [
         (.conflicted,"~",StatusTextColor.red),(.staged,"+",StatusTextColor.green),
-        (.unstaged,"!",StatusTextColor.orange),(.untracked,"?",StatusTextColor.secondary)
+        (.unstaged,"!",StatusTextColor.orange),(.untracked,"?",.labelColor)
     ]
     static func render(_ status:GitWorkspaceStatus,compact:Bool,font:NSFont) -> NSAttributedString {
         let text = NSMutableAttributedString(), counts = status.counts

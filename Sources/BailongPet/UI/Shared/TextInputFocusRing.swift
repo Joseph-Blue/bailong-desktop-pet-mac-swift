@@ -104,11 +104,15 @@ final class TextInputFocusRing: NSView {
     override func draw(_ dirtyRect:NSRect) {
         guard let surface else {return}
         let rect = convert(surface.bounds,from:surface)
-        NSGraphicsContext.saveGraphicsState()
-        NSFocusRingPlacement.only.set()
         let radius = (surface as? NSBox)?.cornerRadius ?? rect.height / 2
-        NSBezierPath(roundedRect:rect, xRadius:radius, yRadius:radius).fill()
-        NSGraphicsContext.restoreGraphicsState()
+        // 外沿扩出 3pt，内沿覆盖一个设备像素。直接描边只绘制轮廓。
+        let inside = 1 / (window?.backingScaleFactor ?? 1)
+        let outset = (3 - inside) / 2
+        let stroke = NSBezierPath(roundedRect:rect.insetBy(dx:-outset,dy:-outset),
+                                  xRadius:radius+outset,yRadius:radius+outset)
+        stroke.lineWidth = 3 + inside
+        NSColor.keyboardFocusIndicatorColor.setStroke()
+        stroke.stroke()
     }
 
     @objc private func updateColor() {needsDisplay = true}

@@ -25,7 +25,7 @@ extension PetGesture {
             return .init(key:"rightDoubleClickAction", title:"右键双击桌宠", defaultAction:"chat", keywords:Self.clickKeywords, help:"""
                 如使用触控板：
 
-                1. 按住 ^（control 键）点按或双击点按（一段下压）桌宠，等同于鼠标右键点击或双击。
+                1. 按住 ⌃ Control 点按或双击点按（一段下压）桌宠，等同于鼠标右键点击或双击。
                 2. 无论 macOS 系统设置中，触控板的辅助点按触发方式如何设置，只有点按（一段下压）才可正确触发双击鼠标右键效果
                 """)
         case .forceClick:

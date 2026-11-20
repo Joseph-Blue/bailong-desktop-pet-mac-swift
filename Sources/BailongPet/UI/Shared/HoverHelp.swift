@@ -148,12 +148,39 @@ private final class HoverHelpPresenter {
         pending = job; DispatchQueue.main.asyncAfter(deadline:.now()+0.2,execute:job)
     }
     func leave(_ previous:HoverHelpTarget) {if target === previous {dismiss()}}
+    private func setTextAndMeasureWidth(_ value:String) -> CGFloat {
+        let font = text.font!
+        guard value.contains("\t") else {
+            text.stringValue = value
+            return (value as NSString).size(withAttributes:[.font:font]).width
+        }
+        var columnWidths: [CGFloat] = []
+        for line in value.components(separatedBy:"\n") {
+            let columns = line.components(separatedBy:"\t")
+            for (index,column) in columns.dropLast().enumerated() {
+                let width = (column as NSString).size(withAttributes:[.font:font]).width
+                if index == columnWidths.count {columnWidths.append(width)}
+                else {columnWidths[index] = max(columnWidths[index],width)}
+            }
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = text.lineBreakMode
+        var position: CGFloat = 0
+        paragraph.tabStops = columnWidths.map { width in
+            position += ceil(width)+10
+            return NSTextTab(textAlignment:.left,location:position)
+        }
+        let formatted = NSAttributedString(string:value,attributes:[.font:font,.foregroundColor:NSColor.labelColor,.paragraphStyle:paragraph])
+        text.attributedStringValue = formatted
+        return formatted.boundingRect(with:NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude),
+                                      options:[.usesLineFragmentOrigin]).width
+    }
     private func show(_ value:String,window:NSWindow) {
         generation += 1; pending = nil
-        text.stringValue = value; panel.appearance = window.effectiveAppearance
+        panel.appearance = window.effectiveAppearance
         let mouse = NSEvent.mouseLocation
         let screen = window.screen?.visibleFrame ?? NSScreen.main!.visibleFrame
-        let naturalWidth = (value as NSString).size(withAttributes:[.font:text.font!]).width.rounded(.up)+4
+        let naturalWidth = setTextAndMeasureWidth(value).rounded(.up)+4
         var width = min(max(20,naturalWidth),min(520,screen.width-32))
         func textHeight(_ width:CGFloat) -> CGFloat {
             text.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up)

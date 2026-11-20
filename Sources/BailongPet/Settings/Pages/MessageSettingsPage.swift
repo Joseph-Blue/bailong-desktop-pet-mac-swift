@@ -87,13 +87,15 @@ enum MessageSettingsPage {
         let keywords: String
         let requires: [String]
         let detail: String?
+        let help: String?
 
-        init(_ title:String,_ control:Control,keywords:String = "",requires:[String] = [],detail:String? = nil) {
+        init(_ title:String,_ control:Control,keywords:String = "",requires:[String] = [],detail:String? = nil,help:String? = nil) {
             self.title = title
             self.control = control
             self.keywords = keywords
             self.requires = requires
             self.detail = detail
+            self.help = help
         }
     }
 
@@ -115,7 +117,20 @@ enum MessageSettingsPage {
             Row("气泡窗审批按钮顺序",.choice("approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")]),detail:"只调整气泡中的按钮位置。红叉拒绝、绿对钩允许；审批需点击按钮，不能用键盘提交。"),
         ]),
         Group(title:"输入快捷键",topic:.input,symbol:"keyboard",keywords:"回车 Return Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 发送 换行 快捷回复 插话 问卷",rows:[
-            Row("发送与换行",.choice("sendShortcut",SendShortcut.options,width:260)),
+            Row("发送与换行",.choice("sendShortcut",SendShortcut.options,width:260),keywords:"小键盘 ⌤ Alt",help:"""
+                按键说明
+
+                ⌘\tCommand
+                ⌥\tOption / Alt
+                ⇧\tShift
+                ⌃\tControl
+                ↩\tReturn\t（主键区回车）
+                ⌤\tEnter\t（全键键盘的小键盘区回车）
+
+                发送和换行时，⌤ Enter 与 ↩ Return 作用相同
+
+                如外接 PC 键盘：⊞ Win 徽标键 = ⌘，Alt = ⌥，Ctrl = ⌃
+                """),
         ]),
         Group(title:"任务气泡",topic:.content,symbol:"bubble.left.and.bubble.right",keywords:"任务气泡提醒 任务进展 通知 显示 开关",rows:[
             Row("显示任务气泡",.toggle("taskBubbles"),detail:"关闭后仍会显示审批、待回答的问题和错误提示。"),
@@ -223,7 +238,7 @@ enum MessageSettingsPage {
                     let button = topic == nil ? nil : adjustment?.button(for:row.title,requires:row.quickRequires,form:form)
                     return form.toggle(row.title,key,detail:row.detail,requires:row.requires,accessory:button)
                 case let .choice(key,options,width):
-                    return form.choice(row.title,key,options,width:width,detail:row.detail,requires:row.requires)
+                    return form.choice(row.title,key,options,width:width,detail:row.detail,help:row.help,requires:row.requires)
                 case let .slider(key,suffix,minimumLabel):
                     if topic != nil,let value = row.quickValue {
                         return form.row(value.title(for:row.title),control:value.button(for:row.title,requires:row.requires,form:form))
