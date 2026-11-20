@@ -131,7 +131,7 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
         if isEnabled && emphasizesLink {attributes.merge(LinkAppearance.attributes) {_,link in link}}
         attributes[.foregroundColor] = color
         attributedTitle = NSAttributedString(string:text,attributes:attributes)
-        hoverHelp = path.isEmpty ? nil : path
+        setHoverHelp(path.isEmpty ? nil : displayName ?? path) { [weak self] in self?.hasTruncatedTitle == true }
         setAccessibilityValue(path)
     }
     @objc private func openDirectory() {if let directory {onOpen(directory)}}

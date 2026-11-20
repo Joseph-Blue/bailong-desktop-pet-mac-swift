@@ -9,15 +9,22 @@ extension NSView {
         set {setHoverHelp(newValue)}
     }
     func setHoverHelp(_ text:String?,when shouldShow:(() -> Bool)? = nil) {
+        setHoverHelp(text,styled:nil,when:shouldShow)
+    }
+    func setHoverHelp(_ text:NSAttributedString,when shouldShow:(() -> Bool)? = nil) {
+        let accessibleText = text.string.replacingOccurrences(of:"\u{FFFC} ",with:"")
+        setHoverHelp(accessibleText,styled:text,when:shouldShow)
+    }
+    private func setHoverHelp(_ text:String?,styled:NSAttributedString?,when shouldShow:(() -> Bool)?) {
         let old = objc_getAssociatedObject(self,&hoverHelpKey) as? HoverHelpTarget
-        if old?.text == text {
+        if old?.text == text,old?.styled == styled {
             old?.shouldShow = shouldShow
             return
         }
         old?.detach()
         toolTip = nil
         setAccessibilityHelp(text)
-        let target = text.flatMap {$0.isEmpty ? nil : HoverHelpTarget(view:self,text:$0,shouldShow:shouldShow)}
+        let target = text.flatMap {$0.isEmpty ? nil : HoverHelpTarget(view:self,text:$0,styled:styled,shouldShow:shouldShow)}
         objc_setAssociatedObject(self,&hoverHelpKey,target,.OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 }
@@ -61,9 +68,10 @@ extension NSTextField {
 }
 
 extension NSButton {
-    var hasTruncatedTitle:Bool {
+    var hasTruncatedTitle:Bool {hasTruncatedTitle(in:bounds)}
+    func hasTruncatedTitle(in contentBounds:NSRect) -> Bool {
         guard let cell,!title.isEmpty else {return false}
-        return attributedTitle.size().width > cell.titleRect(forBounds:bounds).width || title.contains(where:\.isNewline)
+        return attributedTitle.size().width > cell.titleRect(forBounds:contentBounds).width || title.contains(where:\.isNewline)
     }
 }
 
@@ -90,10 +98,11 @@ extension NSToolbarItem {
 private final class HoverHelpTarget: NSResponder {
     weak var view: NSView?
     let text: String
+    let styled: NSAttributedString?
     var shouldShow:(() -> Bool)?
     private var area: NSTrackingArea!
-    init(view:NSView,text:String,shouldShow:(() -> Bool)?) {
-        self.view = view; self.text = text; self.shouldShow = shouldShow
+    init(view:NSView,text:String,styled:NSAttributedString?,shouldShow:(() -> Bool)?) {
+        self.view = view; self.text = text; self.styled = styled; self.shouldShow = shouldShow
         super.init()
         area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.inVisibleRect,.activeAlways],owner:self,userInfo:nil)
         view.addTrackingArea(area)
@@ -143,7 +152,7 @@ private final class HoverHelpPresenter {
                   window.isVisible,!view.isHiddenOrHasHiddenAncestor else {return}
             let point = window.convertPoint(fromScreen:NSEvent.mouseLocation)
             guard view.visibleRect.contains(view.convert(point,from:nil)),next.shouldShow?() ?? true else {return}
-            self.show(next.text,window:window)
+            self.show(next,window:window)
         }
         pending = job; DispatchQueue.main.asyncAfter(deadline:.now()+0.2,execute:job)
     }
@@ -154,33 +163,29 @@ private final class HoverHelpPresenter {
             text.stringValue = value
             return (value as NSString).size(withAttributes:[.font:font]).width
         }
-        var columnWidths: [CGFloat] = []
-        for line in value.components(separatedBy:"\n") {
-            let columns = line.components(separatedBy:"\t")
-            for (index,column) in columns.dropLast().enumerated() {
-                let width = (column as NSString).size(withAttributes:[.font:font]).width
-                if index == columnWidths.count {columnWidths.append(width)}
-                else {columnWidths[index] = max(columnWidths[index],width)}
-            }
+        let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
+        let rows = value.components(separatedBy:"\n").map {line in
+            line.components(separatedBy:"\t").map {NSAttributedString(string:$0,attributes:attributes)}
         }
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = text.lineBreakMode
-        var position: CGFloat = 0
-        paragraph.tabStops = columnWidths.map { width in
-            position += ceil(width)+10
-            return NSTextTab(textAlignment:.left,location:position)
-        }
-        let formatted = NSAttributedString(string:value,attributes:[.font:font,.foregroundColor:NSColor.labelColor,.paragraphStyle:paragraph])
-        text.attributedStringValue = formatted
-        return formatted.boundingRect(with:NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude),
-                                      options:[.usesLineFragmentOrigin]).width
+        return setAttributedTextAndMeasureWidth(InlineStatusLayout.tabbedRows(rows,font:font))
     }
-    private func show(_ value:String,window:NSWindow) {
+    private func setAttributedTextAndMeasureWidth(_ value:NSAttributedString) -> CGFloat {
+        text.attributedStringValue = value
+        return value.boundingRect(with:NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude),
+                                  options:[.usesLineFragmentOrigin]).width
+    }
+    private func show(_ help:HoverHelpTarget,window:NSWindow) {
         generation += 1; pending = nil
         panel.appearance = window.effectiveAppearance
         let mouse = NSEvent.mouseLocation
         let screen = window.screen?.visibleFrame ?? NSScreen.main!.visibleFrame
-        let naturalWidth = setTextAndMeasureWidth(value).rounded(.up)+4
+        let measuredWidth:CGFloat
+        if let styled = help.styled {
+            measuredWidth = setAttributedTextAndMeasureWidth(styled)
+        } else {
+            measuredWidth = setTextAndMeasureWidth(help.text)
+        }
+        let naturalWidth = measuredWidth.rounded(.up)+4
         var width = min(max(20,naturalWidth),min(520,screen.width-32))
         func textHeight(_ width:CGFloat) -> CGFloat {
             text.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up)

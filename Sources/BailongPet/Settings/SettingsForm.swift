@@ -112,15 +112,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         let items = NSStackView()
         items.orientation = .vertical; items.alignment = .leading; items.spacing = 10
-        let surface = SettingsSectionBackground()
-        surface.addSubview(items); items.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            items.leadingAnchor.constraint(equalTo:surface.leadingAnchor,constant:12),
-            items.trailingAnchor.constraint(equalTo:surface.trailingAnchor,constant:-12),
-            items.topAnchor.constraint(equalTo:surface.topAnchor,constant:12),
-            items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)
-        ])
-        fill(surface,in:section)
+        fill(RoundedSectionBackground(content:items),in:section)
         let conditions = rows.map {row in conditionalRows.first(where:{$0.0 === row})?.1}
         if !conditions.isEmpty && conditions.allSatisfy({$0 != nil}) {
             _ = conditional(section) {prefs in conditions.contains {$0?(prefs) == true}}
@@ -287,9 +279,15 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         return dependent(result,requires:requires)
     }
-    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],images:[String:NSImage] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,changed:(() -> Void)? = nil) -> NSView {
+    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],images:[String:NSImage] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,footer:NSView? = nil,changed:(() -> Void)? = nil) -> NSView {
         let control = AccentSegmentedControl(labels:options.map(\.1),trackingMode:.selectOne,target:nil,action:nil)
         control.selectedSegment = options.firstIndex {$0.0 == (value ?? preferences.string(key))} ?? 0
+        if value == nil {
+            observeValues { [weak control] preferences in
+                let selection = options.firstIndex {$0.0 == preferences.string(key)} ?? 0
+                if let control,control.selectedSegment != selection {control.selectedSegment = selection}
+            }
+        }
         control.isEnabled = enabled; control.identifier = .init(key); control.setAccessibilityLabel(title)
         for (index,option) in options.enumerated() {
             let image = images[option.0] ?? symbols[option.0].flatMap {NSImage(systemSymbolName:$0,accessibilityDescription:nil)}
@@ -300,7 +298,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             guard options.indices.contains(index) else {return}
             self?.preferences.set(options[index].0,for:key); changed?()
         }
-        return row(title,detail:detail,control:control)
+        let selection = row(title,detail:detail,control:control)
+        guard let footer else {return selection}
+        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
+        fill(selection,in:stack); fill(footer,in:stack)
+        return stack
     }
     func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, action:NSView? = nil, changed: @escaping (String)->Void) -> NSView {
         let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value

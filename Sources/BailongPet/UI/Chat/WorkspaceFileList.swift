@@ -175,8 +175,8 @@ final class RepositoryLinkButton:NSButton,LinkCursorControl {
         isBordered = false; bezelStyle = .inline; alignment = .left
         let attributes = LinkAppearance.attributes.merging([.font:NSFont.systemFont(ofSize:11)]) {_,new in new}
         attributedTitle = NSAttributedString(string:label ?? url.absoluteString,attributes:attributes)
-        hoverHelp = url.absoluteString
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
+        setHoverHelp(url.absoluteString) { [weak self] in self?.hasTruncatedTitle == true }
         target = self; action = #selector(open); setAccessibilityLabel("打开仓库网页："+url.absoluteString)
     }
     required init?(coder:NSCoder) {fatalError()}

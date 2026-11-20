@@ -1,11 +1,27 @@
 import AppKit
 
-// 额度与历史共用可选择的 TextKit 明细，汇总触发区复用独立的 TokenDisclosureControl。
+enum TokenUsageDetailText {
+    static func render(_ usage:TokenUsage,format:TokenCountFormat,font:NSFont,color:NSColor,scale:CGFloat = 1) -> (text:NSAttributedString,width:CGFloat) {
+        let rows = usage.detailRows(format:format)
+        func columnWidth(_ values:[String]) -> CGFloat {
+            ceil(values.map {($0 as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0)
+        }
+        let valueTab = columnWidth(rows.map(\.label))+12*scale
+        let unitTab = valueTab+columnWidth(rows.map(\.number))+12*scale
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 3*scale
+        paragraph.tabStops = [NSTextTab(textAlignment:.left,location:valueTab),NSTextTab(textAlignment:.left,location:unitTab)]
+        let value = rows.map {$0.label+"\t"+$0.number+"\t"+$0.unit}.joined(separator:"\n")
+        let text = NSAttributedString(string:value,attributes:[.font:font,.foregroundColor:color,.paragraphStyle:paragraph])
+        return (text,unitTab+columnWidth(rows.map(\.unit)))
+    }
+}
+
+// 额度汇总复用展开控件，明细继续用可选择的 TextKit 文字。
 final class QuotaTokenUsageView:NSView {
     override var isFlipped:Bool {true}
     private let heading = NSTextField(labelWithString:"今日用量")
     private let source = NSTextField(labelWithString:"（本机日志）")
-    private let disclosure = TokenDisclosureControl(frame:.zero)
+    private let disclosure = DisclosureControl(frame:.zero)
     private let detail = SelectableRichText(frame:.zero)
     private let scale:CGFloat, expanded:Bool
     var onToggle:() -> Void = {}
@@ -33,13 +49,8 @@ final class QuotaTokenUsageView:NSView {
         disclosure.onToggle = { [weak self] in self?.onToggle() }
         detail.isHidden = !expanded
         let font = NSFont.monospacedDigitSystemFont(ofSize:12*fontScale,weight:.regular)
-        let labels = ["输入","缓存命中","输出"], numbers = [usage.input,usage.cachedInput,usage.output].map(format.number)
-        let labelWidth = labels.map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
-        let numberWidth = numbers.map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
-        let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 3*scale
-        paragraph.tabStops = [NSTextTab(textAlignment:.left,location:ceil(labelWidth)+12*scale),NSTextTab(textAlignment:.left,location:ceil(labelWidth+numberWidth)+24*scale)]
         detail.font = font
-        detail.attributedStringValue = NSAttributedString(string:usage.details(format:format),attributes:[.font:font,.foregroundColor:primaryTextColor,.paragraphStyle:paragraph])
+        detail.attributedStringValue = TokenUsageDetailText.render(usage,format:format,font:font,color:primaryTextColor,scale:scale).text
         [heading,source,disclosure,detail].forEach {addSubview($0)}
     }
     required init?(coder:NSCoder) {fatalError()}

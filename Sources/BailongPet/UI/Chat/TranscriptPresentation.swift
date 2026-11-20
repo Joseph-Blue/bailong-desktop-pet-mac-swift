@@ -46,8 +46,9 @@ final class TranscriptActionBar:NSView {
     private let copyButton = HoverIconButton(symbol:"doc.on.doc",label:"拷贝")
     private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:"转到 Codex")
     private let completion = NSTextField(wrappingLabelWithString:"")
-    private let tokenDisclosure = TokenDisclosureControl(frame:.zero)
+    private let tokenDisclosure = DisclosureControl(frame:.zero)
     private let detail = SelectableRichText(frame:.zero)
+    private var detailWidth:CGFloat = 0
     init(_ content:TranscriptActions) {
         self.content = content
         super.init(frame:.zero)
@@ -73,27 +74,22 @@ final class TranscriptActionBar:NSView {
         if let ended = content.ended {text.addAttribute(.foregroundColor,value:AppAccent.foregroundColor,range:NSRange(location:0,length:(ended as NSString).length))}
         completion.attributedStringValue = text; completion.isHidden = content.ended == nil
         let font = NSFont.monospacedDigitSystemFont(ofSize:content.font.pointSize,weight:.regular)
-        let paragraph = NSMutableParagraphStyle()
-        let labelWidth = ["本轮","输入","缓存命中","输出"].map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
-        let counts = content.result.usage.map {[$0.total,$0.input,$0.cachedInput,$0.output]} ?? []
-        let numberWidth = counts.map {(countFormat.number($0) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
-        let valueTab = ceil(labelWidth)+12, unitTab = valueTab+ceil(numberWidth)+12
-        paragraph.tabStops = [NSTextTab(textAlignment:.left,location:valueTab),NSTextTab(textAlignment:.left,location:unitTab)]
-        paragraph.lineSpacing = 3
         // 汇总是一句话；只有展开后的明细使用制表位，不让“缓存命中”的列宽撑开汇总。
         let heading = "本轮  "+(content.result.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}",format:countFormat)} ?? (content.result.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
         let canExpand = content.result.usage != nil || content.result.usageError != nil
-        let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
-        tokenDisclosure.scale = max(0.85,content.font.pointSize/12)
-        tokenDisclosure.baseFont = font
-        tokenDisclosure.chevronTint = .secondaryLabelColor
         tokenDisclosure.expandable = canExpand
         tokenDisclosure.expanded = expanded
         tokenDisclosure.accessibilityTitle = "用量明细"
-        tokenDisclosure.attributedTitle = NSAttributedString(string:heading,attributes:[.font:font,.foregroundColor:primaryTextColor])
+        tokenDisclosure.setInlineTitle(heading,font:font)
         tokenDisclosure.isHidden = content.ended == nil
-        detail.attributedStringValue = NSAttributedString(string:content.result.usage?.details(format:countFormat) ?? content.result.usageError ?? "",attributes:[
-            .font:font,.paragraphStyle:content.result.usage == nil ? NSParagraphStyle.default : paragraph,.foregroundColor:NSColor.secondaryLabelColor])
+        if let usage = content.result.usage {
+            let rendered = TokenUsageDetailText.render(usage,format:countFormat,font:font,color:.secondaryLabelColor)
+            detail.attributedStringValue = rendered.text
+            detailWidth = rendered.width
+        } else {
+            detail.attributedStringValue = NSAttributedString(string:content.result.usageError ?? "",attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor])
+            detailWidth = 0
+        }
         detail.isHidden = !expanded || !canExpand
         needsLayout = true
     }
@@ -118,17 +114,21 @@ final class TranscriptActionBar:NSView {
                 completion.frame.origin.x -= completion.cell!.drawingRect(forBounds:completion.bounds).minX
             }
             let leadingInset = tokenDisclosure.textLeadingInset
-            let controlSize = tokenDisclosure.preferredSize(maxWidth:width+leadingInset)
+            let controlSize = tokenDisclosure.preferredSize(maxWidth:width)
             let tokenHeight = max(side,controlSize.height)
-            let tokenSlot = place(NSSize(width:controlSize.width-leadingInset,height:tokenHeight)) {rect in
+            // 只有同一行左侧确有空间时，才把胶囊留白放入组间距。
+            let leadingSpace = min(x,leadingInset)
+            let outset = x+controlSize.width-leadingSpace <= width ? leadingSpace : 0
+            let tokenSlot = place(NSSize(width:controlSize.width-outset,height:tokenHeight)) {rect in
+                let controlX = rect.minX-outset
                 var controlY = rect.minY+(tokenHeight-controlSize.height)/2
                 if rect.minY == completionSlot.minY {
-                    tokenDisclosure.frame = NSRect(x:rect.minX-leadingInset,y:controlY,width:controlSize.width,height:controlSize.height)
+                    tokenDisclosure.frame = NSRect(x:controlX,y:controlY,width:controlSize.width,height:controlSize.height)
                     controlY += InlineStatusLayout.baseline(of:completion)-(tokenDisclosure.frame.minY+tokenDisclosure.firstLineBaseline)
                 }
-                tokenDisclosure.frame = NSRect(x:rect.minX-leadingInset,y:controlY,width:controlSize.width,height:controlSize.height)
+                tokenDisclosure.frame = NSRect(x:controlX,y:controlY,width:controlSize.width,height:controlSize.height)
             }
-            tokenOrigin = tokenSlot.minX
+            tokenOrigin = tokenSlot.minX-outset+leadingInset
         }
         if content.showsActions {
             let actionsWidth = side*2+8
@@ -145,9 +145,10 @@ final class TranscriptActionBar:NSView {
         }
         var height = y+rowHeight
         if !detail.isHidden {
-            let detailWidth = max(1,width-tokenOrigin)
-            let h = detail.height(for:detailWidth)
-            if placing {detail.frame = NSRect(x:tokenOrigin,y:height+4,width:detailWidth,height:h)}
+            let detailX = width-tokenOrigin >= detailWidth ? tokenOrigin : 0
+            let availableWidth = max(1,width-detailX)
+            let h = detail.height(for:availableWidth)
+            if placing {detail.frame = NSRect(x:detailX,y:height+4,width:availableWidth,height:h)}
             height += h+4+max(4,content.font.pointSize/2)
         }
         return height

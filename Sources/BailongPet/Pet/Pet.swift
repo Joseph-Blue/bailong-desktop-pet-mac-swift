@@ -822,7 +822,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
-        if keys.allSatisfy({$0 == PetPreferences.tokenDetailsKey || $0 == TokenCountFormat.key}),!keys.isEmpty {return}
+        if keys.allSatisfy({$0 == PetPreferences.tokenDetailsKey || $0 == TokenCountFormat.key || $0 == GitStatusStyle.key}),!keys.isEmpty {return}
         if !Set(keys).isDisjoint(with:["animationSmoothTransition","bubbleMotion"]),
            !preferences.bool("animationSmoothTransition") || !preferences.bool("bubbleMotion") {view.cancelTransition()}
         if keys == ["animationSmoothTransition"] {return}

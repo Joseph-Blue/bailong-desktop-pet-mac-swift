@@ -451,8 +451,7 @@ final class Bubble {
                 InlineStatusLayout.align(self.headingIcon,to:self.title,side:self.headingIcon.layoutSize.height,width:self.headingIcon.layoutSize.width)
             }
             if hasElapsed {self.layoutElapsed(in:size)}
-            let workspaceInset = self.workspace.leadingContentInset
-            self.workspace.frame = NSRect(x:bodyLayout.inset-workspaceInset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth+workspaceInset,height:max(0,workspaceHeight-4*scale))
+            self.workspace.frame = NSRect(x:bodyLayout.inset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-4*scale))
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSize.width,height:progressIconSide)
             self.taskProgress.frame = NSRect(x:bodyLayout.inset+progressIconSize.width+6*scale,y:progressY,width:max(0,bodyLayout.contentWidth-progressIconSize.width-6*scale),height:progressLineHeight)

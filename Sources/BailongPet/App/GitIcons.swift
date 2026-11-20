@@ -4,6 +4,15 @@ import AppKit
 // MIT License — Copyright (c) 2026 GitHub Inc.
 // Full license notices are in 第三方许可.txt.
 enum GitIcons {
+    static func repository(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSImage {
+        switch kind {
+        case .generic:return git
+        case .github:return github
+        case .remote:return remote
+        }
+    }
+    private static let remote = NSImage(systemSymbolName:"network",accessibilityDescription:"其他远端仓库")!
+
     // Lucide git-branch: https://lucide.dev/icons/git-branch (ISC).
     // Copyright (c) 2026 Lucide Icons and Contributors.
     // SVG's 24-point geometry, round caps and joins; scaled to a native template.
@@ -22,7 +31,7 @@ enum GitIcons {
         }
         image.isTemplate = true; image.accessibilityDescription = "Git"; return image
     }()
-    static let github:NSImage = {
+    private static let github:NSImage = {
         let image = NSImage(size:NSSize(width:16,height:16),flipped:true) { _ in
             let p = NSBezierPath()
             p.move(to:NSPoint(x:6.766000,y:11.328000))

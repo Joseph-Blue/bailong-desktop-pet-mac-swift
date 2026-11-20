@@ -117,7 +117,11 @@ final class ActionButton: NSButton {
 }
 class HoverIconButton: NSButton {
     var hoverCornerRadius:CGFloat?
-    var horizontalPadding:CGFloat = 0
+    var horizontalPadding:CGFloat = 0 {
+        didSet {
+            if horizontalPadding != oldValue {invalidateIntrinsicContentSize(); needsDisplay = true}
+        }
+    }
     private var tracking: NSTrackingArea?
     private var hovering = false
     init(symbol:String,label:String) {
@@ -127,6 +131,9 @@ class HoverIconButton: NSButton {
         setAccessibilityLabel(label)
     }
     required init?(coder: NSCoder) {fatalError()}
+    // 胶囊以完整点击范围参与布局，避免系统边框对齐补偿把圆角移到容器外。
+    override var alignmentRectInsets:NSEdgeInsets {hoverCornerRadius == nil ? super.alignmentRectInsets : NSEdgeInsets()}
+    var contentBounds:NSRect {bounds.insetBy(dx:min(horizontalPadding,bounds.width/2),dy:0)}
     override var intrinsicContentSize:NSSize {
         let size = super.intrinsicContentSize
         return NSSize(width:size.width+2*horizontalPadding,height:size.height)
@@ -150,7 +157,8 @@ class HoverIconButton: NSButton {
                 NSBezierPath(ovalIn:circle).fill()
             }
         }
-        super.draw(dirtyRect)
+        if horizontalPadding > 0,let cell {cell.draw(withFrame:contentBounds,in:self)}
+        else {super.draw(dirtyRect)}
     }
 }
 final class BubbleCloseButton: HoverIconButton {
@@ -165,6 +173,35 @@ final class BubbleCloseButton: HoverIconButton {
     @objc private func closeBubble() {onClose()}
 }
 final class TopDownView: NSView {override var isFlipped: Bool {true}}
+
+final class RoundedSectionBackground:NSView {
+    private let solidFill:Bool
+
+    init(content:NSView,horizontalInset:CGFloat = 12,verticalInset:CGFloat = 12,solidFill:Bool = false) {
+        self.solidFill = solidFill
+        super.init(frame:.zero)
+        addSubview(content); content.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo:leadingAnchor,constant:horizontalInset),
+            content.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-horizontalInset),
+            content.topAnchor.constraint(equalTo:topAnchor,constant:verticalInset),
+            content.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-verticalInset)
+        ])
+    }
+    required init?(coder:NSCoder) {fatalError()}
+
+    override func draw(_ dirtyRect:NSRect) {
+        let dark = effectiveAppearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
+        let tint = dark ? NSColor.white : .black
+        let strength:CGFloat = dark ? 0.045 : 0.025
+        let base = NSColor.windowBackgroundColor
+        let fill = solidFill ? (base.blended(withFraction:strength,of:tint) ?? base).withAlphaComponent(1) : tint.withAlphaComponent(strength)
+        fill.setFill()
+        NSBezierPath(roundedRect:bounds,xRadius:12,yRadius:12).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
+}
+
 class ContentCursorPanel:NSPanel {
     var tracksContentCursor = false
     override func performKeyEquivalent(with event:NSEvent) -> Bool {

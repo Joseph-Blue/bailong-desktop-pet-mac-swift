@@ -9,6 +9,7 @@ final class MessageTextView: LinkTextView {
     private var measuredHeight:CGFloat = 0
     private var codeToolbars = [Int:CodeBlockToolbar]()
     private var transcriptToolbars = [Int:TranscriptActionBar]()
+    private var fileDisclosures = [String:(control:DisclosureControl,range:NSRange,size:NSSize)]()
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         NotificationCenter.default.removeObserver(self,name:PetPreferences.didChange,object:nil)
@@ -32,12 +33,12 @@ final class MessageTextView: LinkTextView {
         }
     }
     private func updateTokenLayout() {
-        prepareFooters(width:bounds.width)
+        prepareInlineControls(width:bounds.width)
         measuredWidth = -1; invalidateCodeLayout()
         if isVerticallyResizable {sizeToFit()}
         onContentLayoutChange?()
     }
-    private var preparingFooters = false
+    private var preparingInlineControls = false
     private var resizingFrame = false
     private var codeLayoutDirty = true
     private var codeLayoutWidth:CGFloat = -1
@@ -57,11 +58,20 @@ final class MessageTextView: LinkTextView {
         return super.scrollToVisible(rect)
     }
     override func layout() {
-        prepareFooters(width:bounds.width)
+        prepareInlineControls(width:bounds.width)
         super.layout()
         guard codeLayoutDirty || codeLayoutWidth != bounds.width else {return}
         guard let storage = textStorage,let manager = layoutManager else {return}
         codeLayoutDirty = false; codeLayoutWidth = bounds.width
+        for (control,range,size) in fileDisclosures.values {
+            manager.ensureLayout(forCharacterRange:range)
+            let glyphs = manager.glyphRange(forCharacterRange:range,actualCharacterRange:nil)
+            guard glyphs.length > 0 else {continue}
+            let line = manager.lineFragmentRect(forGlyphAt:glyphs.location,effectiveRange:nil)
+            let textX = line.minX+textContainerOrigin.x+(textContainer?.lineFragmentPadding ?? 0)
+            let x = max(bounds.minX,textX-control.textLeadingInset)
+            control.frame = NSRect(origin:NSPoint(x:x,y:line.minY+textContainerOrigin.y),size:size)
+        }
         var seen = Set<Int>()
         storage.enumerateAttribute(.codeBlockHeader,in:NSRange(location:0,length:storage.length)) {value,range,_ in
             guard let content = value as? CodeBlockContent,
@@ -99,9 +109,11 @@ final class MessageTextView: LinkTextView {
     private func footerWidth(_ width:CGFloat) -> CGFloat {
         max(1,width-2*textContainerInset.width-2*(textContainer?.lineFragmentPadding ?? 0))
     }
-    private func prepareFooters(width:CGFloat) {
-        guard !preparingFooters,let storage = textStorage else {return}
-        preparingFooters = true; defer {preparingFooters = false}
+    private func prepareInlineControls(width:CGFloat) {
+        guard !preparingInlineControls,let storage = textStorage else {return}
+        preparingInlineControls = true; defer {preparingInlineControls = false}
+        let width = footerWidth(width)
+        prepareFileDisclosures(in:storage,width:width)
         var entries = [(TranscriptActions,NSRange)]()
         storage.enumerateAttribute(.transcriptActions,in:NSRange(location:0,length:storage.length)) {value,range,_ in
             if let content = value as? TranscriptActions {entries.append((content,range))}
@@ -121,23 +133,49 @@ final class MessageTextView: LinkTextView {
                 guard let toolbar else {return}
                 PetPreferences.shared.set(!toolbar.expanded,for:PetPreferences.tokenDetailsKey,from:toolbar)
             }
-            let height = toolbar.arrange(width:footerWidth(width))
-            let previous = storage.attribute(.paragraphStyle,at:range.location,effectiveRange:nil) as? NSParagraphStyle
-            if previous?.minimumLineHeight != height {
-                let paragraph = (previous?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-                paragraph.minimumLineHeight = height; paragraph.maximumLineHeight = height
-                storage.addAttribute(.paragraphStyle,value:paragraph,range:range)
-                measuredWidth = -1; codeLayoutDirty = true
-            }
+            reserveInlineHeight(toolbar.arrange(width:width),at:range,in:storage)
         }
+    }
+    private func prepareFileDisclosures(in storage:NSTextStorage,width:CGFloat) {
+        var entries = [(section:FileEditSection,range:NSRange,expanded:Bool)]()
+        storage.enumerateAttribute(.fileEditDisclosure,in:NSRange(location:0,length:storage.length)) {value,range,_ in
+            guard let expanded = value as? Bool,
+                  let section = storage.attribute(.fileEditSection,at:range.location,effectiveRange:nil) as? FileEditSection else {return}
+            entries.append((section,range,expanded))
+        }
+        let ids = Set(entries.map {$0.section.id})
+        for id in Array(fileDisclosures.keys) where !ids.contains(id) {fileDisclosures.removeValue(forKey:id)?.control.removeFromSuperview()}
+        for (section,range,expanded) in entries {
+            let id = section.id
+            let control = fileDisclosures[id]?.control ?? DisclosureControl(frame:.zero)
+            if control.superview == nil {
+                control.accessibilityTitle = "文件列表"
+                control.onToggle = { [weak self] in self?.toggleFileDisclosure(id) }
+                addSubview(control)
+            }
+            let extraCount = section.edits.count-FileEditRendering.previewCount
+            let title = expanded ? "收起文件列表" : "再显示 \(extraCount) 个文件"
+            if control.expanded != expanded {control.expanded = expanded}
+            control.setAccessibilityValue(expanded ? nil : "\(extraCount) 个文件")
+            let font = NSFont.monospacedDigitSystemFont(ofSize:max(11,section.font.pointSize-1),weight:.regular)
+            control.setInlineTitle(title,font:font)
+            let leadingSpace = textContainerInset.width+(textContainer?.lineFragmentPadding ?? 0)
+            let size = control.preferredSize(maxWidth:width+min(leadingSpace,control.textLeadingInset))
+            fileDisclosures[id] = (control,range,size)
+            reserveInlineHeight(size.height,at:range,in:storage)
+        }
+    }
+    private func reserveInlineHeight(_ height:CGFloat,at range:NSRange,in storage:NSTextStorage) {
+        let previous = storage.attribute(.paragraphStyle,at:range.location,effectiveRange:nil) as? NSParagraphStyle
+        guard previous?.minimumLineHeight != height else {return}
+        let paragraph = (previous?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = height; paragraph.maximumLineHeight = height
+        storage.addAttribute(.paragraphStyle,value:paragraph,range:range)
+        measuredWidth = -1; codeLayoutDirty = true
     }
 
     var linkBaseDirectory: (() -> URL?)?
     override func clicked(onLink link: Any, at charIndex: Int) {
-        if (link as? URL) == FileEditRendering.disclosureLink,
-           let section = textStorage?.attribute(.fileEditSection,at:charIndex,effectiveRange:nil) as? FileEditSection {
-            DisclosureMotion.update(in:self) {applyDisclosure(fileEditPresentation.toggle(section.id))}; return
-        }
         if MessageFileLink.reveal(link,relativeTo:linkBaseDirectory?()) {return}
         super.clicked(onLink:link,at:charIndex)
     }
@@ -163,12 +201,16 @@ final class MessageTextView: LinkTextView {
     func revealFileEdits(matching query:String) {
         if let value = fileEditPresentation.revealMatches(query) {applyDisclosure(value)}
     }
+    private func toggleFileDisclosure(_ id:String) {
+        DisclosureMotion.update(in:self,animatesLayout:false) {applyDisclosure(fileEditPresentation.toggle(id))}
+    }
     private func applyDisclosure(_ value:NSAttributedString) {
         let origin = enclosingScrollView?.contentView.bounds.origin
         setSelectedRange(NSRange(location:0,length:0))
         applyContent(value,reset:false)
         if isVerticallyResizable {sizeToFit()}
         onContentLayoutChange?()
+        layoutSubtreeIfNeeded()
         if let scroll = enclosingScrollView,let origin {
             scroll.contentView.scroll(to:scroll.contentView.constrainBoundsRect(NSRect(origin:origin,size:scroll.contentView.bounds.size)).origin)
             scroll.reflectScrolledClipView(scroll.contentView)
@@ -180,13 +222,13 @@ final class MessageTextView: LinkTextView {
         if reset {textStorage?.setAttributedString(value)}
         else {replaceChangedSuffix(with:value)}
         measuredWidth = -1; invalidateCodeLayout()
-        prepareFooters(width:bounds.width)
+        prepareInlineControls(width:bounds.width)
         if !hadSelection {setSelectedRange(NSRange(location:0,length:0))}
         return true
     }
     // 使用实际 TextKit 布局，宽度不受滚动条显隐影响；只在正文或宽度改变后测量。
     func contentHeight(for width:CGFloat) -> CGFloat {
-        prepareFooters(width:width)
+        prepareInlineControls(width:width)
         guard measuredWidth != width else {return measuredHeight}
         guard let container = textContainer,let manager = layoutManager else {return 0}
         if frame.width != width {frame.size.width = width}

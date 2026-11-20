@@ -60,11 +60,13 @@ enum MessageSettingsPage {
         case choice(String,[(String,String)],width:CGFloat = 190)
         case slider(String,suffix:String,minimumLabel:String? = nil)
         case time(String)
+        case gitStatusStyle
         case preview
 
         var key:String? {
             switch self {
             case let .toggle(key,_),let .choice(key,_,_),let .slider(key,_,_),let .time(key): return key
+            case .gitStatusStyle:return GitStatusStyle.key
             case .preview: return nil
             }
         }
@@ -114,7 +116,7 @@ enum MessageSettingsPage {
             Row("记录历史",.toggle("recordHistory"),detail:"关闭后保留已有记录，停止保存新内容；重新开启不会补录。Codex 自身的记录不受影响。"),
         ]),
         Group(title:"气泡窗审批",topic:.input,symbol:"checkmark.shield",keywords:"批准 允许这一次 允许本轮 拒绝 左拒绝 右允许 左允许 右拒绝 左右 位置 红叉 绿对钩",rows:[
-            Row("气泡窗审批按钮顺序",.choice("approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")]),detail:"只调整气泡中的按钮位置。红叉拒绝、绿对钩允许；审批需点击按钮，不能用键盘提交。"),
+            Row("气泡窗审批按钮顺序",.choice("approvalButtonOrder",[("rejectLeft","左拒绝 · 右允许"),("allowLeft","左允许 · 右拒绝")]),detail:"只调整气泡中的按钮位置。红叉拒绝、绿对钩允许。"),
         ]),
         Group(title:"输入快捷键",topic:.input,symbol:"keyboard",keywords:"回车 Return Enter ⌃ Control Ctrl ⌘ Command ⇧ Shift ⌥ Option 发送 换行 快捷回复 插话 问卷",rows:[
             Row("发送与换行",.choice("sendShortcut",SendShortcut.options,width:260),keywords:"小键盘 ⌤ Alt",help:"""
@@ -136,11 +138,12 @@ enum MessageSettingsPage {
             Row("显示任务气泡",.toggle("taskBubbles"),detail:"关闭后仍会显示审批、待回答的问题和错误提示。"),
             Row("任务过程消息",.toggle("progressBubbles",.number("progressSeconds",unit:"秒")),requires:["taskBubbles"]),
             Row("最终回复",.toggle("resultBubbles",.number("resultSeconds",unit:"秒")),requires:["taskBubbles"]),
-            Row("在气泡中显示任务信息栏",.toggle("taskInfoBarEnabled"),keywords:"Git 状态 GitHub 分支 仓库状态 任务概览 本轮文件改动 文件增删 状态栏 进度 工具调用",detail:"在任务气泡和任务概览中同行显示 Git 状态和本轮文件改动。"),
+            Row("显示任务信息栏",.toggle("taskInfoBarEnabled"),keywords:"在气泡中显示任务信息栏 Git 状态 GitHub 分支 仓库状态 任务概览 本轮文件改动 文件增删 状态栏 进度 工具调用",detail:"在任务气泡和任务概览中显示 Git 状态与本轮文件改动。"),
             Row("思考与工具进展小气泡",.toggle("progressToastEnabled",.number("progressToastSeconds",unit:"秒")),keywords:"自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关",requires:["taskBubbles","progressBubbles"]),
         ]),
         Group(title:"工作区状态条",image:{GitIcons.git},keywords:"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条",rows:[
-            Row("显示工作区状态条",.toggle("gitWindowEnabled"),detail:"在桌宠旁常驻显示当前会话的目录、Git 状态和本轮文件改动。"),
+            Row("显示工作区状态条",.toggle("gitWindowEnabled"),detail:"在桌宠旁常驻显示当前会话的目录、Git 状态与本轮文件改动。"),
+            Row("Git 状态显示风格",.gitStatusStyle,keywords:GitStatusStyle.options.map(\.1).joined(separator:" ")+" P10k PL10K VS Code VSCode Git CLI Git 状态图例 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后"),
         ]),
         Group(title:"显示哪些消息",topic:.content,symbol:"line.3.horizontal.decrease.circle",keywords:"显示思考过程 思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关",rows:[
             Row("互动台词",.toggle("interactionBubbles",.number("interactionSeconds",unit:"秒")),keywords:"通知 显示 开关"),
@@ -166,7 +169,7 @@ enum MessageSettingsPage {
         Group(title:"声音",symbol:"speaker.wave.2",keywords:"声音",rows:[
             Row("播放音效",.toggle("soundEnabled")),
         ]),
-        Group(title:"Token 用量",topic:.reading,symbol:"number",rows:[
+        Group(title:"Token 用量",topic:.reading,symbol:"chart.bar",rows:[
             Row("Token 计数格式",.choice(TokenCountFormat.key,TokenCountFormat.options),keywords:"千 百万 十亿 K M B 万 亿 缩写 小数 千分位",detail:"额度、任务气泡和历史共用此格式。缩写保留两位小数。"),
         ]),
         Group(title:"安静陪伴",topic:.reading,symbol:"moon",keywords:"安静陪伴模式 启用专注时段 免打扰 时间 夜间 静音",detail:"按本机时间执行，可跨天；开始和结束时间相同表示全天。",rows:[
@@ -247,6 +250,15 @@ enum MessageSettingsPage {
                                        detail:row.detail,requires:row.requires,minimumLabel:minimumLabel)
                 case .time(let key):
                     return form.time(row.title,key,requires:row.requires)
+                case .gitStatusStyle:
+                    let legend = NSTextField(wrappingLabelWithString:"")
+                    legend.isSelectable = false
+                    legend.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+                    form.observeValues { [weak legend] preferences in
+                        let content = GitStatusText.settingsLegend(preferences.gitStatusStyle)
+                        if let legend,!legend.attributedStringValue.isEqual(to:content) {legend.attributedStringValue = content}
+                    }
+                    return form.segmented(row.title,GitStatusStyle.key,GitStatusStyle.options,footer:legend)
                 case .preview:
                     return form.row(row.title,control:ActionButton("预览…") {onPreview(.result)})
                 }

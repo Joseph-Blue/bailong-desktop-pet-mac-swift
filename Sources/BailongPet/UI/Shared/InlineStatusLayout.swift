@@ -35,11 +35,53 @@ enum InlineStatusLayout {
         return offset
     }
 
+    static func tabbedRows(_ rows:[[NSAttributedString]],font:NSFont,columnGap:CGFloat = 10,paragraphSpacing:CGFloat = 0) -> NSAttributedString {
+        var columnWidths = [CGFloat]()
+        for row in rows {
+            for (index,cell) in row.dropLast().enumerated() {
+                let width = cell.size().width
+                if index == columnWidths.count {columnWidths.append(width)}
+                else {columnWidths[index] = max(columnWidths[index],width)}
+            }
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byCharWrapping; paragraph.paragraphSpacing = paragraphSpacing
+        var position:CGFloat = 0
+        paragraph.tabStops = columnWidths.map {width in
+            position += ceil(width)+columnGap
+            return NSTextTab(textAlignment:.left,location:position)
+        }
+        let result = NSMutableAttributedString()
+        for (rowIndex,row) in rows.enumerated() {
+            if rowIndex > 0 {result.append(NSAttributedString(string:"\n",attributes:[.font:font]))}
+            for (column,cell) in row.enumerated() {
+                if column > 0 {result.append(NSAttributedString(string:"\t",attributes:[.font:font]))}
+                result.append(cell)
+            }
+        }
+        result.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:result.length))
+        return result
+    }
+
     static func centeredSymbol(_ symbol:String,font:NSFont,color:NSColor) -> NSAttributedString {
         let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:color]
         let line = CTLineCreateWithAttributedString(NSAttributedString(string:symbol,attributes:attributes))
         let bounds = CTLineGetBoundsWithOptions(line,.useGlyphPathBounds)
         return NSAttributedString(string:symbol,attributes:attributes.merging([.baselineOffset:font.capHeight/2-bounds.midY]) {_,new in new})
+    }
+    static func imageAttachment(_ source:NSImage,description:String,font:NSFont,side:CGFloat,color:NSColor) -> NSAttributedString {
+        // 文本附件每次绘制解析动态色，避免缓存上一次外观。
+        let image = NSImage(size:source.size,flipped:false) {rect in
+            source.draw(in:rect)
+            color.setFill(); rect.fill(using:.sourceIn)
+            return true
+        }
+        image.cacheMode = .never; image.accessibilityDescription = description
+        let attachment = NSTextAttachment(); attachment.image = image
+        let factor = side/max(source.size.width,source.size.height)
+        let width = source.size.width*factor, height = source.size.height*factor
+        attachment.bounds = NSRect(x:0,y:(font.capHeight-height)/2,width:width,height:height)
+        return NSAttributedString(attachment:attachment)
     }
     static func lineBaseline(font:NSFont,height:CGFloat) -> CGFloat {
         (height-font.ascender+font.descender)/2-font.descender

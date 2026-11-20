@@ -29,7 +29,7 @@ final class SubscriptionManagementButton:NSButton {
     init(management:SubscriptionManagement,font:NSFont) {
         self.management = management
         super.init(frame:.zero)
-        title = management.title; isBordered = true; bezelStyle = .rounded
+        title = management.title+"\u{00A0}"; isBordered = true; bezelStyle = .rounded
         self.font = font
         image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil)
         imagePosition = .imageTrailing; imageScaling = .scaleProportionallyDown

@@ -1,7 +1,8 @@
 import AppKit
 
-// 独立的 Token 汇总与展开触发控件：统一承载富文本／制表位排版、箭头光学对齐及整块圆角悬停反馈。
-final class TokenDisclosureControl:NSControl {
+// 共用的展开触发控件，内容、展开状态与视口行为由调用方管理。
+final class DisclosureControl:NSControl {
+    private static let inlineTitleColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
     override var isFlipped:Bool {true}
     private let storage = NSTextStorage()
     private let layoutManager = NSLayoutManager()
@@ -24,7 +25,7 @@ final class TokenDisclosureControl:NSControl {
         didSet {invalidateIntrinsicContentSize(); needsDisplay = true}
     }
     var chevronTint:NSColor = .labelColor {didSet {needsDisplay = true}}
-    var accessibilityTitle = "用量明细" {didSet {updateAccessibility()}}
+    var accessibilityTitle = "明细" {didSet {updateAccessibility()}}
 
     // 仅供测试或外部模拟悬停验证，不参与业务逻辑。
     var isShowingHoverHighlight:Bool {expandable && (hovering || pressed)}
@@ -47,6 +48,14 @@ final class TokenDisclosureControl:NSControl {
                 needsDisplay = true
             }
         }
+    }
+
+    func setInlineTitle(_ title:String,font:NSFont) {
+        let scale = max(0.85,font.pointSize/12)
+        if self.scale != scale {self.scale = scale}
+        if baseFont != font {baseFont = font}
+        chevronTint = .secondaryLabelColor
+        attributedTitle = NSAttributedString(string:title,attributes:[.font:font,.foregroundColor:Self.inlineTitleColor])
     }
 
     override init(frame:NSRect) {

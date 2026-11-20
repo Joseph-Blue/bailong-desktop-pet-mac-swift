@@ -45,8 +45,16 @@ struct TokenUsage:Codable,Equatable {
     static func unit(_ value:Int64) -> String {value == 1 ? "Token" : "Tokens"}
     static func amount(_ value:Int64,separator:String = " ",format:TokenCountFormat = .full) -> String {format.number(value)+separator+unit(value)}
     var signature:String {"\(input):\(cachedInput):\(output):\(total)"}
-    func details(format:TokenCountFormat) -> String {
-        zip(["输入","缓存命中","输出"],[input,cachedInput,output]).map {title,value in title+"\t"+Self.amount(value,separator:"\t",format:format)}.joined(separator:"\n")
+    func detailRows(format:TokenCountFormat) -> [(label:String,number:String,unit:String)] {
+        var cacheLabel = "缓存命中"
+        if input > 0 {
+            let rate = Decimal(cachedInput)/Decimal(input)
+            let percentage = rate.formatted(.percent.precision(.fractionLength(1)).rounded(rule:.toNearestOrAwayFromZero).locale(Locale(identifier:"en_US")))
+            cacheLabel += " (\(percentage))"
+        }
+        return zip(["输入",cacheLabel,"输出"],[input,cachedInput,output]).map {label,value in
+            (label,format.number(value),Self.unit(value))
+        }
     }
 }
 

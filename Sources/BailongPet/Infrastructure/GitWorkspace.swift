@@ -1,19 +1,33 @@
 import Foundation
 
 struct GitWorkspaceStatus:Equatable {
+    enum RepositoryKind:CaseIterable {case generic, github, remote}
     enum Group:String,CaseIterable {case conflicted = "冲突", staged = "已暂存", unstaged = "未暂存", untracked = "未跟踪"}
     struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:String}
+    struct Operation:Equatable {
+        let compactTitle:String, detailTitle:String
+        init(_ compactTitle:String, detailTitle:String? = nil) {
+            self.compactTitle = compactTitle
+            self.detailTitle = detailTitle ?? compactTitle
+        }
+    }
     var root = "", branch = "", commit = "", tag:String?, upstream:String?
     var ahead:Int?, behind:Int?, stashes = 0
-    var initial = false, detached = false, operation:String?
+    var initial = false, detached = false, operation:Operation?
     var remoteNames = [String]()
     var remoteName:String?, remoteHost:String?, remoteRepository:String?
     var remoteWebURL:URL?
     var entries = [Entry]()
     var observationPaths = [String]()
-    var isGitHub:Bool {remoteHost?.lowercased() == "github.com"}
+    var repositoryKind:RepositoryKind {
+        guard let remoteName,remoteName != "." else {return .generic}
+        return remoteHost?.lowercased() == "github.com" ? .github : .remote
+    }
     var counts:[Group:Int] {entries.reduce(into:[:]) {$0[$1.group,default:0] += 1}}
     var clean:Bool {entries.isEmpty}
+    static let stashLabel = "贮藏 (Stash)"
+    var stashSummary:String? {stashes > 0 ? "\(Self.stashLabel) \(stashes) 条" : nil}
+    var detachedSummary:String? {detached ? "当前不在任何分支上 (Detached HEAD)" : nil}
     var title:String {
         guard detached else {return branch}
         if let tag {return "#"+tag}
@@ -23,7 +37,7 @@ struct GitWorkspaceStatus:Equatable {
         let counts = counts
         var parts = Group.allCases.compactMap {group in counts[group].map {group.rawValue+" \($0) 项"}}
         if parts.isEmpty {parts.append("工作区干净")}
-        if stashes > 0 {parts.append("暂存栈 \(stashes) 份")}
+        if let stashSummary {parts.append(stashSummary)}
         return parts.joined(separator:" · ")
     }
     static func parse(_ data:Data) throws -> Self {
@@ -188,7 +202,7 @@ final class GitWorkspaceRequest {
         }
         return result
     }
-    private func repositoryOperation(in gitDirectory:URL) throws -> String? {
+    private func repositoryOperation(in gitDirectory:URL) throws -> GitWorkspaceStatus.Operation? {
         func exists(_ path:String) -> Bool {
             FileManager.default.fileExists(atPath:gitDirectory.appendingPathComponent(path).path)
         }
@@ -201,21 +215,27 @@ final class GitWorkspaceRequest {
                 return nil
             }
         }
-        if exists("rebase-apply/applying") {return "应用补丁中"}
+        if exists("rebase-apply/applying") {return .init("应用补丁中")}
         let progressPaths:(current:String,total:String)
         if exists("rebase-apply") {
             progressPaths = ("rebase-apply/next","rebase-apply/last")
         } else if exists("rebase-merge") {
             progressPaths = ("rebase-merge/msgnum","rebase-merge/end")
         } else {
-            let markers = [("MERGE_HEAD","合并中"),("CHERRY_PICK_HEAD","拣选中"),("REVERT_HEAD","还原中"),("BISECT_LOG","二分查找中")]
-            return markers.first {exists($0.0)}?.1
+            let markers:[(path:String, operation:GitWorkspaceStatus.Operation)] = [
+                ("MERGE_HEAD", .init("合并中")),
+                ("CHERRY_PICK_HEAD", .init("拣选中", detailTitle:"拣选提交 (Cherry-pick) 进行中")),
+                ("REVERT_HEAD", .init("还原中", detailTitle:"撤销提交改动 (Revert) 进行中")),
+                ("BISECT_LOG", .init("二分查找中"))
+            ]
+            return markers.first {exists($0.path)}?.operation
         }
         if let current = try rebaseStep(progressPaths.current), let total = try rebaseStep(progressPaths.total),
            current > 0, current <= total {
-            return "变基中 \(current)/\(total)"
+            let progress = "\(current)/\(total)"
+            return .init("变基中 \(progress)", detailTitle:"变基 (Rebase) \(progress)")
         }
-        return "变基中"
+        return .init("变基中", detailTitle:"变基 (Rebase) 进行中")
     }
     func start(directory:String,completion:@escaping (Result<GitWorkspaceStatus?,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async { [self] in

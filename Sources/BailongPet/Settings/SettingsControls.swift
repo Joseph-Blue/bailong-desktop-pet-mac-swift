@@ -8,14 +8,6 @@ final class SettingsAction: NSObject {
 }
 
 // 设置分组承载同类选项；不叠加阴影或玻璃效果。
-final class SettingsSectionBackground: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let dark = effectiveAppearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
-        (dark ? NSColor.white.withAlphaComponent(0.045) : NSColor.black.withAlphaComponent(0.025)).setFill()
-        NSBezierPath(roundedRect:bounds,xRadius:12,yRadius:12).fill()
-    }
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
-}
 final class GlassOpacitySlider: NSSlider {
     var tracking = false
     var ended: () -> Void = {}
