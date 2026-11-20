@@ -205,7 +205,7 @@ final class ChatComposer: NSObject {
     }
 
     private func showNewMenu() {
-        let menu = NSMenu(); menu.autoenablesItems = false
+        let menu = AccentMenuRows.menu(); menu.autoenablesItems = false
         let defaultItem = NSMenuItem(title:"在默认工作区新建",action:#selector(newDefault),keyEquivalent:""); defaultItem.target = self
         let same = NSMenuItem(title:"在当前工作区新建",action:#selector(newHere),keyEquivalent:""); same.target = self
         folderAction.target = self; folderAction.action = #selector(newElsewhere)

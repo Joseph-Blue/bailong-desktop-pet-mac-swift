@@ -74,7 +74,10 @@ final class ActionButton: NSButton {
     }
     func emphasize(_ enabled: Bool = true) {prominent = enabled; updateAccent()}
     @objc private func updateAccent() {
-        bezelColor = prominent ? AppAccent.color : nil
+        let nativeDefault = prominent && keyEquivalent == "\r" && !keepsAccentWhenInactive
+        bezelColor = prominent && !nativeDefault ? AppAccent.color : nil
+        if nativeDefault {NativeAccentTint.apply(to:self)}
+        else if !contentFilters.isEmpty {contentFilters = []}
         isBordered = semanticColor == nil && !(prominent && keepsAccentWhenInactive); invalidateIntrinsicContentSize(); needsDisplay = true
     }
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}

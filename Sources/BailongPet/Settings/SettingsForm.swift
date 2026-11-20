@@ -18,8 +18,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     }()
     private(set) weak var currentTemplateField:SettingsTemplateField?
     var moveToAdjacentEntry:((Int) -> Bool)?
-    private var bufferControls = [NSControl]()
-    private weak var bufferRow:NSView?
     private(set) var searchAnchors = [String:NSView]()
     private var section:SettingsSection = .general
     var petSymbol:() -> NSImage? = {nil}
@@ -35,7 +33,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         for view in content.arrangedSubviews {content.removeArrangedSubview(view); view.removeFromSuperview()}
         actions.removeAll(); textActions.removeAll(); textEndActions.removeAll()
         availabilityUpdates.removeAll(); conditionalRows.removeAll()
-        bufferControls.removeAll(); bufferRow = nil
     }
     func fieldEditor(for client:Any?) -> Any? {
         guard let field = client as? SettingsTemplateField else {return nil}
@@ -46,7 +43,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         update(preferences)
     }
     func refreshAvailability() {
-        updateBufferAvailability()
         for update in availabilityUpdates {update(preferences)}
         let changed = conditionalRows.filter {$0.0.isHidden == $0.1(preferences)}
         if !changed.isEmpty {
@@ -125,11 +121,20 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             items.bottomAnchor.constraint(equalTo:surface.bottomAnchor,constant:-12)
         ])
         fill(surface,in:section)
+        let conditions = rows.map {row in conditionalRows.first(where:{$0.0 === row})?.1}
+        if !conditions.isEmpty && conditions.allSatisfy({$0 != nil}) {
+            _ = conditional(section) {prefs in conditions.contains {$0?(prefs) == true}}
+        }
         for (index,row) in rows.enumerated() {
             if index > 0 && row.identifier?.rawValue == "settings-explanation" {items.setCustomSpacing(4,after:rows[index-1])}
             if index > 0 && row.identifier?.rawValue != "settings-explanation" {
                 let line = NSBox(); line.boxType = .separator
-                if let condition = conditionalRows.first(where:{$0.0 === row})?.1 {_ = conditional(line,when:condition)}
+                let preceding = conditions[..<index], current = conditions[index]
+                if current != nil || preceding.allSatisfy({$0 != nil}) {
+                    _ = conditional(line) {prefs in
+                        (current?(prefs) ?? true) && preceding.contains {$0?(prefs) ?? true}
+                    }
+                }
                 fill(line,in:items)
             }
             fill(row,in:items)
@@ -223,21 +228,11 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
     }
     // 只随现有设置通知刷新；离开页面清理回调，不持有旧页面。
-    private func dependent(_ view:NSView, requires keys:[String], unless exclusions:[String] = [],except independent:NSView? = nil) -> NSView {
+    private func dependent(_ view:NSView,requires keys:[String],unless exclusions:[String] = []) -> NSView {
         guard !keys.isEmpty || !exclusions.isEmpty else {return view}
-        let update:(PetPreferences) -> Void = { [weak view,weak independent] preferences in
-            guard let view else {return}
-            let enabled = keys.allSatisfy {preferences.bool($0)} && exclusions.allSatisfy {!preferences.bool($0)}
-            func apply(_ child:NSView) {
-                if child === independent {return}
-                if let control = child as? NSControl {control.isEnabled = enabled}
-                else {for child in child.subviews {apply(child)}}
-            }
-            apply(view)
-            view.alphaValue = enabled ? 1 : 0.45
+        return conditional(view) { prefs in
+            keys.allSatisfy {prefs.bool($0)} && exclusions.allSatisfy {!prefs.bool($0)}
         }
-        availabilityUpdates.append(update); update(preferences)
-        return view
     }
     func toggle(_ title: String, _ key: String, detail: String? = nil, enabled:Bool = true, requires:[String] = [], unless:[String] = [], symbol:String? = nil, accessory:NSView? = nil, changed:(() -> Void)? = nil) -> NSView {
         let control = AccentSwitch(); control.state = preferences.bool(key) ? .on : .off; control.isEnabled = enabled; control.setAccessibilityLabel(title)
@@ -257,14 +252,14 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             controls = stack
         } else {controls = control}
         let result = row(title,detail:detail,symbol:symbol,control:controls)
-        return dependent(result,requires:requires,unless:unless,except:accessory)
+        return dependent(result,requires:requires,unless:unless)
     }
     func popup(_ title: String, options: [(String,String)], value: String, width: CGFloat = 190, identifier: String? = nil, detail:String? = nil, changed: @escaping (String)->Void) -> NSView {
         let menu = popupControl(title,options:options,value:value,width:width,identifier:identifier,changed:changed)
         return row(title,detail:detail,control:menu)
     }
     func popupControl(_ title:String,options:[(String,String)],value:String,width:CGFloat,identifier:String? = nil,changed:@escaping (String)->Void) -> NSPopUpButton {
-        let menu = NSPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
+        let menu = AccentPopUpButton(); menu.addItems(withTitles:options.map(\.1)); menu.selectItem(at:options.firstIndex {$0.0 == value} ?? 0)
         if let identifier {menu.identifier = NSUserInterfaceItemIdentifier(identifier)}
         var controlWidth = width
         if identifier == "animationQuality" || identifier == "sendShortcut" {
@@ -483,8 +478,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         unit.widthAnchor.constraint(equalToConstant:22).isActive = true
         let controls = SettingsSliderControl(number:number,unit:unit,slider:slider,limits:("6 帧","240 帧"),ticks:7)
         let result = row("动画缓冲帧数", detail:"限制播放中保留的后续帧数；起播准备约四分之一秒。", control: controls)
-        bufferControls = [slider, number]; bufferRow = result; updateBufferAvailability()
-        return result
+        return dependent(result,requires:[],unless:["preloadWholeAnimation"])
     }
     func time(_ title: String, _ key: String, requires:[String] = []) -> NSView {
         let picker = NSDatePicker(); picker.datePickerStyle = .textFieldAndStepper; picker.datePickerElements = [.hourMinute]; picker.locale = Locale(identifier:"zh_CN")
@@ -492,10 +486,5 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         picker.setAccessibilityLabel(title)
         attach(picker) { [weak self] sender in let c = Calendar.current.dateComponents([.hour,.minute],from:(sender as! NSDatePicker).dateValue); self?.preferences.set((c.hour ?? 0)*60+(c.minute ?? 0),for:key) }
         return dependent(row(title,control:picker),requires:requires)
-    }
-    func updateBufferAvailability() {
-        let enabled = !preferences.bool("preloadWholeAnimation")
-        for control in bufferControls { control.isEnabled = enabled }
-        bufferRow?.alphaValue = enabled ? 1 : 0.45
     }
 }

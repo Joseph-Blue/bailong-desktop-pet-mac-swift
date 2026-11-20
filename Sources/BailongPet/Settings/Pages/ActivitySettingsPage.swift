@@ -10,8 +10,8 @@ final class ActivitySettingsPage {
     }
     func reset() {viewport = nil}
     func render() {
-        let actions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),("random","显示任务进度、播放随机动画"),("randomAnimation","播放随机动画")]
-        form.group("鼠标互动",[form.choice("单击桌宠","singleClickAction",actions),form.choice("双击桌宠","doubleClickAction",actions),form.choice("右键双击桌宠","rightDoubleClickAction",actions)],symbol:"computermouse")
+        let actions = PetPreferences.mouseActions
+        form.group("鼠标互动",[form.choice("单击桌宠","singleClickAction",actions),form.choice("双击桌宠","doubleClickAction",actions),form.choice("右键双击桌宠","rightDoubleClickAction",actions,detail:"按住 ⌃ 点击或双击桌宠，等同于右键点击或双击。")],symbol:"computermouse")
         form.group("桌宠吸边",[
             form.toggle("屏幕左右边缘吸边","sideDockEnabled"),
             form.slider("左右露出比例","sideExposurePercent",range:40...85,step:5,suffix:"%",requires:["sideDockEnabled"]),

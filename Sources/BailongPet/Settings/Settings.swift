@@ -156,7 +156,6 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func refreshDiagnosticsSwitch(_ note:Notification) {
         guard renderedSection != nil else {return}
         form.refreshAvailability()
-        appearancePage.refreshAvailability()
         if !window.isVisible && !window.isMiniaturized,
            let keys = note.userInfo?["keys"] as? [String],
            let rendered = renderedSection,
@@ -270,6 +269,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     private func revealSetting(_ entry:SettingsSearchEntry) {
+        let entry = entry.section == .messages ? MessageSettingsPage.prerequisite(for:entry,preferences:preferences) ?? entry : entry
         window.makeFirstResponder(nil); select(entry.section,detail:entry.detail)
         if entry.itemID == nil,entry.title == entry.detail?.title {return}
         if let itemList {
@@ -350,9 +350,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .developer:
             form.group("动画", [form.choice("画质", "animationQuality", [("auto", "自动\t跟随显示尺寸"), ("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")]),
                 form.choice("素材帧率上限", "animationFPSLimit", [("full", "满帧"), ("20", "20 FPS"), ("15", "15 FPS")]),
+                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "播放前加载整段动画，会占用更多运行内存 (RAM)。"),
                 form.bufferFrames(),
-                form.toggle("常用动作开头缓存", "animationOpeningCache", detail: "保留播放过的常用动作开头，运行内存（RAM）缓存上限 24 MiB。", unless:["preloadWholeAnimation"]),
-                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "播放前加载整段动画，会占用更多运行内存 (RAM)。")],symbol:"film")
+                form.toggle("常用动作开头缓存", "animationOpeningCache", detail: "保留播放过的常用动作开头，运行内存（RAM）缓存上限 24 MiB。", unless:["preloadWholeAnimation"])],symbol:"film")
             form.group("动画效果改善", [
                 form.toggle("动态效果", "bubbleMotion", detail:"控制气泡、内容展开、选择弹窗、桌宠显隐及动作平滑过渡。"),
                 form.toggle("动作平滑过渡", "animationSmoothTransition", detail:"轮廓相近的动作交接时短暂淡化。", requires:["bubbleMotion"]),
@@ -403,7 +403,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             form.row("访达自动化",detail:"点击文件链接时，在访达中选中文件；对应窗口已最小化时会恢复显示。",control:FinderPermissionControl(frame:.zero)),
             form.row("文件与文件夹",detail:"首次访问文稿、桌面或下载等目录时，系统会询问是否允许。可在系统设置中按目录调整。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
             form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()})],symbol:"lock.shield")
-        let menu = NSPopUpButton(); displayMenu = menu
+        let menu = AccentPopUpButton(); displayMenu = menu
         menu.identifier = .init("preferredDisplay"); menu.setAccessibilityLabel("所在显示器")
         menu.widthAnchor.constraint(equalToConstant:190).isActive = true
         form.attach(menu) { [weak self] sender in

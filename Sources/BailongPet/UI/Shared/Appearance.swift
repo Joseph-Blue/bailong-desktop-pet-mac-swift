@@ -34,6 +34,17 @@ enum AppAccent {
     static let choices = [("system","跟随系统"),("blue","蓝色"),("purple","紫色"),("pink","粉色"),("red","红色"),("orange","橙色"),("yellow","黄色"),("green","绿色"),("gray","石墨色"),("custom","自定义")]
     static var selection: String {SettingsStorage.defaults.string(forKey:"accentStyle") ?? "system"}
     static var color: NSColor {color(for:selection)}
+    static let selectedTextBackground = NSColor(name:nil) { _ in
+        selection == "system" ? .selectedTextBackgroundColor : color.withAlphaComponent(0.32)
+    }
+    static let insertionPoint = NSColor(name:nil) { _ in
+        selection == "system" ? .textInsertionPointColor : foregroundColor
+    }
+    static var textOnFill:NSColor {
+        guard let rgb = color.usingColorSpace(NativeAccentTint.workingSpace) else {return .alternateSelectedControlTextColor}
+        let luminance = 0.2126*rgb.redComponent + 0.7152*rgb.greenComponent + 0.0722*rgb.blueComponent
+        return luminance > 0.179 ? .black : .white
+    }
     // 文字使用独立动态色（固定对象身份以避免属性字典反复新建）；原取样色继续用于按钮、色点和填充。
     static let foregroundColor = NSColor(name:nil) {appearance in foregroundColor(color,for:appearance)}
     static func foregroundColor(_ base:NSColor,for appearance:NSAppearance,increasedContrast:Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,backgroundColor:NSColor = .windowBackgroundColor) -> NSColor {
@@ -89,6 +100,24 @@ enum AppAccent {
     }
 }
 
+// 保留原生表格行、交替行底色与失焦选区，只给活跃选区应用用户选色。
+final class AccentSelectionRow:NSTableRowView {
+    override var interiorBackgroundStyle:NSView.BackgroundStyle {
+        AppAccent.selection == "system" ? super.interiorBackgroundStyle : .normal
+    }
+    override func drawSelection(in dirtyRect:NSRect) {
+        guard AppAccent.selection != "system",isEmphasized else {super.drawSelection(in:dirtyRect); return}
+        AppAccent.color.withAlphaComponent(0.28).setFill()
+        NSBezierPath(roundedRect:bounds.insetBy(dx:2,dy:1),xRadius:5,yRadius:5).fill()
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self,name:AppAccent.didChange,object:nil)
+        if window != nil {NotificationCenter.default.addObserver(self,selector:#selector(refreshAccent),name:AppAccent.didChange,object:nil)}
+    }
+    @objc private func refreshAccent() {needsDisplay = true}
+}
+
 // 状态文字、细线图标与任务结果圆标共用动态色，按钮填充仍使用原系统语义色。
 enum StatusTextColor {
     static let red = adaptive(.systemRed)
@@ -123,7 +152,7 @@ enum StatusTextColor {
 // NSSwitch 没有公开 tint 属性。公开 contentFilters 仅映射原生绘制的颜色，
 // 不访问内部子视图、不重画形状，也不替换系统动画、键盘或辅助功能。
 enum NativeAccentTint {
-    private static let workingSpace = NSColorSpace(cgColorSpace:CGColorSpace(name:CGColorSpace.extendedLinearSRGB)!)!
+    fileprivate static let workingSpace = NSColorSpace(cgColorSpace:CGColorSpace(name:CGColorSpace.extendedLinearSRGB)!)!
     static func apply(to view:NSView) {
         view.wantsLayer = true
         // 在关闭状态也保留映射，原生动画第一帧就使用应用强调色。
@@ -284,14 +313,17 @@ extension NSAlert {
     func applyAccent(primary: Int = 0, keyboardDefault: Int? = 0) {
         if buttons.isEmpty {addButton(withTitle:"好")}
         layout()
+        let dangerous = buttons.contains(where: \.hasDestructiveAction)
         for (index,button) in buttons.enumerated() {
-            // NSAlert 的危险按钮由系统绘制，不能再覆盖为纯红底。
-            button.bezelColor = button.hasDestructiveAction ? nil : index == primary ? AppAccent.color : nil
+            // 默认按钮的底色由 AppKit 单独绘制；保留原底色供 NativeAccentTint 映射。
+            let isDefault = !dangerous && index == keyboardDefault
+            button.bezelColor = index == primary && !isDefault && !button.hasDestructiveAction ? AppAccent.color : nil
             if button.keyEquivalent == "\r" || button.keyEquivalent == "\u{3}" {button.keyEquivalent = ""}
         }
-        let dangerous = buttons.contains(where: \.hasDestructiveAction)
         if !dangerous, let keyboardDefault, buttons.indices.contains(keyboardDefault) {
-            buttons[keyboardDefault].keyEquivalent = "\r"; window.defaultButtonCell = buttons[keyboardDefault].cell as? NSButtonCell
+            let button = buttons[keyboardDefault]
+            button.keyEquivalent = "\r"; window.defaultButtonCell = button.cell as? NSButtonCell
+            if AppAccent.selection != "system" {NativeAccentTint.apply(to:button)}
         } else {window.defaultButtonCell = nil}
     }
     func beginDangerousSheet(for parent:NSWindow, completion:@escaping (NSApplication.ModalResponse)->Void) {

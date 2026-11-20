@@ -146,12 +146,13 @@ final class Bubble {
         guard renderedCardID != nil,renderedCardID == cardStore.selectedID else {return}
         cardStore.saveForm(questionForm,size:questionSize)
     }
-    func present(_ message:BubbleCard,select:Bool = false) {
+    @discardableResult func present(_ message:BubbleCard,select:Bool = false) -> Bool {
         saveCardForm()
         let render = cardStore.present(message,select:select,limit:Int(preferences.number("bubbleCardLimit")),
             wasVisible:visible,protectsInput:submittingQuestion || questionForm != nil,pendingAttention:pendingAttention)
         if render {renderCard()}
         else {updateCardNavigation(); layout(bodyHeight:layoutBodyHeight); onCardLayout()}
+        return render
     }
     func refreshCardPreferences() {
         saveCardForm()
@@ -522,7 +523,6 @@ final class Bubble {
         let laysOutBody = card?.showsTaskOverview != true || !preferences.bool("showTaskOverview")
         preparingDisplay = true
         defer {preparingDisplay = false; onVisibilityChange()}
-        if kind == "quotaLoading" {quotaUsageExpanded = false}
         if kind != "quota" {quotaRequiredContentWidth = 0}
         stopQuotaLoading()
         quotaPricingTimer?.invalidate(); quotaPricingTimer = nil
@@ -873,7 +873,6 @@ final class Bubble {
         }
         quotaLoadingTimer = timer; RunLoop.main.add(timer,forMode:.common)
     }
-    private var quotaUsageExpanded = false
     private var quotaRequiredContentWidth:CGFloat = 0
     func quotaRows(_ overview: QuotaOverview, scale: Double, failure: AppFailure? = nil, cachedAt:Date? = nil, retry: (() -> Void)? = nil,preserveScroll:Bool = false,revealUsage:Bool = false) {
         let readingOrigin = scroll.contentView.bounds.origin
@@ -881,9 +880,12 @@ final class Bubble {
         stopQuotaLoading()
         quotaPricingTimer?.invalidate(); quotaPricingTimer = nil
         var overview = overview
+        let now = Date()
+        var pricingCountdown:NSTextField?
+        var pricingTarget:Date?
         if overview.apiProvider?.catalogID == "deepseek",
            let index = overview.rows.firstIndex(where:{$0.title == "峰谷定价"}) {
-            overview.rows.replaceSubrange(index..<overview.rows.endIndex,with:QuotaPresentation.deepSeekPricingRows())
+            overview.rows.replaceSubrange(index..<overview.rows.endIndex,with:QuotaPresentation.deepSeekPricingRows(at:now))
         }
         retryButton.isHidden = true
         let fontScale = scale*preferences.number("messageFontSize")/13
@@ -893,7 +895,6 @@ final class Bubble {
             onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
         }
         configureButtons()
-        let now = Date()
         let resetFont = NSFont.monospacedDigitSystemFont(ofSize:12.5*fontScale,weight:.medium)
         let resetDates = overview.rows.compactMap(\.resetsAt)
         let resetTab = ceil(resetDates.map {(QuotaPresentation.resetDateText($0) as NSString).size(withAttributes:[.font:resetFont]).width}.max() ?? 0)+16*fontScale
@@ -959,17 +960,20 @@ final class Bubble {
                 let line = NSBox(frame:NSRect(x:0,y:y,width:width,height:1)); line.boxType = .separator; content.addSubview(line); y += 12*scale
             }
             if let usage = row.usage {
-                let usageView = QuotaTokenUsageView(usage:usage,expanded:quotaUsageExpanded,scale:scale,fontScale:fontScale,headingText:overview.usageHeading)
+                let expanded = preferences.bool(PetPreferences.tokenDetailsKey)
+                let usageView = QuotaTokenUsageView(usage:usage,expanded:expanded,scale:scale,fontScale:fontScale,headingText:overview.usageHeading,format:preferences.tokenCountFormat)
                 let height = usageView.arrange(width:width)
                 usageView.frame.origin.y = y; content.addSubview(usageView)
                 y += height+12*scale
                 usageEnd = y
-                usageView.onToggle = { [weak self] in
+                usageView.onToggle = { [weak self,weak usageView] in
+                    self?.preferences.set(!expanded,for:PetPreferences.tokenDetailsKey,from:usageView)
+                }
+                usageView.onExpansionChange = { [weak self] reveal in
                     guard let self,self.visible,self.kind == "quota" else {return}
                     // 气泡高度由 BubbleMotion 负责，文档几何不再叠加隐式布局动画。
                     DisclosureMotion.update(in:self.scroll,animatesLayout:false) {
-                        self.quotaUsageExpanded.toggle()
-                        self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry,preserveScroll:true,revealUsage:self.quotaUsageExpanded)
+                        self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry,preserveScroll:true,revealUsage:reveal)
                         self.onCardLayout()
                     }
                 }
@@ -987,6 +991,7 @@ final class Bubble {
                 heading.attributedStringValue = title
             }
             let amount = NSTextField(labelWithString:row.value); amount.font = amountFont; amount.alignment = .right
+            if let target = row.countdownTarget {pricingCountdown = amount; pricingTarget = target}
             let quotaColor: NSColor? = row.remaining.flatMap {$0 <= 5 ? .systemRed : $0 <= 10 ? .systemOrange : nil}
             amount.textColor = row.tone == .positive ? StatusTextColor.green : row.tone == .negative ? StatusTextColor.red
                 : row.remaining.map {$0 <= 5 ? StatusTextColor.red : $0 <= 10 ? StatusTextColor.orange : .labelColor} ?? .labelColor
@@ -1053,13 +1058,11 @@ final class Bubble {
         management?.symbolConfiguration = actionSymbol
         let providerPage:ActionButton? = overview.apiProvider.flatMap {provider in
             guard let address = provider.pageURL,let url = URL(string:address) else {return nil}
-            let button = ActionButton("\u{00A0}打开供应商开放平台") {NSWorkspace.shared.open(url)}
+            let button = ActionButton("打开供应商开放平台") {NSWorkspace.shared.open(url)}
             button.font = actionFont
-            button.image = NSImage(systemSymbolName:"globe",accessibilityDescription:nil)?
+            button.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil)?
                 .withSymbolConfiguration(actionSymbol)
             button.imagePosition = .imageLeading
-            button.keepsAccentWhenInactive = true
-            button.emphasize()
             button.setAccessibilityLabel("打开供应商开放平台")
             return button
         }
@@ -1105,12 +1108,18 @@ final class Bubble {
             self.show(title:heading,body:" ",kind:"quota",scale:scale,seconds:0,preserveCountdown:true)
             self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry)
         }
-        if deepSeekAPI,let change = DeepSeekPricing.nextDisplayChange() {
-            let timer = Timer(fire:change.addingTimeInterval(0.05),interval:0,repeats:false) { [weak self] _ in
-                guard let self,self.window.isVisible,self.kind.hasPrefix("quota") else {return}
-                let origin = self.scroll.contentView.bounds.origin
-                self.refreshStandalone?()
-                self.scroll.contentView.scroll(to:origin)
+        if deepSeekAPI,let change = DeepSeekPricing.nextDisplayChange(at:now) {
+            let ticks = pricingTarget != nil
+            let firstFire = ticks ? Date(timeIntervalSince1970:floor(now.timeIntervalSince1970)+1) : change
+            let timer = Timer(fire:firstFire,interval:ticks ? 1 : 0,repeats:ticks) { [weak self,weak pricingCountdown] timer in
+                guard let self,self.visible,self.kind == "quota" else {timer.invalidate(); return}
+                let current = Date()
+                if current >= change || current < now {
+                    self.quotaRows(overview,scale:scale,failure:failure,cachedAt:cachedAt,retry:retry,preserveScroll:true)
+                    self.onCardLayout()
+                } else if let pricingTarget {
+                    pricingCountdown?.stringValue = DeepSeekPricing.countdown(until:pricingTarget,now:current)
+                }
             }
             quotaPricingTimer = timer; RunLoop.main.add(timer,forMode:.common)
         }

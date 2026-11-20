@@ -373,7 +373,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func conversationMenu(_ row:Int) -> NSMenu? {
         guard visibleConversations.indices.contains(row) else {return nil}
-        let conversation = visibleConversations[row], menu = NSMenu()
+        let conversation = visibleConversations[row], menu = AccentMenuRows.menu()
         menu.autoenablesItems = false
         for (title,action) in [("重命名对话标题…",#selector(renameConversation(_:))),("同步 Codex 中生成的标题",#selector(syncConversationTitle(_:)))] {
             let item = NSMenuItem(title:title,action:action,keyEquivalent:"")

@@ -43,12 +43,13 @@ enum MessageSettingsPage {
                     editor.fill(editor.time("结束时间","quietEnd"),in:editor.content)
                 }
             }
+            let available:(PetPreferences) -> Bool = {prefs in requires.allSatisfy {prefs.bool($0)}}
+            if !requires.isEmpty {_ = form.conditional(button,when:available)}
             form.observeValues { [weak button] prefs in
                 guard let button else {return}
                 let value = summary(prefs)
                 if value != button.title {button.title = value; button.setAccessibilityValue(value)}
-                button.isEnabled = requires.allSatisfy {prefs.bool($0)}
-                if !button.isEnabled {button.closeEditor()}
+                if !available(prefs) {button.closeEditor()}
             }
             return button
         }
@@ -107,6 +108,9 @@ enum MessageSettingsPage {
     }
 
     private static let groups: [Group] = [
+        Group(title:"Token 用量",topic:.reading,symbol:"number",rows:[
+            Row("Token 计数格式",.choice(TokenCountFormat.key,TokenCountFormat.options),keywords:"千 百万 十亿 K M B 万 亿 缩写 小数 千分位",detail:"额度、任务气泡和历史共用此格式。缩写保留两位小数。"),
+        ]),
         Group(title:"历史记录",symbol:"book",keywords:"聊天 保存 同步",rows:[
             Row("记录历史",.toggle("recordHistory"),detail:"关闭后保留已有记录，停止保存新内容；重新开启不会补录。Codex 自身的记录不受影响。"),
         ]),
@@ -171,6 +175,24 @@ enum MessageSettingsPage {
         groups.flatMap {$0.rows.compactMap { $0.control.key }} + ["countAfterReveal","typingEffect"]
     }
 
+    // 搜索到已收起的项目时，定位到第一个尚未开启的前置开关。
+    static func prerequisite(for entry:SettingsSearchEntry,preferences:PetPreferences) -> SettingsSearchEntry? {
+        guard let group = groups.first(where:{$0.title == entry.group}) else {return nil}
+        for row in group.rows {
+            let keys:[String]
+            if row.title == entry.title {keys = row.requires}
+            else if row.quickValue?.title(for:row.title) == entry.title {keys = row.quickRequires}
+            else {continue}
+            guard let key = keys.first(where:{!preferences.bool($0)}) else {return nil}
+            for parent in groups {
+                if let toggle = parent.rows.first(where:{$0.control.key == key}) {
+                    return SettingsSearchEntry(section:.messages,group:parent.title,title:toggle.title)
+                }
+            }
+        }
+        return nil
+    }
+
     static var searchEntries:[SettingsSearchEntry] {
         func condition(_ requires:[String]) -> String {
             requires.isEmpty ? "" : "开启"+requires.map {titlesByKey[$0]!}.joined(separator:"、")+"后可调整"
@@ -209,8 +231,7 @@ enum MessageSettingsPage {
                     return form.slider(row.title,key,range:PetPreferences.ranges[key]!,suffix:suffix,
                                        detail:row.detail,requires:row.requires,minimumLabel:minimumLabel)
                 case .time(let key):
-                    let picker = form.time(row.title,key,requires:row.requires)
-                    return form.conditional(picker,when:{prefs in row.requires.allSatisfy {prefs.bool($0)}})
+                    return form.time(row.title,key,requires:row.requires)
                 case .preview:
                     return form.row(row.title,control:ActionButton("预览…") {onPreview(.result)})
                 }

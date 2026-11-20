@@ -6,7 +6,7 @@ protocol TemplateContextMenu {}
 enum TextContextMenu {
     private static let commands = [("剪切",#selector(NSText.cut(_:)),"x","scissors"),("拷贝",#selector(NSText.copy(_:)),"c","doc.on.doc"),("粘贴",#selector(NSText.paste(_:)),"v","doc.on.clipboard"),("全选",#selector(NSResponder.selectAll(_:)),"a","")]
     static func menu(for target: NSTextView) -> NSMenu {
-        let menu = NSMenu(); menu.allowsContextMenuPlugIns = false
+        let menu = AccentMenuRows.menu(); menu.allowsContextMenuPlugIns = false
         for (title,action,key,symbol) in commands {
             if action == #selector(NSResponder.selectAll(_:)) {menu.addItem(.separator())}
             let item = NSMenuItem(title:title,action:action,keyEquivalent:key)
@@ -59,7 +59,22 @@ enum TextContextMenu {
     }
 }
 
-class AppTextView: NSTextView {
+class AccentTextView:NSTextView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self,name:AppAccent.didChange,object:nil)
+        guard window != nil else {return}
+        NotificationCenter.default.addObserver(self,selector:#selector(refreshTextAccent),name:AppAccent.didChange,object:nil)
+        refreshTextAccent()
+    }
+    @objc private func refreshTextAccent() {
+        insertionPointColor = AppAccent.insertionPoint
+        selectedTextAttributes[.backgroundColor] = AppAccent.selectedTextBackground
+        needsDisplay = true
+    }
+}
+
+class AppTextView: AccentTextView {
     override func menu(for event: NSEvent) -> NSMenu? {TextContextMenu.menu(for:self)}
 }
 

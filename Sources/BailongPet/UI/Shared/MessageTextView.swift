@@ -9,7 +9,34 @@ final class MessageTextView: LinkTextView {
     private var measuredHeight:CGFloat = 0
     private var codeToolbars = [Int:CodeBlockToolbar]()
     private var transcriptToolbars = [Int:TranscriptActionBar]()
-    private var expandedUsage = Set<String>()
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self,name:PetPreferences.didChange,object:nil)
+        guard window != nil else {return}
+        NotificationCenter.default.addObserver(self,selector:#selector(tokenPreferenceChanged(_:)),name:PetPreferences.didChange,object:PetPreferences.shared)
+        if !transcriptToolbars.isEmpty {updateTokenLayout()}
+    }
+    @objc private func tokenPreferenceChanged(_ note:Notification) {
+        guard let keys = note.userInfo?["keys"] as? [String],keys.contains(PetPreferences.tokenDetailsKey) || keys.contains(TokenCountFormat.key),
+              !transcriptToolbars.isEmpty else {return}
+        let sender = note.userInfo?["sender"] as? TranscriptActionBar
+        guard let sender,sender.superview === self else {updateTokenLayout(); return}
+        DisclosureMotion.update(in:self,animatesLayout:false) {
+            updateTokenLayout()
+            if sender.expanded {
+                layoutSubtreeIfNeeded()
+                let font = sender.content.font
+                let height = ceil(font.ascender-font.descender+font.leading)+8
+                scrollToVisible(NSRect(x:0,y:max(0,sender.frame.maxY-height),width:1,height:height))
+            }
+        }
+    }
+    private func updateTokenLayout() {
+        prepareFooters(width:bounds.width)
+        measuredWidth = -1; invalidateCodeLayout()
+        if isVerticallyResizable {sizeToFit()}
+        onContentLayoutChange?()
+    }
     private var preparingFooters = false
     private var resizingFrame = false
     private var codeLayoutDirty = true
@@ -79,31 +106,20 @@ final class MessageTextView: LinkTextView {
         storage.enumerateAttribute(.transcriptActions,in:NSRange(location:0,length:storage.length)) {value,range,_ in
             if let content = value as? TranscriptActions {entries.append((content,range))}
         }
-        expandedUsage.formIntersection(Set(entries.map {$0.0.id}))
         let locations = Set(entries.map {$0.1.location})
         for key in Array(transcriptToolbars.keys) where !locations.contains(key) {transcriptToolbars.removeValue(forKey:key)?.removeFromSuperview()}
+        guard !entries.isEmpty else {return}
+        let expanded = PetPreferences.shared.bool(PetPreferences.tokenDetailsKey)
+        let format = PetPreferences.shared.tokenCountFormat
         for (content,range) in entries {
             let toolbar = transcriptToolbars[range.location] ?? TranscriptActionBar(content)
             if toolbar.content !== content {toolbar.content = content}
-            if toolbar.expanded != expandedUsage.contains(content.id) {toolbar.expanded = expandedUsage.contains(content.id)}
+            if toolbar.expanded != expanded {toolbar.expanded = expanded}
+            if toolbar.countFormat != format {toolbar.countFormat = format}
             if toolbar.superview == nil {addSubview(toolbar); transcriptToolbars[range.location] = toolbar}
-            toolbar.onToggle = { [weak self] in
-                guard let self else {return}
-                // TextKit 文档高度须先同步；隐式 frame 动画会让滚动上限停在展开前。
-                // 保留一次淡入，最后一行定位使用更新后的文档与视口。
-                DisclosureMotion.update(in:self,animatesLayout:false) {
-                    if !self.expandedUsage.insert(content.id).inserted {self.expandedUsage.remove(content.id)}
-                    self.prepareFooters(width:self.bounds.width)
-                    self.measuredWidth = -1; self.invalidateCodeLayout()
-                    if self.isVerticallyResizable {self.sizeToFit()}
-                    self.onContentLayoutChange?()
-                    if self.expandedUsage.contains(content.id),let toolbar = self.transcriptToolbars[range.location] {
-                        self.layoutSubtreeIfNeeded()
-                        // 仅用户展开时显露最后一行，后台更新与收起仍保留阅读位置。
-                        let lastLineHeight = ceil(content.font.ascender-content.font.descender+content.font.leading)+8
-                        self.scrollToVisible(NSRect(x:0,y:max(0,toolbar.frame.maxY-lastLineHeight),width:1,height:lastLineHeight))
-                    }
-                }
+            toolbar.onToggle = { [weak toolbar] in
+                guard let toolbar else {return}
+                PetPreferences.shared.set(!toolbar.expanded,for:PetPreferences.tokenDetailsKey,from:toolbar)
             }
             let height = toolbar.arrange(width:footerWidth(width))
             let previous = storage.attribute(.paragraphStyle,at:range.location,effectiveRange:nil) as? NSParagraphStyle
@@ -126,6 +142,7 @@ final class MessageTextView: LinkTextView {
         super.clicked(onLink:link,at:charIndex)
     }
     @discardableResult func setContent(_ value:NSAttributedString,reset:Bool = false) -> Bool {
+        if !(layoutManager is MarkdownLayoutManager) {MarkdownLayoutManager.install(in:self)}
         // 保留链接自身的语义颜色：普通链接强调色，文件列表仍区分目录与文件名。
         linkTextAttributes = [.cursor:NSCursor.pointingHand]
         return applyContent(fileEditPresentation.content(value),reset:reset)
@@ -139,12 +156,7 @@ final class MessageTextView: LinkTextView {
         for toolbar in transcriptToolbars.values {toolbar.removeFromSuperview()}
         transcriptToolbars.removeAll()
         // 清空正文不足以回收长文本的字形容量；保留容器和视图，替换只属于显示层的排版器。
-        let manager = NSLayoutManager()
-        if let previous = layoutManager {
-            manager.usesFontLeading = previous.usesFontLeading
-            manager.allowsNonContiguousLayout = previous.allowsNonContiguousLayout
-        }
-        textContainer?.replaceLayoutManager(manager)
+        MarkdownLayoutManager.install(in:self)
         measuredWidth = -1; measuredHeight = 0; codeLayoutWidth = -1
         invalidateCodeLayout()
     }

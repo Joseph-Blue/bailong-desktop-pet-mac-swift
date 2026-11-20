@@ -63,7 +63,7 @@ final class QuotaCoordinator {
         let cacheGeneration = self.cacheGeneration
         if forceRefresh {cachedQuota = nil; cachedAPIProviderUsage = nil}
         if pet.dock == nil {pet.play(pet.catalog.quotaAnimation,"quota")}
-        pet.say(pet.preferences.statusLine("quotaLoadingTemplate"),kind:"quotaLoading",personalizeTitle:false)
+        pet.say(pet.preferences.statusLine("quotaLoadingTemplate"),kind:"quotaLoading",personalizeTitle:false,userRequested:true)
         connection.connect { [weak self] error in
             guard let self else{return}
             if let error {self.quotaResult(serial,.failure(error));return}

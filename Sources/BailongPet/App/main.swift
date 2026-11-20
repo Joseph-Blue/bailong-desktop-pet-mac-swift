@@ -121,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     func installMenuBar() {
         let bar = NSMenu()
-        let appItem = NSMenuItem(); let appMenu = NSMenu(); appItem.submenu = appMenu; bar.addItem(appItem)
+        let appItem = NSMenuItem(); let appMenu = AccentMenuRows.menu(); appItem.submenu = appMenu; bar.addItem(appItem)
         let about = NSMenuItem(title:"关于"+PetPreferences.shared.appName,action:#selector(showAbout),keyEquivalent:""); about.target = self; about.tag = 101; appMenu.addItem(about)
         appMenu.addItem(.separator())
         appMenu.addItem(MenuAction("检查更新…",symbol:"arrow.triangle.2.circlepath") {UpdateWindow.show()})
@@ -132,17 +132,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let close = NSMenuItem(title:"关闭当前窗口",action:#selector(closeInterface),keyEquivalent:"q"); close.target = self; appMenu.addItem(close)
         let closeWindow = NSMenuItem(title:"关闭窗口",action:#selector(closeInterface),keyEquivalent:"w"); closeWindow.target = self; appMenu.addItem(closeWindow)
         let quit = NSMenuItem(title:"退出"+PetPreferences.shared.appName,action:#selector(quitFromMenu),keyEquivalent:""); quit.target = self; quit.tag = 102; quit.image = NSImage(systemSymbolName:"rectangle.portrait.and.arrow.right",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular)); appMenu.addItem(quit)
-        let editItem = NSMenuItem(title:"编辑",action:nil,keyEquivalent:""); let edit = NSMenu(title:"编辑"); editItem.submenu = edit; bar.addItem(editItem)
+        let editItem = NSMenuItem(title:"编辑",action:nil,keyEquivalent:""); let edit = AccentMenuRows.menu(title:"编辑"); editItem.submenu = edit; bar.addItem(editItem)
         for (title,action,key) in [("撤销","undo:","z"),("重做","redo:","Z"),("剪切","cut:","x"),("拷贝","copy:","c"),("粘贴","paste:","v"),("全选","selectAll:","a")] {
             edit.addItem(NSMenuItem(title:title,action:NSSelectorFromString(action),keyEquivalent:key))
         }
-        let conversation = NSMenuItem(title:"对话",action:nil,keyEquivalent:""); let commands = NSMenu(title:"对话"); conversation.submenu = commands; bar.addItem(conversation)
+        let conversation = NSMenuItem(title:"对话",action:nil,keyEquivalent:""); let commands = AccentMenuRows.menu(title:"对话"); conversation.submenu = commands; bar.addItem(conversation)
         commands.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak self] in self?.chat?.toggleComposer() })
         commands.addItem(MenuAction("新对话") { [weak self] in self?.chat?.newConversation(); self?.chat?.showHistory(nil) })
         commands.addItem(MenuAction("选择任务文件夹…") { [weak self] in self?.chat?.chooseFolder() })
         commands.addItem(MenuAction("历史对话",symbol:"book") { [weak self] in self?.chat?.showHistory(nil) })
         let windowsItem = NSMenuItem(title:"窗口",action:nil,keyEquivalent:"")
-        let windows = NSMenu(title:"窗口"); windowsItem.submenu = windows; bar.addItem(windowsItem)
+        let windows = AccentMenuRows.menu(title:"窗口"); windowsItem.submenu = windows; bar.addItem(windowsItem)
         windows.addItem(MenuAction("应用性能信息统计",symbol:"chart.xyaxis.line") { [weak self] in self?.pet?.showDiagnostics() })
         windows.addItem(MenuAction("错误与恢复",symbol:"exclamationmark.triangle") {RecoveryWindow.revealAll()})
         windows.addItem(NSMenuItem(title:"最小化",action:#selector(NSWindow.performMiniaturize(_:)),keyEquivalent:"m"))

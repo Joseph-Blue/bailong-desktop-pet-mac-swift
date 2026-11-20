@@ -92,6 +92,7 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
         table.deselectAll(nil); table.reloadData(); restore(saved)
     }
     func numberOfRows(in tableView:NSTableView) -> Int {rows.count}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {rows[row].item == nil ? nil : AccentSelectionRow()}
     func tableView(_ tableView:NSTableView,isGroupRow row:Int) -> Bool {rows[row].item == nil}
     func tableView(_ tableView:NSTableView,shouldSelectRow row:Int) -> Bool {rows[row].item != nil}
     func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {
@@ -215,7 +216,7 @@ private final class SettingsActionCell:NSTableCellView {
 }
 
 // 单元格展示已保存值，打开原生菜单时才生成其余选项。
-private final class SettingsActionChoice:NSPopUpButton,NSMenuDelegate {
+private final class SettingsActionChoice:AccentPopUpButton {
     private var clipID = "", speed = false, populated = false
     private weak var preferences:PetPreferences?
     func configure(clip:Clip,speed:Bool,preferences:PetPreferences) {
@@ -230,7 +231,8 @@ private final class SettingsActionChoice:NSPopUpButton,NSMenuDelegate {
     private func addOption(_ value:Double) {
         addItem(withTitle:value.formatted()+(speed ? "×" : "")); lastItem?.representedObject = value
     }
-    func menuNeedsUpdate(_ menu:NSMenu) {
+    override func menuNeedsUpdate(_ menu:NSMenu) {
+        defer {super.menuNeedsUpdate(menu)}
         guard !populated,let preferences else {return}
         populated = true
         let values = speed ? PetPreferences.clipSpeedOptions : PetPreferences.clipWeightRange(clipID).map(Double.init)

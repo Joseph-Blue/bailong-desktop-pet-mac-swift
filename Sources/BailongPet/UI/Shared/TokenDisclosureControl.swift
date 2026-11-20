@@ -184,7 +184,7 @@ final class TokenDisclosureControl:NSControl {
     override func menu(for event:NSEvent) -> NSMenu? {
         let plain = storage.string.replacingOccurrences(of:"\t",with:" ").trimmingCharacters(in:.whitespacesAndNewlines)
         guard !plain.isEmpty else {return nil}
-        let menu = NSMenu()
+        let menu = AccentMenuRows.menu()
         let copy = NSMenuItem(title:"拷贝",action:#selector(copySummary),keyEquivalent:"")
         copy.target = self; menu.addItem(copy)
         return menu

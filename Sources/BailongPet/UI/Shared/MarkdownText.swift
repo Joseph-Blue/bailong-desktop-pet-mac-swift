@@ -68,7 +68,7 @@ enum MarkdownText {
             if header || inline.contains(.stronglyEmphasized) {runFont = NSFontManager.shared.convert(runFont,toHaveTrait:.boldFontMask)}
             if inline.contains(.emphasized) {runFont = NSFontManager.shared.convert(runFont,toHaveTrait:.italicFontMask)}
             var attributes: [NSAttributedString.Key:Any] = [.font:runFont,.foregroundColor:quote ? NSColor.secondaryLabelColor : color,.paragraphStyle:paragraph]
-            if code {attributes[.backgroundColor] = NSColor.quaternaryLabelColor}
+            if !codeBlock && inline.contains(.code) {attributes[.inlineCode] = true}
             if inline.contains(.strikethrough) {attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue}
             if let link = run.link {attributes.merge(LinkAppearance.attributes(for:link)) {_,link in link}}
             var value = String(parsed[run.range].characters)
@@ -79,7 +79,8 @@ enum MarkdownText {
                 let name = image.lastPathComponent.isEmpty ? "查看图片" : image.lastPathComponent
                 value = "图片：" + (description.isEmpty ? name : description)
             }
-            let text = NSAttributedString(string:prefix+value,attributes:attributes)
+            let text = NSMutableAttributedString(string:prefix+value,attributes:attributes)
+            if !prefix.isEmpty {text.removeAttribute(.inlineCode,range:NSRange(location:0,length:(prefix as NSString).length))}
             fragments.append(Fragment(block:block,table:tableID,code:codeID,text:text))
             if let id = codeID {
                 let previous = codeBlocks[id]?.text ?? ""
@@ -112,7 +113,8 @@ enum MarkdownText {
                 previousBlock = nil
             } else {
                 if fragment.block != previousBlock && result.length > 0 && !result.string.hasSuffix("\n") {
-                    let attributes = result.attributes(at:result.length-1,effectiveRange:nil)
+                    var attributes = result.attributes(at:result.length-1,effectiveRange:nil)
+                    attributes.removeValue(forKey:.inlineCode)
                     result.append(NSAttributedString(string:"\n",attributes:attributes))
                 }
                 result.append(fragment.text); previousBlock = fragment.block
@@ -124,7 +126,7 @@ enum MarkdownText {
                 guard let url = match.url,["https","http","mailto"].contains(url.scheme?.lowercased() ?? "") else {continue}
                 var literal = false
                 result.enumerateAttributes(in:match.range) {attributes,_,_ in
-                    if attributes[.link] != nil || attributes[.backgroundColor] != nil ||
+                    if attributes[.link] != nil || attributes[.inlineCode] != nil ||
                        (attributes[.paragraphStyle] as? NSParagraphStyle)?.textBlocks.isEmpty == false {literal = true}
                 }
                 if !literal {result.addAttributes(LinkAppearance.attributes(for:url),range:match.range)}

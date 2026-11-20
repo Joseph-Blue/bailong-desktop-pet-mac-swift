@@ -7,20 +7,13 @@ final class AppearanceSettingsPage {
     private var preferences:PetPreferences {form.preferences}
     private var materialPreview: Bubble?
     private var previewDismissal: DispatchWorkItem?
-    private weak var glassSlider: GlassOpacitySlider?
-    private weak var glassFollowSwitch: NSSwitch?
-    private var glassControls = [NSView]()
+    private weak var glassSlider:GlassOpacitySlider?
     private var accentButtons = [NSButton]()
     private var accentNames = [NSTextField]()
     init(form:SettingsForm,window:NSWindow,onPreviewDetails:@escaping () -> Void) {
         self.form = form; self.window = window; self.onPreviewDetails = onPreviewDetails
     }
-    func reset() {dismissPreview(); accentButtons.removeAll(); accentNames.removeAll(); glassControls.removeAll()}
-    func refreshAvailability() {
-        glassSlider?.isEnabled = !preferences.bool("glassFollowsSystem")
-        glassFollowSwitch?.state = preferences.bool("glassFollowsSystem") ? .on : .off
-        for view in glassControls {view.alphaValue = preferences.bool("glassFollowsSystem") ? 0.45 : 1}
-    }
+    func reset() {dismissPreview(); accentButtons.removeAll(); accentNames.removeAll()}
     func refreshAccent() {
         for (index,button) in accentButtons.enumerated() {
             let chosen = AppAccent.choices[index].0 == preferences.string("accentStyle")
@@ -67,21 +60,18 @@ final class AppearanceSettingsPage {
         let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],symbols:["plain":"rectangle.fill"],images:materialImages,value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:PetPreferences.glassAvailabilityDescription) { [weak self] in self?.showPreview() }
         var materialRows = [material]
         do {
-            let follow = AccentSwitch(); follow.state = preferences.bool("glassFollowsSystem") ? .on : .off; glassFollowSwitch = follow
-            follow.setAccessibilityLabel("液态玻璃跟随系统设定")
-            form.attach(follow) { [weak self] sender in self?.preferences.set((sender as! NSSwitch).state == .on,for:"glassFollowsSystem"); self?.showPreview() }
-            materialRows.append(form.conditional(form.row("液态玻璃跟随系统设定",control:follow),when:{$0.usesGlass}))
+            let follow = form.toggle("液态玻璃跟随系统设定","glassFollowsSystem") { [weak self] in self?.showPreview() }
+            materialRows.append(form.conditional(follow,when:{$0.usesGlass}))
             let slider = GlassOpacitySlider(); slider.minValue = 0; slider.maxValue = 1; slider.doubleValue = preferences.number("glassOpacity")
             slider.numberOfTickMarks = 5; slider.allowsTickMarkValuesOnly = false; slider.isContinuous = true
             slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
-            slider.setAccessibilityLabel("玻璃不透明度"); slider.isEnabled = !preferences.bool("glassFollowsSystem"); glassSlider = slider
+            slider.setAccessibilityLabel("玻璃不透明度"); glassSlider = slider
             form.attach(slider) { [weak self] sender in self?.preferences.set((sender as! NSSlider).doubleValue,for:"glassOpacity"); self?.showPreview() }
             slider.ended = { [weak self] in self?.schedulePreviewDismissal() }
             let left = glassSymbol(filled:false), right = glassSymbol(filled:true)
             let controls = NSStackView(views:[left,slider,right]); controls.spacing = 8; controls.alignment = .centerY
             controls.widthAnchor.constraint(equalToConstant:244).isActive = true
-            controls.alphaValue = slider.isEnabled ? 1 : 0.45; glassControls = [controls]
-            materialRows.append(form.conditional(form.row("玻璃不透明度",control:controls),when:{$0.usesGlass}))
+            materialRows.append(form.conditional(form.row("玻璃不透明度",control:controls),when:{$0.usesGlass && !$0.bool("glassFollowsSystem")}))
         }
         materialRows.append(form.row("气泡效果",control:ActionButton("预览气泡") { [weak self] in self?.showPreview() }))
         form.group("消息窗口",materialRows,symbol:"macwindow")

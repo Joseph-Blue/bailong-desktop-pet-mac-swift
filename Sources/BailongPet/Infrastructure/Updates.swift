@@ -274,6 +274,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
             text.textContainer?.widthTracksTextView = true; text.textContainer?.lineFragmentPadding = 0; text.textContainerInset = NSSize(width:0,height:4)
             scroll.documentView = text
         }
+        MarkdownLayoutManager.install(in:notes)
         notesScroll.heightAnchor.constraint(equalToConstant:220).isActive = true
         detailsScroll.heightAnchor.constraint(equalToConstant:110).isActive = true
         details.font = .monospacedSystemFont(ofSize:11,weight:.regular)
@@ -331,9 +332,9 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         details.string = checker.technicalDetails
         versions.stringValue = "当前版本：\(Paths.version)" + (hasNotes ? "    最新正式版：\(checker.release!.tag_name)" : "")
         timestamp.stringValue = "上次检查："+checker.lastCheckText
+        retry.keyEquivalent = failed ? "\r" : ""; download.keyEquivalent = !failed && !checker.checking ? "\r" : ""
         retry.title = failed ? "重试" : "重新检查"; retry.isEnabled = !checker.checking; retry.emphasize(failed)
         download.emphasize(!failed && !checker.checking)
-        retry.keyEquivalent = failed ? "\r" : ""; download.keyEquivalent = !failed && !checker.checking ? "\r" : ""
         close.title = checker.checking ? "取消检查" : "关闭"
         disableAutomatic.isHidden = !automaticPresentation; refreshAutomaticOption()
         for view in buttons.arrangedSubviews {buttons.removeArrangedSubview(view); view.removeFromSuperview()}

@@ -41,6 +41,7 @@ final class TranscriptActionBar:NSView {
     override var isFlipped:Bool {true}
     var content:TranscriptActions {didSet {configure()}}
     var expanded = false {didSet {configure()}}
+    var countFormat:TokenCountFormat = .full {didSet {configure()}}
     var onToggle:(() -> Void)?
     private let copyButton = HoverIconButton(symbol:"doc.on.doc",label:"拷贝")
     private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:"转到 Codex")
@@ -75,12 +76,12 @@ final class TranscriptActionBar:NSView {
         let paragraph = NSMutableParagraphStyle()
         let labelWidth = ["本轮","输入","缓存命中","输出"].map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
         let counts = content.result.usage.map {[$0.total,$0.input,$0.cachedInput,$0.output]} ?? []
-        let numberWidth = counts.map {(TokenUsage.formatted($0) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
+        let numberWidth = counts.map {(countFormat.number($0) as NSString).size(withAttributes:[.font:font]).width}.max() ?? 0
         let valueTab = ceil(labelWidth)+12, unitTab = valueTab+ceil(numberWidth)+12
         paragraph.tabStops = [NSTextTab(textAlignment:.left,location:valueTab),NSTextTab(textAlignment:.left,location:unitTab)]
         paragraph.lineSpacing = 3
         // 汇总是一句话；只有展开后的明细使用制表位，不让“缓存命中”的列宽撑开汇总。
-        let heading = "本轮  "+(content.result.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}")} ?? (content.result.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
+        let heading = "本轮  "+(content.result.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}",format:countFormat)} ?? (content.result.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
         let canExpand = content.result.usage != nil || content.result.usageError != nil
         let primaryTextColor = NSColor(name:nil) {$0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? .white : .black}
         tokenDisclosure.scale = max(0.85,content.font.pointSize/12)
@@ -91,7 +92,7 @@ final class TranscriptActionBar:NSView {
         tokenDisclosure.accessibilityTitle = "用量明细"
         tokenDisclosure.attributedTitle = NSAttributedString(string:heading,attributes:[.font:font,.foregroundColor:primaryTextColor])
         tokenDisclosure.isHidden = content.ended == nil
-        detail.attributedStringValue = NSAttributedString(string:content.result.usage?.details ?? content.result.usageError ?? "",attributes:[
+        detail.attributedStringValue = NSAttributedString(string:content.result.usage?.details(format:countFormat) ?? content.result.usageError ?? "",attributes:[
             .font:font,.paragraphStyle:content.result.usage == nil ? NSParagraphStyle.default : paragraph,.foregroundColor:NSColor.secondaryLabelColor])
         detail.isHidden = !expanded || !canExpand
         needsLayout = true

@@ -54,7 +54,7 @@ extension NSAlert {
         text.isHorizontallyResizable = false; text.isVerticallyResizable = true
         text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         text.font = .monospacedSystemFont(ofSize:11,weight:.regular); text.string = value
-        scroll.documentView = text; accessoryView = scroll
+        scroll.documentView = text; accessoryView = MessageTextBoxSurface(scroll:scroll)
     }
 }
 
@@ -96,6 +96,7 @@ struct QuotaRow {
     var usage:TokenUsage?
     var subtitle:String?
     var footnote:String?
+    var countdownTarget:Date?
 }
 struct QuotaOverview {
     let plan: String
@@ -266,10 +267,10 @@ enum QuotaPresentation {
             tone:pricing.period == .peak ? .negative : .positive)]
         if let next = pricing.next {
             let nextPeriod:DeepSeekPricing.Period = pricing.period == .peak ? .offPeak : .peak
-            let formatter = DateFormatter(); formatter.locale = Locale(identifier:"en_US_POSIX")
-            formatter.timeZone = DeepSeekPricing.calendar.timeZone; formatter.dateFormat = "yyyy-MM-dd HH:mm"
-            rows.append(QuotaRow(title:"下一个"+nextPeriod.title,value:formatter.string(from:next)+"\n（北京时间）",
+            rows.append(QuotaRow(title:"下一个"+nextPeriod.title,value:DeepSeekPricing.timestamp(next),
                 detail:nil,remaining:nil,startsSection:false))
+            rows.append(QuotaRow(title:"距切换还有",value:DeepSeekPricing.countdown(until:next,now:date),
+                detail:nil,remaining:nil,startsSection:false,countdownTarget:next))
         }
         return rows
     }

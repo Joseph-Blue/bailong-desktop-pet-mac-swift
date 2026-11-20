@@ -253,7 +253,7 @@ final class ModelSelectorContent: NSViewController {
     var onResize: (NSSize) -> Void = {_ in}
     private let settings: ChatModelSettings
     private let heading = label("模型与推理强度",bold:true)
-    private let picker = NSPopUpButton(frame:.zero,pullsDown:false)
+    private let picker = AccentPopUpButton(frame:.zero,pullsDown:false)
     private let effort = NSTextField(wrappingLabelWithString:"")
     private let speedLabel = NSTextField(labelWithString:"1.5倍速度")
     private let speedIcon = NSImageView()

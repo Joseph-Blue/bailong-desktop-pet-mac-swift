@@ -9,7 +9,13 @@ final class QuotaTokenUsageView:NSView {
     private let detail = SelectableRichText(frame:.zero)
     private let scale:CGFloat, expanded:Bool
     var onToggle:() -> Void = {}
-    init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat,headingText:String = "今日用量") {
+    var onExpansionChange:(_ reveal:Bool) -> Void = {_ in}
+    @objc private func preferenceChanged(_ note:Notification) {
+        guard let keys = note.userInfo?["keys"] as? [String],let preferences = note.object as? PetPreferences,
+              keys.contains(TokenCountFormat.key) || (keys.contains(PetPreferences.tokenDetailsKey) && preferences.bool(PetPreferences.tokenDetailsKey) != expanded) else {return}
+        onExpansionChange(!expanded && note.userInfo?["sender"] as? QuotaTokenUsageView === self)
+    }
+    init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat,headingText:String = "今日用量",format:TokenCountFormat = .full) {
         self.scale = scale; self.expanded = expanded
         super.init(frame:.zero)
         autoresizesSubviews = false
@@ -23,20 +29,25 @@ final class QuotaTokenUsageView:NSView {
         disclosure.chevronTint = primaryTextColor.withAlphaComponent(0.82)
         disclosure.expanded = expanded
         disclosure.accessibilityTitle = headingText+" Token 明细"
-        disclosure.attributedTitle = NSAttributedString(string:TokenUsage.amount(usage.total),attributes:[.font:amountFont,.foregroundColor:primaryTextColor])
+        disclosure.attributedTitle = NSAttributedString(string:TokenUsage.amount(usage.total,format:format),attributes:[.font:amountFont,.foregroundColor:primaryTextColor])
         disclosure.onToggle = { [weak self] in self?.onToggle() }
         detail.isHidden = !expanded
         let font = NSFont.monospacedDigitSystemFont(ofSize:12*fontScale,weight:.regular)
-        let labels = ["输入","缓存命中","输出"], numbers = [usage.input,usage.cachedInput,usage.output].map(TokenUsage.formatted)
+        let labels = ["输入","缓存命中","输出"], numbers = [usage.input,usage.cachedInput,usage.output].map(format.number)
         let labelWidth = labels.map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
         let numberWidth = numbers.map {($0 as NSString).size(withAttributes:[.font:font]).width}.max()!
         let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 3*scale
         paragraph.tabStops = [NSTextTab(textAlignment:.left,location:ceil(labelWidth)+12*scale),NSTextTab(textAlignment:.left,location:ceil(labelWidth+numberWidth)+24*scale)]
         detail.font = font
-        detail.attributedStringValue = NSAttributedString(string:usage.details,attributes:[.font:font,.foregroundColor:primaryTextColor,.paragraphStyle:paragraph])
+        detail.attributedStringValue = NSAttributedString(string:usage.details(format:format),attributes:[.font:font,.foregroundColor:primaryTextColor,.paragraphStyle:paragraph])
         [heading,source,disclosure,detail].forEach {addSubview($0)}
     }
     required init?(coder:NSCoder) {fatalError()}
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self,name:PetPreferences.didChange,object:nil)
+        if window != nil {NotificationCenter.default.addObserver(self,selector:#selector(preferenceChanged(_:)),name:PetPreferences.didChange,object:nil)}
+    }
     @discardableResult func arrange(width:CGFloat) -> CGFloat {
         let height = arrange(width:width,placing:false)
         // 先确定容器的完整尺寸，再摆放 TextKit 子视图；后续原生布局也使用同一组几何。

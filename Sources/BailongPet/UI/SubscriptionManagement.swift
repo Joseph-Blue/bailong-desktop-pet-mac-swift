@@ -37,7 +37,7 @@ final class SubscriptionManagementButton:NSButton {
     }
     required init?(coder:NSCoder) {fatalError()}
     @objc private func openMenu() {
-        let menu = NSMenu()
+        let menu = AccentMenuRows.menu()
         func add(_ label:String,_ url:String) {
             let item = NSMenuItem(title:label,action:#selector(openDestination(_:)),keyEquivalent:"")
             item.target = self; item.representedObject = url; menu.addItem(item)

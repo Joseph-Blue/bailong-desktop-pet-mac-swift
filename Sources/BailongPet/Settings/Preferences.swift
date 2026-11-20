@@ -14,7 +14,7 @@ enum SettingsSection: Int, CaseIterable {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","singleClickAction","doubleClickAction","rightDoubleClickAction","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
-        case .messages: return MessageSettingsPage.preferenceKeys
+        case .messages: return MessageSettingsPage.preferenceKeys + [PetPreferences.tokenDetailsKey]
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
@@ -60,10 +60,11 @@ enum SendShortcut: String, CaseIterable {
 final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
+    static let tokenDetailsKey = "tokenDetailsExpanded"
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"","petChatFastMode":false,
-        "taskInfoBarEnabled":true,"gitWindowEnabled":false,
+        "taskInfoBarEnabled":true,"gitWindowEnabled":false,tokenDetailsKey:false,TokenCountFormat.key:TokenCountFormat.full.rawValue,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
@@ -103,8 +104,11 @@ final class PetPreferences {
         #endif
     }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
-    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":["none","chat","quota","history","random","randomAnimation"],"doubleClickAction":["none","chat","quota","history","random","randomAnimation"],"rightDoubleClickAction":["none","chat","quota","history","random","randomAnimation"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
-        "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0)]
+    static let mouseActions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),
+                              ("workspace","显示或隐藏工作区状态条"),("random","显示任务进度、播放随机动画"),("randomAnimation","播放随机动画")]
+    static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"singleClickAction":mouseActions.map(\.0),"doubleClickAction":mouseActions.map(\.0),"rightDoubleClickAction":mouseActions.map(\.0),"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
+        "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
+        TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue)]
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
     init(defaults: UserDefaults = SettingsStorage.defaults) {
@@ -152,6 +156,7 @@ final class PetPreferences {
     func bool(_ key: String) -> Bool {value(key) as? Bool ?? false}
     func number(_ key: String) -> Double {(value(key) as? NSNumber)?.doubleValue ?? 0}
     func string(_ key: String) -> String {value(key) as? String ?? ""}
+    var tokenCountFormat:TokenCountFormat {TokenCountFormat(rawValue:string(TokenCountFormat.key)) ?? .full}
     var animationBufferFrames: Int { Int(number("animationBufferFrames")) }
     var defaultWorkspace:URL {
         let path = string("defaultWorkspace")
@@ -165,9 +170,13 @@ final class PetPreferences {
     }
     func animationFPS(native: Double) -> Double { string("animationFPSLimit") == "full" ? native : min(native,Double(string("animationFPSLimit"))!) }
     var sendShortcut: SendShortcut {SendShortcut(rawValue:string("sendShortcut")) ?? .commandReturn}
-    func set(_ value: Any, for key: String) {defaults.set(TemplateSyntax.migrate([key:value])[key]!,forKey:key); notify([key])}
-    private func notify(_ keys: [String]) {
-        NotificationCenter.default.post(name:Self.didChange,object:self,userInfo:["keys":keys])
+    func set(_ value: Any, for key: String,from sender:AnyObject? = nil) {
+        defaults.set(TemplateSyntax.migrate([key:value])[key]!,forKey:key); notify([key],from:sender)
+    }
+    private func notify(_ keys: [String],from sender:AnyObject? = nil) {
+        var info:[String:Any] = ["keys":keys]
+        info["sender"] = sender
+        NotificationCenter.default.post(name:Self.didChange,object:self,userInfo:info)
     }
     func reset(_ keys: [String]) {for key in keys {defaults.removeObject(forKey:key)}; notify(keys)}
     var petName: String {let s = string("petName").trimmingCharacters(in:.whitespacesAndNewlines); return s.isEmpty ? "白龙娘" : s}

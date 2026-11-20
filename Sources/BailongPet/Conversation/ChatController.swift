@@ -174,7 +174,8 @@ final class ChatController {
         ui.onHide = { [weak self] in self?.pet.composerVisible = false; self?.composerSide = nil; self?.pet.placeBubble() }
         ui.isPetInteraction = { [weak self] event in
             guard let self else {return false}
-            return (event.type == .leftMouseDown && event.window === self.pet.window) || event.window === self.pet.bubble.window
+            guard let window = event.window else {return false}
+            return window === self.pet.window || window === self.pet.bubble.window || window === self.pet.status.button?.window
         }
         pet.composerFrame = { [weak self] in self?.ui.composerFrame }
         pet.bubble.fileLinkDirectory = { [weak self] in
@@ -191,7 +192,7 @@ final class ChatController {
         }
         pet.onComposer = { [weak self] in self?.toggleComposer() }
         pet.onDismissComposer = { [weak self] in
-            guard let self,self.ui.composer.attachedSheet == nil else {return}
+            guard let self,!self.ui.presentingFolderPicker,self.ui.composer.attachedSheet == nil else {return}
             self.ui.hideComposer()
         }
         pet.onHistory = { [weak self] key in self?.showHistory(key) }
@@ -211,7 +212,7 @@ final class ChatController {
         pet.onReply = { [weak self] key in
             guard let self,let conversation = self.store.conversations.first(where:{$0.key == key}) else {return}
             self.selectConversation(conversation.key,entry:.composer)
-            if !self.ui.composerVisible {self.toggleComposer()} else {self.ui.composer.makeFirstResponder(self.ui.composerEditor)}
+            self.openComposerForUser()
         }
         pet.onCodex = { [weak self] key in
             if let self, let (conversation,turn) = self.running, conversation.key == key,
@@ -344,7 +345,7 @@ final class ChatController {
     }
     func approvalParent() -> NSWindow {
         if ui.history.isVisible { return ui.history }
-        if !ui.composerVisible { toggleComposer() }
+        if !ui.composerVisible { presentComposer() }
         return ui.composer
     }
     func persist() { store.save(); refresh() }
@@ -391,9 +392,18 @@ final class ChatController {
         } catch {showError("记录删除失败",error)}
     }
     func toggleComposer() {
-        if ui.composerVisible { ui.hideComposer(); return }
+        if ui.composerVisible {pet.onDismissComposer(); return}
+        openComposerForUser()
+    }
+    private func openComposerForUser() {
+        pet.dismissBubblesForComposer()
+        if ui.composerVisible {ui.composer.makeFirstResponder(ui.composerEditor); return}
+        presentComposer()
+    }
+    private func presentComposer() {
         refresh()
-        pet.reveal(); pet.undock(); pet.composerVisible = true; pet.interaction()
+        pet.composerVisible = true
+        pet.reveal(); pet.undock(); pet.interaction()
         ui.prepareComposer()
         positionComposer(); loadModels(entry:.composer)
         ui.showComposer()

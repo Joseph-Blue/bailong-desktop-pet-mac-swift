@@ -68,6 +68,7 @@ private final class ConversationPickerContent:NSViewController,NSTableViewDataSo
         onSelect(filtered[table.selectedRow].key)
     }
     func numberOfRows(in tableView:NSTableView) -> Int {filtered.count}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {AccentSelectionRow()}
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         let conversation = filtered[row]
         let active = conversation.turns.last.map {activeStatuses.contains($0.status)} ?? false

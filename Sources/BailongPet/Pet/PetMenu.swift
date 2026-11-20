@@ -22,7 +22,7 @@ enum PetMenu {
             let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
             item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
             item.image?.isTemplate = true
-            let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
+            let child = AccentMenuRows.menu(title:title); item.submenu = child; menu.addItem(item); return child
         }
         menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
         menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
@@ -35,7 +35,7 @@ enum PetMenu {
         menu.addItem(MenuAction("播放随机动画",symbol:"shuffle") {random()})
         let animations = submenu("播放动作",symbol:"play.rectangle")
         for (name,clips,symbol) in [("待机动作",pet.catalog.idles+pet.catalog.extras,"figure.stand"),("互动动作",pet.catalog.variants,"figure.play"),("工作动作",pet.catalog.work,"briefcase"),("移动动作",pet.catalog.movementAnimations,"figure.walk.motion")] {
-            let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
+            let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = AccentMenuRows.menu(title:name)
             item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
             item.image?.isTemplate = true
             for clip in clips {group.addItem(MenuAction(clip.title) { [weak pet] in pet?.preview(clip) })}

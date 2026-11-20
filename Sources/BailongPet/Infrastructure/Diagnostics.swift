@@ -346,9 +346,8 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         scroll.documentView = body
         let box = MessageTextBoxSurface(scroll:scroll)
         alert.accessoryView = box
-        let dismiss = alert.addButton(withTitle:"知道了")
+        alert.addButton(withTitle:"知道了")
         alert.applyAccent()
-        if dismiss.bezelColor == nil && AppAccent.selection != "system" {NativeAccentTint.apply(to:dismiss)}
         box.layoutSubtreeIfNeeded()
         let width = scroll.documentLayoutWidth
         let viewport = NSSize(width:width,height:scroll.contentSize.height)

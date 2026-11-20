@@ -99,6 +99,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var dockRecallAt: Double?
     var dockDoubleClick = false
     var leftDoubleClick = false
+    private var lastContextPress:(button:Int,time:TimeInterval,point:NSPoint)?
+    private var consumedContextPress:(button:Int,through:TimeInterval)?
     var timer: Timer?, desktopTimer: Timer?
     var playbackScheduling = PlaybackSchedulingStatistics()
     private var motionDisplayLink: CADisplayLink?
@@ -199,7 +201,7 @@ final class PetController: NSObject, NSMenuDelegate {
         settings.petSymbol = {AppIcons.petAvatarTemplate}
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
         settings.onLinePreview = { [weak self] clip,line in self?.preview(clip,line:line) }
-        settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose) }
+        settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose,userRequested:true) }
         settings.onPreviewDetails = { [weak self] in self?.onHistory(nil) }
         observationTokens.append(NotificationCenter.default.addObserver(forName:PetPreferences.didChange,object:preferences,queue:.main) { [weak self] note in self?.settingsChanged(note.userInfo?["keys"] as? [String] ?? []) })
         settings.onClose = { [weak self] in
@@ -470,6 +472,8 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func mouseDown(_ event: NSEvent) {
+        if event.modifierFlags.contains(.control) {rightMouseDown(event); return}
+        lastContextPress = nil
         // 只有吸边状态保留召回判定期；普通点击仍立即响应。
         leftDoubleClick = dock == nil && event.clickCount > 1 && event.clickCount % 2 == 0
         dockDoubleClick = dock != nil && dockRecallAt.map {now <= $0} == true
@@ -536,9 +540,14 @@ final class PetController: NSObject, NSMenuDelegate {
         let title = showsOverview && bubble.taskProvider().tasks.contains(where:{$0.active})
             ? preferences.workingOverviewLine()
             : line ?? preferences.line(for:clip) ?? preferences.statusLine("greetingTemplate")
-        say(title,kind:"interaction",personalizeTitle:false,taskOverview:showsOverview)
+        say(title,kind:"interaction",personalizeTitle:false,taskOverview:showsOverview,userRequested:true)
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TurnCompletion? = nil,failure:AppFailure? = nil) {
+    func dismissBubblesForComposer() {
+        quotaActive = false
+        if bubble.visible {bubble.hide()}
+        if progressBubble.visible {progressBubble.hide()}
+    }
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TurnCompletion? = nil,failure:AppFailure? = nil,userRequested:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -556,10 +565,12 @@ final class PetController: NSObject, NSMenuDelegate {
             bubble.onCardLayout = { [weak self] in self?.placeBubble() }
             let content = BubbleContent(title:personalizeTitle ? preferences.fixedText(title) : title,body:body,kind:kind,
                 animateHeading:animateHeading,timing:timing,conversation:thread,failure:failure)
-            bubble.present(BubbleCard(id:identity,content:content,purpose:purpose,resetText:resetText,
+            let displayed = bubble.present(BubbleCard(id:identity,content:content,purpose:purpose,resetText:resetText,
                 attentionAction:attentionAction,question:question,
                 details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter),select:selectCard)
+            if !displayed {return}
         }
+        if userRequested && composerVisible {onDismissComposer()}
         placeBubble()
     }
     var stableLocalBounds: CGRect {
@@ -622,7 +633,7 @@ final class PetController: NSObject, NSMenuDelegate {
         keepOnScreen()
         activityOrigin = position; savePosition()
     }
-    func showSizePreview(purpose: MessagePurpose = .preview) {
+    func showSizePreview(purpose: MessagePurpose = .preview,userRequested:Bool = false) {
         guard !hidden else{return}
         quotaActive = false
         // 作者 size_preview 本身是空白框；按用户要求，改用 chat_ui.py 的普通对话文案填充预览。
@@ -630,6 +641,7 @@ final class PetController: NSObject, NSMenuDelegate {
         bubble.onCodex = { [weak self] in self?.onCodex(nil) }
         bubble.show(title:preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"preview",scale:Double(bubblePercent)/100,seconds:preferences.duration(purpose,text:preferences.statusLine("greetingTemplate")),details:true)
         bubble.purpose = purpose
+        if userRequested && composerVisible {onDismissComposer()}
         placeBubble()
     }
     func keepOnScreen() {
@@ -751,6 +763,7 @@ final class PetController: NSObject, NSMenuDelegate {
         case "chat": soundOnce(); onComposer()
         case "quota": soundOnce(); onQuota()
         case "history": soundOnce(); onHistory(nil)
+        case "workspace": soundOnce(); onWorkspace()
         case "random": randomAnimation(taskOverview:true)
         case "randomAnimation": randomAnimation()
         default: break
@@ -760,11 +773,21 @@ final class PetController: NSObject, NSMenuDelegate {
         dockRecallAt = nil
         interaction()
         if motion != nil {idle()}
-        if event.clickCount > 1 && event.clickCount % 2 == 0 {
+        // AppKit 可把 Control 点击直接分派到右键入口，菜单跟踪仍使用实际按下的鼠标键。
+        let button = event.modifierFlags.contains(.control) && NSEvent.pressedMouseButtons & 1 != 0 ? 0 : event.buttonNumber
+        if let consumed = consumedContextPress,consumed.button == button,event.timestamp <= consumed.through {return}
+        consumedContextPress = nil
+        let point = NSEvent.mouseLocation
+        if let first = lastContextPress,first.button == button,event.timestamp-first.time <= NSEvent.doubleClickInterval,
+           hypot(point.x-first.point.x,point.y-first.point.y) <= 8 {
+            lastContextPress = nil
             performGesture(preferences.string("rightDoubleClickAction"))
-        } else {showContextMenu(firstClick:event)}
+        } else {
+            lastContextPress = (button,event.timestamp,point)
+            showContextMenu(firstClick:event,button:button)
+        }
     }
-    func showContextMenu(firstClick: NSEvent) {
+    private func showContextMenu(firstClick:NSEvent,button:Int) {
         let menu = makeMenu(); menu.update()
         let cursor = NSEvent.mouseLocation
         let target = NSScreen.screens.first(where:{$0.frame.contains(cursor)}) ?? screen
@@ -775,9 +798,10 @@ final class PetController: NSObject, NSMenuDelegate {
         let deadline = firstClick.timestamp + NSEvent.doubleClickInterval
         func captureSecondPress() {
             guard ProcessInfo.processInfo.systemUptime <= deadline else {return}
-            let pressed = NSEvent.pressedMouseButtons & 2 != 0
+            let pressed = NSEvent.pressedMouseButtons & (1 << button) != 0
             let point = NSEvent.mouseLocation
-            if pressed && !wasPressed && hypot(point.x-cursor.x,point.y-cursor.y) <= 8 {
+            if pressed && !wasPressed && (button != 0 || NSEvent.modifierFlags.contains(.control)) && hypot(point.x-cursor.x,point.y-cursor.y) <= 8 {
+                consumedContextPress = (button,ProcessInfo.processInfo.systemUptime)
                 doubleClicked = true; menu.cancelTrackingWithoutAnimation()
             }
             wasPressed = pressed
@@ -792,7 +816,10 @@ final class PetController: NSObject, NSMenuDelegate {
         // 原生菜单可能先消费第二次按下并退出；返回时也处理该按下。
         captureSecondPress()
         tracking.invalidate()
-        if doubleClicked {performGesture(preferences.string("rightDoubleClickAction"))}
+        if doubleClicked {
+            lastContextPress = nil
+            performGesture(preferences.string("rightDoubleClickAction"))
+        }
     }
     func makeMenu() -> NSMenu {PetMenu.make(for:self,random:{ [weak self] in self?.randomAnimation() })}
     func savePosition() {
@@ -827,6 +854,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     func settingsChanged(_ keys: [String]) {
+        if keys.allSatisfy({$0 == PetPreferences.tokenDetailsKey || $0 == TokenCountFormat.key}),!keys.isEmpty {return}
         if !Set(keys).isDisjoint(with:["animationSmoothTransition","bubbleMotion"]),
            !preferences.bool("animationSmoothTransition") || !preferences.bool("bubbleMotion") {view.cancelTransition()}
         if keys == ["animationSmoothTransition"] {return}
@@ -890,7 +918,12 @@ final class PetController: NSObject, NSMenuDelegate {
         interaction(); checkDesktop(); refreshMenu(); onPreferencesChanged()
     }
     func refreshMenu() { status.menu = PetMenu.make(for:self,includeVisibility:true,random:{ [weak self] in self?.randomAnimation() }) }
-    func menuWillOpen(_ menu: NSMenu) { PetMenu.refreshVisibility(in:menu,pet:self); dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
+    func menuNeedsUpdate(_ menu:NSMenu) {
+        PetMenu.refreshVisibility(in:menu,pet:self)
+        AccentMenuRows.shared.menuNeedsUpdate(menu)
+    }
+    func menu(_ menu:NSMenu,willHighlight item:NSMenuItem?) {AccentMenuRows.shared.menu(menu,willHighlight:item)}
+    func menuWillOpen(_ menu: NSMenu) {dockRecallAt = nil; menuOpen = true; interaction(); if motion != nil {idle()} }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false; interaction() }
     deinit {
         motionDisplayLink?.invalidate()

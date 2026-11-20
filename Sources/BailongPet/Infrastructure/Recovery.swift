@@ -111,15 +111,14 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         let caption = label("错误报告",bold:true)
         activity.font = .systemFont(ofSize:11); activity.textColor = .secondaryLabelColor
         let reportHeader = NSStackView(views:[caption,NSView(),activity]); reportHeader.alignment = .firstBaseline; reportHeader.spacing = 12
-        report.isEditable = false; report.isSelectable = true; report.drawsBackground = true
-        report.backgroundColor = .textBackgroundColor; report.textColor = .labelColor
-        report.font = .monospacedSystemFont(ofSize:12,weight:.regular); report.textContainerInset = NSSize(width:12,height:12)
+        report.isEditable = false; report.isSelectable = true; report.textColor = .labelColor
+        report.font = .monospacedSystemFont(ofSize:12,weight:.regular)
         report.isVerticallyResizable = true; report.isHorizontallyResizable = false; report.autoresizingMask = [.width]
         report.textContainer?.widthTracksTextView = true
         report.minSize = .zero; report.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
         report.setAccessibilityLabel("可拷贝的错误报告")
         let scroll = GutterScrollView(); scroll.documentView = report; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
-        scroll.drawsBackground = true; scroll.backgroundColor = .textBackgroundColor; scroll.borderType = .noBorder
+        let reportBox = MessageTextBoxSurface(scroll:scroll)
         copy = ActionButton("拷贝报告") {}
         copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil); copy.imagePosition = .imageLeading
         CopyFeedback.attach(to:copy) { [weak self] in self?.report.string }
@@ -140,7 +139,7 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         let footer = NSStackView(views:[copy!,issue,NSView(),quit,retry!]); footer.spacing = 8; footer.alignment = .centerY; footer.distribution = .fill
         quit.widthAnchor.constraint(equalTo:retry.widthAnchor).isActive = true
         quit.heightAnchor.constraint(equalTo:retry.heightAnchor).isActive = true
-        for view in [header,reportHeader,scroll,footer] {
+        for view in [header,reportHeader,reportBox,footer] {
             view.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(view)
             view.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24).isActive = true
             view.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24).isActive = true
@@ -148,9 +147,9 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo:root.topAnchor,constant:24),
             reportHeader.topAnchor.constraint(equalTo:header.bottomAnchor,constant:20),
-            scroll.topAnchor.constraint(equalTo:reportHeader.bottomAnchor,constant:8),
-            scroll.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-20),
-            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:100),
+            reportBox.topAnchor.constraint(equalTo:reportHeader.bottomAnchor,constant:8),
+            reportBox.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-20),
+            reportBox.heightAnchor.constraint(greaterThanOrEqualToConstant:100),
             footer.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-20),footer.heightAnchor.constraint(equalToConstant:32)
         ])
         window.center()

@@ -54,7 +54,7 @@ struct SettingsSearchEntry {
         entries += IdentitySettingsPage.items(catalog:catalog).map {$0.searchEntry(in:.identity)}
         if catalog != nil {entries.append(.init(section:.activity,group:SettingsDetail.actions.title,title:SettingsDetail.actions.title,detail:.actions))}
         entries += ActivitySettingsPage.items(catalog:catalog).map {$0.searchEntry(in:.activity)}
-        add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 临时聊天面板 查看额度 查看历史消息 显示任务进度 播放随机动画 单句台词 无动作")
+        add(.activity,"鼠标互动",["单击桌宠","双击桌宠","右键双击桌宠"],"点击 单句台词 Control ⌃ 右键 "+PetPreferences.mouseActions.map(\.1).joined(separator:" "))
         add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
         add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 适中 活泼 自定义 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
@@ -85,13 +85,13 @@ struct SettingsSearchEntry {
             } else if entries[index].title == "液态玻璃跟随系统设定" {
                 entries[index].condition = PetPreferences.glassAvailable ? "选择液态玻璃材质后显示" : PetPreferences.glassAvailabilityDescription
             } else if entries[index].title == "玻璃不透明度" {
-                entries[index].condition = PetPreferences.glassAvailable ? "选择液态玻璃材质后显示；关闭液态玻璃跟随系统设定后可调整" : PetPreferences.glassAvailabilityDescription
+                entries[index].condition = PetPreferences.glassAvailable ? "选择液态玻璃材质并关闭跟随系统设定后显示" : PetPreferences.glassAvailabilityDescription
             } else if entries[index].section == .appearance && entries[index].title == "自定义" {
                 entries[index].condition = "选择自定义强调色后显示"
             } else if entries[index].section == .appearance && entries[index].title == "宽 : 高" {
                 entries[index].condition = "开启气泡自定义宽高比后显示"
             } else if entries[index].section == .developer && ["动画缓冲帧数","常用动作开头缓存"].contains(entries[index].title) {
-                entries[index].condition = "关闭整段动画预加载时可调整"
+                entries[index].condition = "关闭整段动画预加载后显示"
             } else if entries[index].section == .developer && entries[index].title == "动作平滑过渡" {
                 entries[index].condition = "开启动态效果且系统未开启减少动态效果时生效"
             } else if entries[index].section == .developer && entries[index].title == "缓存时长" {
@@ -167,6 +167,7 @@ final class SettingsSearchResults: NSView, NSTableViewDataSource, NSTableViewDel
         onOpen(entries[table.selectedRow])
     }
     func numberOfRows(in tableView:NSTableView) -> Int {entries.count}
+    func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {AccentSelectionRow()}
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         let entry = entries[row], cell = NSTableCellView()
         let title = NSTextField(labelWithString:entry.title)
