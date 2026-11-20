@@ -399,13 +399,14 @@ final class Bubble {
         configureButtons()
         let w = layoutWidth, margin = 16*scale
         let bottomMargin = workspaceAttached ? 8*scale : margin
-        let bodyLayout = self.bodyLayout
+        let targetBodyLayout = self.bodyLayout
         if !questionModels.isEmpty {window.minSize = NSSize(width:min(minimumLayoutWidth,placementArea?.width ?? minimumLayoutWidth),height:220*scale)}
         let hasElapsed = taskStartedAt != nil
         let elapsedWidth = hasElapsed ? elapsedGroupWidth : 0
         elapsedLayoutWidth = elapsedWidth
         let headingSpinnerWidth = spinnerWidth, headingPrefix = headingPrefixWidth
-        let headingWidth = max(1,w-margin*2-32*scale-headingPrefix-(hasElapsed ? elapsedWidth+10*scale : 0))
+        let headingReservedWidth = margin*2+32*scale+headingPrefix+(hasElapsed ? elapsedWidth+10*scale : 0)
+        let headingWidth = max(1,w-headingReservedWidth)
         let font = title.font!
         let firstLineHeight = (font.ascender-font.descender+font.leading).rounded(.up)+4
         let headingHeight = max(firstLineHeight,title.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
@@ -434,10 +435,13 @@ final class Bubble {
         let desiredHeight:CGFloat = (usesCustomAspect ? max(baseChromeHeight+(bodyHeight > 0 ? 24*scale : 0),w/preferences.number("bubbleAspectRatio")) : baseChromeHeight+bodyHeight)+progressHeight+workspaceHeight
         let h = min(questionSize?.height ?? desiredHeight,kind == "progressToast" ? 180*scale+workspaceHeight : .greatestFiniteMagnitude,placementArea?.height ?? .greatestFiniteMagnitude)
         let targetTextHeight = ceil(max(0,h-chromeHeight))
+        let isToast = kind == "progressToast"
         motion.onResize = { [weak self] size in
             guard let self else {return}
             let height = size.height
-            self.title.frame = NSRect(x:margin+32*scale+headingPrefix,y:height-margin-headingHeight,width:headingWidth,height:headingHeight)
+            let titleWidth = isToast ? max(1,size.width-headingReservedWidth) : headingWidth
+            let bodyLayout = isToast ? BubbleBodyLayout(width:size.width,scale:scale) : targetBodyLayout
+            self.title.frame = NSRect(x:margin+32*scale+headingPrefix,y:height-margin-headingHeight,width:titleWidth,height:headingHeight)
             if self.headingActivity != nil {
                 let spinnerWidth = InlineStatusLayout.brailleFieldSize(font:font).width
                 self.headingSpinner.font = font
@@ -528,6 +532,7 @@ final class Bubble {
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
         let same = self.kind == kind && scroll.documentView === text
         self.kind = kind; self.scale = scale; displayedFailure = failure
+        if kind != "progressToast" {motion.originXForWidth = nil}
         self.headingActivity = kind == "progressToast" ? headingActivity : attentionAction ? .waiting(approval:timing?.status == "waitingForApproval" || approval != nil) : nil
         headingIcon.isHidden = self.headingActivity == nil
         // 盲文表示整轮仍在执行，单个工具的结束状态留给操作图标与结果角标。
@@ -901,6 +906,9 @@ final class Bubble {
         else {preferred = [.above,.below,.right,.left]}
         let oldSide = placement?.1 == dock ? placementSide : nil
         let result = BubblePlacement.resolve(size:size,pet:rect,screen:screen.visibleFrame,preferred:preferred,previous:oldSide,avoiding:avoiding)
+        if kind == "progressToast" {
+            motion.originXForWidth = {BubblePlacement.originX(width:$0,side:result.side,pet:rect,area:area)}
+        }
         // 上下方始终重新锚定角色；侧向气泡仅在方向不变且原位置安全时保留原点。
         let current = CGRect(origin:motion.frame.origin,size:size)
         let keepOrigin = (result.side == .left || result.side == .right) && placementSide == result.side

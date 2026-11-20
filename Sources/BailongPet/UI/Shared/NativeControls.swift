@@ -192,11 +192,16 @@ final class PetWindow:ContentCursorPanel {
 }
 // 正文与衬底保持同一视图树；玻璃通过 contentView 为其中的内容提供原生适配。
 private final class BubbleBackingView: NSView {
-    var opacity: CGFloat = 1 {didSet {needsDisplay = true}}
-    override var isOpaque: Bool {false}
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.withAlphaComponent(opacity).setFill()
-        NSBezierPath(roundedRect:bounds,xRadius:BubbleBackgroundView.cornerRadius,yRadius:BubbleBackgroundView.cornerRadius).fill()
+    var opacity:CGFloat = 1 {didSet {if oldValue != opacity {needsDisplay = true}}}
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        wantsLayer = true
+        layer?.cornerRadius = BubbleBackgroundView.cornerRadius
+    }
+    required init?(coder:NSCoder) {fatalError()}
+    override var wantsUpdateLayer:Bool {true}
+    override func updateLayer() {
+        layer?.backgroundColor = AppAppearance.resolvedColor(.windowBackgroundColor.withAlphaComponent(opacity),for:effectiveAppearance)
     }
     override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
 }

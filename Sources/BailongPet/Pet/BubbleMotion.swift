@@ -10,6 +10,7 @@ final class BubbleMotion: NSObject {
     private var slide = 0.0
     private var resizeStart = 0.0
     private var resizeFrom: NSSize?
+    var originXForWidth: ((CGFloat) -> CGFloat)?
     var keepsTopEdge = false
     private(set) var frame: NSRect
     private(set) var presented = false
@@ -60,11 +61,13 @@ final class BubbleMotion: NSObject {
     func resize(to size: NSSize) {
         guard let window else {return}
         guard frame.size != size else {onResize?(window.frame.size); return}
-        let previous = window.frame.size
+        var previous = window.frame.size
         if keepsTopEdge {frame.origin.y += frame.height-size.height}
+        if let originXForWidth {frame.origin.x = originXForWidth(size.width)}
+        else {previous.width = size.width}
         frame.size = size
-        if presented && enabled && !reduced && previous.height != size.height {
-            resizeFrom = NSSize(width:size.width,height:previous.height)
+        if presented && enabled && !reduced && previous != size {
+            resizeFrom = previous
             resizeStart = ProcessInfo.processInfo.systemUptime
         } else {resizeFrom = nil}
         render(); startTimerIfNeeded()
@@ -82,6 +85,10 @@ final class BubbleMotion: NSObject {
         displayed.origin.y -= slide*(1-f)
         if let from = resizeFrom {
             let r = progress(since:resizeStart,duration:0.14)
+            if let originXForWidth {
+                displayed.size.width = from.width+(frame.width-from.width)*r
+                displayed.origin.x = originXForWidth(displayed.width)
+            }
             displayed.size.height = from.height+(frame.height-from.height)*r
             if keepsTopEdge {displayed.origin.y += frame.height-displayed.height}
             if r >= 1 {resizeFrom = nil}

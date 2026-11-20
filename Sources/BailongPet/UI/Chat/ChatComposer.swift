@@ -156,12 +156,13 @@ final class ChatComposer: NSObject {
     }
     func hideComposer() {
         workspace.deactivate()
-        stopDismissMonitoring(); composerModel.closeChoices(); conversationPicker.close(); composerMotion.hide(); onHide()
+        stopDismissMonitoring(); composerModel.closeChoices(); conversationPicker.close(restoreFocus:false); composerMotion.hide(); onHide()
     }
     private func dismissComposerIfOutside(_ event: NSEvent) {
         guard composerVisible, !presentingFolderPicker, composer.attachedSheet == nil else{return}
-        if isPetInteraction(event) {return}
         let point = NSEvent.mouseLocation
+        conversationPicker.dismissIfOutside(at:point,window:event.window)
+        if isPetInteraction(event) {return}
         if workspace.containsInteraction(at:point) || showingNewMenu || composer.frame.contains(point) || composerModel.containsInteraction(at:point,window:event.window) || conversationPicker.containsInteraction(at:point,window:event.window) {return}
         hideComposer()
     }

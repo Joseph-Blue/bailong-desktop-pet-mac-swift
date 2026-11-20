@@ -1,23 +1,47 @@
 import AppKit
 
-// 只绘制，不命中鼠标，不参与键盘响应或窗口激活。
-final class GlassEdgeHighlight:NSView {
-    var cornerRadius:CGFloat = 14 {didSet {needsDisplay = true}}
+final class GlassEdgeHighlight: NSView {
+    var cornerRadius:CGFloat = 14 {didSet {needsLayout = true}}
+    private let gradient = CAGradientLayer()
+    private let outline = CAShapeLayer()
+
+    override init(frame:NSRect) {
+        super.init(frame:frame)
+        wantsLayer = true
+        gradient.startPoint = CGPoint(x:0.5,y:0)
+        gradient.endPoint = CGPoint(x:0.5,y:1)
+        gradient.locations = [0,0.45,1]
+        outline.fillColor = nil
+        outline.strokeColor = NSColor.white.cgColor
+        gradient.mask = outline
+        layer?.addSublayer(gradient)
+        updateColors()
+    }
+    required init?(coder:NSCoder) {fatalError()}
     override func hitTest(_ point:NSPoint) -> NSView? {nil}
-    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); needsDisplay = true}
-    override func viewDidChangeBackingProperties() {super.viewDidChangeBackingProperties(); needsDisplay = true}
-    override func draw(_ rect:NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else {return}
-        let width = 1 / (window?.backingScaleFactor ?? 2)
-        let shape = bounds.insetBy(dx:width/2,dy:width/2)
+
+    private func updateColors() {
         let dark = effectiveAppearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua
-        context.saveGState()
-        context.addPath(CGPath(roundedRect:shape,cornerWidth:cornerRadius-width/2,cornerHeight:cornerRadius-width/2,transform:nil))
-        context.setLineWidth(width); context.replacePathWithStrokedPath(); context.clip()
-        let gradient = NSGradient(colorsAndLocations:(NSColor.white.withAlphaComponent(dark ? 0.22 : 0.36),0),
-            (NSColor.white.withAlphaComponent(dark ? 0.08 : 0.16),0.45),
-            (NSColor.white.withAlphaComponent(dark ? 0.42 : 0.72),1))!
-        gradient.draw(in:bounds,angle:90)
-        context.restoreGState()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.colors = (dark ? [0.22,0.08,0.42] : [0.36,0.16,0.72]).map {NSColor.white.withAlphaComponent($0).cgColor}
+        CATransaction.commit()
+    }
+    override func viewDidChangeEffectiveAppearance() {super.viewDidChangeEffectiveAppearance(); updateColors()}
+    override func viewDidChangeBackingProperties() {super.viewDidChangeBackingProperties(); needsLayout = true}
+    override func layout() {
+        super.layout()
+        let scale = window?.backingScaleFactor ?? 1
+        let width = 1/scale
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.frame = bounds
+        outline.frame = gradient.bounds
+        outline.contentsScale = scale
+        outline.lineWidth = width
+        let rect = outline.bounds.insetBy(dx:width/2,dy:width/2)
+        let radius = max(0,cornerRadius-width/2)
+        outline.path = CGPath(roundedRect:rect,cornerWidth:radius,cornerHeight:radius,transform:nil)
+        CATransaction.commit()
     }
 }
