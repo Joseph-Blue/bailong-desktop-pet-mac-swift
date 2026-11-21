@@ -3,6 +3,15 @@ import Darwin
 
 // Queue 只接纳文本。轮次仍由已加载原会话的桌面端启动和控制。
 enum DesktopQueue {
+    enum Waiting:LocalizedError {
+        case desktop, queue
+        var errorDescription:String? {
+            switch self {
+            case .desktop:return "Codex 桌面端尚未运行。"
+            case .queue:return "Codex 桌面端尚未打开消息队列。"
+            }
+        }
+    }
     struct Destination {
         let app:NSRunningApplication
         let cli:URL
@@ -10,6 +19,7 @@ enum DesktopQueue {
 
         static func running() throws -> Self {
             let apps = NSRunningApplication.runningApplications(withBundleIdentifier:"com.openai.codex").filter {!$0.isTerminated}
+            if apps.isEmpty {throw Waiting.desktop}
             guard apps.count == 1,let app = apps.first,let bundle = app.bundleURL else {
                 throw PetFailure(message:"请在一个 Codex 桌面端中打开原会话。")
             }
@@ -21,7 +31,7 @@ enum DesktopQueue {
         func requireAvailableQueue(for thread:UUID) throws {
             let queue = store.appendingPathComponent("queue_1.sqlite")
             guard try Self.processes(using:queue).contains(where:belongsToDesktop) else {
-                throw PetFailure(message:"请先在 Codex 桌面端打开原会话，等待消息队列就绪。")
+                throw Waiting.queue
             }
             // 队列由各客户端共享。仅目标线程的写锁文件涉及本次投递。
             let lock = store.appendingPathComponent("thread-writer-locks")
@@ -66,6 +76,31 @@ enum DesktopQueue {
             }
             return pid == app.processIdentifier
         }
+    }
+
+    static func prepare(thread:String,previousTurn:String,id:UUID,destination:@escaping () throws -> Destination,
+                        waitForLaunch:Bool,isCurrent:@escaping () -> Bool,completion:@escaping (Result<Destination,Error>) -> Void) {
+        func probe(_ pinned:Destination?) {
+            guard isCurrent() else {return}
+            let candidate = Result {try pinned ?? destination()}
+            DispatchQueue.global(qos:.userInitiated).async {
+                let ready = candidate.flatMap { target in
+                    Result {
+                        guard !target.app.isTerminated else {throw PetFailure(message:"Codex 桌面端已退出。")}
+                        try target.requireAvailableQueue(for:id)
+                        try DesktopHistoryReader.requireReplyConversation(thread,previousTurn:previousTurn,steering:false)
+                        return target
+                    }
+                }
+                DispatchQueue.main.async {
+                    guard isCurrent() else {return}
+                    if waitForLaunch,case .failure(let error) = ready,error is Waiting {
+                        DispatchQueue.main.asyncAfter(deadline:.now()+1) {probe(try? candidate.get())}
+                    } else {completion(ready)}
+                }
+            }
+        }
+        probe(nil)
     }
 
     static func receipt(_ data:Data,thread:UUID) -> UUID? {

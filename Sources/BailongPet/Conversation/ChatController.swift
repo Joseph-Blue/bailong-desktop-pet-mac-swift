@@ -335,20 +335,20 @@ final class ChatController {
         state.readOnly = store.isReadOnly
         if let conversation,conversation.external {
             state.sending = desktopSession.sending(conversation.key); state.unconfirmed = desktopSession.unconfirmed(conversation.key)
+            state.desktopPreparing = desktopSession.preparing(conversation.key)
             if pet.preferences.projectSendChannel == .modern {
                 let target = desktopSession.target(conversation)
                 state.modelNote = .viewInCodex
                 state.replyMode = target?.mode == .start ? .start : nil
                 state.desktopReady = true
                 state.replyNote = desktopSession.replyNote(conversation.key,turnID:target?.id) ?? (state.replyMode == .start
-                    ? "发送到已打开的 Codex 原会话" : "请在 Codex 原会话中处理当前任务。")
+                    ? "发送到 Codex 原会话" : "请在 Codex 原会话中处理当前任务。")
                 return state
             }
             state.replyMode = desktopSession.target(conversation)?.mode
             state.modelSettings = desktopSession.modelSettings(conversation.key)
             state.modelNote = desktopSession.modelNote(conversation.key); state.replyNote = desktopSession.replyNote(conversation.key)
             state.desktopReady = desktopSession.canReply(conversation.key)
-            state.desktopPreparing = desktopSession.preparing(conversation.key)
         }
         return state
     }

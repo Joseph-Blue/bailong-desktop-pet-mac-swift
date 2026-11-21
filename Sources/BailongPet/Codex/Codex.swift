@@ -148,13 +148,16 @@ final class CodexConnection {
                 guard isCurrent() else {return}
                 do {
                     guard try lookup.get(),let url = threadURL(id) else {throw PetFailure(message:"原 Codex 会话已不存在。")}
-                    guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {
+                    let workspace = NSWorkspace.shared
+                    let desktopID = "com.openai.codex"
+                    let running = NSRunningApplication.runningApplications(withBundleIdentifier:desktopID).first {!$0.isTerminated}
+                    guard let app = running?.bundleURL ?? workspace.urlForApplication(withBundleIdentifier:desktopID)
+                            ?? installedDesktopLocations.first(where:{Bundle(url:$0)?.bundleIdentifier == desktopID}) else {
                         throw PetFailure(message:"未找到 Codex 桌面应用。")
                     }
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = true
-                    let runningApp = NSWorkspace.shared.runningApplications.first { isDesktopApplication($0) && $0.bundleURL?.standardizedFileURL == app.standardizedFileURL }
-                    let coldStart = runningApp == nil || (runningApp?.launchDate.map {Date().timeIntervalSince($0) < 10} == true)
+                    let coldStart = running == nil || (running?.launchDate.map {Date().timeIntervalSince($0) < 10} == true)
                     NSWorkspace.shared.open([url],withApplicationAt:app,configuration:configuration) { _,error in
                         DispatchQueue.main.async {
                             if let error {completion(.failure(error))}
