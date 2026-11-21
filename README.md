@@ -8,9 +8,6 @@
 
 [下载正式版](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest) · [版本变化](CHANGELOG.md) · [反馈问题](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues)
 
-<p align="center">
-  <a href=".github/images/task-progress.svg"><img src=".github/images/task-progress.svg" alt="桌宠与任务气泡" width="380"></a>
-</p>
 
 **最新正式版：0.8.0。**
 
@@ -18,6 +15,9 @@
 **⚠️ Codex 桌面端更新后（`26.1117.41037`）不再监听原有的本机 IPC 接口，导致桌宠打开指定 Codex 项目会话后，用户无法在桌宠 app 中提交回复/审批/问卷。接收和记录消息、桌宠人设会话不受影响。**
 详见 [Issue #2](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues/2)
 
+<p align="center">
+  <a href=".github/images/task-progress.svg"><img src=".github/images/task-progress.svg" alt="桌宠与任务气泡" width="380"></a>
+</p>
 
 ## 目录
 
