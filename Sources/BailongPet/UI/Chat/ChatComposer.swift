@@ -276,9 +276,9 @@ final class ChatComposer: NSObject {
         conversationPicker.conversations = choices
         workspace.update(conversation:state.conversation,executing:state.executing,visible:composerVisible)
         folderAction.title = state.conversation?.threadID == nil && state.conversation?.turns.isEmpty == true ? "选择此对话的工作区…" : "在其他工作区新建…"
-        composerInheritedSettings.update(settings:state.modelSettings,conversation:state.conversation,error:state.modelNote)
+        composerInheritedSettings.update(settings:state.modelSettings,conversation:state.conversation,notice:state.modelNote)
         composerInheritedSettings.superview?.isHidden = !external || state.conversation == nil
-        retrySettings.isHidden = state.desktopReady || state.modelNote == nil
+        retrySettings.isHidden = !state.showsModelRetry
         retrySettings.isEnabled = !state.sending
         openCodex.isEnabled = state.conversation?.threadID != nil
         recentReply.update(turn:state.conversation?.turns.max(by:{$0.date < $1.date}))

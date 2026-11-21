@@ -17,6 +17,7 @@ final class AccentMenuRows: NSObject, NSMenuDelegate {
         let custom = AppAccent.selection != "system"
         let hasImages = menu.items.contains {$0.image != nil}
         for item in menu.items where !item.isSeparatorItem {
+            if TextContextMenu.isSystemInputItem(item) {continue}
             if let row = item.view as? AccentMenuRow {
                 if custom {row.picker = picker; row.needsDisplay = true} else {item.view = nil}
             } else if custom && item.view == nil {

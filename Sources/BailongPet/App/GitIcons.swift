@@ -2,7 +2,7 @@ import AppKit
 
 // GitHub mark: https://github.com/primer/octicons/blob/main/icons/mark-github-16.svg
 // MIT License — Copyright (c) 2026 GitHub Inc.
-// Full license notices are in 第三方许可.txt.
+// Full license notices are in THIRD-PARTY-NOTICES.md.
 enum GitIcons {
     static func repository(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSImage {
         switch kind {

@@ -1,5 +1,30 @@
 import AppKit
 
+enum ProjectSendChannel:String, CaseIterable {
+    case modern, legacy
+
+    static let key = "projectSendChannel"
+    static let group = "Codex 项目对话"
+    static let settingTitle = "消息发送方式"
+    static let pendingNotice = "新版自动发送待适配，请在 Codex 原会话中发送。"
+    static let help = """
+    新版桌面端（默认）
+    在 26.1117.41037 上，桌宠可以打开原会话，旧版通信接口已无法提交回复或插话。新版自动发送待适配。可拷贝草稿，点「在 Codex 中打开」后粘贴并发送。
+
+    旧版桌面端
+    如果使用 26.1111.21308 或更早版本，可选旧版通道。26.1111.21308 已验证能在原会话提交消息。两个标注版本之间的构建尚未验证发送，可先在 Codex 中手动回复。
+
+    此选项仅用于 Codex 项目对话。桌宠人设对话沿用自己的连接。
+    """
+    var title:String {
+        switch self {
+        case .modern: return "新版桌面端（适配版本号 ≥ 26.1117.41037）"
+        case .legacy: return "旧版桌面端（适配版本号 ≤ 26.1111.21308）"
+        }
+    }
+    static var options:[(String,String)] {allCases.map {($0.rawValue,$0.title)}}
+}
+
 struct PlaybackSettingsError: LocalizedError {
     let key:String
     var errorDescription:String? {"播放设置「"+key+"」无效。"}
@@ -11,7 +36,7 @@ enum SettingsSection: Int, CaseIterable {
     var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer","arrow.triangle.2.circlepath","info.circle"][rawValue] }
     var keys: [String] {
         switch self {
-        case .general: return ["rememberPosition","preferredDisplay","autoFullscreen"]
+        case .general: return ["rememberPosition","preferredDisplay","autoFullscreen",BrowserSearchEngine.key,ProjectSendChannel.key]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return PetGestureSetting.all.map(\.key) + ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
         case .messages: return MessageSettingsPage.preferenceKeys + [PetPreferences.tokenDetailsKey]
@@ -68,7 +93,8 @@ final class PetPreferences {
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
-        "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,
+        "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,BrowserSearchEngine.key:BrowserSearchEngine.defaultEngine.rawValue,
+        ProjectSendChannel.key:ProjectSendChannel.modern.rawValue,
         "ownerName":"","customAddress":"","petName":"白龙娘",
         "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),"randomWorkingLines":true,
         "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskSuccessTemplate":"{用户名}，完成啦！",
@@ -105,9 +131,11 @@ final class PetPreferences {
         #endif
     }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
+    var projectSendChannel:ProjectSendChannel {ProjectSendChannel(rawValue:string(ProjectSendChannel.key)) ?? .modern}
     static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
-        TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue),GitStatusStyle.key:GitStatusStyle.allCases.map(\.rawValue)]
+        TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue),GitStatusStyle.key:GitStatusStyle.allCases.map(\.rawValue),BrowserSearchEngine.key:BrowserSearchEngine.allCases.map(\.rawValue),
+        ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue)]
         .merging(PetGestureSetting.all.map {($0.key,PetGestureSetting.actions.map(\.0))}) {_, gesture in gesture}
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults

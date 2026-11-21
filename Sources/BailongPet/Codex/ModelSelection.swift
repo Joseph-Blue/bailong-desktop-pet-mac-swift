@@ -187,7 +187,7 @@ final class ChatModelSettings {
         if let model = currentModelID {result["model"] = model}
         if let effort = currentEffort {
             if let currentModel, !currentModel.supportedReasoningEfforts.contains(where:{$0.reasoningEffort == effort}) {
-                throw PetFailure(message:"当前模型不支持所选思考等级，请重新选择。")
+                throw PetFailure(message:"当前模型不支持所选推理强度，请重新选择。")
             }
             result["effort"] = effort
         }

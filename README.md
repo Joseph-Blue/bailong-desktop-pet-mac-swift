@@ -67,6 +67,6 @@
 - 感谢原作者 jingh12312-rgb（風-隐）提供角色动画与主要交互设计。
 - 感谢 [ruyeli/bailong-desktop-pet-english](https://github.com/ruyeli/bailong-desktop-pet-english) 分享的 macOS SDK 兼容处理方案。
 - 感谢 [moon135246/bailong-desktop-pet-optimization](https://github.com/moon135246/bailong-desktop-pet-optimization) 在动作开头缓存与内存预算上的优化参考。
-- 图标许可原文见[第三方许可](第三方许可.txt)，也可从「设置 → 关于 → 来源与致谢」打开随应用附带的文本。
+- 图标许可原文见[第三方许可](THIRD-PARTY-NOTICES.md)，也可在「设置 → 关于 → 第三方许可」阅读。
 - 提交 [GitHub Issue](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues) 时，请附上应用版本号、macOS 版本与复现步骤；涉及会话同步或发送问题时，请一并说明 Codex 桌面端版本及会话类型（桌宠内置对话／Codex 项目会话）。
 - 欢迎 fork 本仓库，也欢迎提出建议或建设性批评。

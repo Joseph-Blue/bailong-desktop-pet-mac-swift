@@ -20,7 +20,6 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     var moveToAdjacentEntry:((Int) -> Bool)?
     private(set) var searchAnchors = [String:NSView]()
     private var section:SettingsSection = .general
-    var petSymbol:() -> NSImage? = {nil}
     var historyRecoveryReason:() -> String? = {nil}
     init(content:NSStackView,preferences:PetPreferences,window:NSWindow) {
         self.content = content; self.preferences = preferences; self.window = window
@@ -304,7 +303,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         fill(selection,in:stack); fill(footer,in:stack)
         return stack
     }
-    func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, icon:NSImage? = nil, tokenHint:String? = nil, action:NSView? = nil, changed: @escaping (String)->Void) -> NSView {
+    func entry(_ title: String, value: String, placeholder: String = "", emptyFallback:String? = nil, limit: Int = 20, allowsTokens:Bool = true, identity:SettingsTemplateTokens.Item? = nil, action:NSView? = nil, changed: @escaping (String)->Void) -> NSView {
         let value = value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? emptyFallback ?? value : value
         let field: NSTextField = section == .identity ? SettingsTemplateField(string:value) : NSTextField(string:value)
         let templateField = field as? SettingsTemplateField
@@ -384,9 +383,9 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             return searchable(row,title:title)
         }
         field.widthAnchor.constraint(equalToConstant:240).isActive = true
-        let caption = identityLabel(title,token:tokenHint)
+        let caption = identityLabel(title,item:identity)
         let leading = NSStackView(); leading.orientation = .horizontal; leading.alignment = .centerY; leading.spacing = 6
-        if let icon {
+        if let icon = identity?.image() {
             let image = NSImageView(image:icon); image.contentTintColor = .secondaryLabelColor
             image.widthAnchor.constraint(equalToConstant:18).isActive = true; image.heightAnchor.constraint(equalToConstant:18).isActive = true
             leading.addArrangedSubview(image)
@@ -394,24 +393,17 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         leading.addArrangedSubview(caption)
         return searchable(alignedRow(leading:leading,control:controls),title:title)
     }
-    private func identityLabel(_ title:String,token:String?) -> NSView {
-        guard let token,let item = SettingsTemplateTokens.items.first(where:{$0.token == token}) else {return label(title)}
-        let row = NSStackView(views:[label(title),SettingsTokenBadge(token:token,color:item.color)])
+    private func identityLabel(_ title:String,item:SettingsTemplateTokens.Item?) -> NSView {
+        guard let item else {return label(title)}
+        let row = NSStackView(views:[label(title),SettingsTokenBadge(token:item.token,color:item.color)])
         row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 6
         return row
     }
     func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20, action:NSView? = nil) -> NSView {
-        let icon:NSImage?
-        switch key {
-        case "ownerName": icon = NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)
-        case "petName": icon = petSymbol()
-        case "customAddress": icon = NSImage(systemSymbolName:"person.text.rectangle",accessibilityDescription:nil)
-        default: icon = nil
-        }
-        let token = ["ownerName":"{用户名}","petName":"{桌宠名}","customAddress":"{特定称呼}"][key]
+        let identity = SettingsTemplateTokens.items.first(where:{$0.setting == key})
         let fallback = ["ownerName":"主人","petName":"白龙娘"][key]
             ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
-        return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),icon:icon,tokenHint:token,action:action) { [weak self] value in self?.preferences.set(value,for:key) }
+        return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),identity:identity,action:action) { [weak self] value in self?.preferences.set(value,for:key) }
     }
     func slider(_ title:String,_ key:String,range:ClosedRange<Double>,step:Double = 1,suffix:String,detail:String? = nil,requires:[String] = [],unless:[String] = [],minimumLabel:String? = nil) -> NSView {
         let controls = numericSlider(title,value:preferences.number(key),range:range,step:step,suffix:suffix,minimumLabel:minimumLabel) { [weak self] value in self?.preferences.set(value,for:key) }

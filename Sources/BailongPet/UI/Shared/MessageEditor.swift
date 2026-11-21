@@ -4,7 +4,7 @@ final class MessageEditor: AccentTextView {
     var usesCompactContextMenu = false
 
     override func menu(for event:NSEvent) -> NSMenu? {
-        usesCompactContextMenu ? TextContextMenu.menu(for:self) : super.menu(for:event)
+        usesCompactContextMenu ? compactContextMenu(for:event) : super.menu(for:event)
     }
 
     func update(font:NSFont,editable:Bool) {

@@ -461,7 +461,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         self.selected = selected.key; self.busy = historyState.runningTitle != nil
         let historyVisible = history.isVisible && !history.isMiniaturized
         if historyVisible {order.update(conversationSource)}
-        inheritedSettings.update(settings:historyState.modelSettings,conversation:selected,error:historyState.modelNote)
+        inheritedSettings.update(settings:historyState.modelSettings,conversation:selected,notice:historyState.modelNote)
         refreshList()
         sourceLabel.stringValue = selected.title
         sourceLabel.hoverHelp = selected.kind.title+" · 共 \(selected.turns.count) 轮记录\n"+selected.title
@@ -480,7 +480,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyButton.emphasize()
         historyModel.isEnabled = historyState.canEdit && !selected.external
         historyModel.isHidden = selected.external; inheritedSettings.isHidden = !selected.external
-        historyRetrySettings.isHidden = !selected.external || historyState.desktopReady || historyState.modelNote == nil
+        historyRetrySettings.isHidden = !selected.external || !historyState.showsModelRetry
         historyRetrySettings.isEnabled = !historyState.sending
         historyStop.isEnabled = !historyState.stopping
         historyStop.title = historyState.desktopPreparing ? "取消发送" : historyState.stopping ? "正在停止…" : "停止任务"

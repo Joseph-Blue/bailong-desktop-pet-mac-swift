@@ -21,16 +21,26 @@ final class GlassOpacitySlider: NSSlider {
 
 // 仅“称呼与个性”页使用；高亮是显示属性，偏好和剪贴板始终保留纯文本。
 enum SettingsTemplateTokens {
+    struct Item {
+        let setting:String, name:String, keyEquivalent:String
+        let color:NSColor
+        let image:() -> NSImage?
+        var title:String {"插入"+name+"："}
+        var token:String {"{"+name+"}"}
+    }
     private static func ink(_ light:(CGFloat,CGFloat,CGFloat), _ dark:(CGFloat,CGFloat,CGFloat)) -> NSColor {
         NSColor(name:nil) {appearance in
             let rgb = appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? dark : light
             return NSColor(srgbRed:rgb.0,green:rgb.1,blue:rgb.2,alpha:1)
         }
     }
-    static let items: [(title:String, token:String, color:NSColor)] = [
-        ("插入特定称呼：", "{特定称呼}", ink((0.12,0.34,0.68),(0.45,0.73,1))),
-        ("插入用户名：", "{用户名}", ink((0.48,0.22,0.62),(0.83,0.62,1))),
-        ("插入桌宠名：", "{桌宠名}", ink((0.62,0.27,0.02),(1,0.72,0.40)))
+    static let items: [Item] = [
+        Item(setting:"ownerName",name:"用户名",keyEquivalent:"1",color:ink((0.48,0.22,0.62),(0.83,0.62,1)),
+             image:{NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)}),
+        Item(setting:"petName",name:"桌宠名",keyEquivalent:"2",color:ink((0.62,0.27,0.02),(1,0.72,0.40)),
+             image:{AppIcons.petAvatarTemplate}),
+        Item(setting:"customAddress",name:"特定称呼",keyEquivalent:"3",color:ink((0.12,0.34,0.68),(0.45,0.73,1)),
+             image:{NSImage(systemSymbolName:"person.text.rectangle",accessibilityDescription:nil)})
     ]
     static func ranges(in text:String, apply:(NSRange,NSColor)->Void) {
         let value = text as NSString
@@ -101,7 +111,7 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
         return accepted
     }
     override func menu(for event:NSEvent) -> NSMenu? {
-        let menu = TextContextMenu.menu(for:self)
+        let menu = compactContextMenu(for:event)
         guard allowsTokens else {return menu}
         menu.addItem(.separator())
         let font = NSFont.menuFont(ofSize:0)
@@ -109,15 +119,23 @@ final class SettingsTemplateEditor: AppTextView, TemplateContextMenu {
         let paragraph = NSMutableParagraphStyle(); paragraph.tabStops = [NSTextTab(textAlignment:.left,location:tab)]
         for entry in SettingsTemplateTokens.items {
             let title = entry.title+"\t"+entry.token
-            let item = NSMenuItem(title:title,action:#selector(insertTemplateToken(_:)),keyEquivalent:"")
+            let item = NSMenuItem(title:title,action:#selector(insertTokenFromMenu(_:)),keyEquivalent:entry.keyEquivalent)
+            item.keyEquivalentModifierMask = .command
+            item.image = entry.image()
             item.attributedTitle = NSAttributedString(string:title,attributes:[.font:font,.paragraphStyle:paragraph])
             item.representedObject = entry.token; item.target = self; menu.addItem(item)
         }
+        menu.showProvidedImages()
         return menu
     }
-    @objc private func insertTemplateToken(_ sender:NSMenuItem) {
+    @objc private func insertTokenFromMenu(_ sender:NSMenuItem) {
         guard let token = sender.representedObject as? String else {return}
+        insertTemplateToken(token)
+    }
+    @discardableResult func insertTemplateToken(_ token:String) -> Bool {
+        guard allowsTokens,isEditable,!hasMarkedText() else {return false}
         insertText(token,replacementRange:selectedRange())
+        return true
     }
     override func deleteBackward(_ sender:Any?) {
         guard allowsTokens,!hasMarkedText() else {super.deleteBackward(sender); return}

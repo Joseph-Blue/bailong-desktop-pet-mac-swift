@@ -41,7 +41,7 @@ final class ChatController {
     private var historyInputRequest = UUID()
     var desktopTaskReadStatus:String? = "正在同步 Codex 任务状态…"
     lazy var desktopSession:DesktopConversationSession = {
-        let session = DesktopConversationSession(store:store,
+        let session = DesktopConversationSession(store:store,preferences:pet.preferences,
             canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
         session.onSubmitted = { [weak self] key,text,entry in
             guard let self else {return}
@@ -335,6 +335,11 @@ final class ChatController {
         state.readOnly = store.isReadOnly
         if let conversation,conversation.external {
             state.sending = desktopSession.sending(conversation.key); state.unconfirmed = desktopSession.unconfirmed(conversation.key)
+            if pet.preferences.projectSendChannel == .modern && !state.sending && !state.unconfirmed {
+                state.modelNote = .viewInCodex
+                state.replyNote = ProjectSendChannel.pendingNotice
+                return state
+            }
             state.replyMode = desktopSession.target(conversation)?.mode
             state.modelSettings = desktopSession.modelSettings(conversation.key)
             state.modelNote = desktopSession.modelNote(conversation.key); state.replyNote = desktopSession.replyNote(conversation.key)

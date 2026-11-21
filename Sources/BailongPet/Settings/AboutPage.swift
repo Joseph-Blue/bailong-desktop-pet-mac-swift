@@ -2,10 +2,15 @@ import AppKit
 
 // 设置“关于”页保留原有图标、版本、原生分页和富文本链接；架构取编译目标。
 final class AboutPageController: NSViewController {
+    enum Tab: String, CaseIterable {
+        case about = "关于"
+        case credits = "来源与致谢"
+        case thirdPartyNotices = "第三方许可"
+    }
+
     private static let repositoryURL = URL(string:"https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift")!
-    static let thirdPartyNoticesTitle = "查看第三方许可"
     private static let thirdPartyNoticesURL = (Bundle.main.bundleURL.pathExtension == "app" ? Paths.resources : Paths.project)
-        .appendingPathComponent("第三方许可.txt")
+        .appendingPathComponent("THIRD-PARTY-NOTICES.md")
     private var textViews = [NSTextView]()
     private let titleLabel = NSTextField(wrappingLabelWithString:"")
     private let appIcon = NSImageView()
@@ -48,7 +53,7 @@ final class AboutPageController: NSViewController {
         versionDetails.orientation = .vertical
         versionDetails.alignment = .centerX
         versionDetails.spacing = 4
-        let buildCommit = Bundle.main.object(forInfoDictionaryKey:"BailongLocalBuildCommit") as? String
+        let buildCommit = Paths.localBuildCommit
         if let commit = buildCommit {
             let commitLabel = NSTextField(labelWithString:"本地构建 \(commit.prefix(8))")
             commitLabel.font = .systemFont(ofSize:12)
@@ -67,10 +72,14 @@ final class AboutPageController: NSViewController {
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
         tabs.font = .systemFont(ofSize:13)
-        for (identifier,label,text) in [("about","关于",aboutText()),("credits","来源与致谢",creditsText())] {
-            let item = NSTabViewItem(identifier:identifier)
-            item.label = label
-            item.view = readingView(text)
+        for tab in Tab.allCases {
+            let item = NSTabViewItem(identifier:tab.rawValue)
+            item.label = tab.rawValue
+            switch tab {
+            case .about: item.view = readingView(aboutText())
+            case .credits: item.view = readingView(creditsText())
+            case .thirdPartyNotices: item.view = readingView(thirdPartyNoticesText(),selectable:true)
+            }
             tabs.addTabViewItem(item)
         }
         for view in [icon,title,versionDetails,tabs] {
@@ -94,20 +103,32 @@ final class AboutPageController: NSViewController {
         ])
     }
 
-    func selectTab(_ identifier:String) {
-        loadViewIfNeeded(); tabs.selectTabViewItem(withIdentifier:identifier)
+    func selectTab(_ tab:Tab) {
+        loadViewIfNeeded(); tabs.selectTabViewItem(withIdentifier:tab.rawValue)
     }
 
-    private func readingView(_ content: NSAttributedString) -> NSScrollView {
+    private func thirdPartyNoticesText() -> NSAttributedString {
+        do {
+            let source = try String(contentsOf:Self.thirdPartyNoticesURL,encoding:.utf8)
+            return MarkdownText.render(source,font:.systemFont(ofSize:13))
+        } catch {
+            let text = NSMutableAttributedString()
+            paragraph("无法读取第三方许可。\n\(error.localizedDescription)",to:text)
+            return text
+        }
+    }
+
+    private func readingView(_ content: NSAttributedString,selectable:Bool = false) -> NSScrollView {
         let scroll = GutterScrollView()
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         let text = LinkTextView(frame:NSRect(x:0,y:0,width:560,height:360))
         text.isEditable = false
-        text.isSelectable = false
-        // 说明文字不允许选中；链接通过点击手势打开，不依赖 NSTextView 的选择行为。
-        text.addGestureRecognizer(NSClickGestureRecognizer(target:self,action:#selector(openTextLink(_:))))
+        text.isSelectable = selectable
+        if !selectable {
+            text.addGestureRecognizer(NSClickGestureRecognizer(target:self,action:#selector(openTextLink(_:))))
+        }
         text.drawsBackground = false
         text.isVerticallyResizable = true
         text.isHorizontallyResizable = false
@@ -132,18 +153,8 @@ final class AboutPageController: NSViewController {
 
     @objc private func openTextLink(_ gesture: NSClickGestureRecognizer) {
         guard let text = gesture.view as? NSTextView,
-              let layout = text.layoutManager, let container = text.textContainer,
-              let storage = text.textStorage, storage.length > 0 else {return}
-        let location = gesture.location(in:text), origin = text.textContainerOrigin
-        let point = NSPoint(x:location.x-origin.x,y:location.y-origin.y)
-        let glyph = layout.glyphIndex(for:point,in:container)
-        guard glyph < layout.numberOfGlyphs,
-              layout.boundingRect(forGlyphRange:NSRange(location:glyph,length:1),in:container).contains(point) else {return}
-        let character = layout.characterIndexForGlyph(at:glyph)
-        if let url = storage.attribute(.link,at:character,effectiveRange:nil) as? URL,
-           !NSWorkspace.shared.open(url),url == Self.thirdPartyNoticesURL {
-            showError("无法打开第三方许可",PetFailure(message:url.path))
-        }
+              let url = LinkAppearance.link(at:gesture.location(in:text),in:text)?.value as? URL else {return}
+        if !NSWorkspace.shared.open(url) {showError("无法打开链接",PetFailure(message:url.absoluteString))}
     }
 
     @objc private func updateAccent() {
@@ -209,7 +220,6 @@ final class AboutPageController: NSViewController {
         link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
         link("GitHub 图标 · Primer Octicons（MIT）",url:"https://github.com/primer/octicons",to:text)
         link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
-        link(Self.thirdPartyNoticesTitle,url:Self.thirdPartyNoticesURL.absoluteString,to:text)
 
         heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)
         paragraph("感谢 AntiGravity agent（Gemini 4 Carbon 模型），在 Codex 冷启动首次发送延迟，以及窗口激活异常与持续掉帧的两轮攻坚中提供关键定位与修复。",to:text)

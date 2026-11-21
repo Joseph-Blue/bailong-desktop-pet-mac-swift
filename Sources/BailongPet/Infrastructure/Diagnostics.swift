@@ -115,7 +115,8 @@ private enum DeviceIdentity {
         #endif
         let info = ProcessInfo.processInfo
         let gpu = MTLCreateSystemDefaultDevice()
-        return "版本 \(Paths.version) · \(architecture)\n进程 \(info.processName) · PID \(info.processIdentifier)\nCPU \(systemString("machdep.cpu.brand_string") ?? "型号不可用") · \(systemString("hw.machine") ?? "架构不可用") · \(info.processorCount) 核\nGPU \(gpu?.name ?? "不可用") · \(gpu?.architecture.name ?? "架构不可用")\nmacOS \(info.operatingSystemVersionString)"
+        let commit = Paths.localBuildCommit.map { " · \($0.prefix(8))" } ?? ""
+        return "桌宠版本 \(Paths.version)\(commit) · \(architecture)\n进程 \(info.processName) · PID \(info.processIdentifier)\nCPU \(systemString("machdep.cpu.brand_string") ?? "型号不可用") · \(systemString("hw.machine") ?? "架构不可用") · \(info.processorCount) 核\nGPU \(gpu?.name ?? "不可用") · \(gpu?.architecture.name ?? "架构不可用")\nmacOS \(info.operatingSystemVersionString)"
     }()
 }
 
@@ -406,9 +407,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             + "本进程 Swap-in：\(swapinText)\(swapRateText)\n"
             + "帧像素合计 \(memoryText(UInt64(cache.bytes))) · \(cache.frames) 帧 · 已发布 \(cache.clips) 段\n"
             + "\(preloadText)\n动画磁盘缓存 0 B"
-        let desktop = NSWorkspace.shared.runningApplications.filter { ["com.openai.codex", "com.openai.chat"].contains($0.bundleIdentifier ?? "") }
-        let desktopText = desktop.isEmpty ? "未运行" : desktop.map { "\($0.localizedName ?? "桌面应用") · PID \($0.processIdentifier)" }.joined(separator: "、")
-        let connections = "桌面端  \(desktopText)\n只读同步  \(pet.syncDiagnostics())\nCLI  \(pet.cliDiagnostics())"
+        let connections = "Codex 桌面端  \(CodexConnection.desktopDiagnostics)\n只读同步  \(pet.syncDiagnostics())\nCodex CLI  \(pet.cliDiagnostics())"
         let frameRates = "更新 FPS \(number(reading.fps)) · HI \(number(frames.high)) · LO \(number(frames.low))"
         return [window.title, frameRates, playback, resources, DeviceIdentity.text, connections].joined(separator: "\n\n")
     }

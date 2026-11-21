@@ -4,6 +4,7 @@ import AVFoundation
 struct PetFailure: LocalizedError { let message: String; var errorDescription: String? { message } }
 
 enum Paths {
+    static let localBuildCommit = Bundle.main.object(forInfoDictionaryKey:"BailongLocalBuildCommit") as? String
     static let project = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     static let resources: URL = {
         if Bundle.main.bundleURL.pathExtension == "app" { return Bundle.main.resourceURL! }

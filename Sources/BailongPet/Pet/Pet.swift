@@ -192,7 +192,6 @@ final class PetController: NSObject, NSMenuDelegate {
         bubble.onVisibilityChange = { [weak self] in self?.refreshWorkspaceBars() }
         progressBubble.onVisibilityChange = { [weak self] in self?.refreshWorkspaceBars() }
         progressBubble.onCardLayout = { [weak self] in self?.placeBubble() }
-        settings.petSymbol = {AppIcons.petAvatarTemplate}
         settings.onPreview = { [weak self] clip in self?.preview(clip) }
         settings.onLinePreview = { [weak self] clip,line in self?.preview(clip,line:line) }
         settings.onMessagePreview = { [weak self] purpose in self?.showSizePreview(purpose:purpose,userRequested:true) }

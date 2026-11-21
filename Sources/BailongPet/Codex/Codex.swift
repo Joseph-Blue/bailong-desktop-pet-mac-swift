@@ -25,6 +25,7 @@ final class CodexConnection {
     private var expiration: Timer?
     private let reader = DispatchQueue(label:"白龙娘 Codex 协议")
     private var connectionError: String?
+    private var cliVersion: String?
     private(set) var executableURL: URL?
     var isConnected:Bool {ready}
     var connectionGeneration:Int {generation}
@@ -39,18 +40,48 @@ final class CodexConnection {
     var diagnostics: String {
         let state = ready ? "协议已连接" : process?.isRunning == true ? "正在初始化" : (connectionError.map { "连接失败：" + $0 } ?? "未连接")
         let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"
-        return "\(state) · 进程 \(executableURL?.lastPathComponent ?? "codex") · PID \(pid) · 待回复 \(pending.count)\n可执行文件：\(executableURL?.path ?? "尚未启动")"
+        let version = cliVersion ?? installedCLIVersion()
+        return "\(version) · \(state) · 进程 \(executableURL?.lastPathComponent ?? "codex") · PID \(pid) · 待回复 \(pending.count)\n可执行文件：\(executableURL?.path ?? "尚未启动")"
     }
     private static func isDesktopApplication(_ app:NSRunningApplication) -> Bool {
         !app.isTerminated && (app.bundleIdentifier == "com.openai.codex" || ["Codex","ChatGPT"].contains(app.localizedName ?? ""))
     }
+    private static let installedDesktopLocations = ["/Applications/Codex.app",NSHomeDirectory()+"/Applications/Codex.app",
+        "/Applications/ChatGPT.app",NSHomeDirectory()+"/Applications/ChatGPT.app"].map {URL(fileURLWithPath:$0)}
     static func desktopApplications() -> [URL] {
-        let running = NSWorkspace.shared.runningApplications.compactMap { app -> URL? in
-            guard isDesktopApplication(app) else { return nil }
-            return app.bundleURL
+        NSWorkspace.shared.runningApplications.filter(isDesktopApplication).compactMap(\.bundleURL) + installedDesktopLocations
+    }
+    static var desktopDiagnostics:String {
+        func summary(_ url:URL?,name:String,status:String) -> String {
+            let bundle = url.flatMap(Bundle.init(url:))
+            let version = bundle?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "版本不可读"
+            let build = (bundle?.object(forInfoDictionaryKey:"CFBundleVersion") as? String).map { " (\($0))" } ?? ""
+            return "\(name) \(version)\(build) · \(status)"
         }
-        return running + ["/Applications/Codex.app",NSHomeDirectory()+"/Applications/Codex.app",
-            "/Applications/ChatGPT.app",NSHomeDirectory()+"/Applications/ChatGPT.app"].map {URL(fileURLWithPath:$0)}
+        let running = NSWorkspace.shared.runningApplications.filter(isDesktopApplication)
+        if !running.isEmpty {
+            return running.map { summary($0.bundleURL,name:$0.localizedName ?? "Codex",status:"PID \($0.processIdentifier)") }.joined(separator:"、")
+        }
+        guard let url = installedDesktopLocations.first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return "未找到桌面应用"}
+        return summary(url,name:url.deletingPathExtension().lastPathComponent,status:"未运行")
+    }
+    private static func versionFromUserAgent(_ agent:String?) -> String? {
+        guard let product = agent?.components(separatedBy:" (").first,let slash = product.lastIndex(of:"/") else {return nil}
+        let version = String(product[product.index(after:slash)...])
+        return SemanticVersion(version) == nil ? nil : version
+    }
+    private static let packagedCLI = "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+    private func installedCLIVersion() -> String {
+        struct Package:Decodable {let version:String}
+        do {
+            let selected = try (executableURL ?? Self.executable()).resolvingSymlinksInPath()
+            guard let app = Self.desktopApplications().first(where:{
+                $0.appendingPathComponent(Self.packagedCLI).resolvingSymlinksInPath() == selected
+            }) else {return ready ? "版本未提供" : "尚未取得握手版本"}
+            let manifest = app.appendingPathComponent("Contents/Resources/codex-cli/codex-package.json")
+            let package = try JSONDecoder().decode(Package.self,from:Data(contentsOf:manifest))
+            return "安装版本 " + package.version
+        } catch {return "版本读取失败：" + error.localizedDescription}
     }
     static func executable() throws -> URL {
         let env = ProcessInfo.processInfo.environment
@@ -60,7 +91,7 @@ final class CodexConnection {
         }
         // 优先当前桌面应用内置版本，防止旧 PATH CLI 不支持桌面端当前模型。
         let bundled = desktopApplications().flatMap { app in
-            ["Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+            [packagedCLI,
              "Contents/Resources/codex", "Contents/Resources/codex-cli/codex"].map {app.appendingPathComponent($0).path}
         }
         let candidates = bundled + (env["PATH"] ?? "").split(separator:":").map {String($0)+"/codex"} +
@@ -134,7 +165,7 @@ final class CodexConnection {
         waiting.append(callback)
         if process?.isRunning == true { return }
         do {
-            connectionError = nil; closing = false; generation += 1; let token = generation
+            connectionError = nil; cliVersion = nil; closing = false; generation += 1; let token = generation
             let task = Process(), stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
             task.executableURL = try Self.executable(); executableURL = task.executableURL; task.arguments = ["app-server","--listen","stdio://"]
             var env = ProcessInfo.processInfo.environment
@@ -176,8 +207,9 @@ final class CodexConnection {
             call("initialize",["clientInfo":["name":"bailong_appkit","title":PetPreferences.shared.appName,"version":Paths.version],"capabilities":["experimentalApi":true]]) { [weak self] result in
                 guard let self,self.generation == token else{return}
                 switch result {
-                case .success:
+                case .success(let reply):
                     guard self.send(["method":"initialized"]) else {return}; self.ready = true
+                    self.cliVersion = Self.versionFromUserAgent(reply["userAgent"] as? String)
                     TerminalMonitor.active?.write(.server,"→ 通知  initialized  ·  握手完成  ·  连接#\(token)",.success)
                     let callbacks = self.waiting; self.waiting.removeAll(); callbacks.forEach{$0(nil)}
                 case .failure(let error): self.fail(error,stage:"初始化握手")
@@ -295,6 +327,6 @@ final class CodexConnection {
             // AppKit 即将退出时也必须等到自有服务结束，否则异步清理来不及执行。
             process.waitUntilExit()
         }
-        process = nil; pending.removeAll(); waiting.removeAll()
+        process = nil; cliVersion = nil; pending.removeAll(); waiting.removeAll()
     }
 }

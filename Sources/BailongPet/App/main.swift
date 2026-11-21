@@ -1,7 +1,7 @@
 import AppKit
 import Darwin
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceStatusSettingsAction {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WorkspaceStatusSettingsAction {
     var pet: PetController?, chat: ChatController?, sync: DesktopSync?
     var instanceFD: Int32 = -1
     var localEvents: Any?
@@ -133,6 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceStatusSetting
         let closeWindow = NSMenuItem(title:"关闭窗口",action:#selector(closeInterface),keyEquivalent:"w"); closeWindow.target = self; appMenu.addItem(closeWindow)
         let quit = NSMenuItem(title:"退出"+PetPreferences.shared.appName,action:#selector(quitFromMenu),keyEquivalent:""); quit.target = self; quit.tag = 102; quit.image = NSImage(systemSymbolName:"rectangle.portrait.and.arrow.right",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular)); appMenu.addItem(quit)
         let editItem = NSMenuItem(title:"编辑",action:nil,keyEquivalent:""); let edit = AccentMenuRows.menu(title:"编辑"); editItem.submenu = edit; bar.addItem(editItem)
+        edit.delegate = self
+        TextContextMenu.editMenu = edit
         for (title,action,key) in [("撤销","undo:","z"),("重做","redo:","Z"),("剪切","cut:","x"),("拷贝","copy:","c"),("粘贴","paste:","v"),("全选","selectAll:","a")] {
             edit.addItem(NSMenuItem(title:title,action:NSSelectorFromString(action),keyEquivalent:key))
         }
@@ -149,6 +151,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceStatusSetting
         windows.addItem(.separator()); NSApp.windowsMenu = windows
         bar.showProvidedImages(); NSApp.mainMenu = bar
     }
+    func menuNeedsUpdate(_ menu:NSMenu) {
+        TextContextMenu.updateEditMenu(menu,for:NSApp.keyWindow)
+        menu.showProvidedImages()
+        AccentMenuRows.shared.prepare(menu)
+    }
+    func menu(_ menu:NSMenu,willHighlight item:NSMenuItem?) {AccentMenuRows.shared.menu(menu,willHighlight:item)}
+
     @objc func updateNames() {
         let name = PetPreferences.shared.appName
         let menu = NSApp.mainMenu?.items.first?.submenu

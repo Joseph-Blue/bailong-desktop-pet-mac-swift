@@ -8,7 +8,6 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     let catalog: Catalog?
     private lazy var form:SettingsForm = {
         let form = SettingsForm(content:content,preferences:preferences,window:window)
-        form.petSymbol = { [weak self] in self?.petSymbol() }
         form.historyRecoveryReason = { [weak self] in self?.historyRecoveryReason() }
         return form
     }()
@@ -41,7 +40,6 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var selectingSidebar = false
     private var hasShown = false
     private var hasSavedFrame = false
-    var petSymbol: () -> NSImage? = {nil}
     var onClose: () -> Void = {}
     var onPreview: (Clip) -> Void = { _ in }
     var onLinePreview: (Clip,String) -> Void = { _,_ in }
@@ -285,7 +283,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             return
         }
         if entry.section == .about {
-            aboutPage.selectTab(entry.title == "关于" ? "about" : "credits")
+            if let tab = AboutPageController.Tab(rawValue:entry.title) {aboutPage.selectTab(tab)}
             return
         }
         guard var target = form.searchAnchors[entry.anchor] ?? form.searchAnchors[entry.group] else {return}
@@ -423,6 +421,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         refreshDisplays()
         form.group("桌面",[form.toggle("全屏时自动隐藏","autoFullscreen"),
             form.row("所在显示器",detail:"选择显示器后，桌宠固定在该屏幕内活动和拖动。",control:menu)],symbol:"display")
+        form.group(BrowserSearchEngine.group,[form.choice(BrowserSearchEngine.settingTitle,BrowserSearchEngine.key,BrowserSearchEngine.options,
+            detail:"在默认浏览器中用所选引擎搜索选中的文字。")],symbol:"magnifyingglass")
+        form.group(ProjectSendChannel.group,[form.choice(ProjectSendChannel.settingTitle,ProjectSendChannel.key,ProjectSendChannel.options,
+            width:300,detail:"新版自动发送待适配。",help:ProjectSendChannel.help)],symbol:"bubble.left.and.bubble.right")
     }
     @objc private func refreshDisplays() {
         guard selected == .general,let menu = displayMenu else {return}

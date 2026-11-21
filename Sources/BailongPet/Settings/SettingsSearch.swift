@@ -16,8 +16,13 @@ final class SettingsWindow: NSWindow {
     }
     var focusSearch: () -> Void = {}
     override func performKeyEquivalent(with event:NSEvent) -> Bool {
-        if event.modifierFlags.intersection([.command,.shift,.option,.control]) == .command,
-           event.charactersIgnoringModifiers?.lowercased() == "f" {focusSearch(); return true}
+        if event.modifierFlags.intersection([.command,.shift,.option,.control]) == .command {
+            let key = event.charactersIgnoringModifiers?.lowercased()
+            if key == "f" {focusSearch(); return true}
+            if let editor = firstResponder as? SettingsTemplateEditor,
+               let item = SettingsTemplateTokens.items.first(where:{$0.keyEquivalent == key}),
+               editor.insertTemplateToken(item.token) {return true}
+        }
         return super.performKeyEquivalent(with:event)
     }
 }
@@ -46,6 +51,8 @@ struct SettingsSearchEntry {
         add(.general,"权限与系统设置",["登录项与后台运行"],"权限 批准 开机 自启动 跟随 后台 系统设置")
         add(.general,"桌面",["全屏时自动隐藏"],"屏幕 多屏")
         add(.general,"桌面",["所在显示器"],"屏幕 多屏 固定 随拖动切换屏幕")
+        add(.general,BrowserSearchEngine.group,[BrowserSearchEngine.settingTitle],"在浏览器中搜索 默认浏览器 " + BrowserSearchEngine.options.map(\.1).joined(separator:" "))
+        add(.general,ProjectSendChannel.group,[ProjectSendChannel.settingTitle],"回复 原会话 发送通道 插话 自动发送待适配 " + ProjectSendChannel.options.map(\.1).joined(separator:" "))
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 动作 播放 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")
@@ -81,9 +88,9 @@ struct SettingsSearchEntry {
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
         let aboutKeywords = "开源致谢 来源 作者 图标 Lucide SF Symbols GitHub Codex OpenAI 技术栈 AppKit macOS UI skill"
-        add(.about,"关于",["关于"],aboutKeywords)
-        add(.about,"关于",["来源与致谢"],aboutKeywords+" Git 状态符号 bash-git-prompt Powerlevel10k")
-        add(.about,"来源与致谢",[AboutPageController.thirdPartyNoticesTitle],"开源许可 许可证 英文原文 图标 Lucide ISC Primer Octicons MIT")
+        add(.about,"关于",[AboutPageController.Tab.about.rawValue],aboutKeywords)
+        add(.about,"关于",[AboutPageController.Tab.credits.rawValue],aboutKeywords+" Git 状态符号 bash-git-prompt Powerlevel10k")
+        add(.about,"关于",[AboutPageController.Tab.thirdPartyNotices.rawValue],"开源许可 许可证 英文原文 图标 Lucide ISC Primer Octicons MIT LobeHub")
         for index in entries.indices {
             if entries[index].section == .appearance && entries[index].title == "消息窗口材质" {
                 entries[index].keywords += " SDK 兼容构建 普通材质"

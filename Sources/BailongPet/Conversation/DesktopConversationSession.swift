@@ -18,6 +18,23 @@ struct ObservedDesktopTurn {
 
 // 外部 Codex 会话的发送、待确认和只读设置状态；不持有内置 CodexConnection。
 final class DesktopConversationSession {
+    enum ModelNotice {
+        case awaitingFirstSend, connecting, viewInCodex, failure(String)
+
+        var message:String {
+            switch self {
+            case .awaitingFirstSend: return "发送首条消息后显示模型信息"
+            case .connecting: return "正在连接 Codex 原会话…"
+            case .viewInCodex: return "在 Codex 中查看模型"
+            case .failure(let message): return message
+            }
+        }
+        var canRetry:Bool {
+            if case .failure = self {return true}
+            return false
+        }
+    }
+
     private enum NavigationRecovery {case existingConnection, none}
     private struct ColdPreparation {
         let request:UUID
@@ -26,6 +43,7 @@ final class DesktopConversationSession {
         let send:(DesktopReply.PreparedConnection) -> Void
     }
     private let store:HistoryStore
+    private let preferences:PetPreferences
     var observedTurns = [ObservedDesktopTurn]()
     private let canSend:() -> Bool, isClosing:() -> Bool
     var onChange:() -> Void = {}, onPersist:() -> Void = {}
@@ -37,7 +55,7 @@ final class DesktopConversationSession {
     var coldRetryInterval:TimeInterval = 0.25
     var coldTotalTimeout:TimeInterval = 60
     private var desktopSettings = [String:DesktopReply.Settings]()
-    private var desktopModelNotes = [String:String]()
+    private var desktopModelNotes = [String:ModelNotice]()
     private var desktopModelChecked = [String:Date]()
     private var desktopModelRequests = [String:UUID]()
     private var settingsReady = Set<String>()
@@ -50,8 +68,9 @@ final class DesktopConversationSession {
     private var desktopUnconfirmed = Set<String>()
     private var desktopReplyNotes = [String:String]()
 
-    init(store:HistoryStore,canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
+    init(store:HistoryStore,preferences:PetPreferences,canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
         self.store = store
+        self.preferences = preferences
         self.canSend = canSend; self.isClosing = isClosing
     }
     var hasPendingSend:Bool {!desktopSending.isEmpty}
@@ -65,7 +84,7 @@ final class DesktopConversationSession {
     func unconfirmed(_ key:String) -> Bool {desktopUnconfirmed.contains(key)}
     func replyNote(_ key:String) -> String? {desktopReplyNotes[key]}
     func modelSettings(_ key:String) -> DesktopReply.Settings? {desktopSettings[key]}
-    func modelNote(_ key:String) -> String? {desktopModelNotes[key]}
+    func modelNote(_ key:String) -> ModelNotice? {desktopModelNotes[key]}
     func canReply(_ key:String) -> Bool {settingsReady.contains(key)}
     func forget(_ key:String) {
         cancelPreparation(key)
@@ -95,7 +114,7 @@ final class DesktopConversationSession {
         for conversation in conversations where conversation.external {refreshSettings(conversation)}
     }
     func refreshSettings(_ conversation:Conversation,force:Bool = false) {
-        guard !isClosing(),let thread = conversation.threadID else {return}
+        guard preferences.projectSendChannel == .legacy,!isClosing(),let thread = conversation.threadID else {return}
         let key = conversation.key
         guard !sending(key),desktopModelRequests[key] == nil,force || Date().timeIntervalSince(desktopModelChecked[key] ?? .distantPast) >= 5 else {return}
         if force {desktopSettings.removeValue(forKey:key); settingsReady.remove(key); desktopModelNotes.removeValue(forKey:key)}
@@ -110,14 +129,18 @@ final class DesktopConversationSession {
             case .failure(let error):
                 self.desktopSettings.removeValue(forKey:key)
                 self.settingsReady.remove(key)
-                self.desktopModelNotes[key] = error is DesktopReply.OwnerUnavailable ? error.localizedDescription : "读取会话设置失败："+error.localizedDescription
+                if error is DesktopSocket.Unavailable || error is DesktopReply.OwnerUnavailable {
+                    self.desktopModelNotes[key] = .awaitingFirstSend
+                } else {
+                    self.desktopModelNotes[key] = .failure("读取会话设置失败："+error.localizedDescription)
+                }
             }
             self.onChange()
         }
     }
     func submit(_ text:String,to conversation:Conversation,entry:ChatEntry) {
         let key = conversation.key
-        guard !isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
+        guard preferences.projectSendChannel == .legacy,!isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
               let thread = conversation.threadID,let target = target(conversation) else {return}
         let request = UUID()
         let trace = TerminalMonitor.active?.begin(.ipc,
@@ -149,7 +172,7 @@ final class DesktopConversationSession {
         coldPreparing.removeValue(forKey:key)
         desktopSending.removeValue(forKey:key)?.trace?.step(stage+"  ·  "+TerminalMonitor.errorCode(error),.error)
         settingsReady.remove(key); desktopSettings.removeValue(forKey:key)
-        desktopModelNotes[key] = error.localizedDescription
+        desktopModelNotes[key] = .failure(error.localizedDescription)
         desktopReplyNotes[key] = "消息未发送，草稿已保留。"+error.localizedDescription; onChange()
     }
     private func prepareColdReply(_ text:String,to conversation:Conversation,entry:ChatEntry,thread:String,
@@ -207,7 +230,7 @@ final class DesktopConversationSession {
                 self.desktopSettings.removeValue(forKey:key)
                 self.settingsReady.remove(key)
                 if DesktopReply.connectionPending(error),current.deadline.timeIntervalSinceNow > self.coldRetryInterval {
-                    self.desktopModelNotes[key] = DesktopReply.OwnerUnavailable().localizedDescription
+                    self.desktopModelNotes[key] = .connecting
                     self.onChange()
                     DispatchQueue.main.asyncAfter(deadline:.now()+self.coldRetryInterval) { [weak self,weak conversation] in
                         guard let self,let conversation else {return}
@@ -285,6 +308,7 @@ final class DesktopConversationSession {
                 }
                 self.onSubmitted(key,text,entry)
                 self.desktopReplyNotes.removeValue(forKey:key)
+                if case .awaitingFirstSend? = self.desktopModelNotes[key] {self.refreshSettings(conversation,force:true)}
                 self.onPersist()
             case .failure(let error):
                 if let unconfirmed = error as? DesktopReply.Unconfirmed {
