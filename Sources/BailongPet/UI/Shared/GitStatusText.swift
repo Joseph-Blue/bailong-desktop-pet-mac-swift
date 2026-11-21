@@ -1,14 +1,16 @@
 import AppKit
 
 enum GitStatusStyle:String,CaseIterable {
-    case powerlevel10k, gitCLI
+    case bashGitPrompt, powerlevel10k, gitCLI
 
     static let key = "gitStatusStyle"
+    static let defaultStyle = GitStatusStyle.bashGitPrompt
     static var options:[(String,String)] {
         allCases.map {($0.rawValue,$0.title)}
     }
     private var title:String {
         switch self {
+        case .bashGitPrompt:return "bash-git-prompt 符号风格"
         case .powerlevel10k:return "Powerlevel10k 符号风格"
         case .gitCLI:return "缩写字母风格"
         }
@@ -17,25 +19,32 @@ enum GitStatusStyle:String,CaseIterable {
 
 enum GitStatusText {
     private struct Indicator {
-        let symbol:String, mnemonic:String, label:String
+        let symbol:String, promptSymbol:String, mnemonic:String, label:String
         let color:NSColor
 
-        init(_ symbol:String,_ mnemonic:String,_ label:String,_ color:NSColor) {
-            self.symbol = symbol; self.mnemonic = mnemonic; self.label = label; self.color = color
+        init(_ symbol:String,_ promptSymbol:String,_ mnemonic:String,_ label:String,_ color:NSColor) {
+            self.symbol = symbol; self.promptSymbol = promptSymbol
+            self.mnemonic = mnemonic; self.label = label; self.color = color
         }
-        func marker(_ style:GitStatusStyle) -> String {style == .gitCLI ? mnemonic : symbol}
+        func marker(_ style:GitStatusStyle) -> String {
+            switch style {
+            case .powerlevel10k:return symbol
+            case .bashGitPrompt:return promptSymbol
+            case .gitCLI:return mnemonic
+            }
+        }
     }
     private static let groups:[(group:GitWorkspaceStatus.Group,indicator:Indicator)] = [
-        (.conflicted,Indicator("~","C",GitWorkspaceStatus.Group.conflicted.rawValue,StatusTextColor.red)),
-        (.staged,Indicator("+","S",GitWorkspaceStatus.Group.staged.rawValue,StatusTextColor.green)),
-        (.unstaged,Indicator("!","M",GitWorkspaceStatus.Group.unstaged.rawValue,StatusTextColor.orange)),
-        (.untracked,Indicator("?","?",GitWorkspaceStatus.Group.untracked.rawValue,.labelColor))
+        (.conflicted,Indicator("~","✖","C",GitWorkspaceStatus.Group.conflicted.rawValue,StatusTextColor.red)),
+        (.staged,Indicator("+","●","S",GitWorkspaceStatus.Group.staged.rawValue,StatusTextColor.green)),
+        (.unstaged,Indicator("!","✚","M",GitWorkspaceStatus.Group.unstaged.rawValue,StatusTextColor.orange)),
+        (.untracked,Indicator("?","…","?",GitWorkspaceStatus.Group.untracked.rawValue,.labelColor))
     ]
-    private static let clean = Indicator("✓","✓","工作区干净",StatusTextColor.green)
-    private static let stash = Indicator("*","ST",GitWorkspaceStatus.stashLabel,StatusTextColor.purple)
+    private static let clean = Indicator("✓","✔","✓","工作区干净",StatusTextColor.green)
+    private static let stash = Indicator("*","⚑","SH",GitWorkspaceStatus.stashLabel,StatusTextColor.purple)
     private static let upstreamIndicators:[(indicator:Indicator,count:KeyPath<GitWorkspaceStatus,Int?>)] = [
-        (Indicator("⇣","↓","落后",StatusTextColor.blue),\.behind),
-        (Indicator("⇡","↑","领先",StatusTextColor.blue),\.ahead)
+        (Indicator("⇣","↓","↓","落后",StatusTextColor.blue),\.behind),
+        (Indicator("⇡","↑","↑","领先",StatusTextColor.blue),\.ahead)
     ]
 
     private static let compactLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
@@ -77,18 +86,18 @@ enum GitStatusText {
 
     static func compact(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let text = NSMutableAttributedString(), counts = status.counts
-        func append(_ marker:String,count:Int? = nil,color:NSColor) {
+        func append(_ item:Indicator,count:Int? = nil) {
             if text.length > 0 {text.append(NSAttributedString(string:" ",attributes:[.font:font]))}
-            text.append(markerText(marker,font:font,color:color))
-            if let count {text.append(NSAttributedString(string:String(count),attributes:[.font:font,.foregroundColor:color]))}
+            text.append(markerText(item.marker(style),font:font,color:item.color))
+            if let count {text.append(NSAttributedString(string:String(count),attributes:[.font:font,.foregroundColor:item.color]))}
         }
         for (group,item) in groups {
-            if let count = counts[group],count > 0 {append(item.marker(style),count:count,color:item.color)}
+            if let count = counts[group],count > 0 {append(item,count:count)}
         }
-        if status.clean {append(clean.marker(style),color:clean.color)}
-        if status.stashes > 0 {append(stash.marker(style),count:status.stashes,color:stash.color)}
+        if status.clean {append(clean)}
+        if status.stashes > 0 {append(stash,count:status.stashes)}
         for (item,countPath) in upstreamIndicators {
-            if let count = status[keyPath:countPath],count > 0 {append(item.marker(style),count:count,color:item.color)}
+            if let count = status[keyPath:countPath],count > 0 {append(item,count:count)}
         }
         return text
     }

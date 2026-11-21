@@ -196,6 +196,11 @@ final class AboutPageController: NSViewController {
         paragraph("界面设计参考 gambadio 的 macos-golden-gate-design，让设置和窗口更贴近 Mac 的使用习惯。该设计指南采用 MIT 许可证。",to:text)
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)
 
+        paragraph("Git 状态符号参考 bash-git-prompt 与 Powerlevel10k。",to:text,links:[
+            ("bash-git-prompt","https://github.com/magicmonty/bash-git-prompt"),
+            ("Powerlevel10k","https://github.com/romkatv/powerlevel10k"),
+        ])
+
         heading("Mac 与 Codex",to:text)
         paragraph("应用用 Swift 和 AppKit 开发，窗口、菜单和设置使用 Mac 原生控件。聊天和任务由本机安装的 Codex 处理。",to:text)
 
@@ -212,18 +217,22 @@ final class AboutPageController: NSViewController {
     }
 
     private func paragraph(_ value: String,to text: NSMutableAttributedString,
-                           color: NSColor = .labelColor,font: NSFont = .systemFont(ofSize:13)) {
+                           color: NSColor = .labelColor,font: NSFont = .systemFont(ofSize:13),
+                           links:[(title:String,url:String)] = []) {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 4
         style.paragraphSpacing = 12
+        let start = text.length
         text.append(NSAttributedString(string:value+"\n",attributes:[.font:font,.foregroundColor:color,.paragraphStyle:style]))
+        for (title,url) in links {
+            let range = NSRange(value.range(of:title)!,in:value)
+            text.addAttributes(LinkAppearance.attributes(for:URL(string:url)!),range:NSRange(location:start+range.location,length:range.length))
+        }
     }
     private func heading(_ value: String,to text: NSMutableAttributedString) {
         paragraph(value,to:text,font:.systemFont(ofSize:15,weight:.semibold))
     }
     private func link(_ title: String,url: String,to text: NSMutableAttributedString) {
-        let start = text.length
-        paragraph(title,to:text)
-        text.addAttributes(LinkAppearance.attributes(for:URL(string:url)!),range:NSRange(location:start,length:(title as NSString).length))
+        paragraph(title,to:text,links:[(title,url)])
     }
 }

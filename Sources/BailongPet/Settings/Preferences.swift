@@ -64,7 +64,7 @@ final class PetPreferences {
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"","petChatFastMode":false,
-        "taskInfoBarEnabled":true,"gitWindowEnabled":false,GitStatusStyle.key:GitStatusStyle.powerlevel10k.rawValue,tokenDetailsKey:false,TokenCountFormat.key:TokenCountFormat.full.rawValue,
+        "taskInfoBarEnabled":true,"gitWindowEnabled":false,GitStatusStyle.key:GitStatusStyle.defaultStyle.rawValue,tokenDetailsKey:false,TokenCountFormat.key:TokenCountFormat.full.rawValue,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
@@ -157,7 +157,7 @@ final class PetPreferences {
     func number(_ key: String) -> Double {(value(key) as? NSNumber)?.doubleValue ?? 0}
     func string(_ key: String) -> String {value(key) as? String ?? ""}
     var tokenCountFormat:TokenCountFormat {TokenCountFormat(rawValue:string(TokenCountFormat.key)) ?? .full}
-    var gitStatusStyle:GitStatusStyle {GitStatusStyle(rawValue:string(GitStatusStyle.key)) ?? .powerlevel10k}
+    var gitStatusStyle:GitStatusStyle {GitStatusStyle(rawValue:string(GitStatusStyle.key)) ?? .defaultStyle}
     var animationBufferFrames: Int { Int(number("animationBufferFrames")) }
     var defaultWorkspace:URL {
         let path = string("defaultWorkspace")
