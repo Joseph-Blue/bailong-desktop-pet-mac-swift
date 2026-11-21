@@ -1,4 +1,4 @@
-# 白龙桌宠Swift · Dev
+# 白龙桌宠Swift · Dev 开发分支
 
 本分支（`joseph/dev`）维护 白龙桌宠Swift 的开发源码、架构文档与构建资源。开发版本见 [VERSION](VERSION)。
 
@@ -7,6 +7,13 @@
 本项目基于 [jingh12312-rgb（風-隐）的 GPT白龙娘动态桌宠](https://github.com/jingh12312-rgb/bailong-desktop-pet)（参考基线 `v0.5.1 / b102e73`），使用 Swift + AppKit 原生重写并独立维护。角色动画采用透明 HEVC（HEVC with Alpha）与 AVFoundation 解码，由 CPU／vImage 完成线性光缩放与色彩转换；界面采用原生 AppKit 分栏与液态玻璃材质。
 
 本项目作者：**Joseph Blue（约瑟Blue）**。
+
+## Codex 最新版适配问题
+**⚠️ Codex 桌面端更新后（`26.1117.41037`）不再监听原有的本机 IPC 接口，导致桌宠打开指定 Codex 项目会话后，用户无法在桌宠 app 中提交回复/审批/问卷。
+详见 [Issue #2](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/issues/2)**
+
+**接收和记录消息、桌宠人设会话不受影响。**
+
 
 ## 模块概览
 
