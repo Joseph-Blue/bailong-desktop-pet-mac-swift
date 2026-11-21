@@ -1,6 +1,12 @@
 import AppKit
 
 final class MessageEditor: AccentTextView {
+    var usesCompactContextMenu = false
+
+    override func menu(for event:NSEvent) -> NSMenu? {
+        usesCompactContextMenu ? TextContextMenu.menu(for:self) : super.menu(for:event)
+    }
+
     func update(font:NSFont,editable:Bool) {
         let inputFont = NSFontManager.shared.convert(font,toSize:font.pointSize+1)
         if self.font != inputFont {self.font = inputFont}

@@ -4,6 +4,7 @@ import AppKit
 final class MessageTextView: LinkTextView {
     // NSTextView 的便利初始化会再次进入指定初始化；按首次使用创建，避免覆盖已分配的 Swift 存储。
     private lazy var fileEditPresentation = FileEditPresentation()
+    private var fileEditInteraction:FileEditInteraction?
     var onContentLayoutChange:(() -> Void)?
     private var measuredWidth:CGFloat = -1
     private var measuredHeight:CGFloat = 0
@@ -175,15 +176,29 @@ final class MessageTextView: LinkTextView {
     }
 
     var linkBaseDirectory: (() -> URL?)?
+    override func mouseDown(with event:NSEvent) {
+        if fileEditInteraction?.handleClick(event) != true {super.mouseDown(with:event)}
+    }
+    override func menu(for event:NSEvent) -> NSMenu? {
+        fileEditInteraction?.menu(for:event) ?? super.menu(for:event)
+    }
+    override func drawBackground(in rect:NSRect) {
+        super.drawBackground(in:rect)
+        fileEditInteraction?.drawBackground(in:rect)
+    }
     override func clicked(onLink link: Any, at charIndex: Int) {
         if MessageFileLink.reveal(link,relativeTo:linkBaseDirectory?()) {return}
         super.clicked(onLink:link,at:charIndex)
     }
     @discardableResult func setContent(_ value:NSAttributedString,reset:Bool = false) -> Bool {
         if !(layoutManager is MarkdownLayoutManager) {MarkdownLayoutManager.install(in:self)}
-        // 保留链接自身的语义颜色：普通链接强调色，文件列表仍区分目录与文件名。
+        // 保留链接自身的语义颜色。
         linkTextAttributes = [.cursor:NSCursor.pointingHand]
-        return applyContent(fileEditPresentation.content(value),reset:reset)
+        let content = fileEditPresentation.content(value)
+        if fileEditPresentation.hasSections,fileEditInteraction == nil {
+            fileEditInteraction = FileEditInteraction(view:self) { [weak self] in self?.linkBaseDirectory?() }
+        }
+        return applyContent(content,reset:reset)
     }
     func releaseRenderedContent() {
         setContent(NSAttributedString(),reset:true)
@@ -221,6 +236,7 @@ final class MessageTextView: LinkTextView {
         let hadSelection = !reset && selectedRange().length > 0
         if reset {textStorage?.setAttributedString(value)}
         else {replaceChangedSuffix(with:value)}
+        fileEditInteraction?.contentChanged(hasRows:fileEditPresentation.hasSections,reset:reset)
         measuredWidth = -1; invalidateCodeLayout()
         prepareInlineControls(width:bounds.width)
         if !hadSelection {setSelectedRange(NSRange(location:0,length:0))}

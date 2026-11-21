@@ -4,10 +4,12 @@ import AppKit
 final class FileEditPresentation {
     private var source = NSAttributedString()
     private var expanded = Set<String>()
+    private(set) var hasSections = false
 
     func content(_ value:NSAttributedString) -> NSAttributedString {
         source = value
         let ids = Set(sections.map { $0.section.id })
+        hasSections = !ids.isEmpty
         expanded.formIntersection(ids)
         return projected()
     }

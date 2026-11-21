@@ -147,11 +147,13 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         transcript.isEditable = false; transcript.isSelectable = true
         transcript.onContentLayoutChange = { [weak self] in self?.updateSearchHighlights(reveal:false) }
         let reading = ChatViewLayout.editorScroll(transcript); reading.drawsBackground = false
+        history.acceptsMouseMovedEvents = true
         // 保留 TextKit 行内留白，使实际文字起点与顶部信息行同为 24pt。
         transcript.textContainerInset = NSSize(width:24-(transcript.textContainer?.lineFragmentPadding ?? 0),height:14)
         reading.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self,selector:#selector(historyScrolled(_:)),name:NSView.boundsDidChangeNotification,object:reading.contentView)
         historyEditor.placeholder = historyPlaceholder
+        historyEditor.usesCompactContextMenu = true
         historyInput = ChatViewLayout.inputBox(historyEditor)
         let drafting = historyInput!
         historyButton = ActionButton("发送") { [weak self] in

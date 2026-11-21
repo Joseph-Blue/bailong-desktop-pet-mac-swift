@@ -34,7 +34,7 @@ enum PetMenu {
         menu.addItem(.separator())
         menu.addItem(MenuAction("播放随机动画",symbol:"shuffle") {random()})
         let animations = submenu("播放动作",symbol:"play.rectangle")
-        for (name,clips,symbol) in [("待机动作",pet.catalog.idles+pet.catalog.extras,"figure.stand"),("互动动作",pet.catalog.variants,"figure.play"),("工作动作",pet.catalog.work,"briefcase"),("移动动作",pet.catalog.movementAnimations,"figure.walk.motion")] {
+        for (name,clips,symbol) in [("待机动作",pet.catalog.idles+pet.catalog.extras,"figure.stand"),("互动动作",pet.catalog.variants,"figure.play"),("工作动作",pet.catalog.work,"briefcase"),("移动动作",pet.catalog.movementAnimationsForDisplay,"figure.walk.motion")] {
             let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
             item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
             item.image?.isTemplate = true

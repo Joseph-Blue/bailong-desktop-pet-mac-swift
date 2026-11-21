@@ -59,6 +59,7 @@ final class ChatComposer: NSObject {
         c.wantsLayer = true; c.layer?.backgroundColor = NSColor.clear.cgColor
         c.layer?.cornerRadius = BubbleBackgroundView.cornerRadius; c.layer?.masksToBounds = true
         composer.contentView = c
+        composerEditor.usesCompactContextMenu = true
         composerInput = ChatViewLayout.inputBox(composerEditor)
         recovery.orientation = .vertical; recovery.alignment = .leading; recovery.spacing = 8; recovery.isHidden = true
         status.font = .systemFont(ofSize:14); status.textColor = .labelColor

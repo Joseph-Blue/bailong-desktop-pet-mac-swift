@@ -11,6 +11,7 @@ struct UpdateFailure: Error {
     let title: String
     let message: String
     let detail: String
+    var retryAt: Date? = nil
 
     static func network(_ error: Error) -> Self {
         let error = error as NSError
@@ -40,7 +41,7 @@ struct UpdateFailure: Error {
         }
         return Self(title:text.0,message:text.1,detail:detail)
     }
-    static func http(_ response: HTTPURLResponse) -> Self {
+    static func http(_ response: HTTPURLResponse, body:Data?) -> Self {
         let code = response.statusCode
         let retry = response.value(forHTTPHeaderField:"Retry-After")
         let remaining = response.value(forHTTPHeaderField:"X-RateLimit-Remaining")
@@ -49,22 +50,25 @@ struct UpdateFailure: Error {
         for key in ["Retry-After","X-RateLimit-Remaining","X-RateLimit-Reset","X-GitHub-Request-Id"] {
             if let value = response.value(forHTTPHeaderField:key) {detail += "\n\(key)：\(value)"}
         }
-        if code == 429 || (code == 403 && (remaining == "0" || retry != nil)) {
-            var resume: Date?
+        let secondaryLimit = code == 403 && body.flatMap {String(data:$0,encoding:.utf8)}?.localizedCaseInsensitiveContains("secondary rate limit") == true
+        if code == 429 || secondaryLimit || (code == 403 && (remaining == "0" || retry != nil)) {
+            let now = Date()
+            var retryAt: Date?
             if let retry {
                 if let seconds = Double(retry), seconds.isFinite, seconds >= 0 {
-                    resume = Date().addingTimeInterval(seconds)
+                    retryAt = now.addingTimeInterval(seconds)
                 } else {
                     let format = DateFormatter(); format.locale = Locale(identifier:"en_US_POSIX")
                     format.timeZone = TimeZone(secondsFromGMT:0); format.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-                    resume = format.date(from:retry)
+                    retryAt = format.date(from:retry)
                 }
             }
-            if resume == nil, remaining == "0", let reset, let seconds = Double(reset), seconds.isFinite {
-                resume = Date(timeIntervalSince1970:seconds)
+            var resetAt: Date?
+            if remaining == "0", let reset, let seconds = Double(reset), seconds.isFinite {
+                resetAt = Date(timeIntervalSince1970:seconds)
             }
-            let message = resume.map {"可在 " + DateFormatter.localizedString(from:$0,dateStyle:.short,timeStyle:.medium) + " 后重新检查。"} ?? "请稍后重新检查。"
-            return Self(title:"检查次数已达上限",message:message,detail:detail)
+            let resume = [retryAt,resetAt].compactMap {$0}.filter {$0 > now}.max() ?? now.addingTimeInterval(60)
+            return rateLimited(until:resume,detail:detail)
         }
         switch code {
         case 401,403: return Self(title:"更新请求被拒绝",message:"GitHub 未接受这次请求，请稍后重试。",detail:detail)
@@ -73,6 +77,10 @@ struct UpdateFailure: Error {
         case 500...599: return Self(title:"更新服务响应异常",message:"请稍后重试，或直接查看 GitHub 发布页。",detail:detail)
         default: return Self(title:"更新检查未完成",message:"请重新检查，或前往 GitHub 发布页查看。",detail:detail)
         }
+    }
+    static func rateLimited(until date:Date,detail:String? = nil) -> Self {
+        let time = DateFormatter.localizedString(from:date,dateStyle:.short,timeStyle:.medium)
+        return Self(title:"检查次数已达上限",message:"可在 \(time) 后重新检查。",detail:detail ?? "GitHub 限流恢复时间：\(time)",retryAt:date)
     }
     static func unreadable(_ detail: String) -> Self {
         Self(title:"未能读取更新信息",message:"收到的发布信息不完整或格式不正确。",detail:detail)
@@ -85,6 +93,9 @@ final class UpdateChecker: NSObject {
     static let didChange = Notification.Name("BailongUpdateCheckChanged")
     static let repository = URL(string:"https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift")!
     static let releases = repository.appendingPathComponent("releases")
+    private static let lastAttemptKey = "updateLastAttempt"
+    private static let retryAtKey = "updateRetryAt"
+    private static let automaticInterval: TimeInterval = 24 * 60 * 60
     private var session: URLSession?
     private var task: URLSessionDataTask?
     private var generation = 0
@@ -126,6 +137,20 @@ final class UpdateChecker: NSObject {
             if !automatically {automatic = false; notify()}
             return
         }
+        let defaults = UserDefaults.standard, now = Date()
+        if let retryAt = defaults.object(forKey:Self.retryAtKey) as? Date, now < retryAt {
+            if !automatically {
+                if failure?.retryAt != retryAt {failure = .rateLimited(until:retryAt)}
+                status = failure!.title
+                notify()
+            }
+            return
+        }
+        if automatically, let lastAttempt = defaults.object(forKey:Self.lastAttemptKey) as? Date,
+           now.timeIntervalSince(lastAttempt) < Self.automaticInterval {return}
+        // Record the attempt before starting the request so cancellation and relaunch count too.
+        defaults.set(now,forKey:Self.lastAttemptKey)
+        defaults.removeObject(forKey:Self.retryAtKey)
         generation += 1; let requestGeneration = generation
         automatic = automatically; checking = true; release = nil; releaseURL = nil
         failure = nil; slow = false
@@ -149,7 +174,7 @@ final class UpdateChecker: NSObject {
             let result: Result<GitHubRelease,Error> = Result {
                 if let error {throw error}
                 guard let response = response as? HTTPURLResponse else {throw UpdateFailure.unreadable("未收到 HTTP 响应。")}
-                guard response.statusCode == 200 else {throw UpdateFailure.http(response)}
+                guard response.statusCode == 200 else {throw UpdateFailure.http(response,body:data)}
                 guard let data, !data.isEmpty else {throw UpdateFailure.unreadable("HTTP 200，响应正文为空。")}
                 let release: GitHubRelease
                 do {release = try JSONDecoder().decode(GitHubRelease.self,from:data)}
@@ -189,6 +214,7 @@ final class UpdateChecker: NSObject {
             }
         case .failure(let error):
             failure = (error as? UpdateFailure) ?? UpdateFailure.network(error)
+            if let retryAt = failure?.retryAt {UserDefaults.standard.set(retryAt,forKey:Self.retryAtKey)}
             status = failure!.title
         }
         UserDefaults.standard.set(Date(),forKey:"updateLastCheck")

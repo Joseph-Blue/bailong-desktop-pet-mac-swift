@@ -62,7 +62,7 @@ final class PetPreferences {
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let tokenDetailsKey = "tokenDetailsExpanded"
     static let defaults: [String:Any] = [
-        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":20,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
+        "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":50,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"","petChatFastMode":false,
         "taskInfoBarEnabled":true,"gitWindowEnabled":false,GitStatusStyle.key:GitStatusStyle.defaultStyle.rawValue,tokenDetailsKey:false,TokenCountFormat.key:TokenCountFormat.full.rawValue,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,

@@ -6,6 +6,10 @@ enum PanelPresentation {
         parent?.screen ?? NSScreen.screens.first {$0.frame.contains(NSEvent.mouseLocation)} ?? NSScreen.main
     }
 
+    static func setAnchoredWindowLevel(_ window:NSWindow) {
+        if window.level < .statusBar {window.level = .statusBar}
+    }
+
     static func center(_ window:NSWindow,on screen:NSScreen?) {
         guard let screen else {return}
         let available = screen.visibleFrame
@@ -27,6 +31,18 @@ enum PanelPresentation {
         let response = panel.runModal()
         NotificationCenter.default.removeObserver(observer)
         completion(response)
+    }
+}
+
+final class AnchoredPopover:NSPopover {
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(self,selector:#selector(didShow(_:)),name:NSPopover.didShowNotification,object:self)
+    }
+    required init?(coder:NSCoder) {fatalError()}
+
+    @objc private func didShow(_ notification:Notification) {
+        if let window = contentViewController?.view.window {PanelPresentation.setAnchoredWindowLevel(window)}
     }
 }
 

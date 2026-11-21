@@ -4,7 +4,7 @@ import AppKit
 final class SettingsValueButton:NSButton,NSPopoverDelegate {
     private let makeEditor:(SettingsForm) -> Void
     private let preferences:PetPreferences
-    private var popover:NSPopover?
+    private var popover:AnchoredPopover?
     init(label:String,preferences:PetPreferences,makeEditor:@escaping (SettingsForm) -> Void) {
         self.preferences = preferences; self.makeEditor = makeEditor
         super.init(frame:.zero)
@@ -23,7 +23,7 @@ final class SettingsValueButton:NSButton,NSPopoverDelegate {
         if let existing = popover?.contentViewController as? ValueEditor {controller = existing}
         else {
             controller = ValueEditor(window:window,preferences:preferences,build:makeEditor)
-            let panel = NSPopover(); panel.behavior = .transient; panel.animates = DisclosureMotion.enabled
+            let panel = AnchoredPopover(); panel.behavior = .transient; panel.animates = DisclosureMotion.enabled
             panel.delegate = self; panel.contentViewController = controller; panel.contentSize = controller.preferredContentSize
             popover = panel; panel.show(relativeTo:bounds,of:self,preferredEdge:.minY)
         }

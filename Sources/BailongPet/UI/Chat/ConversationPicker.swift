@@ -102,6 +102,7 @@ private final class ConversationSearchPanel:ContentCursorPanel {
     }
 
     func present() {
+        PanelPresentation.setAnchoredWindowLevel(self)
         alphaValue = DisclosureMotion.enabled ? 0 : 1
         makeKeyAndOrderFront(nil)
         if alphaValue == 0 {

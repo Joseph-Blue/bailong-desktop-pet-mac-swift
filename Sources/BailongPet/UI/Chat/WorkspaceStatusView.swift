@@ -8,7 +8,7 @@ import AppKit
 final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private let directory = WorkspaceLinkButton()
     private let git = HoverIconButton(symbol:"arrow.triangle.branch",label:"Git 状态"), changes = HoverIconButton(symbol:"doc",label:"本轮文件修改")
-    private let popover = NSPopover()
+    private let popover = AnchoredPopover()
     private let popoverDismissal = PopoverDismissal()
     private var showsChanges = false, fileEdits = [FileEditSummary]()
     private var path = "", conversationKey:String?, taskKey:String?, wasExecuting = false
@@ -363,7 +363,8 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             top.addArrangedSubview(retry)
             setLoading(loading)
         }
-        let settings = HoverIconButton(symbol:"questionmark",label:"打开工作区状态设置")
+        let settings = HoverIconButton(symbol:"questionmark.circle",label:"打开工作区状态设置")
+        settings.symbolConfiguration = .init(pointSize:15,weight:.bold)
         settings.hoverCornerRadius = 10
         settings.widthAnchor.constraint(equalToConstant:22).isActive = true
         settings.heightAnchor.constraint(equalToConstant:22).isActive = true

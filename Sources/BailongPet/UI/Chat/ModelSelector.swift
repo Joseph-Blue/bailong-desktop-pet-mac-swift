@@ -3,7 +3,7 @@ import AppKit
 // 两个聊天入口共享偏好；模型与可用思考档位均来自 app-server。
 final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     let settings: ChatModelSettings
-    private let popover = NSPopover()
+    private let popover = AnchoredPopover()
     var onSummaryChange:() -> Void = {}
     init(_ settings: ChatModelSettings) {
         self.settings = settings; super.init(frame:.zero)

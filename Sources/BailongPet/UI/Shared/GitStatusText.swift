@@ -123,7 +123,6 @@ enum GitStatusText {
                 text.append(NSAttributedString(string:label,attributes:attributes))
             }
         }
-        text.append(NSAttributedString(string:"（本机记录）",attributes:attributes))
         return text
     }
     static func stateDetails(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle) -> NSAttributedString {

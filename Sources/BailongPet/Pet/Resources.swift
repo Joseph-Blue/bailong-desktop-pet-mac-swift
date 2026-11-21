@@ -41,7 +41,10 @@ struct Clip: Decodable {
     let movementAngleRange: [Double]?
     let moveStartMs: Double?
     let moveStopMs: Double?
-    var title: String { name ?? ["idle": "默认待机", "idle2": "待机动作02", "drag": "拖拽", "landing": "落地", "quota": "查询额度"][id] ?? id }
+    var title: String {
+        if id == "idle2" {return "待机动作 02"}
+        return name ?? ["idle": "默认待机", "drag": "拖拽", "landing": "落地", "quota": "查询额度"][id] ?? id
+    }
 }
 struct Catalog: Decodable {
     let idle: Clip
@@ -55,6 +58,15 @@ struct Catalog: Decodable {
     var idles: [Clip] { [idle] + additionalIdleAnimations.prefix(1) }
     var extras: [Clip] { Array(additionalIdleAnimations.dropFirst()) }
     var work: [Clip] { workAnimations.compactMap { $0 } }
+    var movementAnimationsForDisplay: [Clip] {
+        guard let left = movementAnimations.firstIndex(where: {$0.id == "move02left"}),
+              let right = movementAnimations.firstIndex(where: {$0.id == "move02"}),
+              left > right else {return movementAnimations}
+        var clips = movementAnimations
+        let leftRun = clips.remove(at:left)
+        clips.insert(leftRun,at:right)
+        return clips
+    }
     var all: [Clip] { idles + extras + variants + work + movementAnimations + [dragAnimation, landingAnimation, quotaAnimation] }
     static func load() throws -> Catalog {
         try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: Paths.assets.appendingPathComponent("素材清单.json")))

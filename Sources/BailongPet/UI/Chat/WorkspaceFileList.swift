@@ -13,17 +13,15 @@ final class WorkspaceFileTableRow:NSTableRowView {
     override func mouseExited(with event:NSEvent) {hovered = false; needsDisplay = true}
     override func drawBackground(in dirtyRect:NSRect) {
         guard hovered,!isSelected else {return}
-        NSColor.secondaryLabelColor.withAlphaComponent(0.10).setFill()
-        NSBezierPath(roundedRect:bounds.insetBy(dx:2,dy:1),xRadius:5,yRadius:5).fill()
+        WorkspaceFileHighlight.draw(bounds,selected:false,emphasized:false,appearance:effectiveAppearance)
     }
     override func drawSelection(in dirtyRect:NSRect) {
         guard selectionHighlightStyle != .none else {return}
-        AppAccent.selectionColor(for:effectiveAppearance).withAlphaComponent(isEmphasized ? 0.22 : 0.12).setFill()
-        NSBezierPath(roundedRect:bounds.insetBy(dx:2,dy:1),xRadius:5,yRadius:5).fill()
+        WorkspaceFileHighlight.draw(bounds,selected:true,emphasized:isEmphasized,appearance:effectiveAppearance)
     }
 }
 
-// 两种文件详情共用原生透明列表；单击选择，双击定位文件，右键提供文件操作。
+// 两种文件详情共用原生透明列表；单击选择，双击定位文件，右键与重压共用菜单。
 final class WorkspaceFileTable:NSTableView {
     var fileURLForRow:(Int) -> URL? = {_ in nil}
     var fileGroupForRow:(Int) -> GitWorkspaceStatus.Group? = {_ in nil}
@@ -32,70 +30,42 @@ final class WorkspaceFileTable:NSTableView {
         style = .plain; backgroundColor = .clear; headerView = nil
         columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         target = self; doubleAction = #selector(revealClickedFile)
+        let forceClick = WorkspaceFileForceClick(target:self,action:#selector(showForceClickMenu(_:)))
+        forceClick.canOpenMenu = { [weak self] event in
+            guard let self else {return false}
+            let index = row(at:convert(event.locationInWindow,from:nil))
+            return index >= 0 && (fileURLForRow(index) != nil || fileGroupForRow(index) != nil)
+        }
+        addGestureRecognizer(forceClick)
     }
     required init?(coder:NSCoder) {fatalError()}
+    @objc private func showForceClickMenu(_ gesture:WorkspaceFileForceClick) {
+        guard let event = gesture.mouseDownEvent,let menu = menu(for:event) else {return}
+        NSMenu.popUpContextMenu(menu,with:event,for:self)
+    }
     override func menu(for event:NSEvent) -> NSMenu? {
         let index = row(at:convert(event.locationInWindow,from:nil))
         guard index >= 0 else {return nil}
         let file = fileURLForRow(index), group = fileGroupForRow(index)
         guard file != nil || group != nil else {return nil}
-        let menu = NSMenu()
-        if let file {
-            selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)
-            let reveal = NSMenuItem(title:"在访达中显示",action:#selector(revealFile(_:)),keyEquivalent:"")
-            let finder = AppIcons.finder.copy() as! NSImage; finder.size = NSSize(width:16,height:16)
-            reveal.image = finder
-            let copy = NSMenuItem(title:"拷贝文件路径",action:#selector(copyPath(_:)),keyEquivalent:"")
-            copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)
-            for item in [reveal,copy] {item.target = self; item.representedObject = file; menu.addItem(item)}
-            menu.addItem(.separator())
+        if file != nil {selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)}
+        let groupPaths = group.map {group in
+            { [weak self] in self?.filePaths(in:group) ?? [] }
         }
-        if let group {
-            let copyGroup = NSMenuItem(title:"拷贝本组文件路径",action:#selector(copyGroupPaths(_:)),keyEquivalent:"")
-            copyGroup.target = self; copyGroup.representedObject = group
-            copyGroup.image = NSImage(systemSymbolName:"doc.on.clipboard",accessibilityDescription:nil)
-            menu.addItem(copyGroup)
+        let reveal = file.map {file in {WorkspaceFileMenu.reveal(file)}}
+        return WorkspaceFileMenu.make(path:file?.path,reveal:reveal,groupPaths:groupPaths) { [weak self] in
+            self?.filePaths() ?? []
         }
-        let copyAll = NSMenuItem(title:"拷贝所有文件路径",action:#selector(copyAllPaths),keyEquivalent:"")
-        copyAll.target = self
-        copyAll.image = NSImage(systemSymbolName:"list.bullet.clipboard",accessibilityDescription:nil)
-        menu.addItem(copyAll)
-        menu.showProvidedImages()
-        return menu
-    }
-    @objc private func revealFile(_ sender:NSMenuItem) {
-        guard let file = sender.representedObject as? URL else {return}
-        WorkspaceFileRow.reveal(file)
     }
     @objc private func revealClickedFile() {
         guard clickedRow >= 0,let file = fileURLForRow(clickedRow) else {return}
-        WorkspaceFileRow.reveal(file)
+        WorkspaceFileMenu.reveal(file)
     }
-    @objc private func copyPath(_ sender:NSMenuItem) {
-        guard let file = sender.representedObject as? URL else {return}
-        copyPaths(file.path)
-    }
-    @objc private func copyAllPaths() {
-        copyFilePaths()
-    }
-    @objc private func copyGroupPaths(_ sender:NSMenuItem) {
-        guard let group = sender.representedObject as? GitWorkspaceStatus.Group else {return}
-        copyFilePaths(in:group)
-    }
-    private func copyFilePaths(in group:GitWorkspaceStatus.Group? = nil) {
-        var seen = Set<String>()
-        var paths = [String]()
-        for row in 0..<numberOfRows {
-            guard group == nil || fileGroupForRow(row) == group,
-                  let path = fileURLForRow(row)?.path,seen.insert(path).inserted else {continue}
-            paths.append(path)
+    private func filePaths(in group:GitWorkspaceStatus.Group? = nil) -> [String] {
+        (0..<numberOfRows).compactMap {row in
+            guard group == nil || fileGroupForRow(row) == group else {return nil}
+            return fileURLForRow(row)?.path
         }
-        copyPaths(paths.joined(separator:"\n"))
-    }
-    private func copyPaths(_ text:String) {
-        guard !text.isEmpty else {return}
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text,forType:.string)
     }
 }
 
@@ -152,10 +122,6 @@ final class WorkspaceFileRow:NSView {
     }
     required init?(coder:NSCoder) {fatalError()}
     static let countFont = NSFont.monospacedSystemFont(ofSize:12,weight:.semibold)
-    static func reveal(_ file:URL) {
-        if FileManager.default.fileExists(atPath:file.path) {FinderFileReveal.reveal(file)}
-        else {FinderFileReveal.openDirectory(file.deletingLastPathComponent())}
-    }
     static func symbol(for entry:GitWorkspaceStatus.Entry) -> (String,NSColor) {
         if entry.group == .conflicted {return ("exclamationmark.triangle",StatusTextColor.red)}
         switch entry.change {

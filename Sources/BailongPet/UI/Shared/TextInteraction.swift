@@ -38,13 +38,14 @@ enum TextContextMenu {
             var hit = content.hitTest(content.convert(event.locationInWindow,from:nil))
             var inputAncestor = hit
             while let view = inputAncestor {
-                if view is MessageEditor {return event}
+                if let editor = view as? MessageEditor,!editor.usesCompactContextMenu {return event}
                 inputAncestor = view.superview
             }
             while let view = hit {
                 if view is TemplateContextMenu {return event}
                 if let text = view as? NSTextView, text.isEditable || text.isSelectable {
-                    NSMenu.popUpContextMenu(menu(for:text),with:event,for:text); return nil
+                    let context = (text as? AppTextView)?.menu(for:event) ?? menu(for:text)
+                    NSMenu.popUpContextMenu(context,with:event,for:text); return nil
                 }
                 if let field = view as? NSTextField, field.isSelectable || field.isEditable {
                     if field.currentEditor() == nil {field.selectText(nil)}

@@ -3,6 +3,7 @@ import AppKit
 extension NSAttributedString.Key {
     static let fileEditSection = NSAttributedString.Key("BailongFileEditSection")
     static let fileEditDisclosure = NSAttributedString.Key("BailongFileEditDisclosure")
+    static let fileEditRow = NSAttributedString.Key("BailongFileEditRow")
 }
 
 // 显示层元数据，保留完整列表供展开和搜索；不写入历史或助手正文。
@@ -78,14 +79,15 @@ enum FileEditRendering {
         cell(total.map(counts) ?? NSAttributedString(string:""),row:0,column:1)
         let visible = expanded ? edits[...] : edits.prefix(previewCount)
         for (index,edit) in visible.enumerated() {
+            let start = result.length
             let path = NSMutableAttributedString(string:edit.path,attributes:[.font:font,.foregroundColor:NSColor.secondaryLabelColor])
             let name = (edit.path as NSString).lastPathComponent
             let nameRange = NSRange(location:path.length-(name as NSString).length,length:(name as NSString).length)
             path.addAttribute(.font,value:NSFont.systemFont(ofSize:font.pointSize,weight:.medium),range:nameRange)
             path.addAttribute(.foregroundColor,value:NSColor.labelColor,range:nameRange)
-            if let link = MessageFileLink.url(forPath:edit.path) {path.addAttributes([.link:link,.cursor:NSCursor.pointingHand],range:NSRange(location:0,length:path.length))}
             cell(path,row:index+1,column:0)
             cell(edit.lines.map(counts) ?? NSAttributedString(string:""),row:index+1,column:1)
+            result.addAttribute(.fileEditRow,value:index,range:NSRange(location:start,length:result.length-start))
         }
         if edits.count > previewCount {
             let style = NSMutableParagraphStyle(); style.paragraphSpacing = 4

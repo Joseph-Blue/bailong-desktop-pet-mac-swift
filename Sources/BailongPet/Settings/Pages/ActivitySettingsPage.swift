@@ -60,7 +60,7 @@ final class ActivitySettingsPage {
             ("待机动作",catalog.idles+catalog.extras,true),
             ("互动动作",catalog.variants,true),
             ("工作动作",catalog.work,true),
-            ("移动动作",catalog.movementAnimations,true),
+            ("移动动作",catalog.movementAnimationsForDisplay,true),
             ("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation],false)
         ]
     }

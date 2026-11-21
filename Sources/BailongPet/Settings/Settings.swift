@@ -458,7 +458,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             form.row("公开仓库",control:ActionButton("GitHub 发布页") {
                 if !NSWorkspace.shared.open(UpdateChecker.releases) {showError("无法打开发布页",PetFailure(message:UpdateChecker.releases.absoluteString))}
             })],symbol:"info.circle")
-        form.group("自动检查",[form.toggle("启动时检查更新","automaticallyCheckUpdates",detail:"发现新版时提醒，检查失败仅记录在本页。")],symbol:"arrow.triangle.2.circlepath")
+        form.group("自动检查",[form.toggle("启动时检查更新","automaticallyCheckUpdates",detail:"每 24 小时最多自动检查一次。发现新版时提醒，检查失败仅记录在本页。")],symbol:"arrow.triangle.2.circlepath")
         let status = form.note(UpdateChecker.shared.recordText), time = label(UpdateChecker.shared.lastCheckText)
         updateStatusLabel = status; updateTimeLabel = time
         form.group("检查记录",[form.row("上次检查时间",control:time),status],symbol:"clock.arrow.circlepath")
