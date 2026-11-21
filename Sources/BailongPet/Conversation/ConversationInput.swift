@@ -8,6 +8,29 @@ enum ConversationKind:Int,CaseIterable {
 extension Conversation {
     var kind:ConversationKind {external ? .project : .persona}
 }
+
+struct ComposerDestination {
+    static let defaultsKey = "lastComposerDestination"
+    let kind:ConversationKind
+    let conversationKey:String?
+
+    init?(defaults:UserDefaults) {
+        guard let saved = defaults.dictionary(forKey:Self.defaultsKey),
+              let raw = saved["kind"] as? Int,let kind = ConversationKind(rawValue:raw) else {return nil}
+        self.kind = kind
+        conversationKey = saved["conversation"] as? String
+    }
+
+    func resolve(in conversations:[Conversation]) -> Conversation? {
+        conversations.first {$0.key == conversationKey && $0.kind == kind}
+    }
+
+    static func save(_ kind:ConversationKind,conversation:Conversation?,in defaults:UserDefaults) {
+        var saved:[String:Any] = ["kind":kind.rawValue]
+        saved["conversation"] = conversation?.key
+        defaults.set(saved,forKey:defaultsKey)
+    }
+}
 enum ChatEntry:Hashable {case composer, history}
 
 // 两个输入入口各自按会话保存文字，仅驻留内存。普通刷新不保存或覆盖输入。
@@ -32,6 +55,8 @@ final class ChatDraftCache {
 
 // 两个界面共用的显示状态，不持有发送逻辑或改变任务生命周期。
 struct ChatInputState {
+    static let jumpToCodexTitle = "跳转到 Codex"
+    static let steeringHint = "Codex 新版桌面端通信方式暂不支持插话，点击「\(jumpToCodexTitle)」进入原会话。"
     var conversation:Conversation?
     var kind:ConversationKind = .persona
     var runningTitle:String?
@@ -44,6 +69,8 @@ struct ChatInputState {
     var replyNote:String?
     var desktopReady = false
     var desktopPreparing = false
+    var requiresCodexForSteering = false
+    var showsSteeringHint:Bool {requiresCodexForSteering && canEdit && !unconfirmed && replyNote == nil}
     var showsModelRetry:Bool {!desktopReady && modelNote?.canRetry == true}
     var canEdit:Bool {conversation != nil && runningTitle == nil && !sending && !readOnly}
     func canSend(models:ChatModelSettings) -> Bool {
@@ -70,6 +97,7 @@ struct ChatInputState {
         if ownsRunningTask {return PetPreferences.shared.statusLine("historyBusyTemplate")}
         if let runningTitle {return "桌宠任务正在执行："+runningTitle}
         if let replyNote {return replyNote}
+        if showsSteeringHint {return Self.steeringHint}
         if kind == .project {
             if replyMode == nil {return "当前会话等待处理，请转到 Codex"}
             if !desktopReady {return "发送时连接原会话；未就绪时打开 Codex"}

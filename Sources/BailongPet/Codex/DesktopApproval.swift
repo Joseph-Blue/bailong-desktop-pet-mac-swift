@@ -7,6 +7,9 @@ struct DesktopApproval {
     let details:String
     struct DetailSection {let key:String, title:String, text:String, codeLanguage:String?}
     let detailSections:[DetailSection]
+    private var hookDecision:((DesktopPermissionHook.Decision?)->Bool)?
+    var isHook:Bool {hookDecision != nil}
+    func handoffToCodex() {_ = hookDecision?(nil)}
     let canAllow:Bool
     var identity:String {source+":"+thread+":"+turn+":"+String(describing:requestID)}
     var allowTitle:String {method == "item/permissions/requestApproval" ? "允许本轮" : "允许这一次"}
@@ -41,8 +44,21 @@ struct DesktopApproval {
         }
         details = detailSections.map {$0.title+"\n"+$0.text}.joined(separator:"\n\n")
     }
+    init(hook:DesktopPermissionHook.Request,id:UUID,decide:@escaping (DesktopPermissionHook.Decision?)->Bool) {
+        thread = hook.thread; turn = hook.turn; source = "PermissionRequest"; method = "Bash"
+        requestID = id.uuidString; params = [:]; canAllow = true; hookDecision = decide
+        var sections = [DetailSection(key:"command",title:"执行命令",text:hook.command,codeLanguage:"shell"),
+                        DetailSection(key:"cwd",title:"会话目录",text:hook.cwd,codeLanguage:nil)]
+        if let reason = hook.reason,!reason.isEmpty {sections.append(.init(key:"description",title:"审批理由",text:reason,codeLanguage:nil))}
+        detailSections = sections; details = sections.map {$0.title+"\n"+$0.text}.joined(separator:"\n\n")
+    }
     // 用户明确点击后才调用；新连接读取原 owner 的最新快照，再提交完全相同的请求。
     func submit(allow:Bool,completion:@escaping (Error?) -> Void) {
+        if let hookDecision {
+            let sent = hookDecision(allow ? .allow : .deny)
+            completion(sent ? nil : PetFailure(message:"审批请求已结束，请查看 Codex 原会话。"))
+            return
+        }
         DispatchQueue.global(qos:.userInitiated).async {
             do {
                 let connection = try DesktopSocket(timeoutSeconds:4)

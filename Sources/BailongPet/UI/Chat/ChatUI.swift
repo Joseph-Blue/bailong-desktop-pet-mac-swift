@@ -34,6 +34,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     let list = HistoryTableView()
     private let workspaceStatus = WorkspaceStatusView()
     let historyStatus = label(PetPreferences.shared.fixedText("主人的叮嘱，我都记在这台电脑里啦"))
+    private let historySteeringHint = ChatViewLayout.steeringHint()
     let models: ChatModelSettings
     let composerModels = ChatModelSettings()
     private(set) var historyModel: ModelSelector!
@@ -65,7 +66,11 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var onComposerSelect:(String) -> Void = {_ in}, onMode:(ConversationKind) -> Void = {_ in}
     var onReleaseHistory:() -> Void = {}
     var onHistoryPage:(Conversation,[Turn]) -> Void = {_,_ in}
-    var onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}, onComposerResize: () -> Void = {}
+    var onHide: () -> Void = {}, onOpenHistory: () -> Void = {}, onRevealFolder: () -> Void = {}
+    var onComposerResize:() -> Void {
+        get {composerView.onLayoutSizeChange}
+        set {composerView.onLayoutSizeChange = newValue}
+    }
     var presentingFolderPicker:Bool {get {composerView.presentingFolderPicker} set {composerView.presentingFolderPicker = newValue}}
     var isPetInteraction:(NSEvent) -> Bool {get {composerView.isPetInteraction} set {composerView.isPetInteraction = newValue}}
     private var historyInput: MessageInputBox!
@@ -170,8 +175,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let preferences = NSStackView(views:[historyModel,inheritedSettings,historyRetrySettings!,NSView(),historyStop,historyCheck,historyButton]); preferences.spacing = 12; preferences.alignment = .centerY
         historyModelRow = preferences
         historyModel.onSummaryChange = { [weak self] in self?.layoutHistoryModel() }
-        let inputArea = NSStackView(views:[drafting,preferences]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
-        for view in [drafting,preferences] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
+        let inputArea = NSStackView(views:[drafting,historySteeringHint,preferences]); inputArea.orientation = .vertical; inputArea.alignment = .leading; inputArea.spacing = 8
+        for view in [drafting,historySteeringHint,preferences] {view.widthAnchor.constraint(equalTo:inputArea.widthAnchor).isActive = true}
         workspaceStatus.onOpen = { [weak self] in self?.onOpenWorkspace($0) }
         historyStatus.font = .systemFont(ofSize:11); historyStatus.textColor = .secondaryLabelColor
         historyStatus.alignment = .right; historyStatus.maximumNumberOfLines = 1; historyStatus.lineBreakMode = .byTruncatingTail
@@ -269,7 +274,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             item.target = historySplit; item.action = #selector(NSSplitViewController.toggleSidebar(_:))
         case "new": item.label = "新对话"; item.image = NSImage(systemSymbolName:"square.and.pencil",accessibilityDescription:item.label); item.action = #selector(newChat)
         case "folder": item.label = "选择文件夹"; item.image = NSImage(systemSymbolName:"folder",accessibilityDescription:item.label); item.action = #selector(chooseFolder)
-        case "codex": item.label = "跳转到 Codex"; item.image = AppIcons.openAI; item.action = #selector(goCodex)
+        case "codex": item.label = ChatInputState.jumpToCodexTitle; item.image = AppIcons.openAI; item.action = #selector(goCodex)
         case "delete": item.label = "删除记录…"; item.image = NSImage(systemSymbolName:"trash",accessibilityDescription:item.label); item.action = #selector(deleteSelectedConversation)
         case "reveal": item.label = "访达中打开"; item.image = AppIcons.finder; item.action = #selector(revealFolder)
         default: return nil
@@ -302,7 +307,9 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         if let content = history.contentView, content.bounds.width < historyWidth {history.setContentSize(NSSize(width:historyWidth,height:content.bounds.height))}
         history.contentView?.layoutSubtreeIfNeeded()
     }
-    func windowDidResize(_ notification: Notification) {if notification.object as? NSWindow === composer {onComposerResize()} else {resizeHistoryInput()}}
+    func windowDidResize(_ notification: Notification) {
+        if notification.object as? NSWindow === history {resizeHistoryInput()}
+    }
     @objc private func goCodex() {onGoCodex()}
     func focusHistorySearch() {
         searchItem?.beginSearchInteraction()
@@ -487,6 +494,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         historyStop.title = historyState.desktopPreparing ? "取消发送" : historyState.stopping ? "正在停止…" : "停止任务"
         historyStop.isHidden = !historyState.ownsRunningTask && !historyState.desktopPreparing; historyCheck.isHidden = !historyState.unconfirmed
         historyStatus.stringValue = historyState.historyNote
+        historySteeringHint.isHidden = !historyState.showsSteeringHint
+        historyStatus.isHidden = historyState.showsSteeringHint
         let statusHelp = historyState.replyNote ?? historyState.historyNote
         let showsMore = statusHelp != historyState.historyNote
         historyStatus.setHoverHelp(statusHelp) { [weak historyStatus] in showsMore || historyStatus?.hasTruncatedText == true }

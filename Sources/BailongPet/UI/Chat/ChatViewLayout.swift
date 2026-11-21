@@ -1,6 +1,17 @@
 import AppKit
 
 enum ChatViewLayout {
+    static func steeringHint() -> NSTextField {
+        let hint = NSTextField(wrappingLabelWithString:ChatInputState.steeringHint)
+        hint.font = .systemFont(ofSize:NSFont.systemFontSize,weight:.semibold)
+        hint.textColor = .labelColor
+        hint.alignment = .right
+        hint.isSelectable = true
+        hint.setContentCompressionResistancePriority(.required,for:.vertical)
+        hint.isHidden = true
+        return hint
+    }
+
     static func configureSendButton(_ button:ActionButton) {
         button.image = NSImage(systemSymbolName:"arrow.up",accessibilityDescription:nil)
         button.imagePosition = .imageLeading

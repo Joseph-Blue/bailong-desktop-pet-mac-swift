@@ -33,6 +33,7 @@ final class ChatComposer: NSObject {
     private var modes:ChatModeControl!
     private let recentReply = ChatReplyPreview()
     private let inputStatus = ComposerStatusView()
+    private let steeringHint = ChatViewLayout.steeringHint()
     private let inlineStatus = NSTextField(labelWithString:"")
     private var statusText = "", allowsInlineStatus = false, externalModel = false
     private var openCodex:ActionButton!, retrySettings:ActionButton!
@@ -46,6 +47,7 @@ final class ChatComposer: NSObject {
     var onOpenCodex:() -> Void = {}, onRetrySettings:() -> Void = {}
     var onSubmit:() -> Void = {}, onFolder:() -> Void = {}, onNew:() -> Void = {}, onHistory:() -> Void = {}, onHide:() -> Void = {}
     var onNewDefault:() -> Void = {}
+    var onLayoutSizeChange:() -> Void = {}
     init(models:ChatModelSettings) {
         super.init()
         composer.tracksContentCursor = true; composer.acceptsMouseMovedEvents = true
@@ -78,7 +80,7 @@ final class ChatComposer: NSObject {
         composerNew.image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); composerNew.imagePosition = .imageTrailing
         stopButton = ActionButton("停止任务") { [weak self] in self?.onStop() }
         checkButton = ActionButton("检查发送结果") { [weak self] in self?.onCheck() }
-        openCodex = ActionButton("在 Codex 中打开") { [weak self] in self?.onOpenCodex() }
+        openCodex = ActionButton(ChatInputState.jumpToCodexTitle) { [weak self] in self?.onOpenCodex() }
         openCodex.image = AppIcons.openAI; openCodex.imagePosition = .imageLeading
         composerFooterButtons = [historyLink,openCodex,composerNew,stopButton,checkButton,composerButton]
         for button in composerFooterButtons {
@@ -124,14 +126,14 @@ final class ChatComposer: NSObject {
         conversationPicker.widthAnchor.constraint(lessThanOrEqualToConstant:240).isActive = true
         let modeRow = NSStackView(views:[modes!,NSView(),targetCaption,conversationPicker])
         modeRow.alignment = .centerY; modeRow.distribution = .fill; modeRow.spacing = 8
-        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelStrip,inputStatus,footer])
+        let body = NSStackView(views:[workspaceRow,recentReply,composerInput,recovery,modelStrip,inputStatus,steeringHint,footer])
         body.orientation = .vertical; body.alignment = .leading; body.spacing = 8
         let stack = NSStackView(views:[header,modeRow,body]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         contentStack = stack
         c.body.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:c.body.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:c.body.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:c.body.topAnchor,constant:16)])
         [header,modeRow,body].forEach {$0.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
-        [composerInput!,recovery,workspaceRow,recentReply,modelStrip,inputStatus,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
+        [composerInput!,recovery,workspaceRow,recentReply,modelStrip,inputStatus,steeringHint,footer].forEach {$0.widthAnchor.constraint(equalTo:body.widthAnchor).isActive = true}
         inputHeight = composerInput.heightAnchor.constraint(equalToConstant:140); inputHeight.isActive = true
         composerEditor.onTextChange = { [weak self] in self?.updateLayout() }
         composerModel.onSummaryChange = { [weak self] in self?.updateLayout() }
@@ -223,6 +225,7 @@ final class ChatComposer: NSObject {
 
     func updateLayout(force:Bool = false) {
         guard composerVisible || force,let content = composer.contentView else {return}
+        let previousSize = composerMotion.frame.size
         let buttons = composerFooterButtons.filter {!$0.isHidden}
         let footerWidth = buttons.reduce(CGFloat(32+buttons.count*8)) {$0+$1.intrinsicContentSize.width}
         let width = max(540,footerWidth,modes.intrinsicContentSize.width+196)
@@ -248,6 +251,7 @@ final class ChatComposer: NSObject {
         let size = NSSize(width:width,height:height)
         composer.contentMinSize = NSSize(width:width,height:min(height,420))
         if composerMotion.frame.size != size {composerMotion.resize(to:size)}
+        if size != previousSize {onLayoutSizeChange()}
     }
 
     func refreshTurn(_ turn:Turn,in conversation:Conversation,editsChanged:Bool) {
@@ -282,7 +286,8 @@ final class ChatComposer: NSObject {
         retrySettings.isEnabled = !state.sending
         openCodex.isEnabled = state.conversation?.threadID != nil
         recentReply.update(turn:state.conversation?.turns.max(by:{$0.date < $1.date}))
-        statusText = state.note; externalModel = external
+        steeringHint.isHidden = !state.showsSteeringHint
+        statusText = state.showsSteeringHint ? "" : state.note; externalModel = external
         allowsInlineStatus = state.conversation != nil
         stopButton.isHidden = !state.ownsRunningTask && !state.desktopPreparing
         stopButton.isEnabled = !state.stopping

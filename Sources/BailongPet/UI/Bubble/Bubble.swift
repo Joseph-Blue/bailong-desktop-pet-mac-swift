@@ -316,6 +316,7 @@ final class Bubble {
         codexButton = ActionButton("转到 Codex") { [weak self] in
             guard let self else {return}
             let action = self.onCodex
+            self.approval?.request.handoffToCodex()
             self.hide(); self.onClose(); action()
         }
         codexButton.image = AppIcons.openAI; codexButton.imagePosition = .imageLeading; codexButton.imageScaling = .scaleProportionallyDown
@@ -658,7 +659,7 @@ final class Bubble {
         form.request.submit(allow:allow) { [weak self,weak form] error in
             if let context {
                 if let error {TerminalMonitor.active?.write(.approval,context+"  外部审批未确认  ·  "+TerminalMonitor.errorCode(error),.warning)}
-                else {TerminalMonitor.active?.write(.approval,context+"  外部审批已确认",.success)}
+                else {TerminalMonitor.active?.write(.approval,context+(form?.request.isHook == true ? "  审批决定已交给 Hook" : "  外部审批已确认"),.success)}
             }
             guard let self,let form else {return}
             form.isSubmitting = false

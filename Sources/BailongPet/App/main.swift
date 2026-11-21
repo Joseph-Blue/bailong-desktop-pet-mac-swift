@@ -256,7 +256,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Worksp
         if instanceFD >= 0 {close(instanceFD)}
     }
 }
-if CommandLine.arguments.contains("--follow") {FollowLauncher.run()}
+if Array(CommandLine.arguments.dropFirst()) == ["--codex-permission-request"] {
+    // 注册命令以 exec 启动，父进程是发起 Hook 的 Codex。人设与终端 CLI 各走自己的审批。
+    if let desktop = try? DesktopQueue.Destination.running(),desktop.belongsToDesktop(getppid()) {
+        do {try DesktopPermissionHook.run()}
+        catch {FileHandle.standardError.write(Data("桌宠审批连接已结束，转到 Codex 处理。\n".utf8))}
+    }
+} else if CommandLine.arguments.contains("--follow") {FollowLauncher.run()}
 else {
     // AppKit 原生 tooltip 的延迟单位为毫秒；仅写当前应用域。
     UserDefaults.standard.set(200,forKey:"NSInitialToolTipDelay")

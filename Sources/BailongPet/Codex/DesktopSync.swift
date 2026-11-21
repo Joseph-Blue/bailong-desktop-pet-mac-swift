@@ -12,6 +12,27 @@ struct PublicAgentMessage:Equatable {
     var isImage = false
 }
 
+struct DesktopQuestionNotice {
+    static let openInCodex = "这个问题需要你转到 Codex 回复。"
+    let body:String
+    let form:QuestionPresentation?
+
+    init?(_ attention:TaskAttention?,channel:ProjectSendChannel,
+          submit:@escaping ([String:String], @escaping (Error?) -> Void) -> Void,
+          skip:@escaping (Set<String>) -> Void) {
+        guard let attention,attention.kind == .answer else {return nil}
+        if channel == .modern {
+            body = Self.openInCodex
+            form = nil
+        } else {
+            body = attention.body
+            let questions = attention.questions
+            let editable = !attention.isSensitive && !questions.isEmpty && questions.allSatisfy {!$0.id.isEmpty}
+            form = .init(questions:questions,submit:editable ? submit : nil,skip:skip)
+        }
+    }
+}
+
 struct PublicSnapshot {
     var logical: String, actual: String, turn: String, title: String, cwd: String, historyMode: String
     var status: String, started: Double, messages: String, final: String, alert: String, step: String, error: String
@@ -57,6 +78,9 @@ struct PublicSnapshot {
 final class DesktopSync {
     let chat: ChatController
     private let queue = DispatchQueue(label:"白龙娘外部任务只读观察",qos:.utility,autoreleaseFrequency:.workItem)
+    private let permissionHook = DesktopPermissionListener()
+    private var hookChannel:ProjectSendChannel?
+    private var hookStartError:String?
     private let approvalReader = DesktopApprovalReader()
     private var timer: Timer?
     private var reading = false, stopped = false, initial = true
@@ -76,8 +100,10 @@ final class DesktopSync {
     private var fingerprints = [String:[String]](), changedAt = [String:Double](), noticedAt = [String:Double]()
     private var running = Set<String>()
     private var skippedQuestionIDs = Set<String>()
+    private var lastQuestionChannel:ProjectSendChannel?
     private var clearedBefore = UserDefaults.standard.double(forKey:"desktopHistoryClearedBefore")
     func clearLocalProjection() {
+        permissionHook.discard()
         skippedQuestionIDs.removeAll()
         clearedBefore = Date().timeIntervalSince1970
         UserDefaults.standard.set(clearedBefore,forKey:"desktopHistoryClearedBefore")
@@ -98,8 +124,23 @@ final class DesktopSync {
     var status = "正在准备读取本机 Codex 的任务记录。\n读取成功后，这里会显示任务数量、当前状态和最近刷新时间。"
     init(chat: ChatController) {
         self.chat = chat
+        permissionHook.canPresent = { [weak chat] in
+            guard let pet = chat?.pet else {return false}
+            return pet.preferences.projectSendChannel == .modern && !pet.hidden && pet.preferences.allows(.attention)
+        }
         chat.onHistoryDeleted = { [weak self] conversation in self?.forget(conversation) }
         timer = Timer.scheduledTimer(withTimeInterval:0.2,repeats:true) { [weak self] _ in self?.poll() }
+    }
+    private func configurePermissionHook(_ channel:ProjectSendChannel) {
+        guard channel != hookChannel else {return}
+        hookChannel = channel; hookStartError = nil
+        guard channel == .modern else {permissionHook.stop(); return}
+        queue.async {self.approvalReader.close()}
+        do {try permissionHook.start()}
+        catch {
+            let message = "桌宠审批通道未启动："+error.localizedDescription
+            hookStartError = message; TerminalMonitor.active?.write(.approval,message,.warning)
+        }
     }
     private func forget(_ conversation:Conversation) {
         chat.desktopSession.observedTurns.removeAll {$0.threadID == conversation.threadID}
@@ -112,6 +153,7 @@ final class DesktopSync {
     }
     private func poll() {
         guard !stopped else {return}
+        configurePermissionHook(chat.pet.preferences.projectSendChannel)
         chat.checkTaskReminder(now:Date().timeIntervalSince1970)
         chat.refreshDesktopSettingsIfNeeded()
         guard !reading && !stopped else{return}; reading = true
@@ -119,6 +161,7 @@ final class DesktopSync {
         let watched = tracked.values.filter{running.contains($0.key)}
         let unresolvedThreads = Set(chat.store.conversations.filter {$0.external && $0.turns.contains(where:{activeStatuses.contains($0.status)})}.compactMap(\.threadID))
         let titleIDs = chat.store.recordsAutomatically && Date().timeIntervalSince(lastTitleSync) >= 5 ? chat.store.conversations.filter {$0.external && $0.localTitle == nil}.compactMap(\.threadID) : []
+        let legacy = chat.pet.preferences.projectSendChannel == .legacy
         queue.async { [weak self] in
             guard let self else{return}
             do {
@@ -129,30 +172,34 @@ final class DesktopSync {
                 var values = self.historyValues.filter {!excluded.contains($0.logical) && !excluded.contains($0.actual)}
                 var approvalError:String?
                 var monitorIssue:String?
-                do {
-                    let approvals = try self.approvalReader.read(values)
-                    for index in values.indices {
-                        if values[index].isLatest,self.approvalReader.knownThreads.contains(values[index].logical) {
-                            values[index].activity = self.approvalReader.activities[values[index].key]
+                if legacy {
+                    do {
+                        let approvals = try self.approvalReader.read(values)
+                        for index in values.indices {
+                            if values[index].isLatest,self.approvalReader.knownThreads.contains(values[index].logical) {
+                                values[index].activity = self.approvalReader.activities[values[index].key]
+                            }
+                            if let approval = approvals[values[index].key] {
+                                values[index].attention = approval.attention; values[index].approvalID = approval.id; values[index].approval = approval.request
+                                values[index].status = "waitingForApproval"; values[index].alert = approval.attention.body
+                            } else if self.approvalReader.knownThreads.contains(values[index].logical),values[index].attention?.kind == .approval {
+                                values[index].attention = nil; values[index].alert = ""; values[index].status = "inProgress"
+                            }
                         }
-                        if let approval = approvals[values[index].key] {
-                            values[index].attention = approval.attention; values[index].approvalID = approval.id; values[index].approval = approval.request
-                            values[index].status = "waitingForApproval"; values[index].alert = approval.attention.body
-                        } else if self.approvalReader.knownThreads.contains(values[index].logical),values[index].attention?.kind == .approval {
-                            values[index].attention = nil; values[index].alert = ""; values[index].status = "inProgress"
+                        if self.approvalReader.unavailableCount > 0 {
+                            approvalError = "\(self.approvalReader.unavailableCount) 个会话尚未收到 Codex 实时状态。"
+                            monitorIssue = approvalError
                         }
+                    } catch {
+                        approvalError = error.localizedDescription
+                        monitorIssue = "读取实时审批失败  ·  "+TerminalMonitor.errorCode(error)
                     }
-                    if self.approvalReader.unavailableCount > 0 {
-                        approvalError = "\(self.approvalReader.unavailableCount) 个会话尚未收到 Codex 实时状态。"
-                        monitorIssue = approvalError
-                    }
-                } catch {
-                    approvalError = error.localizedDescription
-                    monitorIssue = "读取实时审批失败  ·  "+TerminalMonitor.errorCode(error)
                 }
                 let titles = try DesktopHistoryReader.readTitles(titleIDs)
                 DispatchQueue.main.async {
                     self.reading = false; guard !self.stopped else {return}
+                    guard legacy == (self.chat.pet.preferences.projectSendChannel == .legacy) else {return}
+                    if !legacy {self.permissionHook.project(into:&values)}
                     self.recordReadIssue(monitorIssue)
                     self.chat.desktopTaskReadStatus = nil
                     self.chat.desktopSession.observedTurns = values.filter {$0.isLatest && $0.started > self.clearedBefore && !self.chat.store.deletedThreads.contains($0.logical)}.map(\.observedTurn)
@@ -165,7 +212,7 @@ final class DesktopSync {
                     }
                     let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint || self.tracked[$0.key]?.activity != $0.activity}
                     let recordsChanged = self.accept(values)
-                    if let approvalError {
+                    if let approvalError = approvalError ?? (legacy ? nil : self.hookStartError) {
                         self.diagnostics += " · 审批同步失败："+approvalError
                         self.status += "\n\n实时审批状态未同步："+approvalError
                     }
@@ -175,21 +222,27 @@ final class DesktopSync {
             }
             catch {DispatchQueue.main.async {
                 self.reading = false
+                self.permissionHook.discard()
                 self.recordReadIssue("读取任务记录失败  ·  "+TerminalMonitor.errorCode(error))
                 self.chat.desktopSession.observedTurns = []; self.chat.desktopTaskReadStatus = "Codex 当前任务状态读取失败"; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
         }
     }
     private func accept(_ values: [PublicSnapshot]) -> Bool {
         var changed = false
+        let channel = chat.pet.preferences.projectSendChannel
+        let channelChanged = lastQuestionChannel != nil && lastQuestionChannel != channel
+        lastQuestionChannel = channel
         let now = Date().timeIntervalSince1970
         let excluded = Set(chat.store.conversations.filter{!$0.external}.compactMap{$0.threadID}).union(chat.store.deletedThreads)
         let currentActive = Set(values.filter {$0.isLatest && activeStatuses.contains($0.status)}.map(\.key))
         for key in running.subtracting(currentActive) {
+            if tracked[key]?.attention != nil {chat.pet.bubble.resolveQuestions(taskKey:key)}
             chat.pet.stopObservingTask(key); running.remove(key)
         }
         for var value in values {
             var skippedAll = false
-            if let attention = value.attention,attention.kind == .answer,!attention.isSensitive,!attention.questions.isEmpty {
+            let questionModeChanged = channelChanged && value.attention?.kind == .answer
+            if channel == .legacy,let attention = value.attention,attention.kind == .answer,!attention.isSensitive,!attention.questions.isEmpty {
                 let remaining = attention.questions.filter {!skippedQuestionIDs.contains($0.id)}
                 skippedAll = remaining.isEmpty
                 if remaining.count != attention.questions.count {
@@ -270,7 +323,7 @@ final class DesktopSync {
             }
             if different {
                 if value.activity == nil || !active {chat.pet.bubble.removeActivity(taskKey:key)}
-                if previousAttention != nil && value.attention == nil {chat.pet.bubble.resolveQuestions(taskKey:key)}
+                if active && previousAttention != nil && value.attention == nil {chat.pet.bubble.resolveQuestions(taskKey:key)}
                 if value.alert.isEmpty && !value.status.hasPrefix("waiting") && chat.pet.bubble.purpose == .attention && chat.pet.bubble.relatedConversation == conversation.key {
                     chat.pet.bubble.hide()
                 }
@@ -316,15 +369,17 @@ final class DesktopSync {
                    TaskReminderClock.isDue(now:now,lastProgress:changedAt[key] ?? now,lastNotice:noticedAt[key] ?? now,interval:chat.pet.preferences.number("taskReminderMinutes")*60),
                    chat.showTaskReminder(conversation:conversation,start:turn.date,key:key) {noticedAt[key] = now}
                 let repeatDue = now-(noticedAt[key] ?? now) >= 300
-                if !skippedAll && (different || repeatDue) {
+                if !skippedAll && (different || repeatDue || questionModeChanged) {
                     let quiet = now-(changedAt[key] ?? now) >= 90
-                    let text = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.agentMessages.last(where:{!$0.isFinal})?.text ?? value.messages
+                    let question = DesktopQuestionNotice(value.attention,channel:channel,submit:{ [weak self] answers,completion in
+                        self?.submitAnswers(value,answers:answers,completion:completion)
+                    },skip:{ [weak self] ids in self?.skippedQuestionIDs.formUnion(ids) })
+                    let statusText = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.agentMessages.last(where:{!$0.isFinal})?.text ?? value.messages
+                    let text = question?.body ?? statusText
                     let questionIDs = value.attention?.questions.map(\.id).joined(separator:"\u{001f}") ?? ""
                     let signature = (value.attention?.kind.rawValue ?? "progress")+":"+value.approvalID+":"+questionIDs+":"+text
-                    if (value.attention != nil || value.status.hasPrefix("waiting")) && !text.isEmpty && (turn.notices[signature] == nil || previous?.approval?.details != value.approval?.details || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key,  purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,status:value.attention?.kind.status), question:.init(questions:value.attention?.questions ?? [],submit:value.attention?.kind == .answer && value.attention?.isSensitive == false && value.attention?.questions.allSatisfy({!$0.id.isEmpty}) == true ? { [weak self] answers,completion in
-                            self?.submitAnswers(value,answers:answers,completion:completion)
-                        } : nil,skip:{ [weak self] ids in self?.skippedQuestionIDs.formUnion(ids) }),approval:value.approval.map(ApprovalPresentation.init))
+                    if (value.attention != nil || value.status.hasPrefix("waiting")) && !text.isEmpty && (questionModeChanged || turn.notices[signature] == nil || previous?.approval?.details != value.approval?.details || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
+                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key, purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,status:value.attention?.kind.status), question:question?.form,approval:value.approval.map(ApprovalPresentation.init))
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
                     }
                 }
@@ -368,7 +423,12 @@ final class DesktopSync {
                       Set(questions.map(\.id)).isSubset(of:Set(current.attention?.questions.map(\.id) ?? [])),!questions.isEmpty else {
                     throw PetFailure(message:"这道问题已回答或已结束，请查看 Codex 当前状态。")
                 }
-                DesktopQuestionReply.submit(thread:snapshot.logical,cwd:snapshot.cwd,questions:questions,answers:answers,completion:completion)
+                DispatchQueue.main.async {
+                    guard self.chat.pet.preferences.projectSendChannel == .legacy else {
+                        completion(PetFailure(message:DesktopQuestionNotice.openInCodex)); return
+                    }
+                    DesktopQuestionReply.submit(thread:snapshot.logical,cwd:snapshot.cwd,questions:questions,answers:answers,completion:completion)
+                }
             } catch {DispatchQueue.main.async {completion(error)}}
         }
     }
@@ -396,5 +456,5 @@ final class DesktopSync {
         ]
         return lines.joined(separator:"\n")
     }
-    func close() {diagnostics = "已停止"; stopped = true; timer?.invalidate(); queue.async {self.approvalReader.close()}; status = "任务同步已停止，当前不会读取新的任务状态。"}
+    func close() {permissionHook.stop(); diagnostics = "已停止"; stopped = true; timer?.invalidate(); queue.async {self.approvalReader.close()}; status = "任务同步已停止，当前不会读取新的任务状态。"}
 }

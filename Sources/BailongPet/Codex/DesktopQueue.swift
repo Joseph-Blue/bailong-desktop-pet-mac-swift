@@ -58,7 +58,7 @@ enum DesktopQueue {
             }
         }
 
-        private func belongsToDesktop(_ process:pid_t) -> Bool {
+        func belongsToDesktop(_ process:pid_t) -> Bool {
             guard !app.isTerminated else {return false}
             if process == app.processIdentifier {return true}
             guard let bundle = app.bundleURL else {return false}
@@ -79,7 +79,7 @@ enum DesktopQueue {
     }
 
     static func prepare(thread:String,previousTurn:String,id:UUID,destination:@escaping () throws -> Destination,
-                        waitForLaunch:Bool,isCurrent:@escaping () -> Bool,completion:@escaping (Result<Destination,Error>) -> Void) {
+                        isCurrent:@escaping () -> Bool,completion:@escaping (Result<Destination,Error>) -> Void) {
         func probe(_ pinned:Destination?) {
             guard isCurrent() else {return}
             let candidate = Result {try pinned ?? destination()}
@@ -94,7 +94,7 @@ enum DesktopQueue {
                 }
                 DispatchQueue.main.async {
                     guard isCurrent() else {return}
-                    if waitForLaunch,case .failure(let error) = ready,error is Waiting {
+                    if case .failure(let error) = ready,error is Waiting {
                         DispatchQueue.main.asyncAfter(deadline:.now()+1) {probe(try? candidate.get())}
                     } else {completion(ready)}
                 }

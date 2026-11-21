@@ -8,6 +8,7 @@ extension ChatController {
         else {
             composerSelection = conversation; composerKind = conversation.kind
             recentComposerTargets[conversation.kind] = key
+            ComposerDestination.save(conversation.kind,conversation:conversation,in:.standard)
         }
         loadModels(entry:entry); refresh(); refreshDesktopSettingsIfNeeded()
     }
@@ -18,8 +19,12 @@ extension ChatController {
             selectConversation(remembered.key,entry:.composer)
         } else if let latest = choices.max(by:{$0.lastActivity < $1.lastActivity}) {
             selectConversation(latest.key,entry:.composer)
-        } else if kind == .persona {newConversation(entry:.composer)}
-        else {composerSelection = nil; refresh()}
+        } else {
+            composerSelection = nil
+            ComposerDestination.save(kind,conversation:nil,in:.standard)
+            if kind == .persona {newConversation(entry:.composer)}
+            refresh()
+        }
     }
     func newConversation(cwd:String? = nil,entry:ChatEntry = .history) {
         guard running == nil && !store.isReadOnly else {return}

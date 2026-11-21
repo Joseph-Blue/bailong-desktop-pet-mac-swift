@@ -78,6 +78,7 @@ final class ChatController {
         try store.clear()
         unstartedConversations.removeAll(); recentComposerTargets.removeAll()
         selected = store.create(cwd:LocalStorage.workspace.path); composerSelection = selected; composerKind = .persona
+        UserDefaults.standard.removeObject(forKey:ComposerDestination.defaultsKey)
         modelLoaders.values.forEach {$0.invalidate()}
         ui.clearDrafts(); desktopSession.clear()
         pet.bubble.resolveQuestions(); pet.bubble.discardCards()
@@ -104,6 +105,11 @@ final class ChatController {
         try FileManager.default.createDirectory(at:workspace,withIntermediateDirectories:true)
         selected = store.conversations.last(where:{!$0.external}) ?? store.create(cwd:pet.preferences.defaultWorkspace.path)
         composerSelection = selected; recentComposerTargets[.persona] = selected.key
+        if let saved = ComposerDestination(defaults:.standard) {
+            composerKind = saved.kind
+            composerSelection = saved.resolve(in:store.conversations) ?? (saved.kind == .persona ? selected : nil)
+            recentComposerTargets[saved.kind] = composerSelection?.key
+        }
         pet.settings.historyRecoveryReason = { [weak self] in self?.store.readOnlyReason }
         pet.settings.onReloadHistory = { [weak self] in try self?.reloadHistory() }
         pet.settings.onClearDefaultWorkspace = { [weak self] completion in
@@ -341,8 +347,11 @@ final class ChatController {
                 state.modelNote = .viewInCodex
                 state.replyMode = target?.mode == .start ? .start : nil
                 state.desktopReady = true
-                state.replyNote = desktopSession.replyNote(conversation.key,turnID:target?.id) ?? (state.replyMode == .start
-                    ? "发送到 Codex 原会话" : "请在 Codex 原会话中处理当前任务。")
+                state.requiresCodexForSteering = state.executing && conversation.threadID != nil
+                state.replyNote = desktopSession.replyNote(conversation.key,turnID:target?.id)
+                if state.replyNote == nil && !state.requiresCodexForSteering {
+                    state.replyNote = state.replyMode == .start ? "发送到 Codex 原会话" : "请在 Codex 原会话中处理当前任务。"
+                }
                 return state
             }
             state.replyMode = desktopSession.target(conversation)?.mode
@@ -396,7 +405,11 @@ final class ChatController {
             unstartedConversations.removeAll {$0.key == key}
             recentComposerTargets = recentComposerTargets.filter {$0.value != key}
             if selected === conversation {selected = store.conversations.last ?? store.create(cwd:pet.preferences.defaultWorkspace.path)}
-            if composerSelection === conversation {composerSelection = nil; selectComposerMode(composerKind)}
+            if composerSelection === conversation {
+                composerSelection = nil
+                ComposerDestination.save(composerKind,conversation:nil,in:.standard)
+                if composerKind == .persona {selectComposerMode(.persona)}
+            }
             refresh()
         } catch {showError("记录删除失败",error)}
     }

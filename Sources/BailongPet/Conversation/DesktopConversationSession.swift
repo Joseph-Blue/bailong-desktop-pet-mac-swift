@@ -191,7 +191,7 @@ final class DesktopConversationSession {
             desktopReplyNotes[key] = "原会话缺少有效的 UUID。"; onChange(); return
         }
         let trace = TerminalMonitor.active?.begin(.desktopQueue,context:TerminalMonitor.context(key),event:"准备投递到原会话")
-        desktopSending[key] = PendingSend(id:request,trace:trace)
+        desktopSending[key] = PendingSend(id:request,trace:trace,waitingForQueue:true)
         let isCurrent = { [weak self,weak conversation] in
             guard let self,let conversation else {return false}
             return self.isCurrent(conversation,thread:thread,request:request)
@@ -204,11 +204,9 @@ final class DesktopConversationSession {
                       current.id == previousTurn,current.mode == .start else {
                     throw PetFailure(message:"桌面端或原会话状态已变化。")
                 }
-                if self.desktopSending[key]?.waitingForQueue == true {
-                    self.desktopSending[key]?.waitingForQueue = false
-                    trace?.step("桌面队列已就绪")
-                    self.desktopReplyNotes[key] = "正在向 Codex 队列提交…"; self.onChange()
-                }
+                self.desktopSending[key]?.waitingForQueue = false
+                trace?.step("桌面队列已就绪")
+                self.desktopReplyNotes[key] = "正在向 Codex 队列提交…"; self.onChange()
                 self.queueProcesses[key] = try DesktopQueue.submit(cli:destination.cli,store:destination.store,thread:threadID,text:text) { [weak self] result in
                     guard let self,isCurrent() else {return}
                     self.queueProcesses.removeValue(forKey:key)
@@ -222,30 +220,17 @@ final class DesktopConversationSession {
                 self.onChange()
             }
         }
-        let candidate = Result {try queueDestination()}
-        let needsLaunch:Bool
-        switch candidate {
-        case .failure(DesktopQueue.Waiting.desktop):needsLaunch = true
-        case .success(let destination):needsLaunch = !destination.app.isFinishedLaunching
-        case .failure:needsLaunch = false
+        DispatchQueue.main.asyncAfter(deadline:.now()+coldTotalTimeout) { [weak self,weak conversation] in
+            guard let self,let conversation,isCurrent(),self.preparing(key) else {return}
+            self.failBeforeSend(conversation,stage:"等待原会话就绪超时",error:PetFailure(message:"等待 Codex 打开原会话和消息队列超时。"))
         }
-        if needsLaunch {
-            desktopSending[key]?.waitingForQueue = true
-            DispatchQueue.main.asyncAfter(deadline:.now()+coldTotalTimeout) { [weak self] in
-                guard isCurrent(),self?.desktopSending[key]?.waitingForQueue == true else {return}
-                submitWhenReady(.failure(PetFailure(message:"等待 Codex 桌面端启动并打开消息队列超时。")))
-            }
-            openForReply(conversation,thread:thread,request:request) { [weak self] _ in
-                guard let self else {return}
-                trace?.step("已打开原会话链接，等待桌面队列")
-                self.desktopReplyNotes[key] = "正在等待 Codex 桌面队列就绪…"; self.onChange()
-                DesktopQueue.prepare(thread:thread,previousTurn:previousTurn,id:threadID,destination:self.queueDestination,
-                                     waitForLaunch:true,isCurrent:isCurrent,completion:submitWhenReady)
-            }
-        } else {
-            desktopReplyNotes[key] = "正在向 Codex 队列提交…"; onChange()
-            DesktopQueue.prepare(thread:thread,previousTurn:previousTurn,id:threadID,destination:{try candidate.get()},
-                                 waitForLaunch:false,isCurrent:isCurrent,completion:submitWhenReady)
+        // 队列由桌面端共享；即使进程已运行，也要打开本次发送的会话才能在该页处理消息。
+        openForReply(conversation,thread:thread,request:request) { [weak self] _ in
+            guard let self else {return}
+            trace?.step("已打开原会话链接，等待桌面队列")
+            self.desktopReplyNotes[key] = "正在等待 Codex 桌面队列就绪…"; self.onChange()
+            DesktopQueue.prepare(thread:thread,previousTurn:previousTurn,id:threadID,destination:self.queueDestination,
+                                 isCurrent:isCurrent,completion:submitWhenReady)
         }
     }
     func applyQueueReceipt(_ result:Result<UUID,Error>,to key:String,after previousTurn:String,request:UUID,
