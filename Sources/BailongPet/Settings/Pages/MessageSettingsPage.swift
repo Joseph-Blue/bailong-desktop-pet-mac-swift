@@ -1,6 +1,8 @@
 import AppKit
 
 enum MessageSettingsPage {
+    static let workspaceStatusGroupTitle = "工作区状态"
+
     enum Topic:String,CaseIterable {
         case content = "气泡内容与任务概览", reading = "阅读与预览", input = "输入与审批"
     }
@@ -138,12 +140,12 @@ enum MessageSettingsPage {
             Row("显示任务气泡",.toggle("taskBubbles"),detail:"关闭后仍会显示审批、待回答的问题和错误提示。"),
             Row("任务过程消息",.toggle("progressBubbles",.number("progressSeconds",unit:"秒")),requires:["taskBubbles"]),
             Row("最终回复",.toggle("resultBubbles",.number("resultSeconds",unit:"秒")),requires:["taskBubbles"]),
-            Row("显示任务信息栏",.toggle("taskInfoBarEnabled"),keywords:"在气泡中显示任务信息栏 Git 状态 GitHub 分支 仓库状态 任务概览 本轮文件改动 文件增删 状态栏 进度 工具调用",detail:"在任务气泡和任务概览中显示 Git 状态与本轮文件改动。"),
             Row("思考与工具进展小气泡",.toggle("progressToastEnabled",.number("progressToastSeconds",unit:"秒")),keywords:"自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关",requires:["taskBubbles","progressBubbles"]),
         ]),
-        Group(title:"工作区状态条",image:{GitIcons.git},keywords:"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条",rows:[
-            Row("显示工作区状态条",.toggle("gitWindowEnabled"),detail:"在桌宠旁常驻显示当前会话的目录、Git 状态与本轮文件改动。"),
+        Group(title:workspaceStatusGroupTitle,image:{GitIcons.git},keywords:"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条",rows:[
             Row("Git 状态显示风格",.gitStatusStyle,keywords:GitStatusStyle.options.map(\.1).joined(separator:" ")+" P10k PL10K VS Code VSCode Git CLI Git 状态图例 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后"),
+            Row("显示任务信息栏",.toggle("taskInfoBarEnabled"),keywords:"在气泡中显示任务信息栏 Git 状态 GitHub 分支 仓库状态 任务概览 本轮文件改动 文件增删 状态栏 进度 工具调用",detail:"在任务气泡和任务概览中显示 Git 状态与本轮文件改动。"),
+            Row("显示工作区状态条",.toggle("gitWindowEnabled"),detail:"在桌宠旁常驻显示当前会话的目录、Git 状态与本轮文件改动。"),
         ]),
         Group(title:"显示哪些消息",topic:.content,symbol:"line.3.horizontal.decrease.circle",keywords:"显示思考过程 思考摘要 工具名称 操作 执行状态 短气泡 小窗口 顶部 进展 自动 弹出 开关",rows:[
             Row("互动台词",.toggle("interactionBubbles",.number("interactionSeconds",unit:"秒")),keywords:"通知 显示 开关"),

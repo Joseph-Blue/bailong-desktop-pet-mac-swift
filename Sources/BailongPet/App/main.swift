@@ -1,7 +1,7 @@
 import AppKit
 import Darwin
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WorkspaceStatusSettingsAction {
     var pet: PetController?, chat: ChatController?, sync: DesktopSync?
     var instanceFD: Int32 = -1
     var localEvents: Any?
@@ -156,6 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu?.item(withTag:102)?.title = "退出"+name
     }
     @objc func showSettings() {pet?.showSettings()}
+    func showWorkspaceStatusSettings(_ sender:Any?) {
+        pet?.showSettings(section:.messages,groupTitle:MessageSettingsPage.workspaceStatusGroupTitle)
+    }
     @objc func showAbout() {pet?.showSettings(section:.about)}
     @objc func systemWillTerminate() {explicitQuit = true}
     @objc func quitFromMenu() {explicitQuit = true; FollowSessions.markManualExit(); prepareForTermination()}

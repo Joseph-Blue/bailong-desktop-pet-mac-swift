@@ -78,7 +78,7 @@ class AppTextView: AccentTextView {
     override func menu(for event: NSEvent) -> NSMenu? {TextContextMenu.menu(for:self)}
 }
 
-// 使用自身 TextKit 排版与选择，避免 NSTextField 切换共享 field editor 时丢失制表位。
+// 使用自身 TextKit 排版与选择，避免 NSTextField 切换共享 field editor 时丢失富文本格式。
 final class SelectableRichText:AppTextView {
     override init(frame:NSRect) {
         let storage = NSTextStorage(), manager = NSLayoutManager()
@@ -103,10 +103,10 @@ final class SelectableRichText:AppTextView {
         manager.ensureLayout(for:container)
         return ceil(manager.usedRect(for:container).maxY+2*textContainerInset.height)
     }
-    var firstLineCenter:CGFloat {
-        guard let manager = layoutManager,manager.numberOfGlyphs > 0 else {return bounds.midY}
+    override var firstBaselineOffsetFromTop:CGFloat {
+        guard let manager = layoutManager,manager.numberOfGlyphs > 0 else {return super.firstBaselineOffsetFromTop}
         let line = manager.lineFragmentRect(forGlyphAt:0,effectiveRange:nil)
-        return textContainerOrigin.y+line.minY+manager.location(forGlyphAt:0).y-(font?.capHeight ?? 0)/2
+        return textContainerOrigin.y+line.minY+manager.location(forGlyphAt:0).y
     }
 }
 

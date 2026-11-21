@@ -802,9 +802,9 @@ final class PetController: NSObject, NSMenuDelegate {
         notchDockArea = nil; notchDockDisplayID = nil; view.refreshFrame()
         move(constrained(position,screen:display)); activityOrigin = position; savePosition()
     }
-    func showSettings(section:SettingsSection? = nil) {
+    func showSettings(section:SettingsSection? = nil,groupTitle:String? = nil) {
         if composerVisible { onDismissComposer() }
-        settingsOpen = true; interaction(); settings.show(section:section)
+        settingsOpen = true; interaction(); settings.show(section:section,groupTitle:groupTitle)
     }
     func showDiagnostics() {
         if !preferences.bool("showDiagnostics") {preferences.set(true,for:"showDiagnostics")}

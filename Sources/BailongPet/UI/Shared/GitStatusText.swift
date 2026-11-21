@@ -65,7 +65,7 @@ enum GitStatusText {
             let title:String
             switch kind {
             case .generic:title = "通用 Git 仓库"
-            case .github:title = "GitHub 仓库"
+            case .github:title = "GitHub 远端仓库"
             case .remote:title = "其他远端仓库"
             }
             let icon = GitIcons.repository(kind)

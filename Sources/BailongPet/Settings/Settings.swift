@@ -163,7 +163,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             renderedSection = nil
         }
     }
-    func show(section: SettingsSection? = nil) {
+    func show(section: SettingsSection? = nil,groupTitle:String? = nil) {
         if let section {
             select(section)
         } else if renderedSection != selected {
@@ -174,6 +174,10 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             hasShown = true
         }
         InterfaceWindows.shared.focus(window)
+        if let groupTitle,let target = form.searchAnchors[groupTitle] {
+            scrollToSetting(target,atTop:true)
+            NSAccessibility.post(element:target,notification:.layoutChanged)
+        }
     }
     func select(_ section:SettingsSection,detail:SettingsDetail? = nil) {
         guard let index = SettingsSection.allCases.firstIndex(of:section) else {return}
@@ -284,12 +288,9 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             aboutPage.selectTab(entry.title == "关于" ? "about" : "credits")
             return
         }
-        window.contentView?.layoutSubtreeIfNeeded()
-        guard var target = form.searchAnchors[entry.anchor] ?? form.searchAnchors[entry.group],let document = scroll.documentView else {return}
+        guard var target = form.searchAnchors[entry.anchor] ?? form.searchAnchors[entry.group] else {return}
         if target.isHiddenOrHasHiddenAncestor,let group = form.searchAnchors[entry.group] {target = group}
-        let rect = target.convert(target.bounds,to:document)
-        let y = max(0,min(rect.midY-scroll.contentView.bounds.height/2,document.bounds.height-scroll.contentView.bounds.height))
-        scroll.contentView.scroll(to:NSPoint(x:0,y:y)); scroll.reflectScrolledClipView(scroll.contentView)
+        scrollToSetting(target)
         (target as? any SettingsViewportRow)?.loadControls()
         if let button = target as? SettingsValueButton,button.isEnabled {button.showEditor(focusing:entry.title)}
         let highlight = SettingsSearchHighlight(frame:target.bounds)
@@ -297,6 +298,15 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         target.addSubview(highlight,positioned:.below,relativeTo:nil); searchHighlight = highlight
         NSAccessibility.post(element:target,notification:.layoutChanged)
         DispatchQueue.main.asyncAfter(deadline:.now()+2) { [weak highlight] in highlight?.removeFromSuperview() }
+    }
+    private func scrollToSetting(_ target:NSView,atTop:Bool = false) {
+        window.contentView?.layoutSubtreeIfNeeded()
+        guard let document = scroll.documentView else {return}
+        let rect = target.convert(target.bounds,to:document)
+        let viewportHeight = scroll.contentView.bounds.height
+        let offset = atTop ? rect.minY-12 : rect.midY-viewportHeight/2
+        let y = max(0,min(offset,document.bounds.height-viewportHeight))
+        scroll.contentView.scroll(to:NSPoint(x:0,y:y)); scroll.reflectScrolledClipView(scroll.contentView)
     }
     @objc private func refreshAccent() {
         func update(_ view: NSView) {

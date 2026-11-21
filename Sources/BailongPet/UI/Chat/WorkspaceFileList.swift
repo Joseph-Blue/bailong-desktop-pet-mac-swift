@@ -26,6 +26,7 @@ final class WorkspaceFileTableRow:NSTableRowView {
 // 两种文件详情共用原生透明列表；单击选择，双击定位文件，右键提供文件操作。
 final class WorkspaceFileTable:NSTableView {
     var fileURLForRow:(Int) -> URL? = {_ in nil}
+    var fileGroupForRow:(Int) -> GitWorkspaceStatus.Group? = {_ in nil}
     override init(frame:NSRect) {
         super.init(frame:frame)
         style = .plain; backgroundColor = .clear; headerView = nil
@@ -35,15 +36,30 @@ final class WorkspaceFileTable:NSTableView {
     required init?(coder:NSCoder) {fatalError()}
     override func menu(for event:NSEvent) -> NSMenu? {
         let index = row(at:convert(event.locationInWindow,from:nil))
-        guard index >= 0,let file = fileURLForRow(index) else {return nil}
-        selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)
+        guard index >= 0 else {return nil}
+        let file = fileURLForRow(index), group = fileGroupForRow(index)
+        guard file != nil || group != nil else {return nil}
         let menu = NSMenu()
-        let reveal = NSMenuItem(title:"在访达中显示",action:#selector(revealFile(_:)),keyEquivalent:"")
-        let finder = AppIcons.finder.copy() as! NSImage; finder.size = NSSize(width:16,height:16)
-        reveal.image = finder
-        let copy = NSMenuItem(title:"拷贝文件路径",action:#selector(copyPath(_:)),keyEquivalent:"")
-        copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)
-        for item in [reveal,copy] {item.target = self; item.representedObject = file; menu.addItem(item)}
+        if let file {
+            selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)
+            let reveal = NSMenuItem(title:"在访达中显示",action:#selector(revealFile(_:)),keyEquivalent:"")
+            let finder = AppIcons.finder.copy() as! NSImage; finder.size = NSSize(width:16,height:16)
+            reveal.image = finder
+            let copy = NSMenuItem(title:"拷贝文件路径",action:#selector(copyPath(_:)),keyEquivalent:"")
+            copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil)
+            for item in [reveal,copy] {item.target = self; item.representedObject = file; menu.addItem(item)}
+            menu.addItem(.separator())
+        }
+        if let group {
+            let copyGroup = NSMenuItem(title:"拷贝本组文件路径",action:#selector(copyGroupPaths(_:)),keyEquivalent:"")
+            copyGroup.target = self; copyGroup.representedObject = group
+            copyGroup.image = NSImage(systemSymbolName:"doc.on.clipboard",accessibilityDescription:nil)
+            menu.addItem(copyGroup)
+        }
+        let copyAll = NSMenuItem(title:"拷贝所有文件路径",action:#selector(copyAllPaths),keyEquivalent:"")
+        copyAll.target = self
+        copyAll.image = NSImage(systemSymbolName:"list.bullet.clipboard",accessibilityDescription:nil)
+        menu.addItem(copyAll)
         menu.showProvidedImages()
         return menu
     }
@@ -57,8 +73,29 @@ final class WorkspaceFileTable:NSTableView {
     }
     @objc private func copyPath(_ sender:NSMenuItem) {
         guard let file = sender.representedObject as? URL else {return}
+        copyPaths(file.path)
+    }
+    @objc private func copyAllPaths() {
+        copyFilePaths()
+    }
+    @objc private func copyGroupPaths(_ sender:NSMenuItem) {
+        guard let group = sender.representedObject as? GitWorkspaceStatus.Group else {return}
+        copyFilePaths(in:group)
+    }
+    private func copyFilePaths(in group:GitWorkspaceStatus.Group? = nil) {
+        var seen = Set<String>()
+        var paths = [String]()
+        for row in 0..<numberOfRows {
+            guard group == nil || fileGroupForRow(row) == group,
+                  let path = fileURLForRow(row)?.path,seen.insert(path).inserted else {continue}
+            paths.append(path)
+        }
+        copyPaths(paths.joined(separator:"\n"))
+    }
+    private func copyPaths(_ text:String) {
+        guard !text.isEmpty else {return}
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(file.path,forType:.string)
+        NSPasteboard.general.setString(text,forType:.string)
     }
 }
 

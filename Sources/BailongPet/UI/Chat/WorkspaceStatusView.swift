@@ -1,5 +1,9 @@
 import AppKit
 
+@objc protocol WorkspaceStatusSettingsAction {
+    func showWorkspaceStatusSettings(_ sender:Any?)
+}
+
 // 一条共用的次级信息行：目录入口、Git 摘要、本轮修改。可见入口与倒计时收起的独立小窗按事件更新。
 final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private let directory = WorkspaceLinkButton()
@@ -300,6 +304,10 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     private var rows = [Row]()
     private let table = WorkspaceFileTable()
     var onRetry:() -> Void = {}
+    private func fileEntry(at row:Int) -> GitWorkspaceStatus.Entry? {
+        guard rows.indices.contains(row),case .file(let entry) = rows[row] else {return nil}
+        return entry
+    }
     func restoreReadingPosition(from previous:GitWorkspaceDetails) {
         view.layoutSubtreeIfNeeded()
         if let origin = previous.table.enclosingScrollView?.contentView.bounds.origin,let scroll = table.enclosingScrollView {
@@ -328,6 +336,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     }
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
+        let detailWidth:CGFloat = 420
         let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
         let heading = NSTextField(labelWithString:snapshot?.title ?? "Git 工作区")
         heading.font = .systemFont(ofSize:13,weight:.semibold)
@@ -345,38 +354,55 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
         let title = NSStackView(views:sources); title.alignment = .centerY; title.spacing = 6
         title.addArrangedSubview(heading)
+        let top = NSStackView(views:[title,NSView()])
+        top.alignment = .centerY; top.spacing = 12
         if failure != nil {
             let retry = ActionButton("重试") { [weak self] in self?.onRetry() }
             retryButton = retry
             retry.widthAnchor.constraint(greaterThanOrEqualToConstant:70).isActive = true
-            let top = NSStackView(views:[title,NSView(),retry]); top.alignment = .centerY; top.spacing = 12
-            stack.addArrangedSubview(top)
+            top.addArrangedSubview(retry)
             setLoading(loading)
-        } else {
-            stack.addArrangedSubview(title)
         }
+        let settings = HoverIconButton(symbol:"questionmark",label:"打开工作区状态设置")
+        settings.hoverCornerRadius = 10
+        settings.widthAnchor.constraint(equalToConstant:22).isActive = true
+        settings.heightAnchor.constraint(equalToConstant:22).isActive = true
+        settings.target = NSApp.delegate
+        settings.action = #selector(WorkspaceStatusSettingsAction.showWorkspaceStatusSettings(_:))
+        top.addArrangedSubview(settings)
+        stack.addArrangedSubview(top)
         if let failure,snapshot != nil {
             let error = NSTextField(wrappingLabelWithString:failure); error.textColor = StatusTextColor.orange
             error.font = .systemFont(ofSize:11); stack.addArrangedSubview(error)
         }
+        let summaryFont = NSFont.systemFont(ofSize:11)
         func label(_ value:String) -> NSTextField {
             let field = NSTextField(wrappingLabelWithString:value)
-            field.font = .systemFont(ofSize:11); field.textColor = .labelColor
+            field.font = summaryFont; field.textColor = .labelColor
             field.isSelectable = true; return field
         }
+        func selectableLabel(_ content:NSAttributedString,width:CGFloat) -> SelectableRichText {
+            let text = SelectableRichText(frame:.zero)
+            text.attributedStringValue = content
+            text.selectedTextAttributes = [.backgroundColor:AppAccent.selectedTextBackground]
+            text.heightAnchor.constraint(equalToConstant:text.height(for:width)).isActive = true
+            return text
+        }
         if let snapshot {
+            let summaryInset:CGFloat = 10, captionWidth:CGFloat = 40, columnSpacing:CGFloat = 6
+            let valueWidth = detailWidth-2*summaryInset-captionWidth-columnSpacing
             let summary = NSStackView(); summary.orientation = .vertical; summary.alignment = .leading; summary.spacing = 6
             func metadata(_ title:String,_ value:NSView) {
                 let caption = NSTextField(labelWithString:title)
-                caption.font = .systemFont(ofSize:11); caption.textColor = .labelColor
-                caption.widthAnchor.constraint(equalToConstant:40).isActive = true
+                caption.font = summaryFont; caption.textColor = .labelColor
+                caption.widthAnchor.constraint(equalToConstant:captionWidth).isActive = true
                 value.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
                 value.setContentHuggingPriority(.defaultLow,for:.horizontal)
-                let row = NSStackView(views:[caption,value]); row.alignment = .firstBaseline; row.spacing = 6
+                let row = NSStackView(views:[caption,value]); row.alignment = .firstBaseline; row.spacing = columnSpacing
                 row.distribution = .fill; summary.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo:summary.widthAnchor).isActive = true
             }
-            let workspace = WorkspaceLinkButton(); workspace.font = .systemFont(ofSize:11)
+            let workspace = WorkspaceLinkButton(); workspace.font = summaryFont
             workspace.update(path:snapshot.root)
             workspace.onOpen = {FinderFileReveal.openDirectory($0)}
             metadata("工作区",workspace)
@@ -387,16 +413,14 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             else if let remote = snapshot.remoteName {
                 metadata("远端",label(([remote]+[snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}).joined(separator:" · ")))
             } else {metadata("远端",label(snapshot.remoteNames.isEmpty ? "未配置" : snapshot.remoteNames.joined(separator:"、")))}
-            let upstream = label("")
-            upstream.attributedStringValue = GitStatusText.tracking(snapshot,font:upstream.font!,style:style)
-            metadata("上游",upstream)
-            stack.addArrangedSubview(RoundedSectionBackground(content:summary,horizontalInset:10,verticalInset:8,solidFill:true))
-            let stateLabel = label("")
-            let states = GitStatusText.stateDetails(snapshot,font:stateLabel.font!,style:style)
-            if states.length > 0 {stateLabel.attributedStringValue = states; stack.addArrangedSubview(stateLabel)}
+            let upstream = GitStatusText.tracking(snapshot,font:summaryFont,style:style)
+            metadata("上游",selectableLabel(upstream,width:valueWidth))
+            stack.addArrangedSubview(RoundedSectionBackground(content:summary,horizontalInset:summaryInset,verticalInset:8,solidFill:true))
+            let states = GitStatusText.stateDetails(snapshot,font:summaryFont,style:style)
+            if states.length > 0 {stack.addArrangedSubview(selectableLabel(states,width:detailWidth))}
             if rows.isEmpty {
-                let clean = label("工作区干净"); clean.textColor = StatusTextColor.green
-                stack.addArrangedSubview(clean)
+                let clean = NSAttributedString(string:"工作区干净",attributes:[.font:summaryFont,.foregroundColor:StatusTextColor.green])
+                stack.addArrangedSubview(selectableLabel(clean,width:detailWidth))
             }
         } else {stack.addArrangedSubview(label(failure ?? (loading ? "正在读取 Git 状态…" : "非 Git 工作区")))}
         if !rows.isEmpty {
@@ -407,15 +431,22 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             table.addTableColumn(column); table.rowHeight = 26; table.intercellSpacing = .zero
             table.delegate = self; table.dataSource = self
             table.fileURLForRow = { [weak self] row in
-                guard let self,self.rows.indices.contains(row),case .file(let entry) = self.rows[row],let root = self.snapshot?.root else {return nil}
+                guard let self,let entry = fileEntry(at:row),let root = snapshot?.root else {return nil}
                 return URL(fileURLWithPath:root,isDirectory:true).appendingPathComponent(entry.path)
+            }
+            table.fileGroupForRow = { [weak self] row in
+                guard let self,rows.indices.contains(row) else {return nil}
+                switch rows[row] {
+                case .heading(let group,_):return group
+                case .file(let entry):return entry.group
+                }
             }
             table.setAccessibilityLabel("Git 文件状态，双击在访达中显示，右键显示文件操作")
             scroll.documentView = table; stack.addArrangedSubview(scroll)
             scroll.heightAnchor.constraint(equalToConstant:min(300,rows.indices.reduce(CGFloat.zero) {$0+rowHeight($1)})).isActive = true
         }
         view = NSView(); view.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:view.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-16),stack.widthAnchor.constraint(equalToConstant:420)])
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:view.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-16),stack.widthAnchor.constraint(equalToConstant:detailWidth)])
         for row in stack.arrangedSubviews {row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true}
         preferredContentSize = view.fittingSize
     }
