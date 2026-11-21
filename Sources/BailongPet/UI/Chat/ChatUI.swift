@@ -437,13 +437,14 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         let text = editor.string.trimmingCharacters(in:.whitespacesAndNewlines)
         if !text.isEmpty {onSubmit(key,text,entry)}
     }
-    func clearSubmittedDraft(key:String,fromComposer:Bool,text:String) {
+    @discardableResult func clearSubmittedDraft(key:String,fromComposer:Bool,text:String) -> Bool {
         let entry:ChatEntry = fromComposer ? .composer : .history
-        if drafts.target(entry) == key {
-            let input = editor(entry)
-            if input.string.trimmingCharacters(in:.whitespacesAndNewlines) == text {input.string = ""}
-        }
         drafts.clearSubmitted(key:key,entry:entry,text:text)
+        guard drafts.target(entry) == key else {return false}
+        let input = editor(entry)
+        guard input.string.trimmingCharacters(in:.whitespacesAndNewlines) == text else {return false}
+        input.string = ""
+        return true
     }
     func restoreInput(_ text:String,key:String,entry:ChatEntry) {
         guard drafts.target(entry) == key else {return}

@@ -45,8 +45,8 @@ final class ChatController {
             canSend:{ [unowned self] in self.running == nil },isClosing:{ [unowned self] in self.closing })
         session.onSubmitted = { [weak self] key,text,entry in
             guard let self else {return}
-            self.ui.clearSubmittedDraft(key:key,fromComposer:entry == .composer,text:text)
-            if entry == .composer && self.ui.targetKey(.composer) == key {self.ui.hideComposer()}
+            let cleared = self.ui.clearSubmittedDraft(key:key,fromComposer:entry == .composer,text:text)
+            if cleared && entry == .composer {self.ui.hideComposer()}
         }
         session.onChange = { [weak self] in self?.refresh() }; session.onPersist = { [weak self] in self?.persist() }
         return session
@@ -335,9 +335,13 @@ final class ChatController {
         state.readOnly = store.isReadOnly
         if let conversation,conversation.external {
             state.sending = desktopSession.sending(conversation.key); state.unconfirmed = desktopSession.unconfirmed(conversation.key)
-            if pet.preferences.projectSendChannel == .modern && !state.sending && !state.unconfirmed {
+            if pet.preferences.projectSendChannel == .modern {
+                let target = desktopSession.target(conversation)
                 state.modelNote = .viewInCodex
-                state.replyNote = ProjectSendChannel.pendingNotice
+                state.replyMode = target?.mode == .start ? .start : nil
+                state.desktopReady = true
+                state.replyNote = desktopSession.replyNote(conversation.key,turnID:target?.id) ?? (state.replyMode == .start
+                    ? "发送到已打开的 Codex 原会话" : "请在 Codex 原会话中处理当前任务。")
                 return state
             }
             state.replyMode = desktopSession.target(conversation)?.mode
@@ -631,6 +635,7 @@ final class ChatController {
     }
     func shutdown(_ completion: @escaping () -> Void) {
         closing = true; onFinishedShutdown = completion
+        desktopSession.stopQueueProcesses()
         workspacePanel.hide()
         quotaCoordinator.cancel()
         if running != nil {

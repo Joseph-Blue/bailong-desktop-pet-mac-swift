@@ -162,6 +162,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         }
     }
     func show(section: SettingsSection? = nil,groupTitle:String? = nil) {
+        preferences.refreshDesktopVersion()
         if let section {
             select(section)
         } else if renderedSection != selected {
@@ -423,8 +424,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             form.row("所在显示器",detail:"选择显示器后，桌宠固定在该屏幕内活动和拖动。",control:menu)],symbol:"display")
         form.group(BrowserSearchEngine.group,[form.choice(BrowserSearchEngine.settingTitle,BrowserSearchEngine.key,BrowserSearchEngine.options,
             detail:"在默认浏览器中用所选引擎搜索选中的文字。")],symbol:"magnifyingglass")
-        form.group(ProjectSendChannel.group,[form.choice(ProjectSendChannel.settingTitle,ProjectSendChannel.key,ProjectSendChannel.options,
-            width:300,detail:"新版自动发送待适配。",help:ProjectSendChannel.help)],symbol:"bubble.left.and.bubble.right")
+        let version = form.note("")
+        form.observeValues { [weak version] preferences in
+            version?.stringValue = preferences.projectChannelHint
+        }
+        form.group(ProjectSendChannel.group,[form.segmented(ProjectSendChannel.settingTitle,ProjectSendChannel.key,ProjectSendChannel.options,
+            help:ProjectSendChannel.help,footer:version)],symbol:"bubble.left.and.bubble.right")
     }
     @objc private func refreshDisplays() {
         guard selected == .general,let menu = displayMenu else {return}

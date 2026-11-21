@@ -51,12 +51,26 @@ final class CodexConnection {
     static func desktopApplications() -> [URL] {
         NSWorkspace.shared.runningApplications.filter(isDesktopApplication).compactMap(\.bundleURL) + installedDesktopLocations
     }
+    struct DesktopVersion:Equatable {
+        let number:String
+        let build:String?
+        var display:String {number + (build.map {" ("+$0+")"} ?? "")}
+        init?(_ url:URL) {
+            guard let info = CFBundleCopyInfoDictionaryForURL(url as CFURL) as? [String:Any],
+                  let number = info["CFBundleShortVersionString"] as? String else {return nil}
+            self.number = number; build = info["CFBundleVersion"] as? String
+        }
+    }
+    static func detectDesktopVersion() -> DesktopVersion? {
+        for url in desktopApplications() {
+            if let version = DesktopVersion(url) {return version}
+        }
+        return nil
+    }
     static var desktopDiagnostics:String {
         func summary(_ url:URL?,name:String,status:String) -> String {
-            let bundle = url.flatMap(Bundle.init(url:))
-            let version = bundle?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "版本不可读"
-            let build = (bundle?.object(forInfoDictionaryKey:"CFBundleVersion") as? String).map { " (\($0))" } ?? ""
-            return "\(name) \(version)\(build) · \(status)"
+            let version = url.flatMap(DesktopVersion.init)?.display ?? "版本不可读"
+            return "\(name) \(version) · \(status)"
         }
         let running = NSWorkspace.shared.runningApplications.filter(isDesktopApplication)
         if !running.isEmpty {
@@ -70,7 +84,7 @@ final class CodexConnection {
         let version = String(product[product.index(after:slash)...])
         return SemanticVersion(version) == nil ? nil : version
     }
-    private static let packagedCLI = "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+    static let packagedCLI = "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
     private func installedCLIVersion() -> String {
         struct Package:Decodable {let version:String}
         do {

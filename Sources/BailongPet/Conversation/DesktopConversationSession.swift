@@ -45,6 +45,14 @@ final class DesktopConversationSession {
     private let store:HistoryStore
     private let preferences:PetPreferences
     var observedTurns = [ObservedDesktopTurn]()
+    private var queueProcesses = [String:Process]()
+    private struct UnconfirmedQueueSubmission {
+        let request:UUID
+        let text:String
+        let entry:ChatEntry
+    }
+    private var unconfirmedQueueSubmissions = [String:UnconfirmedQueueSubmission]()
+    private var queuedAfterTurn = [String:String]()
     private let canSend:() -> Bool, isClosing:() -> Bool
     var onChange:() -> Void = {}, onPersist:() -> Void = {}
     var onSubmitted:(String,String,ChatEntry) -> Void = {_,_,_ in}
@@ -82,7 +90,11 @@ final class DesktopConversationSession {
         desktopReplyNotes[key] = "已取消发送，草稿已保留。"; onChange()
     }
     func unconfirmed(_ key:String) -> Bool {desktopUnconfirmed.contains(key)}
-    func replyNote(_ key:String) -> String? {desktopReplyNotes[key]}
+    func replyNote(_ key:String,turnID:String? = nil) -> String? {
+        if let note = desktopReplyNotes[key] {return note}
+        guard let turnID,queuedAfterTurn[key] == turnID else {return nil}
+        return "已排队，等待 Codex 处理。"
+    }
     func modelSettings(_ key:String) -> DesktopReply.Settings? {desktopSettings[key]}
     func modelNote(_ key:String) -> ModelNotice? {desktopModelNotes[key]}
     func canReply(_ key:String) -> Bool {settingsReady.contains(key)}
@@ -90,6 +102,7 @@ final class DesktopConversationSession {
         cancelPreparation(key)
         desktopSettings.removeValue(forKey:key)
         settingsReady.remove(key)
+        queuedAfterTurn.removeValue(forKey:key); unconfirmedQueueSubmissions.removeValue(forKey:key)
         desktopUnconfirmed.remove(key); desktopReplyNotes.removeValue(forKey:key)
         desktopModelNotes.removeValue(forKey:key); desktopModelChecked.removeValue(forKey:key); desktopModelRequests.removeValue(forKey:key)
     }
@@ -97,6 +110,7 @@ final class DesktopConversationSession {
         for key in Array(coldPreparing.keys) {cancelPreparation(key)}
         desktopSettings.removeAll()
         settingsReady.removeAll()
+        queuedAfterTurn.removeAll(); unconfirmedQueueSubmissions.removeAll()
         desktopUnconfirmed.removeAll(); desktopReplyNotes.removeAll()
         desktopModelNotes.removeAll(); desktopModelChecked.removeAll(); desktopModelRequests.removeAll()
     }
@@ -140,8 +154,13 @@ final class DesktopConversationSession {
     }
     func submit(_ text:String,to conversation:Conversation,entry:ChatEntry) {
         let key = conversation.key
-        guard preferences.projectSendChannel == .legacy,!isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
+        guard !isClosing(),canSend(),desktopSending[key] == nil,!desktopUnconfirmed.contains(key),
               let thread = conversation.threadID,let target = target(conversation) else {return}
+        queuedAfterTurn.removeValue(forKey:key)
+        if preferences.projectSendChannel == .modern {
+            if target.mode == .start {submitQueued(text,to:conversation,entry:entry,thread:thread,previousTurn:target.id)}
+            return
+        }
         let request = UUID()
         let trace = TerminalMonitor.active?.begin(.ipc,
             context:TerminalMonitor.context(key)+" 请求#"+TerminalMonitor.tag(request.uuidString),
@@ -162,6 +181,65 @@ final class DesktopConversationSession {
             }
         }
         else {send(.existingConnection)}
+    }
+    private func submitQueued(_ text:String,to conversation:Conversation,entry:ChatEntry,thread:String,previousTurn:String) {
+        let key = conversation.key, request = UUID()
+        guard let threadID = UUID(uuidString:thread) else {
+            desktopReplyNotes[key] = "原会话缺少有效的 UUID。"; onChange(); return
+        }
+        let destination:DesktopQueue.Destination
+        do {destination = try DesktopQueue.Destination.running()}
+        catch {desktopReplyNotes[key] = error.localizedDescription; onChange(); return}
+        let trace = TerminalMonitor.active?.begin(.desktopQueue,context:TerminalMonitor.context(key),event:"准备投递到原会话")
+        desktopSending[key] = PendingSend(id:request,trace:trace)
+        desktopReplyNotes[key] = "正在向 Codex 队列提交…"; onChange()
+        DispatchQueue.global(qos:.userInitiated).async { [weak self,weak conversation] in
+            let ready = Result {
+                try DesktopHistoryReader.requireReplyConversation(thread,previousTurn:previousTurn,steering:false)
+                try destination.requireAvailableQueue(for:threadID)
+            }
+            DispatchQueue.main.async { [weak self,weak conversation] in
+                guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
+                do {
+                    try ready.get()
+                    guard !destination.app.isTerminated,self.canSend(),let current = self.target(conversation),
+                          current.id == previousTurn,current.mode == .start else {
+                        throw PetFailure(message:"桌面端或原会话状态已变化。")
+                    }
+                    self.queueProcesses[key] = try DesktopQueue.submit(cli:destination.cli,store:destination.store,thread:threadID,text:text) { [weak self,weak conversation] result in
+                        guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
+                        self.queueProcesses.removeValue(forKey:key)
+                        self.desktopSending.removeValue(forKey:key)
+                        self.applyQueueReceipt(result,to:key,after:previousTurn,request:request,text:text,entry:entry,trace:trace)
+                    }
+                } catch {
+                    self.desktopSending.removeValue(forKey:key)
+                    trace?.step("入队前停止  ·  "+TerminalMonitor.errorCode(error),.warning)
+                    self.desktopReplyNotes[key] = "消息未发送。"+error.localizedDescription
+                    self.onChange()
+                }
+            }
+        }
+    }
+    func applyQueueReceipt(_ result:Result<UUID,Error>,to key:String,after previousTurn:String,request:UUID,
+                           text:String,entry:ChatEntry,trace:TerminalMonitor.Send?) {
+        switch result {
+        case .success(let id):
+            trace?.step("队列已接纳  ·  队列项#"+TerminalMonitor.tag(id.uuidString),.success)
+            desktopReplyNotes.removeValue(forKey:key)
+            queuedAfterTurn[key] = previousTurn
+            onSubmitted(key,text,entry)
+        case .failure(let error):
+            trace?.step("队列回执待确认",.warning)
+            desktopReplyNotes[key] = error.localizedDescription
+            unconfirmedQueueSubmissions[key] = UnconfirmedQueueSubmission(request:request,text:text,entry:entry)
+            desktopUnconfirmed.insert(key)
+        }
+        onChange()
+    }
+    func stopQueueProcesses() {
+        for task in queueProcesses.values where task.isRunning {kill(task.processIdentifier,SIGKILL)}
+        queueProcesses.removeAll()
     }
     private func isCurrent(_ conversation:Conversation,thread:String,request:UUID) -> Bool {
         !isClosing() && desktopSending[conversation.key]?.id == request && conversation.threadID == thread &&
@@ -328,6 +406,24 @@ final class DesktopConversationSession {
         guard desktopUnconfirmed.contains(key) else {return}
         CodexConnection.openConversation(conversation.threadID)
         let alert = NSAlert(); alert.messageText = "确认消息是否已发送"
+        if let submission = unconfirmedQueueSubmissions[key] {
+            alert.messageText = "检查原会话中的消息"
+            alert.informativeText = "请检查原会话和待发送队列，确认这条消息的状态。"
+            alert.addButton(withTitle:"稍后确认")
+            alert.addButton(withTitle:"已看到消息")
+            alert.addButton(withTitle:"确认未入队或已移除")
+            alert.applyAccent()
+            alert.beginSheetModal(for:parent) { [weak self] response in
+                guard let self,self.unconfirmedQueueSubmissions[key]?.request == submission.request,
+                      self.store.conversations.contains(where:{$0 === conversation}),
+                      response == .alertSecondButtonReturn || response == .alertThirdButtonReturn else {return}
+                self.unconfirmedQueueSubmissions.removeValue(forKey:key)
+                self.desktopUnconfirmed.remove(key); self.desktopReplyNotes.removeValue(forKey:key)
+                if response == .alertSecondButtonReturn {self.onSubmitted(key,submission.text,submission.entry)}
+                self.onChange()
+            }
+            return
+        }
         alert.informativeText = "请在 Codex 的“\(conversation.title)”中查看这条消息。确认未发送后，才能再次发送。草稿已保留。"
         alert.addButton(withTitle:"稍后确认"); alert.addButton(withTitle:"确认未发送，重新编辑"); alert.applyAccent()
         alert.beginSheetModal(for:parent) { [weak self] response in

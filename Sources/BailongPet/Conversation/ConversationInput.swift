@@ -65,7 +65,7 @@ struct ChatInputState {
         if readOnly {return "历史只读：请在设置 → 高级导出原文件或重新读取"}
         if conversation == nil {return "请选择 Codex 项目对话"}
         if sending {return replyNote ?? "正在发送…"}
-        if unconfirmed {return "发送结果待确认，草稿已保留"}
+        if unconfirmed {return replyNote ?? "发送结果待确认，草稿已保留"}
         if stopping {return PetPreferences.shared.statusLine("taskStoppingTemplate")}
         if ownsRunningTask {return PetPreferences.shared.statusLine("historyBusyTemplate")}
         if let runningTitle {return "桌宠任务正在执行："+runningTitle}

@@ -45,12 +45,12 @@ final class TerminalMonitor {
 
     enum Module:String {
         case app = "应用", persona = "内置", desktop = "桌面观察", approval = "审批"
-        case server = "app-server", ipc = "桌面 IPC"
+        case server = "app-server", ipc = "桌面 IPC", desktopQueue = "桌面队列"
         case bubble = "气泡", animation = "动画", history = "历史"
         var color:String? {
             switch self {
             case .server:return "1;36"
-            case .ipc,.desktop:return "35"
+            case .ipc,.desktop,.desktopQueue:return "35"
             case .animation:return "94"
             case .bubble:return "32"
             default:return nil

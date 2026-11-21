@@ -5,23 +5,25 @@ enum ProjectSendChannel:String, CaseIterable {
 
     static let key = "projectSendChannel"
     static let group = "Codex 项目对话"
-    static let settingTitle = "消息发送方式"
-    static let pendingNotice = "新版自动发送待适配，请在 Codex 原会话中发送。"
+    static let settingTitle = "Codex 桌面端通信方式"
+    static let legacyVersion = "26.1111.21308"
+    static let modernVersion = "26.1117.41037"
+    static let modernSeries = "26.1117"
     static let help = """
-    新版桌面端（默认）
-    在 26.1117.41037 上，桌宠可以打开原会话，旧版通信接口已无法提交回复或插话。新版自动发送待适配。可拷贝草稿，点「在 Codex 中打开」后粘贴并发送。
+    新版（推荐）
+    适配新版 Codex 桌面端，使用新的会话通信机制。\(modernSeries) 系列起默认选用，适配基准为 \(modernVersion)。
 
-    旧版桌面端
-    如果使用 26.1111.21308 或更早版本，可选旧版通道。26.1111.21308 已验证能在原会话提交消息。两个标注版本之间的构建尚未验证发送，可先在 Codex 中手动回复。
+    旧版（兼容）
+    沿用原有 IPC 通信机制，适用于仍支持该接口的旧版 Codex 桌面端。\(modernSeries) 之前默认选用，适配基准为 \(legacyVersion)。
 
-    此选项仅用于 Codex 项目对话。桌宠人设对话沿用自己的连接。
+    默认按桌面端版本选择。手动切换后保留选择。恢复本页默认值后重新自动选择。
     """
-    var title:String {
-        switch self {
-        case .modern: return "新版桌面端（适配版本号 ≥ 26.1117.41037）"
-        case .legacy: return "旧版桌面端（适配版本号 ≤ 26.1111.21308）"
-        }
+    static func recommended(for version:String?) -> Self {
+        guard let version,let current = SemanticVersion(version),
+              let cutoff = SemanticVersion(modernSeries+".0") else {return .modern}
+        return current < cutoff ? .legacy : .modern
     }
+    var title:String {self == .modern ? "新版（推荐）" : "旧版（兼容）"}
     static var options:[(String,String)] {allCases.map {($0.rawValue,$0.title)}}
 }
 
@@ -131,6 +133,19 @@ final class PetPreferences {
         #endif
     }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
+    private(set) var desktopVersion:CodexConnection.DesktopVersion?
+    private var automaticChannel:ProjectSendChannel = .modern
+    var projectChannelHint:String {
+        let current = desktopVersion.map {"当前桌面端 "+$0.display} ?? "未检测到 Codex 桌面端"
+        return current+"，建议选择「"+automaticChannel.title+"」。"
+    }
+    func refreshDesktopVersion() {
+        let version = CodexConnection.detectDesktopVersion()
+        guard version != desktopVersion else {return}
+        desktopVersion = version
+        automaticChannel = ProjectSendChannel.recommended(for:version?.number)
+        notify([ProjectSendChannel.key])
+    }
     var projectSendChannel:ProjectSendChannel {ProjectSendChannel(rawValue:string(ProjectSendChannel.key)) ?? .modern}
     static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
@@ -141,6 +156,8 @@ final class PetPreferences {
     let defaults: UserDefaults
     init(defaults: UserDefaults = SettingsStorage.defaults) {
         self.defaults = defaults
+        desktopVersion = CodexConnection.detectDesktopVersion()
+        automaticChannel = ProjectSendChannel.recommended(for:desktopVersion?.number)
         guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {return}
         TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
         let receivedKeys = ["desktopTaskReceivedTemplate","desktopTaskReceivedBodyTemplate"]
@@ -180,7 +197,11 @@ final class PetPreferences {
     }
 
     static func displayID(_ screen: NSScreen) -> String {(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? ""}
-    func value(_ key: String) -> Any {defaults.object(forKey:key) ?? Self.defaults[key]!}
+    func value(_ key: String) -> Any {
+        if let saved = defaults.object(forKey:key) {return saved}
+        if key == ProjectSendChannel.key {return automaticChannel.rawValue}
+        return Self.defaults[key]!
+    }
     func bool(_ key: String) -> Bool {value(key) as? Bool ?? false}
     func number(_ key: String) -> Double {(value(key) as? NSNumber)?.doubleValue ?? 0}
     func string(_ key: String) -> String {value(key) as? String ?? ""}
@@ -317,7 +338,9 @@ final class PetPreferences {
         }
     }
     func exportData() throws -> Data {
-        let values = Dictionary(uniqueKeysWithValues:Self.defaults.keys.map {($0,value($0))})
+        var values = Dictionary(uniqueKeysWithValues:Self.defaults.keys.map {($0,value($0))})
+        // 缺少手动覆盖时，导入方也按自己的桌面端版本选择。
+        values[ProjectSendChannel.key] = defaults.object(forKey:ProjectSendChannel.key)
         return try JSONSerialization.data(withJSONObject:["schemaVersion":SettingsStorage.schemaVersion,"settings":values],options:[.prettyPrinted,.sortedKeys])
     }
     func importData(_ data: Data, clipIDs: Set<String>) throws {

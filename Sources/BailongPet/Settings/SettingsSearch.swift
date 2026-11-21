@@ -52,7 +52,7 @@ struct SettingsSearchEntry {
         add(.general,"桌面",["全屏时自动隐藏"],"屏幕 多屏")
         add(.general,"桌面",["所在显示器"],"屏幕 多屏 固定 随拖动切换屏幕")
         add(.general,BrowserSearchEngine.group,[BrowserSearchEngine.settingTitle],"在浏览器中搜索 默认浏览器 " + BrowserSearchEngine.options.map(\.1).joined(separator:" "))
-        add(.general,ProjectSendChannel.group,[ProjectSendChannel.settingTitle],"回复 原会话 发送通道 插话 自动发送待适配 " + ProjectSendChannel.options.map(\.1).joined(separator:" "))
+        add(.general,ProjectSendChannel.group,[ProjectSendChannel.settingTitle],"回复 原会话 消息发送方式 IPC 桌面队列 自动 版本 \(ProjectSendChannel.legacyVersion) \(ProjectSendChannel.modernVersion) " + ProjectSendChannel.options.map(\.1).joined(separator:" "))
         add(.identity,"我们怎么称呼彼此",["你的名字","桌宠的名字","特定称呼"],"主人 昵称 用户名 变量")
         add(.identity,"见面时说",["问候语"],"台词 欢迎 动作 播放 预览")
         add(.identity,"工作中台词",["随机工作中台词抽取"],"点击 任务列表 任务概览 随机 抽取 工作中 台词 执行任务中")

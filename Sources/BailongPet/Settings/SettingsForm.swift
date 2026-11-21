@@ -278,7 +278,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         }
         return dependent(result,requires:requires)
     }
-    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],images:[String:NSImage] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,footer:NSView? = nil,changed:(() -> Void)? = nil) -> NSView {
+    func segmented(_ title:String,_ key:String,_ options:[(String,String)],symbols:[String:String] = [:],images:[String:NSImage] = [:],value:String? = nil,enabled:Bool = true,detail:String? = nil,help:String? = nil,footer:NSView? = nil,changed:(() -> Void)? = nil) -> NSView {
         let control = AccentSegmentedControl(labels:options.map(\.1),trackingMode:.selectOne,target:nil,action:nil)
         control.selectedSegment = options.firstIndex {$0.0 == (value ?? preferences.string(key))} ?? 0
         if value == nil {
@@ -297,7 +297,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
             guard options.indices.contains(index) else {return}
             self?.preferences.set(options[index].0,for:key); changed?()
         }
-        let selection = row(title,detail:detail,control:control)
+        let selection = row(title,detail:detail,help:help,control:control)
         guard let footer else {return selection}
         let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
         fill(selection,in:stack); fill(footer,in:stack)
