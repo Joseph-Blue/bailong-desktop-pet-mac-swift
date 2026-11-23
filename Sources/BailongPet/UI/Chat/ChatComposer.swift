@@ -61,10 +61,7 @@ final class ChatComposer: NSObject {
         composer.isMovable = false; composer.isMovableByWindowBackground = false
         composer.hidesOnDeactivate = false
         composer.collectionBehavior.insert(.fullScreenNone)
-        let c = BubbleBackgroundView()
-        // 临时聊天窗统一裁切最终合成边界，避免圆角外露出矩形底板。
-        c.wantsLayer = true; c.layer?.backgroundColor = NSColor.clear.cgColor
-        c.layer?.cornerRadius = BubbleBackgroundView.cornerRadius; c.layer?.masksToBounds = true
+        let c = BubbleBackgroundView(clipsToRoundedBounds:true)
         composer.contentView = c
         composerEditor.usesCompactContextMenu = true
         composerInput = ChatViewLayout.inputBox(composerEditor)

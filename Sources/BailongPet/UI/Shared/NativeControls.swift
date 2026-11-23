@@ -254,9 +254,16 @@ final class BubbleBackgroundView: NSView {
     private var targetOpacity: CGFloat = 1
     private var cursorTracking:NSTrackingArea?
     private let preferences: PetPreferences
-    init(preferences: PetPreferences = .shared) {
+    init(preferences: PetPreferences = .shared, clipsToRoundedBounds:Bool = false) {
         self.preferences = preferences
         super.init(frame:.zero)
+        if clipsToRoundedBounds {
+            // 玻璃与正文共用最终圆角，四角保留透明。
+            wantsLayer = true
+            layer?.backgroundColor = NSColor.clear.cgColor
+            layer?.cornerRadius = Self.cornerRadius
+            layer?.masksToBounds = true
+        }
         addSubview(surface)
         for view in [glassBacking,ordinary,body] {
             surface.addSubview(view); view.autoresizingMask = [.width,.height]

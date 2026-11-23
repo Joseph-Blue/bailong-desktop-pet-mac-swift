@@ -88,10 +88,10 @@ struct SettingsSearchEntry {
         add(.updates,"版本",["当前版本","检查正式版本","公开仓库"],"更新 下载 GitHub 发布")
         add(.updates,"自动检查",["启动时检查更新"],"自动 新版")
         add(.updates,"检查记录",["上次检查时间"],"更新 检查结果")
-        let aboutKeywords = "开源致谢 来源 作者 图标 Lucide SF Symbols GitHub Codex OpenAI 技术栈 AppKit macOS UI skill"
+        let aboutKeywords = "开源致谢 来源 作者 图标 Lucide Brands SF Symbols GitHub Codex OpenAI 技术栈 AppKit macOS UI skill"
         add(.about,"关于",[AboutPageController.Tab.about.rawValue],aboutKeywords)
         add(.about,"关于",[AboutPageController.Tab.credits.rawValue],aboutKeywords+" Git 状态符号 bash-git-prompt Powerlevel10k")
-        add(.about,"关于",[AboutPageController.Tab.thirdPartyNotices.rawValue],"开源许可 许可证 英文原文 图标 Lucide ISC Primer Octicons MIT LobeHub")
+        add(.about,"关于",[AboutPageController.Tab.thirdPartyNotices.rawValue],"开源许可 许可证 英文原文 图标 Lucide Brands ISC GitHub LobeHub MIT")
         for index in entries.indices {
             if entries[index].section == .appearance && entries[index].title == "消息窗口材质" {
                 entries[index].keywords += " SDK 兼容构建 普通材质"

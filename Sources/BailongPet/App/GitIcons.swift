@@ -1,8 +1,5 @@
 import AppKit
 
-// GitHub mark: https://github.com/primer/octicons/blob/main/icons/mark-github-16.svg
-// MIT License — Copyright (c) 2026 GitHub Inc.
-// Full license notices are in THIRD-PARTY-NOTICES.md.
 enum GitIcons {
     static func repository(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSImage {
         switch kind {
@@ -31,40 +28,40 @@ enum GitIcons {
         }
         image.isTemplate = true; image.accessibilityDescription = "Git"; return image
     }()
+
+    // Lucide Brands github.svg: https://github.com/azirali/lucide-brands/blob/main/svg/github.svg
+    // Original artwork from lucide-static v1.0.0 (ISC). See THIRD-PARTY-NOTICES.md.
     private static let github:NSImage = {
         let image = NSImage(size:NSSize(width:16,height:16),flipped:true) { _ in
-            let p = NSBezierPath()
-            p.move(to:NSPoint(x:6.766000,y:11.328000))
-            p.curve(to:NSPoint(x:3.250000,y:7.672000),controlPoint1:NSPoint(x:4.703000,y:11.078000),controlPoint2:NSPoint(x:3.250000,y:9.594000))
-            p.curve(to:NSPoint(x:4.000000,y:5.484000),controlPoint1:NSPoint(x:3.250000,y:6.891000),controlPoint2:NSPoint(x:3.531000,y:6.047000))
-            p.curve(to:NSPoint(x:4.063000,y:3.422000),controlPoint1:NSPoint(x:3.797000,y:4.969000),controlPoint2:NSPoint(x:3.828000,y:3.875000))
-            p.curve(to:NSPoint(x:6.031000,y:4.125000),controlPoint1:NSPoint(x:4.688000,y:3.344000),controlPoint2:NSPoint(x:5.531000,y:3.672000))
-            p.curve(to:NSPoint(x:8.016000,y:3.844000),controlPoint1:NSPoint(x:6.625000,y:3.938000),controlPoint2:NSPoint(x:7.250000,y:3.844000))
-            p.curve(to:NSPoint(x:9.969000,y:4.109000),controlPoint1:NSPoint(x:8.781000,y:3.844000),controlPoint2:NSPoint(x:9.406000,y:3.938000))
-            p.curve(to:NSPoint(x:11.938000,y:3.422000),controlPoint1:NSPoint(x:10.453000,y:3.672000),controlPoint2:NSPoint(x:11.313000,y:3.344000))
-            p.curve(to:NSPoint(x:11.984000,y:5.469000),controlPoint1:NSPoint(x:12.156000,y:3.844000),controlPoint2:NSPoint(x:12.188000,y:4.937000))
-            p.curve(to:NSPoint(x:12.750000,y:7.672000),controlPoint1:NSPoint(x:12.484000,y:6.062000),controlPoint2:NSPoint(x:12.750000,y:6.859000))
-            p.curve(to:NSPoint(x:9.203000,y:11.312000),controlPoint1:NSPoint(x:12.750000,y:9.594000),controlPoint2:NSPoint(x:11.297000,y:11.047000))
-            p.curve(to:NSPoint(x:10.093000,y:13.266000),controlPoint1:NSPoint(x:9.734000,y:11.656000),controlPoint2:NSPoint(x:10.093000,y:12.406000))
-            p.line(to:NSPoint(x:10.093000,y:14.891000))
-            p.curve(to:NSPoint(x:10.953000,y:15.438000),controlPoint1:NSPoint(x:10.093000,y:15.359000),controlPoint2:NSPoint(x:10.484000,y:15.625000))
-            p.curve(to:NSPoint(x:16.000000,y:8.030000),controlPoint1:NSPoint(x:13.781000,y:14.359000),controlPoint2:NSPoint(x:16.000000,y:11.530000))
-            p.curve(to:NSPoint(x:7.984000,y:0.000000),controlPoint1:NSPoint(x:16.000000,y:3.610000),controlPoint2:NSPoint(x:12.406000,y:0.000000))
-            p.curve(to:NSPoint(x:0.000000,y:8.031000),controlPoint1:NSPoint(x:3.563000,y:0.000000),controlPoint2:NSPoint(x:0.000000,y:3.610000))
-            p.curve(to:NSPoint(x:5.172000,y:15.453000),controlPoint1:NSPoint(x:-0.009220,y:11.346744),controlPoint2:NSPoint(x:2.058182,y:14.313537))
-            p.curve(to:NSPoint(x:6.000000,y:14.906000),controlPoint1:NSPoint(x:5.594000,y:15.609000),controlPoint2:NSPoint(x:6.000000,y:15.328000))
-            p.line(to:NSPoint(x:6.000000,y:13.656000))
-            p.curve(to:NSPoint(x:5.250000,y:13.812000),controlPoint1:NSPoint(x:5.781000,y:13.750000),controlPoint2:NSPoint(x:5.500000,y:13.812000))
-            p.curve(to:NSPoint(x:3.172000,y:12.203000),controlPoint1:NSPoint(x:4.219000,y:13.812000),controlPoint2:NSPoint(x:3.610000,y:13.250000))
-            p.curve(to:NSPoint(x:2.453000,y:11.484000),controlPoint1:NSPoint(x:3.000000,y:11.781000),controlPoint2:NSPoint(x:2.812000,y:11.531000))
-            p.curve(to:NSPoint(x:2.203000,y:11.297000),controlPoint1:NSPoint(x:2.266000,y:11.469000),controlPoint2:NSPoint(x:2.203000,y:11.391000))
-            p.curve(to:NSPoint(x:2.828000,y:10.969000),controlPoint1:NSPoint(x:2.203000,y:11.109000),controlPoint2:NSPoint(x:2.516000,y:10.969000))
-            p.curve(to:NSPoint(x:4.078000,y:11.829000),controlPoint1:NSPoint(x:3.281000,y:10.969000),controlPoint2:NSPoint(x:3.672000,y:11.250000))
-            p.curve(to:NSPoint(x:5.109000,y:12.484000),controlPoint1:NSPoint(x:4.391000,y:12.281000),controlPoint2:NSPoint(x:4.718000,y:12.484000))
-            p.curve(to:NSPoint(x:6.109000,y:11.984000),controlPoint1:NSPoint(x:5.500000,y:12.484000),controlPoint2:NSPoint(x:5.750000,y:12.344000))
-            p.curve(to:NSPoint(x:6.766000,y:11.328000),controlPoint1:NSPoint(x:6.375000,y:11.719000),controlPoint2:NSPoint(x:6.579000,y:11.484000))
-            p.close(); NSColor.black.setFill(); p.fill(); return true
+            // The SVG's two circular arcs are represented by cubic curves.
+            let path = NSBezierPath()
+            path.move(to:NSPoint(x:15,y:22))
+            path.line(to:NSPoint(x:15,y:18))
+            path.curve(to:NSPoint(x:14,y:14.5),controlPoint1:NSPoint(x:15.139120,y:16.747290),controlPoint2:NSPoint(x:14.779930,y:15.490125))
+            path.curve(to:NSPoint(x:20,y:9),controlPoint1:NSPoint(x:17,y:14.5),controlPoint2:NSPoint(x:20,y:12.5))
+            path.curve(to:NSPoint(x:19,y:5.5),controlPoint1:NSPoint(x:20.08,y:7.75),controlPoint2:NSPoint(x:19.73,y:6.52))
+            path.curve(to:NSPoint(x:19,y:2),controlPoint1:NSPoint(x:19.28,y:4.35),controlPoint2:NSPoint(x:19.28,y:3.15))
+            path.curve(to:NSPoint(x:16,y:3.5),controlPoint1:NSPoint(x:19,y:2),controlPoint2:NSPoint(x:18,y:2))
+            path.curve(to:NSPoint(x:8,y:3.5),controlPoint1:NSPoint(x:13.36,y:3),controlPoint2:NSPoint(x:10.64,y:3))
+            path.curve(to:NSPoint(x:5,y:2),controlPoint1:NSPoint(x:6,y:2),controlPoint2:NSPoint(x:5,y:2))
+            path.curve(to:NSPoint(x:5,y:5.5),controlPoint1:NSPoint(x:4.7,y:3.15),controlPoint2:NSPoint(x:4.7,y:4.35))
+            path.curve(to:NSPoint(x:4,y:9),controlPoint1:NSPoint(x:4.271873,y:6.515884),controlPoint2:NSPoint(x:3.918472,y:7.752787))
+            path.curve(to:NSPoint(x:10,y:14.5),controlPoint1:NSPoint(x:4,y:12.5),controlPoint2:NSPoint(x:7,y:14.5))
+            path.curve(to:NSPoint(x:9.15,y:16.15),controlPoint1:NSPoint(x:9.61,y:14.99),controlPoint2:NSPoint(x:9.32,y:15.55))
+            path.curve(to:NSPoint(x:9,y:18),controlPoint1:NSPoint(x:8.98,y:16.75),controlPoint2:NSPoint(x:8.93,y:17.38))
+            path.line(to:NSPoint(x:9,y:22))
+            path.move(to:NSPoint(x:9,y:18))
+            path.curve(to:NSPoint(x:2,y:16),controlPoint1:NSPoint(x:4.49,y:20),controlPoint2:NSPoint(x:4,y:16))
+            path.transform(using:AffineTransform(scale:2.0/3.0))
+            path.lineWidth = 4.0/3.0
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
         }
-        image.isTemplate = true; image.accessibilityDescription = "GitHub"; return image
+        image.isTemplate = true
+        image.accessibilityDescription = "GitHub"
+        return image
     }()
 }

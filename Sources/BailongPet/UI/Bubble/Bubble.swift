@@ -236,7 +236,7 @@ final class Bubble {
             self.questionSize = self.window.frame.size; self.motion.adoptUserFrame()
             self.layoutQuestions()
         }
-        let content = BubbleBackgroundView()
+        let content = BubbleBackgroundView(clipsToRoundedBounds:true)
         window.contentView = content
         workspace.isHidden = true
         workspace.onOpen = {FinderFileReveal.openDirectory($0)}

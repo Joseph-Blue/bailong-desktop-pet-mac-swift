@@ -221,7 +221,7 @@ final class AboutPageController: NSViewController {
         heading("图标与标识",to:text)
         link("SF Symbols · Apple",url:"https://developer.apple.com/sf-symbols/",to:text)
         link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
-        link("GitHub 图标 · Primer Octicons（MIT）",url:"https://github.com/primer/octicons",to:text)
+        link("GitHub 图标 · Lucide Brands（ISC）",url:"https://github.com/azirali/lucide-brands",to:text)
         link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
 
         heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)
