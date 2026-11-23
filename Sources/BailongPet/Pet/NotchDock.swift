@@ -36,10 +36,7 @@ enum NotchDockGeometry {
         let canvas = CGRect(x:0,y:0,width:size,height:size)
         let expanded = reference.intersection(canvas)
         let docked = reference.applying(transform(reference:reference,size:size,maximumSize:maximumSize,exposure:exposure,progress:1)).intersection(canvas)
-        return CGRect(x:expanded.minX+(docked.minX-expanded.minX)*progress,
-                      y:expanded.minY+(docked.minY-expanded.minY)*progress,
-                      width:expanded.width+(docked.width-expanded.width)*progress,
-                      height:expanded.height+(docked.height-expanded.height)*progress)
+        return BubblePlacement.interpolatedAnchor(from:expanded,to:docked,progress:progress)
     }
 }
 

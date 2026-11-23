@@ -77,6 +77,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var pending: (Clip, String)?
     var startup: NSPanel?
     var baseBounds: CGRect?
+    private var sideDockOutline: SideDockGeometry.Outline?
+    private var sideDockAnchor: (left:Bool,exposure:CGFloat,bounds:CGRect)?
     var dock: String?
     var dockProgress = 0.0, dockFrom = 0.0, dockTarget = 0.0, dockBegan = 0.0
     var dockAnimating = false {didSet {updateMotionDisplayLink()}}
@@ -144,17 +146,13 @@ final class PetController: NSObject, NSMenuDelegate {
         return CGRect(x: (size - size * scale)/2 + size * offset[0], y: size - size * scale + size * offset[1], width: size * scale, height: size * scale)
     }
     var transform: CGAffineTransform {
-        guard let dock, let baseBounds else { return .identity }
+        guard let dock, baseBounds != nil else { return .identity }
+        let reference = stableLocalBounds
         if dock == "notch",notchDockArea != nil {
-            let reference = CGRect(x:baseBounds.minX*size/512,y:baseBounds.minY*size/512,width:baseBounds.width*size/512,height:baseBounds.height*size/512)
             return NotchDockGeometry.transform(reference:reference,size:size,maximumSize:Self.defaultCanvasSize,exposure:preferences.number("notchExposurePercent")/100,progress:dockProgress)
         }
-        let center = CGPoint(x: size/2, y: size/2)
-        let rotation = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: (dock == "left" ? 1 : -1) * .pi/4 * dockProgress).translatedBy(x: -center.x, y: -center.y)
-        let reference = CGRect(x: baseBounds.minX * size/512, y: baseBounds.minY * size/512, width: baseBounds.width * size/512, height: baseBounds.height * size/512)
-        let bounds = reference.applying(rotation), exposure = 1 - (1-preferences.number("sideExposurePercent")/100) * dockProgress
-        let dx = dock == "left" ? exposure * bounds.width - bounds.maxX : size - exposure * bounds.width - bounds.minX
-        return rotation.concatenating(CGAffineTransform(translationX: dx * dockProgress, y: 0))
+        return SideDockGeometry.transform(reference:reference,size:size,exposure:preferences.number("sideExposurePercent")/100,
+                                          progress:dockProgress,left:dock == "left")
     }
     init(catalog: Catalog, defaults: UserDefaults = SettingsStorage.defaults) {
         self.defaults = defaults; self.catalog = catalog; current = catalog.idle
@@ -254,7 +252,10 @@ final class PetController: NSObject, NSMenuDelegate {
             self.tick()
         },first: { [weak self] frame in
             guard let self, !self.exiting else { return }
-            if clip.id == self.catalog.idle.id && self.baseBounds == nil { self.baseBounds = frame.bounds }
+            if clip.id == self.catalog.idle.id && self.baseBounds == nil {
+                self.baseBounds = frame.bounds
+                self.sideDockOutline = SideDockGeometry.Outline(frame:frame,rect:AnimationTransition.rect(for:clip))
+            }
             if self.animation == nil {
                 self.current = clip; self.mode = mode; self.playbackRate = self.preferences.speed(clip.id); self.began = self.now
                 self.animation = Animation([frame]); self.frameIndex = 0; self.view.refreshFrame()
@@ -506,10 +507,12 @@ final class PetController: NSObject, NSMenuDelegate {
         guard !composerVisible else { return false }
         if snapToNotch(on:screen) {return true}
         guard preferences.bool("sideDockEnabled") else {return false}
-        let a = area(screen), p = position, left = abs(p.x-a.minX), right = abs(a.maxX-p.x-size)
+        let display = screen, visibleFrame = display.visibleFrame, p = position
+        let left = abs(p.x-visibleFrame.minX), right = abs(visibleFrame.maxX-p.x-size)
         guard min(left,right) <= 24 else { return false }
-        dockRestore = p; dock = left <= right ? "left" : "right"
-        move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:p.y))
+        let dockLeft = left <= right
+        dockRestore = p; dock = dockLeft ? "left" : "right"
+        move(CGPoint(x:SideDockGeometry.originX(frame:display.frame,visibleFrame:visibleFrame,size:size,left:dockLeft),y:p.y))
         dockProgress = 0; dockFrom = 0; dockTarget = 1; dockBegan = now; dockAnimating = true
         play(catalog.idle,"idle"); return true
     }
@@ -568,10 +571,25 @@ final class PetController: NSObject, NSMenuDelegate {
         return local.isNull ? window.frame : window.convertToScreen(view.convert(local,to:nil))
     }
     private var bubbleAttachmentFrame: CGRect {
+        if let dock,dock == "left" || dock == "right",let local = sideDockBubbleBounds(left:dock == "left") {
+            return window.convertToScreen(view.convert(local,to:nil))
+        }
         guard dock == "notch",dockAnimating,notchDockArea != nil,baseBounds != nil else {return visiblePetFrame}
         let local = NotchDockGeometry.bubbleAnchor(reference:stableLocalBounds,size:size,
             maximumSize:Self.defaultCanvasSize,exposure:preferences.number("notchExposurePercent")/100,progress:dockProgress)
         return window.convertToScreen(view.convert(local,to:nil))
+    }
+    private func sideDockBubbleBounds(left:Bool) -> CGRect? {
+        guard let baseBounds,let sideDockOutline else {return nil}
+        let exposure = CGFloat(preferences.number("sideExposurePercent"))/100
+        if sideDockAnchor?.left != left || sideDockAnchor?.exposure != exposure {
+            let reference = baseBounds.applying(CGAffineTransform(scaleX:1.0/512,y:1.0/512))
+            let transform = SideDockGeometry.transform(reference:reference,size:1,exposure:exposure,progress:1,left:left)
+            sideDockAnchor = (left,exposure,sideDockOutline.dockedBounds(transform:transform))
+        }
+        guard let bounds = sideDockAnchor?.bounds,!bounds.isNull else {return nil}
+        let docked = bounds.applying(CGAffineTransform(scaleX:size,y:size))
+        return BubblePlacement.interpolatedAnchor(from:stableLocalBounds.intersection(view.bounds),to:docked,progress:dockProgress)
     }
     func showProgressToast(_ activity:TaskActivity?,key:String,timing:TaskTiming,thread:String? = nil) {
         guard let activity,activity.kind != .reply else {
@@ -639,8 +657,10 @@ final class PetController: NSObject, NSMenuDelegate {
             }
         }
         if dock == "notch" {repositionNotchDock(); return}
-        move(constrained(position,screen:screen))
-        if dock != nil {let a = area(screen); move(CGPoint(x:dock == "left" ? a.minX : a.maxX-size,y:position.y))}
+        let display = screen
+        var origin = constrained(position,screen:display)
+        if let dock {origin.x = SideDockGeometry.originX(frame:display.frame,visibleFrame:display.visibleFrame,size:size,left:dock == "left")}
+        move(origin)
     }
     func taskStarted(_ key: String) { let first = activeTasks.isEmpty; activeTasks.insert(key); interaction()
         if preferences.bool("taskOpening") && first && !hidden && dock == nil && !gestures.isPressed, let clip = catalog.work.first(where:{$0.id == "work01"}) { play(clip,"opening") }

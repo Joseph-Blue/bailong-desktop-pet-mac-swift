@@ -7,6 +7,13 @@ enum BubblePlacement {
     struct Result {let frame:CGRect; let side:Side}
     private static let gap:CGFloat = 10
 
+    static func interpolatedAnchor(from expanded:CGRect,to docked:CGRect,progress:CGFloat) -> CGRect {
+        CGRect(x:expanded.minX+(docked.minX-expanded.minX)*progress,
+               y:expanded.minY+(docked.minY-expanded.minY)*progress,
+               width:expanded.width+(docked.width-expanded.width)*progress,
+               height:expanded.height+(docked.height-expanded.height)*progress)
+    }
+
     static func originX(width:CGFloat,side:Side,pet:CGRect,area:CGRect) -> CGFloat {
         let x:CGFloat
         switch side {
