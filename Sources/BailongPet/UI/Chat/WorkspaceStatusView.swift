@@ -243,7 +243,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let heading = snapshot.title+(snapshot.initial ? " · 首次提交前" : "")
         let compactHeading = snapshot.operation.map {heading+" · "+$0.compactTitle} ?? heading
         let help = NSMutableAttributedString(string:compactHeading+"\n",attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.labelColor])
-        help.append(GitStatusText.legend(style))
+        help.append(GitStatusText.legend(style,snapshot))
         git.setHoverHelp(help) { [weak self] in
             guard let self,!self.popover.isShown else {return false}
             return self.git.imagePosition == .imageOnly || self.git.hasTruncatedTitle(in:self.git.contentBounds)
@@ -255,7 +255,8 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         git.contentTintColor = .secondaryLabelColor
         let tracking = GitStatusText.tracking(snapshot,font:font).string
         let repository = snapshot.repositoryKind == .generic ? nil : snapshot.repositoryKind.title
-        let accessibility = [repository,heading,snapshot.detachedSummary,snapshot.operation?.detailTitle,snapshot.summary,"上游："+tracking]
+        let push = snapshot.pushTarget.map {GitStatusText.pushTitle+"："+GitStatusText.push($0,font:font).string}
+        let accessibility = [repository,heading,snapshot.detachedSummary,snapshot.operation?.detailTitle,snapshot.summary,"上游："+tracking,push]
         git.setAccessibilityValue(accessibility.compactMap {$0}.joined(separator:"，"))
     }
     @objc private func openDetails() {
@@ -394,7 +395,8 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             return text
         }
         if let snapshot {
-            let summaryInset:CGFloat = 10, captionWidth:CGFloat = 40, columnSpacing:CGFloat = 6
+            let summaryInset:CGFloat = 10, columnSpacing:CGFloat = 6
+            let captionWidth:CGFloat = snapshot.pushTarget == nil ? 40 : ceil((GitStatusText.pushTitle as NSString).size(withAttributes:[.font:summaryFont]).width)+4
             let valueWidth = detailWidth-2*summaryInset-captionWidth-columnSpacing
             let summary = NSStackView(); summary.orientation = .vertical; summary.alignment = .leading; summary.spacing = 6
             func metadata(_ title:String,_ value:NSView) {
@@ -420,6 +422,10 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             } else {metadata("远端",label(snapshot.remoteNames.isEmpty ? "未配置" : snapshot.remoteNames.joined(separator:"、")))}
             let upstream = GitStatusText.tracking(snapshot,font:summaryFont,style:style)
             metadata("上游",selectableLabel(upstream,width:valueWidth))
+            if let pushTarget = snapshot.pushTarget {
+                let push = GitStatusText.push(pushTarget,font:summaryFont,style:style)
+                metadata(GitStatusText.pushTitle,selectableLabel(push,width:valueWidth))
+            }
             stack.addArrangedSubview(RoundedSectionBackground(content:summary,horizontalInset:summaryInset,verticalInset:8,solidFill:true))
             let states = GitStatusText.stateDetails(snapshot,font:summaryFont,style:style)
             if states.length > 0 {stack.addArrangedSubview(selectableLabel(states,width:detailWidth))}

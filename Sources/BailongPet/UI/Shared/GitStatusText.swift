@@ -43,24 +43,41 @@ enum GitStatusText {
     private static let clean = Indicator("✓","✔","✓","工作区干净",StatusTextColor.green)
     private static let stash = Indicator("*","⚑","SH",GitWorkspaceStatus.stashLabel,StatusTextColor.purple)
     private static let upstreamIndicators:[(indicator:Indicator,count:KeyPath<GitWorkspaceStatus,Int?>)] = [
-        (Indicator("⇣","↓","↓","落后",StatusTextColor.blue),\.behind),
-        (Indicator("⇡","↑","↑","领先",StatusTextColor.blue),\.ahead)
+        (Indicator("⇣","↓","↓","落后上游",StatusTextColor.blue),\.behind),
+        (Indicator("⇡","↑","↑","领先上游",StatusTextColor.blue),\.ahead)
     ]
+    private static let pushIndicators:[(indicator:Indicator,count:KeyPath<GitWorkspaceStatus.PushTarget,Int?>)] = [
+        (Indicator("⇠","⇠","⇠","落后推送目标",StatusTextColor.blue),\.behind),
+        (Indicator("⇢","⇢","⇢","领先推送目标",StatusTextColor.blue),\.ahead)
+    ]
+    static let pushTitle = "推送目标 (Push Remote)"
 
-    private static let compactLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
-        let font = NSFont.systemFont(ofSize:11)
+    private static func inlineLegend(_ items:[Indicator],font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let text = NSMutableAttributedString()
-        for item in groups.map(\.indicator) + [stash] + upstreamIndicators.map(\.indicator) {
+        for item in items {
             if text.length > 0 {text.append(NSAttributedString(string:" ",attributes:[.font:font]))}
             text.append(marked(item,label:item.label,font:font,style:style,separator:""))
         }
-        return (style,NSAttributedString(attributedString:text))
+        return text
+    }
+    private static let compactLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
+        let font = NSFont.systemFont(ofSize:11)
+        let standard = inlineLegend(groups.map(\.indicator)+[stash]+upstreamIndicators.map(\.indicator),font:font,style:style)
+        let extended = NSMutableAttributedString(attributedString:standard)
+        extended.append(NSAttributedString(string:"\n",attributes:[.font:font]))
+        extended.append(inlineLegend(pushIndicators.map(\.indicator),font:font,style:style))
+        return (style,(standard:standard,withPush:NSAttributedString(attributedString:extended)))
     })
-    static func legend(_ style:GitStatusStyle) -> NSAttributedString {compactLegends[style]!}
+    static func legend(_ style:GitStatusStyle,_ status:GitWorkspaceStatus) -> NSAttributedString {
+        let legend = compactLegends[style]!
+        guard let push = status.pushTarget else {return legend.standard}
+        let hasPushCounts = pushIndicators.contains {(push[keyPath:$0.count] ?? 0) > 0}
+        return hasPushCounts ? legend.withPush : legend.standard
+    }
 
     static let settingsLegendFont = NSFont.systemFont(ofSize:11)
     private static func repositoryIcon(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSAttributedString {
-        InlineStatusLayout.imageAttachment(GitIcons.repository(kind),description:kind.title,font:settingsLegendFont,side:12,color:.labelColor)
+        InlineStatusLayout.imageAttachment(GitIcons.repository(kind),description:kind.title,font:settingsLegendFont,side:settingsLegendFont.pointSize,color:.labelColor)
     }
     private static func repositoryLabel(_ title:String) -> NSAttributedString {
         NSAttributedString(string:title,attributes:[.font:settingsLegendFont,.foregroundColor:NSColor.labelColor])
@@ -86,9 +103,12 @@ enum GitStatusText {
     private static let settingsLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
         let font = settingsLegendFont
         let fileIndicators = (groups.map(\.indicator) + [stash]).map {marked($0,label:$0.label,font:font,style:style)}
-        let upstream = upstreamIndicators.map {marked($0.indicator,label:$0.indicator.label+"上游",font:font,style:style)}
+        let upstream = upstreamIndicators.map {marked($0.indicator,label:$0.indicator.label,font:font,style:style)}
+        let push = pushIndicators.map {marked($0.indicator,label:$0.indicator.label,font:font,style:style)}
+        let indicators = NSMutableAttributedString(attributedString:InlineStatusLayout.tabbedRows([fileIndicators+upstream,[]],font:font,columnGap:16,paragraphSpacing:2))
+        indicators.append(InlineStatusLayout.tabbedRows([push],font:font,columnGap:16))
         return (style,(clean:marked(clean,label:clean.label,font:font,style:style),
-                       indicators:InlineStatusLayout.tabbedRows([fileIndicators+upstream],font:font,columnGap:16)))
+                       indicators:NSAttributedString(attributedString:indicators)))
     })
     static func settingsLegend(_ style:GitStatusStyle) -> (clean:NSAttributedString,indicators:NSAttributedString) {
         settingsLegends[style]!
@@ -109,6 +129,11 @@ enum GitStatusText {
         for (item,countPath) in upstreamIndicators {
             if let count = status[keyPath:countPath],count > 0 {append(item,count:count)}
         }
+        if let push = status.pushTarget {
+            for (item,countPath) in pushIndicators {
+                if let count = push[keyPath:countPath],count > 0 {append(item,count:count)}
+            }
+        }
         return text
     }
     static func tracking(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle? = nil) -> NSAttributedString {
@@ -123,6 +148,25 @@ enum GitStatusText {
             text.append(NSAttributedString(string:" · "+state,attributes:attributes))
             return text
         }
+        appendComparison(counts,to:text,font:font,style:style)
+        return text
+    }
+    static func push(_ target:GitWorkspaceStatus.PushTarget,font:NSFont,style:GitStatusStyle? = nil) -> NSAttributedString {
+        let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
+        let destination = target.address.map {[$0.host,$0.repository].compactMap {$0}.joined(separator:"/")} ?? "多个推送地址"
+        let text = NSMutableAttributedString()
+        if style != nil,let address = target.address {
+            let icon = GitIcons.repository(target.kind)
+            text.append(InlineStatusLayout.imageAttachment(icon,description:address.host ?? target.remote,font:font,side:font.pointSize,color:.labelColor))
+            text.append(NSAttributedString(string:" ",attributes:attributes))
+        }
+        text.append(NSAttributedString(string:target.remote+"/"+target.branch+" · "+destination,attributes:attributes))
+        let counts = pushIndicators.compactMap {direction in target[keyPath:direction.count].map {(direction.indicator,$0)}}
+        appendComparison(counts,to:text,font:font,style:style)
+        return text
+    }
+    private static func appendComparison(_ counts:[(Indicator,Int)],to text:NSMutableAttributedString,font:NSFont,style:GitStatusStyle?) {
+        let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
         for (item,count) in counts {
             text.append(NSAttributedString(string:" · ",attributes:attributes))
             let label = item.label+" \(count)"
@@ -133,7 +177,6 @@ enum GitStatusText {
                 text.append(NSAttributedString(string:label,attributes:attributes))
             }
         }
-        return text
     }
     static func stateDetails(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]

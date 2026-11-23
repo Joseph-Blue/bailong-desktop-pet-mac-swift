@@ -143,7 +143,7 @@ enum MessageSettingsPage {
             Row("思考与工具进展小气泡",.toggle("progressToastEnabled",.number("progressToastSeconds",unit:"秒")),keywords:"自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关",requires:["taskBubbles","progressBubbles"]),
         ]),
         Group(title:workspaceStatusGroupTitle,image:{GitIcons.git},keywords:"Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条",rows:[
-            Row("Git 状态显示风格",.gitStatusStyle,keywords:GitStatusStyle.options.map(\.1).joined(separator:" ")+" P10k PL10K VS Code VSCode Git CLI Git 状态图例 远端仓库图标 GitLab Gitee Gitea Forgejo Codeberg Hugging Face 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后"),
+            Row("Git 状态显示风格",.gitStatusStyle,keywords:GitStatusStyle.options.map(\.1).joined(separator:" ")+" P10k PL10K VS Code VSCode Git CLI Git 状态图例 远端仓库图标 GitLab Gitee Gitea Forgejo Codeberg Hugging Face 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后 上游 推送目标 Push Remote"),
             Row("显示任务信息栏",.toggle("taskInfoBarEnabled"),keywords:"在气泡中显示任务信息栏 Git 状态 GitHub 分支 仓库状态 任务概览 本轮文件改动 文件增删 状态栏 进度 工具调用",detail:"在任务气泡和任务概览中显示 Git 状态与本轮文件改动。"),
             Row("显示工作区状态条",.toggle("gitWindowEnabled"),detail:"在桌宠旁常驻显示当前会话的目录、Git 状态与本轮文件改动。"),
         ]),
@@ -268,22 +268,19 @@ enum MessageSettingsPage {
         heading.font = .systemFont(ofSize:font.pointSize,weight:.semibold)
         let repositories = NSTextField(labelWithAttributedString:GitStatusText.settingsRepositories)
         let infoTitle = "更多远端仓库图标"
-        let info = NSImageView(image:NSImage(systemSymbolName:"info.circle",accessibilityDescription:infoTitle)!)
-        info.contentTintColor = .secondaryLabelColor
-        info.imageScaling = .scaleProportionallyDown
+        let symbol = NSImage(systemSymbolName:"info.circle",accessibilityDescription:infoTitle)!
+        let infoText = NSMutableAttributedString(attributedString:InlineStatusLayout.imageAttachment(symbol,description:infoTitle,font:font,side:font.pointSize,color:.secondaryLabelColor))
+        infoText.addAttribute(.font,value:font,range:NSRange(location:0,length:infoText.length))
+        let info = NSTextField(labelWithAttributedString:infoText)
         info.setAccessibilityElement(true)
         info.setAccessibilityLabel(infoTitle)
         info.setHoverHelp(GitStatusText.additionalRepositoryLegend)
         let clean = NSTextField(labelWithString:"")
         let repositoryRow = NSStackView(views:[repositories,info,clean])
         repositoryRow.orientation = .horizontal
-        repositoryRow.alignment = .centerY
+        repositoryRow.alignment = .firstBaseline
         repositoryRow.spacing = 4
         repositoryRow.setCustomSpacing(20,after:info)
-        NSLayoutConstraint.activate([
-            info.widthAnchor.constraint(equalToConstant:12),
-            info.heightAnchor.constraint(equalToConstant:12),
-        ])
 
         let indicators = NSTextField(wrappingLabelWithString:"")
         indicators.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)

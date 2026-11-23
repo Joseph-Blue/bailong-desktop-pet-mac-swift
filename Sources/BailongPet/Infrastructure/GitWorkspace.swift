@@ -40,12 +40,60 @@ struct GitWorkspaceStatus:Equatable {
             self.detailTitle = detailTitle ?? compactTitle
         }
     }
+    struct RemoteAddress:Equatable {
+        let host:String?, repository:String, webURL:URL?
+        let repositoryIdentity:String
+
+        init(_ address:String) {
+            var web:URL?
+            var port:Int?
+            if var url = URLComponents(string:address),let host = url.host {
+                self.host = host
+                repository = url.path.trimmingCharacters(in:CharacterSet(charactersIn:"/"))
+                let scheme = url.scheme?.lowercased()
+                let defaultPorts = ["http":80,"https":443,"ssh":22,"git":9418]
+                if let portNumber = url.port,portNumber != defaultPorts[scheme ?? ""] {port = portNumber}
+                if scheme == "https" || scheme == "http" {
+                    url.user = nil; url.password = nil; url.query = nil; url.fragment = nil
+                    web = url.url
+                }
+            } else if !address.hasPrefix("/"),let colon = address.firstIndex(of:":") {
+                host = String(address[..<colon].split(separator:"@").last ?? "")
+                repository = String(address[address.index(after:colon)...])
+            } else {
+                host = nil
+                repository = address
+            }
+            let path = repository.hasSuffix(".git") ? String(repository.dropLast(4)) : repository
+            if web == nil,let host,["github.com","gitlab.com","gitee.com","bitbucket.org"].contains(host.lowercased()) {
+                var url = URLComponents(); url.scheme = "https"; url.host = host; url.path = "/"+path
+                web = url.url
+            }
+            webURL = web
+            if let host {
+                let hostname = host.lowercased()
+                let authority: String
+                switch (hostname,port) {
+                case ("hf.co",nil): authority = "huggingface.co"
+                case ("altssh.gitlab.com",443), ("altssh.gitlab.com",nil): authority = "gitlab.com"
+                default: authority = port.map {"\(hostname):\($0)"} ?? hostname
+                }
+                repositoryIdentity = authority+"/"+path.trimmingCharacters(in:CharacterSet(charactersIn:"/"))
+            } else {repositoryIdentity = address}
+        }
+    }
+    struct PushTarget:Equatable {
+        let remote:String, branch:String, address:RemoteAddress?
+        let ahead:Int?, behind:Int?
+        var kind:RepositoryKind {RepositoryKind(host:address?.host)}
+    }
     var root = "", branch = "", commit = "", tag:String?, upstream:String?
     var ahead:Int?, behind:Int?, stashes = 0
     var initial = false, detached = false, operation:Operation?
     var remoteNames = [String]()
     var remoteName:String?, remoteHost:String?, remoteRepository:String?
     var remoteWebURL:URL?
+    var pushTarget:PushTarget?
     var entries = [Entry]()
     var observationPaths = [String]()
     var repositoryKind:RepositoryKind {
@@ -138,6 +186,7 @@ final class GitWorkspaceRequest {
         task.arguments = ["--no-optional-locks","-C",directory]+arguments
         var environment = ProcessInfo.processInfo.environment
         environment["LC_ALL"] = "C"; environment["GIT_TERMINAL_PROMPT"] = "0"
+        if arguments.first == "rev-list" {environment["GIT_NO_LAZY_FETCH"] = "1"}
         // 会话 cwd 是唯一目标，不继承启动桌宠的终端中指向其他仓库的 Git 环境。
         for key in ["GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE","GIT_COMMON_DIR"] {environment.removeValue(forKey:key)}
         task.environment = environment; task.standardOutput = pipe; task.standardError = pipe
@@ -175,6 +224,13 @@ final class GitWorkspaceRequest {
         }
         return (task.terminationStatus,data)
     }
+    private func gitString(_ directory:String,_ args:[String],optional:Bool = false) throws -> String? {
+        let (code,data) = try run(directory,args,optional:optional)
+        guard code == 0 else {return nil}
+        var value = String(decoding:data,as:UTF8.self)
+        if value.hasSuffix("\n") {value.removeLast()}
+        return value
+    }
     func read(directory:String) throws -> GitWorkspaceStatus? {
         // 明确区分普通目录和查询失败，错误不能显示成干净。
         var isDirectory:ObjCBool = false
@@ -187,11 +243,7 @@ final class GitWorkspaceRequest {
         }
         guard found else {return nil}
         func string(_ args:[String],optional:Bool = false) throws -> String? {
-            let (code,data) = try run(directory,args,optional:optional)
-            guard code == 0 else {return nil}
-            var value = String(decoding:data,as:UTF8.self)
-            if value.hasSuffix("\n") {value.removeLast()}
-            return value
+            try gitString(directory,args,optional:optional)
         }
         let root = try string(["rev-parse","--show-toplevel"])!
         var result = try GitWorkspaceStatus.parse(run(directory,["status","--porcelain=v2","-z","--branch","--ahead-behind","--show-stash","--untracked-files=all","--ignore-submodules=none"]).1)
@@ -205,31 +257,76 @@ final class GitWorkspaceRequest {
            !tag.isEmpty {
             result.tag = tag
         }
-        if result.upstream != nil,!result.detached {
-            result.remoteName = try string(["config","--get","branch.\(result.branch).remote"],optional:true)
-        }
+        let branchRemote = result.detached ? nil : try string(["config","--get","branch.\(result.branch).remote"],optional:true)
+        if result.upstream != nil {result.remoteName = branchRemote}
         result.remoteNames = try string(["remote"])!.split(separator:"\n").map(String.init)
         if result.remoteName == nil,result.remoteNames.count == 1 {result.remoteName = result.remoteNames[0]}
-        if let remote = result.remoteName,remote != ".",let address = try string(["remote","get-url",remote]) {
-            // 仅投影主机与仓库路径，不把 remote URL 中的用户信息交给显示层。
-            if let url = URLComponents(string:address),let host = url.host {
-                result.remoteHost = host; result.remoteRepository = url.path.trimmingCharacters(in:CharacterSet(charactersIn:"/"))
-                if ["https","http"].contains(url.scheme?.lowercased() ?? "") {
-                    var web = url; web.user = nil; web.password = nil; web.query = nil; web.fragment = nil
-                    result.remoteWebURL = web.url
-                }
-            } else if !address.hasPrefix("/"),let colon = address.firstIndex(of:":") {
-                result.remoteHost = String(address[..<colon].split(separator:"@").last ?? "")
-                result.remoteRepository = String(address[address.index(after:colon)...])
-            } else {result.remoteRepository = address}
-            if result.remoteWebURL == nil,let host = result.remoteHost,
-               ["github.com","gitlab.com","gitee.com","bitbucket.org"].contains(host.lowercased()),let repository = result.remoteRepository {
-                var web = URLComponents(); web.scheme = "https"; web.host = host
-                web.path = "/"+(repository.hasSuffix(".git") ? String(repository.dropLast(4)) : repository)
-                result.remoteWebURL = web.url
+        let fetchAddress = try result.remoteName.flatMap {remote -> GitWorkspaceStatus.RemoteAddress? in
+            guard remote != ".",let address = try string(["remote","get-url","--",remote]) else {return nil}
+            return GitWorkspaceStatus.RemoteAddress(address)
+        }
+        result.remoteHost = fetchAddress?.host
+        result.remoteRepository = fetchAddress?.repository
+        result.remoteWebURL = fetchAddress?.webURL
+        result.pushTarget = try pushTarget(in:directory,status:result,branchRemote:branchRemote,fetchAddress:fetchAddress)
+        return result
+    }
+
+    private func pushTarget(in directory:String,status:GitWorkspaceStatus,branchRemote:String?,
+                            fetchAddress:GitWorkspaceStatus.RemoteAddress?) throws -> GitWorkspaceStatus.PushTarget? {
+        guard !status.detached,!status.initial,!status.remoteNames.isEmpty else {return nil}
+        let localRef = "refs/heads/"+status.branch
+        func references(simpleFork:Bool = false) throws -> (remote:String, destination:String, tracking:String, upstream:String, upstreamDestination:String)? {
+            let options = simpleFork ? ["-c","push.default=current"] : []
+            let format = "%(refname)%00%(push:remotename)%00%(push:remoteref)%00%(push)%00%(upstream)%00%(upstream:remoteref)"
+            let output = try gitString(directory,options+["for-each-ref","--count=1","--format=\(format)","--",localRef])!
+            guard !output.isEmpty else {return nil}
+            let fields = output.split(separator:"\0",omittingEmptySubsequences:false).map(String.init)
+            guard fields.count == 6 else {throw GitWorkspaceFailure("Git 推送引用格式无效。")}
+            guard fields[0] == localRef else {return nil}
+            return (fields[1],fields[2],fields[3],fields[4],fields[5])
+        }
+        guard var refs = try references() else {return nil}
+        let defaultRemote = status.remoteNames.count == 1 ? status.remoteNames[0] : "origin"
+        let remote = refs.remote.isEmpty ? defaultRemote : refs.remote
+        guard status.remoteNames.contains(remote) else {return nil}
+        if remote != (branchRemote ?? defaultRemote),refs.destination.isEmpty {
+            let mode = try gitString(directory,["config","--get","push.default"],optional:true) ?? "simple"
+            if mode == "upstream" {return nil}
+            if mode == "simple",refs.tracking.isEmpty {
+                // 推送到另一远端时，Git 的 simple 模式推送当前分支。@{push} 未必能解析这个分支。
+                guard let forkRefs = try references(simpleFork:true) else {return nil}
+                refs = forkRefs
             }
         }
-        return result
+        guard !refs.tracking.isEmpty || !refs.destination.isEmpty else {return nil}
+        let destination = refs.destination.isEmpty
+            ? (refs.tracking == refs.upstream && !refs.upstreamDestination.isEmpty ? refs.upstreamDestination : localRef)
+            : refs.destination
+        let branch = destination.hasPrefix("refs/heads/") ? String(destination.dropFirst("refs/heads/".count)) : destination
+        let pushURLs = try gitString(directory,["remote","get-url","--push","--all","--",remote])!
+        let addresses = pushURLs.split(separator:"\n").map {GitWorkspaceStatus.RemoteAddress(String($0))}
+        let identities = Set(addresses.map(\.repositoryIdentity))
+        if status.upstream != nil,destination == refs.upstreamDestination,
+           let fetchAddress,identities == [fetchAddress.repositoryIdentity] {return nil}
+
+        let address = identities.count == 1 ? addresses.first : nil
+        // 推送 URL 与取回 URL 指向同一仓库时，本地跟踪引用才能用于比较。
+        var ahead:Int?, behind:Int?
+        if let address,!refs.tracking.isEmpty {
+            let trackedAddress = remote == status.remoteName ? fetchAddress
+                : try gitString(directory,["remote","get-url","--",remote]).map(GitWorkspaceStatus.RemoteAddress.init)
+            if trackedAddress?.repositoryIdentity == address.repositoryIdentity,
+               let trackedCommit = try gitString(directory,["rev-parse","--verify","--quiet",refs.tracking+"^{commit}"],optional:true) {
+                let counts = try gitString(directory,["rev-list","--left-right","--count",status.commit+"..."+trackedCommit,"--"])!
+                    .split(whereSeparator:\.isWhitespace)
+                guard counts.count == 2,let left = Int(counts[0]),let right = Int(counts[1]) else {
+                    throw GitWorkspaceFailure("Git 推送分支计数格式无效。")
+                }
+                ahead = left; behind = right
+            }
+        }
+        return GitWorkspaceStatus.PushTarget(remote:remote,branch:branch,address:address,ahead:ahead,behind:behind)
     }
     private func repositoryOperation(in gitDirectory:URL) throws -> GitWorkspaceStatus.Operation? {
         func exists(_ path:String) -> Bool {
