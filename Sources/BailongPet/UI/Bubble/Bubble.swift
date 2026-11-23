@@ -195,14 +195,18 @@ final class Bubble {
         guard let index = cardIndex,cards.indices.contains(index) else {return}
         let card = cards[index]
         let changedApproval = approval?.request.identity != card.approval?.request.identity || approval?.request.details != card.approval?.request.details
+        let changedQuestionMode = (onQuestionSubmit != nil) != (card.question?.submit != nil)
         let changedCard = renderedCardID != card.id || changedApproval || !visible
-        questionForm = card.form; questionModels = card.form?.questions ?? card.question?.questions ?? []; questionTaskKey = card.content.timing?.key; questionSize = card.questionSize
+        let editable = card.question?.submit != nil
+        questionForm = editable ? card.form : nil
+        questionModels = questionForm?.questions ?? card.question?.questions ?? []
+        questionTaskKey = card.content.timing?.key; questionSize = editable ? card.questionSize : nil
         onQuestionSubmit = card.question?.submit; onQuestionsSkipped = card.question?.skip
         onDetails = card.details; onCodex = card.codex; approval = card.approval
         updateCardNavigation()
         render(card.content,card:card,scale:preferences.number("bubblePercent")/100,
                seconds:preferences.duration(card.purpose,text:card.content.body),details:card.content.conversation != nil,
-               resetText:card.resetText || changedCard,preserveCountdown:refreshingAppearance)
+               resetText:card.resetText || changedCard || changedQuestionMode,preserveCountdown:refreshingAppearance)
         purpose = card.purpose
         renderedCardID = card.id
         cardStore.saveForm(questionForm,size:questionSize)

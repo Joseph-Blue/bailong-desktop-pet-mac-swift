@@ -199,7 +199,7 @@ enum DesktopHistoryReader {
                 CASE WHEN item_type='dynamicToolCall' THEN json_extract(item_json,'$.namespace') END namespace,
                 CASE WHEN item_type='imageGeneration' THEN json_extract(item_json,'$.savedPath') END saved_path
                 FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type IN
-                ('agentMessage','userMessage','reasoning','commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageGeneration','imageView','contextCompaction','plan','collabAgentToolCall','collabToolCall','enteredReviewMode','exitedReviewMode')
+                ('agentMessage','userMessage','reasoning','commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageGeneration','imageView','contextCompaction','plan','collabAgentToolCall','collabToolCall','enteredReviewMode','exitedReviewMode','sleep')
                 ORDER BY rollout_ordinal DESC LIMIT 200
                 """,[actual,turn["turn_id"]!]).reversed()
                 var messages = [String](), final = "", alert = ""
@@ -216,7 +216,8 @@ enum DesktopHistoryReader {
                     for key in ["status","tool","server","namespace","command","query"] {if let value = item[key],value != "null" {progress[key] = value}}
                     if let text = item["plan_text"],text != "null" {progress["text"] = text}
                     if let value = item["success"],value != "null" {progress["success"] = value == "1"}
-                    if item["completed"] == "1" || Double(item["completed_at_ms"] ?? "") != nil {progress["completed"] = true}
+                    if Double(item["completed_at_ms"] ?? "") != nil {progress["completed"] = true}
+                    else if let completed = item["completed"],completed == "0" || completed == "1" {progress["completed"] = completed == "1"}
                     for (column,field) in [("summary","summary"),("command_actions","commandActions"),("changes","changes"),("web_action","action")] {
                         if let raw = item[column],raw != "null" {progress[field] = try JSONSerialization.jsonObject(with:Data(raw.utf8))}
                     }

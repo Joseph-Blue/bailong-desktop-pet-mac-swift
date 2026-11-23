@@ -71,12 +71,13 @@ final class DesktopConversationSession {
     private struct PendingSend {
         let id:UUID
         let trace:TerminalMonitor.Send?
+        let channel:ProjectSendChannel
         var waitingForQueue = false
     }
     private var desktopSending = [String:PendingSend]()
     private var coldPreparing = [String:ColdPreparation]()
     private var desktopUnconfirmed = Set<String>()
-    private var desktopReplyNotes = [String:String]()
+    private var desktopReplyNotes = [String:[ProjectSendChannel:String]]()
 
     init(store:HistoryStore,preferences:PetPreferences,canSend:@escaping () -> Bool,isClosing:@escaping () -> Bool) {
         self.store = store
@@ -87,15 +88,20 @@ final class DesktopConversationSession {
     func sending(_ key:String) -> Bool {desktopSending[key] != nil}
     func preparing(_ key:String) -> Bool {coldPreparing[key] != nil || desktopSending[key]?.waitingForQueue == true}
     func cancelPreparation(_ key:String) {
-        guard preparing(key) else {return}
+        guard preparing(key),let pending = desktopSending.removeValue(forKey:key) else {return}
         coldPreparing.removeValue(forKey:key)
-        desktopSending.removeValue(forKey:key)?.trace?.step(L10n.text(.conversation,"desktopConversationSession.cancelPreparation.text.2"),.warning); desktopModelRequests.removeValue(forKey:key)
-        desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.cancelPreparation.text"); onChange()
+        pending.trace?.step(L10n.text(.conversation,"desktopConversationSession.cancelPreparation.text.2"),.warning)
+        if pending.channel == .legacy {desktopModelRequests.removeValue(forKey:key)}
+        desktopReplyNotes[key,default:[:]][pending.channel] = L10n.text(.conversation,"desktopConversationSession.cancelPreparation.text"); onChange()
     }
     func unconfirmed(_ key:String) -> Bool {desktopUnconfirmed.contains(key)}
     func replyNote(_ key:String,turnID:String? = nil) -> String? {
-        if let note = desktopReplyNotes[key] {return note}
-        guard let turnID,queuedAfterTurn[key] == turnID else {return nil}
+        let channel:ProjectSendChannel
+        if let pending = desktopSending[key] {channel = pending.channel}
+        else if desktopUnconfirmed.contains(key) {channel = unconfirmedQueueSubmissions[key] == nil ? .legacy : .modern}
+        else {channel = preferences.projectSendChannel}
+        if let note = desktopReplyNotes[key]?[channel] {return note}
+        guard channel == .modern,let turnID,queuedAfterTurn[key] == turnID else {return nil}
         return L10n.text(.conversation,"desktopConversationSession.replyNote.text")
     }
     func modelSettings(_ key:String) -> DesktopReply.Settings? {desktopSettings[key]}
@@ -168,9 +174,9 @@ final class DesktopConversationSession {
         let trace = TerminalMonitor.active?.begin(.ipc,
             context:TerminalMonitor.context(key)+L10n.text(.conversation,"desktopConversationSession.trace.text")+TerminalMonitor.tag(request.uuidString),
             event:target.mode == .steer ? L10n.text(.conversation,"desktopConversationSession.submit.text") : L10n.text(.conversation,"desktopConversationSession.submit.text.2"))
-        desktopSending[key] = PendingSend(id:request,trace:trace)
+        desktopSending[key] = PendingSend(id:request,trace:trace,channel:.legacy)
         desktopModelRequests.removeValue(forKey:key)
-        desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.connecting"); onChange()
+        desktopReplyNotes[key,default:[:]][.legacy] = L10n.text(.conversation,"desktopConversationSession.connecting"); onChange()
         let needsOpen = !settingsReady.contains(key)
         let send:(NavigationRecovery) -> Void = { [weak self,weak conversation] recovery in
             guard let self,let conversation else {return}
@@ -188,10 +194,10 @@ final class DesktopConversationSession {
     private func submitQueued(_ text:String,to conversation:Conversation,entry:ChatEntry,thread:String,previousTurn:String) {
         let key = conversation.key, request = UUID()
         guard let threadID = UUID(uuidString:thread) else {
-            desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text"); onChange(); return
+            desktopReplyNotes[key,default:[:]][.modern] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text"); onChange(); return
         }
         let trace = TerminalMonitor.active?.begin(.desktopQueue,context:TerminalMonitor.context(key),event:L10n.text(.conversation,"desktopConversationSession.trace.event"))
-        desktopSending[key] = PendingSend(id:request,trace:trace,waitingForQueue:true)
+        desktopSending[key] = PendingSend(id:request,trace:trace,channel:.modern,waitingForQueue:true)
         let isCurrent = { [weak self,weak conversation] in
             guard let self,let conversation else {return false}
             return self.isCurrent(conversation,thread:thread,request:request)
@@ -206,7 +212,7 @@ final class DesktopConversationSession {
                 }
                 self.desktopSending[key]?.waitingForQueue = false
                 trace?.step(L10n.text(.conversation,"desktopConversationSession.current.text"))
-                self.desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text.2"); self.onChange()
+                self.desktopReplyNotes[key,default:[:]][.modern] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text.2"); self.onChange()
                 self.queueProcesses[key] = try DesktopQueue.submit(cli:destination.cli,store:destination.store,thread:threadID,text:text) { [weak self] result in
                     guard let self,isCurrent() else {return}
                     self.queueProcesses.removeValue(forKey:key)
@@ -216,7 +222,7 @@ final class DesktopConversationSession {
             } catch {
                 self.desktopSending.removeValue(forKey:key)
                 trace?.step(L10n.text(.conversation,"desktopConversationSession.labels.text")+TerminalMonitor.errorCode(error),.warning)
-                self.desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text.3")+error.localizedDescription
+                self.desktopReplyNotes[key,default:[:]][.modern] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text.3")+error.localizedDescription
                 self.onChange()
             }
         }
@@ -228,7 +234,7 @@ final class DesktopConversationSession {
         openForReply(conversation,thread:thread,request:request) { [weak self] _ in
             guard let self else {return}
             trace?.step(L10n.text(.conversation,"desktopConversationSession.self.text"))
-            self.desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text.5"); self.onChange()
+            self.desktopReplyNotes[key,default:[:]][.modern] = L10n.text(.conversation,"desktopConversationSession.submitQueued.text.5"); self.onChange()
             DesktopQueue.prepare(thread:thread,previousTurn:previousTurn,id:threadID,destination:self.queueDestination,
                                  isCurrent:isCurrent,completion:submitWhenReady)
         }
@@ -238,12 +244,12 @@ final class DesktopConversationSession {
         switch result {
         case .success(let id):
             trace?.step(L10n.text(.conversation,"desktopConversationSession.id.text")+TerminalMonitor.tag(id.uuidString),.success)
-            desktopReplyNotes.removeValue(forKey:key)
+            desktopReplyNotes[key]?[.modern] = nil
             queuedAfterTurn[key] = previousTurn
             onSubmitted(key,text,entry)
         case .failure(let error):
             trace?.step(L10n.text(.conversation,"desktopConversationSession.error.text"),.warning)
-            desktopReplyNotes[key] = error.localizedDescription
+            desktopReplyNotes[key,default:[:]][.modern] = error.localizedDescription
             unconfirmedQueueSubmissions[key] = UnconfirmedQueueSubmission(request:request,text:text,entry:entry)
             desktopUnconfirmed.insert(key)
         }
@@ -259,11 +265,14 @@ final class DesktopConversationSession {
     }
     private func failBeforeSend(_ conversation:Conversation,stage:String,error:Error) {
         let key = conversation.key
+        guard let pending = desktopSending.removeValue(forKey:key) else {return}
         coldPreparing.removeValue(forKey:key)
-        desktopSending.removeValue(forKey:key)?.trace?.step(stage+"  ·  "+TerminalMonitor.errorCode(error),.error)
-        settingsReady.remove(key); desktopSettings.removeValue(forKey:key)
-        desktopModelNotes[key] = .failure(error.localizedDescription)
-        desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.failBeforeSend.text")+error.localizedDescription; onChange()
+        pending.trace?.step(stage+"  ·  "+TerminalMonitor.errorCode(error),.error)
+        if pending.channel == .legacy {
+            settingsReady.remove(key); desktopSettings.removeValue(forKey:key)
+            desktopModelNotes[key] = .failure(error.localizedDescription)
+        }
+        desktopReplyNotes[key,default:[:]][pending.channel] = L10n.text(.conversation,"desktopConversationSession.failBeforeSend.text")+error.localizedDescription; onChange()
     }
     private func prepareColdReply(_ text:String,to conversation:Conversation,entry:ChatEntry,thread:String,
                                   target:(id:String,mode:DesktopReply.Mode,start:Date),request:UUID) {
@@ -276,7 +285,7 @@ final class DesktopConversationSession {
             self.sendReply(text,to:conversation,entry:entry,thread:thread,target:target,request:request,recovery:.none,deadline:Date().addingTimeInterval(20),prepared:connection)
         }
         desktopSending[key]?.trace?.step(L10n.text(.conversation,"desktopConversationSession.conversation.text"))
-        desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.prepareColdReply.text"); onChange()
+        desktopReplyNotes[key,default:[:]][.legacy] = L10n.text(.conversation,"desktopConversationSession.prepareColdReply.text"); onChange()
         for offset in coldReopenOffsets {
             DispatchQueue.main.asyncAfter(deadline:.now()+offset) { [weak self,weak conversation] in
                 guard let self,let conversation,let pending = self.coldPreparing[key],
@@ -337,8 +346,9 @@ final class DesktopConversationSession {
     private func openForReply(_ conversation:Conversation,thread:String,request:UUID,completion:@escaping (Bool) -> Void) {
         guard isCurrent(conversation,thread:thread,request:request) else {return}
         let key = conversation.key
-        desktopSending[key]?.trace?.step(L10n.text(.conversation,"desktopConversationSession.key.text"))
-        desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.openForReply.text"); onChange()
+        guard let pending = desktopSending[key] else {return}
+        pending.trace?.step(L10n.text(.conversation,"desktopConversationSession.key.text"))
+        desktopReplyNotes[key,default:[:]][pending.channel] = L10n.text(.conversation,"desktopConversationSession.openForReply.text"); onChange()
         openThreadForReply(thread,{ [weak self,weak conversation] in
             guard let self,let conversation else {return false}
             return self.isCurrent(conversation,thread:thread,request:request)
@@ -357,11 +367,11 @@ final class DesktopConversationSession {
             failBeforeSend(conversation,stage:L10n.text(.conversation,"desktopConversationSession.sendReply.text"),error:PetFailure(message:L10n.text(.conversation,"desktopConversationSession.sendReply.message"))); return
         }
         let key = conversation.key, started = Date()
-        desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.sendReply.text.2"); onChange()
+        desktopReplyNotes[key,default:[:]][.legacy] = L10n.text(.conversation,"desktopConversationSession.sendReply.text.2"); onChange()
         DesktopReply.submit(thread:thread,previousTurn:target.id,cwd:conversation.cwd,text:text,mode:target.mode,connectionDeadline:deadline,prepared:prepared,onConnected:{ [weak self,weak conversation] in
             guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
             self.desktopSending[key]?.trace?.step(target.mode == .steer ? L10n.text(.conversation,"desktopConversationSession.conversation.text.2") : L10n.text(.conversation,"desktopConversationSession.conversation.text.3"))
-            self.desktopReplyNotes[key] = L10n.text(.conversation,"desktopConversationSession.sendReply.text.3"); self.onChange()
+            self.desktopReplyNotes[key,default:[:]][.legacy] = L10n.text(.conversation,"desktopConversationSession.sendReply.text.3"); self.onChange()
         }) { [weak self,weak conversation] result in
             guard let self,let conversation,self.isCurrent(conversation,thread:thread,request:request) else {return}
             // 只重试未提交消息的连接阶段；真正发送后的任何错误均不进入此分支。
@@ -397,7 +407,7 @@ final class DesktopConversationSession {
                     turn.date = target.mode == .steer ? target.start : started; turn.status = receipt.status; turn.lastMessageAt = started; conversation.turns.append(turn)
                 }
                 self.onSubmitted(key,text,entry)
-                self.desktopReplyNotes.removeValue(forKey:key)
+                self.desktopReplyNotes[key]?[.legacy] = nil
                 if case .awaitingFirstSend? = self.desktopModelNotes[key] {self.refreshSettings(conversation,force:true)}
                 self.onPersist()
             case .failure(let error):
@@ -407,7 +417,7 @@ final class DesktopConversationSession {
                 } else {
                     trace?.step(L10n.text(.conversation,"desktopConversationSession.unconfirmed.text.2")+TerminalMonitor.errorCode(error),.error)
                 }
-                self.desktopReplyNotes[key] = error.localizedDescription
+                self.desktopReplyNotes[key,default:[:]][.legacy] = error.localizedDescription
                 // 回执只更新原会话状态。用户已切换或关闭窗口时不弹模态框、激活应用。
                 self.onChange()
             }
@@ -430,7 +440,7 @@ final class DesktopConversationSession {
                       self.store.conversations.contains(where:{$0 === conversation}),
                       response == .alertSecondButtonReturn || response == .alertThirdButtonReturn else {return}
                 self.unconfirmedQueueSubmissions.removeValue(forKey:key)
-                self.desktopUnconfirmed.remove(key); self.desktopReplyNotes.removeValue(forKey:key)
+                self.desktopUnconfirmed.remove(key); self.desktopReplyNotes[key]?[.modern] = nil
                 if response == .alertSecondButtonReturn {self.onSubmitted(key,submission.text,submission.entry)}
                 self.onChange()
             }
@@ -440,7 +450,7 @@ final class DesktopConversationSession {
         alert.addButton(withTitle:L10n.text(.conversation,"desktopConversationSession.checkDelivery.button")); alert.addButton(withTitle:L10n.text(.conversation,"desktopConversationSession.checkDelivery.button.4")); alert.applyAccent()
         alert.beginSheetModal(for:parent) { [weak self] response in
             guard response == .alertSecondButtonReturn,let self,self.store.conversations.contains(where:{$0 === conversation}) else {return}
-            self.desktopUnconfirmed.remove(key); self.desktopReplyNotes.removeValue(forKey:key); self.onChange()
+            self.desktopUnconfirmed.remove(key); self.desktopReplyNotes[key]?[.legacy] = nil; self.onChange()
         }
     }
 }

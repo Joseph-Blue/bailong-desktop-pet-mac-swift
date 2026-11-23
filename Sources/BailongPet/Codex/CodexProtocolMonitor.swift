@@ -49,7 +49,7 @@ extension TerminalMonitor {
             let type = item["type"] as? String ?? ""
             let known = ["agentMessage","userMessage","reasoning","commandExecution","fileChange","mcpToolCall","dynamicToolCall",
                          "webSearch","imageGeneration","imageView","contextCompaction","plan","enteredReviewMode","exitedReviewMode",
-                         "collabAgentToolCall","collabToolCall"]
+                         "collabAgentToolCall","collabToolCall","sleep"]
             let status = item["status"] as? String
             let outcome = status.flatMap {TaskActivity.Outcome(rawValue:$0 == "canceled" ? "cancelled" : $0)}
             let failed = outcome == .failed || item["success"] as? Bool == false

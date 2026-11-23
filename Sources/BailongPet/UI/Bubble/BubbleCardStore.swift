@@ -12,7 +12,7 @@ final class BubbleCardStore {
         if let index = cards.firstIndex(where:{$0.id == message.id}) {
             var updated = message
             if let old = cards[index].approval,let new = message.approval,old.request.identity == new.request.identity,old.request.details == new.request.details {updated.approval = old}
-            if message.question?.submit != nil {
+            if message.question?.submit != nil || message.retainsQuestionDraft {
                 updated.form = cards[index].form; updated.questionSize = cards[index].questionSize
             }
             if message.showsTaskOverview {cards.remove(at:index); cards.append(updated)}
@@ -49,7 +49,7 @@ final class BubbleCardStore {
         cardIndex = id.flatMap {id in cards.firstIndex {$0.id == id}}
     }
     func saveForm(_ form:QuestionForm?,size:NSSize?) {
-        guard let index = cardIndex else {return}
+        guard let index = cardIndex,cards[index].question?.submit != nil else {return}
         cards[index].form = form; cards[index].questionSize = size
     }
     func clearQuestionSizes() {for index in cards.indices {cards[index].questionSize = nil}}

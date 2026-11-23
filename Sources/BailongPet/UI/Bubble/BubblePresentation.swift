@@ -48,6 +48,7 @@ struct BubbleCard {
     var completionFooter:TurnCompletion? = nil
     var form:QuestionForm? = nil
     var questionSize:NSSize? = nil
+    var retainsQuestionDraft = false
     var priority:Priority {
         if attentionAction {return .request}
         if showsTaskOverview || (content.conversation == nil && purpose == .interaction) {return .companion}

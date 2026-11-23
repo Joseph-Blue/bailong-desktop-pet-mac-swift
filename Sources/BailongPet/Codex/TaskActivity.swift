@@ -4,7 +4,7 @@ struct TaskActivity:Equatable {
     enum Kind {case reasoning, tool, reply, status, attention}
     enum ToolOperation {
         case tool, command, read, search, listFiles, edit, webSearch, webOpen, webFind
-        case imageGeneration, imageView, compaction, plan, collaboration, waiting, review
+        case imageGeneration, imageView, compaction, plan, collaboration, waiting, review, sleep
         case document, spreadsheet, presentation, mail, calendar, code
         var monitorName:String {
             switch self {
@@ -24,6 +24,7 @@ struct TaskActivity:Equatable {
             case .collaboration:return L10n.text(.tasks,"taskActivity.collaboration")
             case .waiting:return L10n.text(.tasks,"taskActivity.waiting")
             case .review:return L10n.text(.tasks,"taskActivity.review")
+            case .sleep:return L10n.text(.tasks,"taskActivity.sleep")
             case .document:return L10n.text(.tasks,"taskActivity.document")
             case .spreadsheet:return L10n.text(.tasks,"taskActivity.spreadsheet")
             case .presentation:return L10n.text(.tasks,"taskActivity.presentation")
@@ -174,6 +175,7 @@ struct TaskActivity:Equatable {
             case .webFind:return "doc.text.magnifyingglass"
             case .imageGeneration:return "photo.badge.plus"
             case .imageView:return "photo"
+            case .sleep:return "timer"
             case .compaction:return "arrow.down.right.and.arrow.up.left"
             case .plan:return "list.bullet.clipboard"
             case .collaboration:return "figure.and.child.holdinghands"
@@ -203,7 +205,8 @@ struct TaskActivity:Equatable {
         return kind == .reasoning ? PetPreferences.shared.bool("showThinkingProgress") : kind == .tool ? PetPreferences.shared.bool("showToolProgress") : true
     }
     static func summary(_ parts:[Any]) -> String {
-        parts.compactMap {$0 as? String ?? ($0 as? [String:Any])?["text"] as? String}.filter {!$0.isEmpty}.joined(separator:"\n")
+        parts.compactMap {$0 as? String ?? ($0 as? [String:Any])?["text"] as? String}
+            .filter {!$0.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}.joined(separator:"\n")
     }
     // 只按公开工具身份分类；不读取 arguments，不从脚本内容推断操作。
     private static let knownTools:[String:ToolOperation] = {
@@ -244,7 +247,9 @@ struct TaskActivity:Equatable {
         switch type {
         case "commandExecution":operation = .command; action = L10n.text(.tasks,"taskActivity.command")
         case "fileChange":operation = .edit; action = L10n.text(.tasks,"taskActivity.edit")
-        case "mcpToolCall","dynamicToolCall":operation = knownTools[tool ?? ""] ?? .tool; action = L10n.text(.tasks,"taskActivity.from.text")
+        case "mcpToolCall","dynamicToolCall":
+            operation = knownTools[tool ?? ""] ?? .tool
+            action = operation == .webSearch ? operation.monitorName : L10n.text(.tasks,"taskActivity.from.text")
         case "webSearch":
             switch webAction["type"] as? String {
             case "openPage":operation = .webOpen; action = L10n.text(.tasks,"taskActivity.webOpen")
@@ -255,6 +260,7 @@ struct TaskActivity:Equatable {
         case "imageGeneration":operation = .imageGeneration; action = L10n.text(.tasks,"taskActivity.imageGeneration")
         case "imageView":operation = .imageView; action = L10n.text(.tasks,"taskActivity.imageView")
         case "contextCompaction":operation = .compaction; action = L10n.text(.tasks,"taskActivity.compaction")
+        case "sleep":operation = .sleep; action = operation.monitorName
         case "plan":operation = .plan; action = L10n.text(.tasks,"taskActivity.from.text.4")
         case "enteredReviewMode","exitedReviewMode":operation = .review; action = L10n.text(.tasks,"taskActivity.from.text.5")
         case "collabAgentToolCall","collabToolCall":
@@ -312,18 +318,35 @@ struct TaskActivity:Equatable {
         if let outcome {title = action+" · "+outcome.label}
         else if type == "enteredReviewMode" {title = L10n.text(.tasks,"taskActivity.label.title")}
         else if type == "exitedReviewMode" {title = L10n.text(.tasks,"taskActivity.label.title.2")}
+        else if type == "sleep" {title = succeeded ? L10n.text(.tasks,"taskActivity.sleep.completed") : action}
         else {title = (succeeded ? L10n.text(.tasks,"taskActivity.label.text") : L10n.text(.tasks,"taskActivity.label.text.2"))+action}
         return .init(title:title,detail:detail,finished:ended || type == "enteredReviewMode" || type == "exitedReviewMode",toolOperation:operation,outcome:outcome)
     }
     static func from(item:[String:Any]) -> TaskActivity? {
+        let type = item["type"] as? String ?? ""
+        let webAction = item["action"] as? [String:Any] ?? [:]
+        let query = item["query"] as? String
         var status = item["status"] as? String
-        if status == nil,(item["completed"] as? Bool == true || item["completedAtMs"] as? NSNumber != nil) {status = "completed"}
-        if item["type"] as? String == "dynamicToolCall",status == "completed",item["success"] as? Bool == false {status = "failed"}
+        if status == nil {
+            if item["completed"] as? Bool == true || item["completedAtMs"] as? NSNumber != nil {status = "completed"}
+            else if item["completed"] as? Bool == false {status = "inProgress"}
+            else if type == "webSearch" {
+                // 历史的 WebSearchBegin 只有空 query，WebSearchEnd 才填入 action。
+                status = webAction.isEmpty && (query ?? "").isEmpty ? "inProgress" : "completed"
+            }
+        }
+        if type == "dynamicToolCall",status == "completed",item["success"] as? Bool == false {status = "failed"}
         let tool = [item["namespace"] as? String ?? item["server"] as? String,item["tool"] as? String].compactMap {$0}.filter {!$0.isEmpty}.joined(separator:".")
-        return from(type:item["type"] as? String ?? "",status:status,summary:summary(item["summary"] as? [Any] ?? []),
-                    tool:tool.isEmpty ? item["query"] as? String : tool,command:item["command"] as? String,
+        return from(type:type,status:status,summary:summary(item["summary"] as? [Any] ?? []),
+                    tool:tool.isEmpty ? query : tool,command:item["command"] as? String,
                     actions:item["commandActions"] as? [[String:Any]] ?? [],paths:(item["changes"] as? [[String:Any]] ?? []).compactMap {$0["path"] as? String},
-                    text:item["text"] as? String ?? "",webAction:item["action"] as? [String:Any] ?? [:])
+                    text:item["text"] as? String ?? "",webAction:webAction)
+    }
+    private static func isActive(_ item:[String:Any],_ activity:TaskActivity) -> Bool {
+        guard !activity.finished else {return false}
+        return ["inProgress","running"].contains(item["status"] as? String ?? "") ||
+            item["completed"] as? Bool == false ||
+            (item["type"] as? String == "webSearch" && item["status"] as? String == nil)
     }
     private static func commandToastDetails(_ item:[String:Any]) -> [CommandField] {
         guard item["type"] as? String == "commandExecution",let actions = item["commandActions"] as? [[String:Any]] else {return []}
@@ -344,17 +367,26 @@ struct TaskActivity:Equatable {
         if actions.count > 3 {fields.append(.text(L10n.format(.tasks,"taskActivity.waiting.text.2",String(describing:actions.count-3))))}
         return fields
     }
+    private static let groupBoundaries:Set<String> = [
+        "agentMessage","userMessage","steeringUserMessage","hookPrompt","imageGeneration","imageView","contextCompaction",
+        "collabAgentToolCall","collabToolCall","plan","enteredReviewMode","exitedReviewMode","sleep","error"
+    ]
     static func current(items:[[String:Any]]) -> TaskActivity? {
         typealias Entry = (item:[String:Any],activity:TaskActivity)
         var result:Entry?, runningTool:Entry?
         for item in items {
-            if item["type"] as? String == "agentMessage" {
+            let type = item["type"] as? String ?? ""
+            if groupBoundaries.contains(type) {runningTool = nil}
+            if type == "userMessage" || type == "steeringUserMessage" {
+                result = nil; continue
+            }
+            if type == "agentMessage" {
                 result = (item,.init(title:L10n.text(.tasks,"taskActivity.reply"),kind:.reply)); continue
             }
             guard let next = from(item:item) else {continue}
-            if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = (item,next)}
-            // 连续的空 reasoning 项不擦掉此前同阶段已公开的摘要；工具/回复切换仍改变状态。
-            if next.kind == .reasoning,next.detail.isEmpty,result?.activity.kind == .reasoning,result?.activity.detail.isEmpty == false {continue}
+            if next.kind == .tool,isActive(item,next) {runningTool = (item,next)}
+            if next.kind == .reasoning,reasoningHeading(next.detail) == nil,
+               let previous = result?.activity,previous.kind == .tool || previous.kind == .reasoning {continue}
             result = (item,next)
         }
         guard let selected = runningTool ?? result else {return nil}
@@ -365,9 +397,7 @@ struct TaskActivity:Equatable {
         activity.groupHeaderHidingToolFailures = currentGroupHeader(items:items,hidingToolFailures:true)
         return activity
     }
-    // 本机 Codex 的 NQNw / udV3 / I3PO：reasoning 不断组，独立消息断组；
-    // live 组取最后活动项，无活动项时取探索标题或思考，关闭的组显示整组摘要。
-    // 插件依赖 arguments / result 的自定义呈现不进入此公开投影。
+    // reasoning 不断组。空摘要保留具体操作，独立消息关闭工具组。
     private static func currentGroupHeader(items:[[String:Any]],hidingToolFailures:Bool = false) -> GroupHeader? {
         var group = [(item:[String:Any],activity:TaskActivity)]()
         var isOpen = false, heading:String?, closed:GroupHeader?, standalone:GroupHeader?
@@ -380,11 +410,10 @@ struct TaskActivity:Equatable {
             let type = item["type"] as? String ?? ""
             if type == "reasoning" {
                 if let next = reasoningHeading(summary(item["summary"] as? [Any] ?? [])) {heading = next}
+                if !isOpen,standalone?.kind != .tool {standalone = nil; closed = nil}
                 continue
             }
             if ["commandExecution","fileChange","mcpToolCall","dynamicToolCall","webSearch"].contains(type) {
-                if type == "webSearch",(item["query"] as? String ?? "").isEmpty,
-                   (item["action"] as? [String:Any] ?? [:]).isEmpty {continue}
                 if !isOpen {group.removeAll(keepingCapacity:true); isOpen = true}
                 // 客户端将 commandActions 展开成独立 exec，活动标题只取最后一个。
                 let actions = item["commandActions"] as? [[String:Any]] ?? []
@@ -394,40 +423,39 @@ struct TaskActivity:Equatable {
                         var value = item; value["commandActions"] = [action]; return value
                     }
                 } else {entries = [item]}
-                for entry in entries {if let activity = from(item:entry) {group.append((entry,activity))}}
+                for entry in entries {
+                    if let activity = from(item:entry) {
+                        group.append((entry,activity))
+                        if !hidingToolFailures || !activity.isToolFailure {heading = nil}
+                    }
+                }
                 standalone = nil
                 continue
             }
-            // 计划 / 审查标记不属于客户端折叠工具组；不把它们当作工具组边界。
-            if ["plan","enteredReviewMode","exitedReviewMode"].contains(type) {continue}
-            if ["agentMessage","userMessage","steeringUserMessage","hookPrompt","imageGeneration","imageView","contextCompaction",
-                "collabAgentToolCall","collabToolCall","error"].contains(type) {
+            if groupBoundaries.contains(type) {
                 closeGroup()
-                if let activity = from(item:item) {standalone = hidingToolFailures && activity.isToolFailure ? nil : header(activity)}
+                if type == "userMessage" || type == "steeringUserMessage" {closed = nil}
+                if let activity = from(item:item) {
+                    standalone = hidingToolFailures && activity.isToolFailure ? nil : header(activity)
+                    closed = nil
+                }
                 else if type == "agentMessage",closed == nil {standalone = .init(title:L10n.text(.tasks,"taskActivity.reply"),kind:.reply)}
+                else {standalone = nil}
             }
         }
         if isOpen,!group.isEmpty {
             let displayed = hidingToolFailures ? group.filter {!$0.activity.isToolFailure} : group
-            if displayed.isEmpty {return heading.map {GroupHeader(title:$0,kind:.reasoning)}}
-            if let active = displayed.last(where:{isActive($0.item,$0.activity)}) {return activeGroupHeader(active.item,active.activity)}
-            // EeZ9.G：尾部连续探索段在模型思考期间继续显示探索标题。
-            if let last = displayed.last,[.read,.search,.listFiles].contains(last.activity.toolOperation) {
-                return activeGroupHeader(last.item,last.activity)
-            }
-            return .init(title:heading ?? L10n.text(.tasks,"taskActivity.from.title"),kind:.reasoning)
+            if let active = displayed.last(where:{isActive($0.item,$0.activity)}) {return toolGroupHeader(active.item,active.activity)}
+            if let heading {return .init(title:heading,kind:.reasoning)}
+            return displayed.last.map {toolGroupHeader($0.item,$0.activity)}
         }
-        return standalone ?? closed ?? heading.map {GroupHeader(title:$0,kind:.reasoning)}
-    }
-    private static func isActive(_ item:[String:Any],_ activity:TaskActivity) -> Bool {
-        guard !activity.finished else {return false}
-        return ["inProgress","running"].contains(item["status"] as? String ?? "") || item["completed"] as? Bool == false
+        return heading.map {GroupHeader(title:$0,kind:.reasoning)} ?? standalone ?? closed
     }
     private static func header(_ activity:TaskActivity) -> GroupHeader {
         .init(title:activity.line,kind:activity.kind,operation:activity.toolOperation,
               finished:activity.finished,outcome:activity.outcome)
     }
-    private static func activeGroupHeader(_ item:[String:Any],_ activity:TaskActivity) -> GroupHeader {
+    private static func toolGroupHeader(_ item:[String:Any],_ activity:TaskActivity) -> GroupHeader {
         if activity.outcome != nil {return header(activity)}
         let action = (item["commandActions"] as? [[String:Any]])?.last ?? [:]
         let title:String
@@ -436,20 +464,26 @@ struct TaskActivity:Equatable {
         case .read:
             let path = action["path"] as? String ?? action["name"] as? String ?? ""
             let name = (path as NSString).lastPathComponent
-            title = L10n.text(.tasks,"taskActivity.activeGroupHeader.title")+(path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading") : " "+name)
+            let verb = activity.finished ? activity.title : L10n.text(.tasks,"taskActivity.activeGroupHeader.title")
+            title = verb+(path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading") : " "+name)
             subject = .read(short(name))
         case .search:
             let path = action["path"] as? String ?? "",query = action["query"] as? String ?? ""
-            title = !path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.2")+path : !query.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.3")+query+"」" : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.4")
+            if activity.finished {
+                title = activity.title + (path.isEmpty ? (query.isEmpty ? "" : "「"+query+"」") : " "+path)
+            } else {
+                title = !path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.2")+path : !query.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.3")+query+"」" : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.4")
+            }
             subject = path.isEmpty ? .query(short(query)) : .folder(short(path))
         case .listFiles:
             let path = action["path"] as? String ?? ""
-            title = path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.5") : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.6")+path
+            let prefix = activity.finished ? activity.title : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.5")
+            title = path.isEmpty ? prefix : activity.finished ? prefix+" "+path : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.6")+path
             subject = .folder(short(path))
-        case .edit:title = L10n.text(.tasks,"taskActivity.edit.2")
+        case .edit:title = activity.title
         default:return header(activity)
         }
-        return .init(title:short(title),operation:activity.toolOperation,subject:subject)
+        return .init(title:short(title),operation:activity.toolOperation,finished:activity.finished,subject:subject)
     }
     private static func completedGroupHeader(_ entries:[(item:[String:Any],activity:TaskActivity)],hidingToolFailures:Bool) -> GroupHeader? {
         let displayed = hidingToolFailures ? entries.filter {!$0.activity.isToolFailure} : entries
@@ -468,14 +502,20 @@ struct TaskActivity:Equatable {
             switch entry.item["type"] as? String {
             case "fileChange":key = "edit"
             case "commandExecution":key = [.read,.search,.listFiles].contains(activity.toolOperation) ? "explore" : "command"
-            case "webSearch":key = "web"
+            case "webSearch":
+                switch activity.toolOperation {
+                case .webOpen:key = "webOpen"
+                case .webFind:key = "webFind"
+                default:key = "web"
+                }
             default:key = "tool"
             }
             if categories[key] == nil {categories[key] = activity}
         }
         let labels = [("tool",L10n.text(.tasks,"taskActivity.labels")),("edit",L10n.text(.tasks,"taskActivity.labels.2")),("explore",L10n.text(.tasks,"taskActivity.labels.3")),("command",L10n.text(.tasks,"taskActivity.labels.4")),("web",L10n.text(.tasks,"taskActivity.labels.5"))]
-        let parts = labels.filter {categories[$0.0] != nil}.map(\.1)+failures
-        let first = labels.compactMap {categories[$0.0]}.first ?? failure
+        let webDetails = ["webOpen","webFind"].compactMap {categories[$0]}
+        let parts = labels.filter {categories[$0.0] != nil}.map(\.1)+webDetails.map(\.title)+failures
+        let first = labels.compactMap {categories[$0.0]}.first ?? webDetails.first ?? failure
         return .init(title:parts.isEmpty ? L10n.text(.tasks,"taskActivity.completedGroupHeader.text") : parts.joined(separator:"、"),
                      operation:first?.toolOperation ?? .tool,finished:true,outcome:failure?.outcome)
     }

@@ -91,6 +91,8 @@
 "taskActivity.webSearch" = "搜索网页";
 "taskActivity.webOpen" = "打开网页";
 "taskActivity.webFind" = "页内查找";
+"taskActivity.sleep" = "定时等待";
+"taskActivity.sleep.completed" = "定时等待已结束";
 "taskActivity.imageGeneration" = "生成图片";
 "taskActivity.imageView" = "查看图片";
 "taskActivity.compaction" = "压缩上下文";

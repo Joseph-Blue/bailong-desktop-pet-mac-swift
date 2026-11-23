@@ -98,7 +98,10 @@ final class TaskMessageAccumulator {
             } else {steps.removeValue(forKey:id)}
         case "reasoning":
             // 只读取协议公开 summary，不读取 content 或加密推理字段。
-            for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {summaries["\(id):\(index)"] = part as? String ?? (part as? [String:Any])?["text"] as? String ?? ""}
+            for (index,part) in (item["summary"] as? [Any] ?? []).enumerated() {
+                let text = TaskActivity.summary([part])
+                if !text.isEmpty {summaries["\(id):\(index)"] = text}
+            }
         case "commandExecution": steps[id] = CommandSummary.text(item)
         case "plan":
             if let text = item["text"] as? String {steps[id] = text}

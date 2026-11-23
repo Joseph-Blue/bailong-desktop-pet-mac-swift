@@ -16,19 +16,22 @@ struct DesktopQuestionNotice {
     static let openInCodex = L10n.text(.conversation,"desktopSync.openInCodex")
     let body:String
     let form:QuestionPresentation?
+    let retainsDraft:Bool
 
     init?(_ attention:TaskAttention?,channel:ProjectSendChannel,
           submit:@escaping ([String:String], @escaping (Error?) -> Void) -> Void,
           skip:@escaping (Set<String>) -> Void) {
         guard let attention,attention.kind == .answer else {return nil}
+        let questions = attention.questions
+        let editable = !attention.isSensitive && !questions.isEmpty && questions.allSatisfy {!$0.id.isEmpty}
         if channel == .modern {
             body = Self.openInCodex
             form = nil
+            retainsDraft = editable
         } else {
             body = attention.body
-            let questions = attention.questions
-            let editable = !attention.isSensitive && !questions.isEmpty && questions.allSatisfy {!$0.id.isEmpty}
             form = .init(questions:questions,submit:editable ? submit : nil,skip:skip)
+            retainsDraft = false
         }
     }
 }
@@ -379,7 +382,8 @@ final class DesktopSync {
                     let questionIDs = value.attention?.questions.map(\.id).joined(separator:"\u{001f}") ?? ""
                     let signature = (value.attention?.kind.rawValue ?? "progress")+":"+value.approvalID+":"+questionIDs+":"+text
                     if (value.attention != nil || value.status.hasPrefix("waiting")) && !text.isEmpty && (questionModeChanged || turn.notices[signature] == nil || previous?.approval?.details != value.approval?.details || previousAttention != value.attention?.kind || (repeatDue && (!value.alert.isEmpty || quiet || value.status.hasPrefix("waiting")))) {
-                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key, purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,status:value.attention?.kind.status), question:question?.form,approval:value.approval.map(ApprovalPresentation.init))
+                        chat.pet.say(chat.pet.preferences.statusLine(value.attention?.kind.templateKey ?? "taskProgressTemplate"), body:text, kind:"task", thread:conversation.key, purpose:!value.alert.isEmpty || value.status.hasPrefix("waiting") ? .attention : .progress, personalizeTitle:false, animateHeading:value.attention == nil, attentionAction:value.attention != nil, timing:.init(start:value.started > 0 ? Date(timeIntervalSince1970:value.started) : nil,key:key,status:value.attention?.kind.status), question:question?.form,approval:value.approval.map(ApprovalPresentation.init),
+                            retainsQuestionDraft:question?.retainsDraft == true)
                         turn.notices[signature] = now; noticedAt[key] = now; changed = true
                     }
                 }

@@ -532,7 +532,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if bubble.visible {bubble.hide()}
         if progressBubble.visible {progressBubble.hide()}
     }
-    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TurnCompletion? = nil,failure:AppFailure? = nil,userRequested:Bool = false) {
+    func say(_ title: String, body: String = "", kind: String = "interaction", thread: String? = nil, resetText: Bool = false, purpose: MessagePurpose? = nil, personalizeTitle: Bool = true, animateHeading: Bool = false, attentionAction: Bool = false, timing: TaskTiming? = nil, question: QuestionPresentation? = nil, messageID:String? = nil, taskOverview:Bool = false,selectCard:Bool = false,approval:ApprovalPresentation? = nil,fileEdits:[FileEditSummary] = [],isUserInput:Bool = false,completionFooter:TurnCompletion? = nil,failure:AppFailure? = nil,userRequested:Bool = false,retainsQuestionDraft:Bool = false) {
         let purpose = purpose ?? (kind.hasPrefix("quota") ? .quota : kind == "task" ? .progress : .interaction)
         guard !hidden && preferences.allows(purpose) else { return }
         if [.attention,.result,.quota].contains(purpose) {progressBubble.hide()}
@@ -552,7 +552,8 @@ final class PetController: NSObject, NSMenuDelegate {
                 animateHeading:animateHeading,timing:timing,conversation:thread,failure:failure)
             let displayed = bubble.present(BubbleCard(id:identity,content:content,purpose:purpose,resetText:resetText,
                 attentionAction:attentionAction,question:question,
-                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter),select:selectCard)
+                details:{ [weak self] in self?.onHistory(thread) },codex:{ [weak self] in self?.onCodex(thread) },reply:reply,approval:approval,fileEdits:fileEdits,showsTaskOverview:taskOverview,isUserInput:isUserInput,completionFooter:completionFooter,
+                retainsQuestionDraft:retainsQuestionDraft),select:selectCard)
             if !displayed {return}
         }
         if userRequested && composerVisible {onDismissComposer()}
