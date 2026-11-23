@@ -13,6 +13,7 @@ extension NSView {
     }
     func setHoverHelp(_ text:NSAttributedString,when shouldShow:(() -> Bool)? = nil) {
         let accessibleText = text.string.replacingOccurrences(of:"\u{FFFC} ",with:"")
+            .replacingOccurrences(of:"\u{FFFC}\t",with:"")
         setHoverHelp(accessibleText,styled:text,when:shouldShow)
     }
     private func setHoverHelp(_ text:String?,styled:NSAttributedString?,when shouldShow:(() -> Bool)?) {

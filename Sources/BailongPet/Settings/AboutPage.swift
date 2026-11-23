@@ -221,7 +221,10 @@ final class AboutPageController: NSViewController {
         heading("图标与标识",to:text)
         link("SF Symbols · Apple",url:"https://developer.apple.com/sf-symbols/",to:text)
         link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
-        link("GitHub 图标 · Lucide Brands（ISC）",url:"https://github.com/azirali/lucide-brands",to:text)
+        link("GitHub、GitLab · Lucide Brands（ISC）",url:"https://github.com/azirali/lucide-brands",to:text)
+        link("Gitee · Remix Icon（Remix Icon License v1.0）",url:"https://github.com/Remix-Design/RemixIcon/blob/master/icons/Logos/gitee-line.svg",to:text)
+        link("Gitea、Hugging Face · Icon Monks（MIT）",url:"https://github.com/designmonks-llc/icon-monks",to:text)
+        link("Forgejo · Caesar Schinas，经 Simple Icons 收录（CC BY-SA 4.0）",url:"https://github.com/simple-icons/simple-icons/blob/develop/icons/forgejo.svg",to:text)
         link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
 
         heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)

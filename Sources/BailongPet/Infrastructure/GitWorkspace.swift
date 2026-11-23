@@ -1,7 +1,36 @@
 import Foundation
 
 struct GitWorkspaceStatus:Equatable {
-    enum RepositoryKind:CaseIterable {case generic, github, remote}
+    enum RepositoryKind {
+        case generic, github, gitlab, gitee, gitea, forgejo, huggingFace, remote
+
+        static let additionalRemotes:[Self] = [.gitlab,.gitee,.gitea,.forgejo,.huggingFace]
+
+        init(host:String?) {
+            switch host?.lowercased() {
+            case "github.com": self = .github
+            case "gitlab.com", "altssh.gitlab.com": self = .gitlab
+            case "gitee.com": self = .gitee
+            case "gitea.com", "demo.gitea.com", "try.gitea.io": self = .gitea
+            case "codeberg.org", "code.forgejo.org", "next.forgejo.org": self = .forgejo
+            case "huggingface.co", "hf.co": self = .huggingFace
+            default: self = .remote
+            }
+        }
+
+        var title:String {
+            switch self {
+            case .generic: return "通用 Git 仓库"
+            case .github: return "GitHub"
+            case .gitlab: return "GitLab"
+            case .gitee: return "Gitee"
+            case .gitea: return "Gitea"
+            case .forgejo: return "Forgejo"
+            case .huggingFace: return "Hugging Face"
+            case .remote: return "其他远端仓库"
+            }
+        }
+    }
     enum Group:String,CaseIterable {case conflicted = "冲突", staged = "已暂存", unstaged = "未暂存", untracked = "未跟踪"}
     struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:String}
     struct Operation:Equatable {
@@ -21,7 +50,7 @@ struct GitWorkspaceStatus:Equatable {
     var observationPaths = [String]()
     var repositoryKind:RepositoryKind {
         guard let remoteName,remoteName != "." else {return .generic}
-        return remoteHost?.lowercased() == "github.com" ? .github : .remote
+        return RepositoryKind(host:remoteHost)
     }
     var counts:[Group:Int] {entries.reduce(into:[:]) {$0[$1.group,default:0] += 1}}
     var clean:Bool {entries.isEmpty}

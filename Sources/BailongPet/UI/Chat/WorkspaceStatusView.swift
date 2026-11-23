@@ -254,7 +254,8 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         if git.attributedTitle != text {git.attributedTitle = text}
         git.contentTintColor = .secondaryLabelColor
         let tracking = GitStatusText.tracking(snapshot,font:font).string
-        let accessibility = [heading,snapshot.detachedSummary,snapshot.operation?.detailTitle,snapshot.summary,"上游："+tracking]
+        let repository = snapshot.repositoryKind == .generic ? nil : snapshot.repositoryKind.title
+        let accessibility = [repository,heading,snapshot.detachedSummary,snapshot.operation?.detailTitle,snapshot.summary,"上游："+tracking]
         git.setAccessibilityValue(accessibility.compactMap {$0}.joined(separator:"，"))
     }
     @objc private func openDetails() {

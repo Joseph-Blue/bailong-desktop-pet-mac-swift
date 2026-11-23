@@ -58,31 +58,41 @@ enum GitStatusText {
     })
     static func legend(_ style:GitStatusStyle) -> NSAttributedString {compactLegends[style]!}
 
-    private static let settingsLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
-        let font = NSFont.systemFont(ofSize:11)
-        let base:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
-        func repository(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSAttributedString {
-            let title:String
-            switch kind {
-            case .generic:title = "通用 Git 仓库"
-            case .github:title = "GitHub 远端仓库"
-            case .remote:title = "其他远端仓库"
-            }
-            let icon = GitIcons.repository(kind)
-            let text = NSMutableAttributedString(attributedString:InlineStatusLayout.imageAttachment(icon,description:title,font:font,side:12,color:.labelColor))
-            text.append(NSAttributedString(string:" "+title,attributes:base))
+    static let settingsLegendFont = NSFont.systemFont(ofSize:11)
+    private static func repositoryIcon(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSAttributedString {
+        InlineStatusLayout.imageAttachment(GitIcons.repository(kind),description:kind.title,font:settingsLegendFont,side:12,color:.labelColor)
+    }
+    private static func repositoryLabel(_ title:String) -> NSAttributedString {
+        NSAttributedString(string:title,attributes:[.font:settingsLegendFont,.foregroundColor:NSColor.labelColor])
+    }
+    static let settingsRepositories: NSAttributedString = {
+        let kinds:[GitWorkspaceStatus.RepositoryKind] = [.generic,.github,.remote]
+        let repositories = kinds.map {kind in
+            let label = kind == .github ? kind.title+" 远端仓库" : kind.title
+            let text = NSMutableAttributedString(attributedString:repositoryIcon(kind))
+            text.append(repositoryLabel(" "+label))
             return text
         }
-        let repositories = GitWorkspaceStatus.RepositoryKind.allCases.map(repository) + [marked(clean,label:clean.label,font:font,style:style)]
+        return InlineStatusLayout.tabbedRows([repositories],font:settingsLegendFont,columnGap:20)
+    }()
+    static let additionalRepositoryLegend: NSAttributedString = {
+        let rows = GitWorkspaceStatus.RepositoryKind.additionalRemotes.map {kind in
+            [repositoryIcon(kind),repositoryLabel(kind.title)]
+        }
+        return InlineStatusLayout.tabbedRows([[repositoryLabel("更多远端仓库图标：")]]+rows,
+                                             font:settingsLegendFont,columnGap:6,paragraphSpacing:2)
+    }()
+
+    private static let settingsLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
+        let font = settingsLegendFont
         let fileIndicators = (groups.map(\.indicator) + [stash]).map {marked($0,label:$0.label,font:font,style:style)}
         let upstream = upstreamIndicators.map {marked($0.indicator,label:$0.indicator.label+"上游",font:font,style:style)}
-        let heading = NSFont.systemFont(ofSize:font.pointSize,weight:.semibold)
-        let text = NSMutableAttributedString(string:"图例：\n",attributes:[.font:heading,.foregroundColor:NSColor.labelColor])
-        text.append(InlineStatusLayout.tabbedRows([repositories,[]],font:font,columnGap:20,paragraphSpacing:2))
-        text.append(InlineStatusLayout.tabbedRows([fileIndicators+upstream],font:font,columnGap:16))
-        return (style,NSAttributedString(attributedString:text))
+        return (style,(clean:marked(clean,label:clean.label,font:font,style:style),
+                       indicators:InlineStatusLayout.tabbedRows([fileIndicators+upstream],font:font,columnGap:16)))
     })
-    static func settingsLegend(_ style:GitStatusStyle) -> NSAttributedString {settingsLegends[style]!}
+    static func settingsLegend(_ style:GitStatusStyle) -> (clean:NSAttributedString,indicators:NSAttributedString) {
+        settingsLegends[style]!
+    }
 
     static func compact(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let text = NSMutableAttributedString(), counts = status.counts
