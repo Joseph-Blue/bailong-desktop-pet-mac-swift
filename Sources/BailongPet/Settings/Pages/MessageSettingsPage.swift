@@ -138,6 +138,7 @@ enum MessageSettingsPage {
         ]),
         Group(title:workspaceStatusGroupTitle,image:{GitIcons.git},keywords:L10n.text(.settings,"messages.group.keywords.5"),rows:[
             Row(L10n.text(.settings,"messages.group.text"),.gitStatusStyle,keywords:GitStatusStyle.options.map(\.1).joined(separator:" ")+L10n.text(.settings,"messageSettingsPage.labels.text")),
+            Row(L10n.text(.settings,"messages.gitTerminologyInEnglish.title"),.toggle(GitTerminology.key),keywords:L10n.text(.settings,"messages.gitTerminologyInEnglish.keywords")),
             Row(L10n.text(.settings,"messages.taskInfoBarEnabled.title"),.toggle("taskInfoBarEnabled"),keywords:L10n.text(.settings,"messages.taskInfoBarEnabled.keywords"),detail:L10n.text(.settings,"messages.taskInfoBarEnabled.detail")),
             Row(L10n.text(.settings,"messages.gitWindowEnabled.title"),.toggle("gitWindowEnabled"),detail:L10n.text(.settings,"messages.gitWindowEnabled.detail")),
         ]),
@@ -260,15 +261,10 @@ enum MessageSettingsPage {
         let font = GitStatusText.settingsLegendFont
         let heading = NSTextField(labelWithString:L10n.text(.settings,"messageSettingsPage.heading.labelWithString"))
         heading.font = .systemFont(ofSize:font.pointSize,weight:.semibold)
-        let repositories = NSTextField(labelWithAttributedString:GitStatusText.settingsRepositories)
-        let infoTitle = L10n.text(.settings,"messageSettingsPage.infoTitle.text")
-        let symbol = NSImage(systemSymbolName:"info.circle",accessibilityDescription:infoTitle)!
-        let infoText = NSMutableAttributedString(attributedString:InlineStatusLayout.imageAttachment(symbol,description:infoTitle,font:font,side:font.pointSize,color:.secondaryLabelColor))
-        infoText.addAttribute(.font,value:font,range:NSRange(location:0,length:infoText.length))
-        let info = NSTextField(labelWithAttributedString:infoText)
+        let repositories = NSTextField(labelWithString:"")
+        let symbol = NSImage(systemSymbolName:"info.circle",accessibilityDescription:nil)!
+        let info = NSTextField(labelWithString:"")
         info.setAccessibilityElement(true)
-        info.setAccessibilityLabel(infoTitle)
-        info.setHoverHelp(GitStatusText.additionalRepositoryLegend)
         let clean = NSTextField(labelWithString:"")
         let repositoryRow = NSStackView(views:[repositories,info,clean])
         repositoryRow.orientation = .horizontal
@@ -284,8 +280,20 @@ enum MessageSettingsPage {
         legend.alignment = .leading
         legend.spacing = 2
         indicators.widthAnchor.constraint(equalTo:legend.widthAnchor).isActive = true
-        form.observeValues { [weak clean,weak indicators] preferences in
-            let content = GitStatusText.settingsLegend(preferences.gitStatusStyle)
+        var previousTerms:GitTerminology?
+        form.observeValues { [weak clean,weak indicators,weak repositories,weak info] preferences in
+            let terms = preferences.gitTerminology
+            if previousTerms != terms {
+                previousTerms = terms
+                repositories?.attributedStringValue = GitStatusText.settingsRepositories(terms)
+                let infoTitle = terms.text("gitStatusText.rows.text")
+                let infoText = NSMutableAttributedString(attributedString:InlineStatusLayout.imageAttachment(symbol,description:infoTitle,font:font,side:font.pointSize,color:.secondaryLabelColor))
+                infoText.addAttribute(.font,value:font,range:NSRange(location:0,length:infoText.length))
+                info?.attributedStringValue = infoText
+                info?.setAccessibilityLabel(infoTitle)
+                info?.setHoverHelp(GitStatusText.additionalRepositoryLegend(terms))
+            }
+            let content = GitStatusText.settingsLegend(preferences.gitStatusStyle,terms:terms)
             if let clean,!clean.attributedStringValue.isEqual(to:content.clean) {clean.attributedStringValue = content.clean}
             if let indicators,!indicators.attributedStringValue.isEqual(to:content.indicators) {indicators.attributedStringValue = content.indicators}
         }

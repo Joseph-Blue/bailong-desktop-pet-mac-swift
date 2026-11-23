@@ -1,7 +1,7 @@
 /* 工作区、Git 与文件 · 简体中文 */
 
 /* repositoryIcons */
-"repositoryIcons.remote" = "其他远端仓库";
+"repositoryIcons.remote" = "其他远端平台";
 "repositoryIcons.repository.accessibilityDescription" = "Git";
 "repositoryIcons.repository.accessibilityDescription.2" = "GitHub";
 
@@ -15,6 +15,7 @@
 "gitWorkspace.conflicted.3" = "未暂存";
 "gitWorkspace.conflicted.4" = "未跟踪";
 "gitWorkspace.stashLabel" = "贮藏 (Stash)";
+"gitWorkspace.stashListError" = "无法读取 Git 贮藏列表。";
 /* 参数 %1$@ = Self.stashLabel；%2$@ = stashes */
 "gitWorkspace.text" = "%1$@ %2$@ 条";
 "gitWorkspace.text.2" = "当前不在任何分支上 (Detached HEAD)";
@@ -47,16 +48,12 @@
 "gitWorkspace.read.error" = "工作区目录不存在或无法访问。";
 "gitWorkspace.rebaseStep.text" = "应用补丁中";
 "gitWorkspace.rebaseStep.text.2" = "合并中";
-"gitWorkspace.rebaseStep.text.3" = "拣选中";
 "gitWorkspace.rebaseStep.text.4" = "拣选提交 (Cherry-pick) 进行中";
-"gitWorkspace.rebaseStep.text.5" = "还原中";
 "gitWorkspace.rebaseStep.text.6" = "撤销提交改动 (Revert) 进行中";
 "gitWorkspace.rebaseStep.text.7" = "二分查找中";
 /* 参数 %1$@ = progress */
-"gitWorkspace.rebaseStep.text.8" = "变基中 %1$@";
 /* 参数 %1$@ = progress */
 "gitWorkspace.rebaseStep.text.9" = "变基 (Rebase) %1$@";
-"gitWorkspace.rebaseStep.text.10" = "变基中";
 "gitWorkspace.rebaseStep.text.11" = "变基 (Rebase) 进行中";
 
 /* 工作区监视 */
@@ -85,6 +82,9 @@
 
 /* 目录、版本控制与本轮文件 */
 "status.git" = "Git 状态";
+"status.stashLoading" = "正在读取贮藏文件…";
+/* 参数 %1$@ = Git 贮藏引用，%2$@ = 文件数 */
+"status.stashFilesTitle" = "贮藏 · %1$@ · %2$@ 个文件";
 "status.git.2" = "本轮文件修改";
 "status.text" = "Git 工作区状态";
 "status.text.2" = "本轮累计修改行数";
@@ -100,6 +100,7 @@
 "status.presentStatus.text" = "Git 状态读取失败";
 "status.heading" = " · 首次提交前";
 "status.accessibility" = "上游：";
+"status.pushAccessibility" = "%1$@：%2$@";
 "status.setLoading.heading" = "重试中…";
 "status.setLoading.heading.2" = "重试";
 "status.heading.2" = "Git 工作区";
@@ -144,11 +145,11 @@
 "gitStatusText.powerlevel10k" = "Powerlevel10k 符号风格";
 "gitStatusText.gitCLI" = "缩写字母风格";
 "gitStatusText.clean" = "工作区干净";
-"gitStatusText.marker.text" = "落后";
-"gitStatusText.marker.text.2" = "领先";
+"gitStatusText.comparison.behind" = "落后";
+"gitStatusText.comparison.ahead" = "领先";
 "gitStatusText.generic" = "通用 Git 仓库";
 "gitStatusText.github" = "GitHub 远端仓库";
-"gitStatusText.remote" = "其他远端仓库";
+"gitStatusText.remote" = "其他远端平台";
 "gitStatusText.repository.text" = "上游";
 "gitStatusText.repository.text.2" = "图例：\n";
 "gitStatusText.tracking.text" = "未设置";
@@ -170,7 +171,26 @@
 "gitStatusText.upstreamIndicators.text.2" = "领先上游";
 "gitStatusText.pushIndicators.text" = "落后推送目标";
 "gitStatusText.pushIndicators.text.2" = "领先推送目标";
-"gitStatusText.pushTitle.text" = "推送目标 (Push Remote)";
+"gitStatusText.pushTitle.text" = "推送目标";
 "gitStatusText.label.text" = " 远端仓库";
-"gitStatusText.rows.text" = "更多远端仓库图标：";
+"gitStatusText.rows.text" = "更多远端平台图标";
 "gitStatusText.destination.text" = "多个推送地址";
+
+/* Hugging Face Space 状态 */
+"spaceStatus.title" = "Hugging Face Space 状态";
+"spaceStatus.loading" = "正在读取状态…";
+"spaceStatus.unavailable" = "无法读取 Space 状态";
+"spaceStatus.unknown" = "未知状态";
+"spaceStatus.detail" = "%1$@（%2$@）";
+"spaceStatus.stage.RUNNING" = "运行中";
+"spaceStatus.stage.BUILDING" = "构建中";
+"spaceStatus.stage.RUNNING_BUILDING" = "运行中，正在构建";
+"spaceStatus.stage.APP_STARTING" = "启动中";
+"spaceStatus.stage.RUNNING_APP_STARTING" = "运行中，正在启动";
+"spaceStatus.stage.PAUSED" = "已暂停";
+"spaceStatus.stage.STOPPED" = "已停止";
+"spaceStatus.stage.BUILD_ERROR" = "构建失败";
+"spaceStatus.stage.RUNTIME_ERROR" = "运行错误";
+"spaceStatus.stage.CONFIG_ERROR" = "配置错误";
+"spaceStatus.stage.NO_APP_FILE" = "缺少应用入口文件";
+"spaceStatus.stage.DELETING" = "删除中";

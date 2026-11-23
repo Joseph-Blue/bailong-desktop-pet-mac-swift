@@ -1,0 +1,66 @@
+/* 英文 Git 术语由工作区状态设置选择。 */
+
+"gitWorkspace.conflicted" = "Conflicts";
+"gitWorkspace.conflicted.2" = "Staged";
+"gitWorkspace.conflicted.3" = "Unstaged";
+"gitWorkspace.conflicted.4" = "Untracked";
+"gitWorkspace.stashLabel" = "Stash";
+"gitWorkspace.text" = "%1$@ %2$@";
+"gitWorkspace.text.2" = "Detached HEAD";
+"gitWorkspace.text.3" = " %1$@";
+
+"gitWorkspace.change.text" = "Added";
+"gitWorkspace.change.text.2" = "Deleted";
+"gitWorkspace.change.text.3" = "Renamed";
+"gitWorkspace.change.text.4" = "Copied";
+"gitWorkspace.change.text.5" = "Type changed";
+"gitWorkspace.change.text.6" = "Modified";
+"gitWorkspace.change.text.7" = "Submodule changed";
+"gitWorkspace.changes" = "Both deleted";
+"gitWorkspace.changes.2" = "Added by us";
+"gitWorkspace.changes.3" = "Deleted by them";
+"gitWorkspace.changes.4" = "Added by them";
+"gitWorkspace.changes.5" = "Deleted by us";
+"gitWorkspace.changes.6" = "Both added";
+"gitWorkspace.changes.7" = "Both modified";
+
+"gitWorkspace.rebaseStep.text" = "Applying patch";
+"gitWorkspace.rebaseStep.text.2" = "Merging";
+"gitWorkspace.rebaseStep.text.4" = "Cherry-pick in progress";
+"gitWorkspace.rebaseStep.text.6" = "Revert in progress";
+"gitWorkspace.rebaseStep.text.7" = "Bisecting";
+"gitWorkspace.rebaseStep.text.9" = "Rebase %1$@";
+"gitWorkspace.rebaseStep.text.11" = "Rebase in progress";
+
+"gitStatusText.clean" = "Clean worktree";
+"gitStatusText.generic" = "Git repository";
+"gitStatusText.remote" = "Other hosting platforms";
+"gitStatusText.repository.text" = "Upstream";
+"gitStatusText.tracking.text" = "Not set";
+"gitStatusText.state" = "No local commits yet";
+"gitStatusText.state.2" = "Upstream ref missing";
+"gitStatusText.labels" = "No commits yet";
+"gitStatusText.comparison.behind" = "Behind";
+"gitStatusText.comparison.ahead" = "Ahead";
+"gitStatusText.upstreamIndicators.text" = "Behind upstream";
+"gitStatusText.upstreamIndicators.text.2" = "Ahead of upstream";
+"gitStatusText.pushIndicators.text" = "Behind push target";
+"gitStatusText.pushIndicators.text.2" = "Ahead of push target";
+"gitStatusText.pushTitle.text" = "Push target";
+"gitStatusText.label.text" = " remote";
+"gitStatusText.rows.text" = "More hosting platform icons";
+"gitStatusText.destination.text" = "Multiple push URLs";
+
+"status.stashLoading" = "Loading stash files…";
+"status.stashFilesTitle" = "Stash · %1$@ · %2$@ files";
+"status.stashFileTitle" = "Stash · %1$@ · %2$@ file";
+"status.heading" = " · No commits yet";
+"status.heading.2" = "Git worktree";
+"status.accessibility" = "Upstream: ";
+"status.pushAccessibility" = "%1$@: %2$@";
+"status.metadata.text" = "Worktree";
+"status.metadata.text.2" = "Remote";
+"status.metadata.text.3" = "Upstream is in the local repository";
+"status.metadata.text.4" = "Not configured";
+"status.metadata.text.7" = "No Git repository";
+"status.tableView.text" = "%1$@, %2$@";

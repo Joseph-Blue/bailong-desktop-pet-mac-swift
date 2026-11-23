@@ -304,6 +304,8 @@
 "messages.progressToastEnabled.keywords" = "自动显示进展小气泡 默认开启 2s 2秒 思考摘要 工具调用 短气泡 小窗口 顶部 进展 自动 弹出 开关";
 "messages.group.keywords.5" = "Git GitHub 分支 仓库 工作区 目录 文件修改 增删 状态 状态条 独立 小窗 常驻 隐藏工作区状态条";
 "messages.group.text" = "Git 状态显示风格";
+"messages.gitTerminologyInEnglish.title" = "Git 术语使用英文";
+"messages.gitTerminologyInEnglish.keywords" = "英文 英语 Git 术语 Repository Upstream Push target Stash Staged Unstaged";
 "messages.group.text.2" = " P10k PL10K VS Code VSCode Git CLI Git 状态图例 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后";
 "messages.taskInfoBarEnabled.title" = "显示任务信息栏";
 "messages.taskInfoBarEnabled.keywords" = "在气泡中显示任务信息栏 Git 状态 GitHub 分支 仓库状态 任务概览 本轮文件改动 文件增删 状态栏 进度 工具调用";
@@ -668,9 +670,8 @@
 
 /* 应用接入补充 */
 "messageSettingsPage.key.text" = "%1$@停留时间";
-"messageSettingsPage.labels.text" = " P10k PL10K VS Code VSCode Git CLI Git 状态图例 远端仓库图标 GitLab Gitee Gitea Forgejo Codeberg Hugging Face 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后 上游 推送目标 Push Remote";
+"messageSettingsPage.labels.text" = " P10k PL10K VS Code VSCode Git CLI Git 状态图例 其他远端平台 远端平台图标 远端仓库图标 Hosting platforms GitLab Gitee Gitea Forgejo Codeberg Hugging Face 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后 上游 推送目标 Push Remote";
 "messageSettingsPage.heading.labelWithString" = "图例：";
-"messageSettingsPage.infoTitle.text" = "更多远端仓库图标";
 "preferences.labels.text" = "让我看看额度还有多少……";
 "preferences.template.text" = "{特定称呼}";
 "settingsSearch.remoteIconKeywords.text" = "远端仓库 GitLab Gitee Gitea Forgejo Hugging Face Remix Icon Icon Monks Simple Icons CC BY-SA";

@@ -15,6 +15,9 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private var path = "", conversationKey:String?, taskKey:String?, wasExecuting = false
     private var editSignature = [String]()
     private var monitor:GitWorkspaceMonitor?
+    private var stashRequest:GitWorkspaceRequest?, stashFailure:String?
+    private var stashes = [GitWorkspaceStatus.Stash]()
+    private var spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result] {monitor?.spaceStatuses ?? [:]}
     private var snapshot:GitWorkspaceStatus? {monitor?.snapshot}
     private var failure:String? {monitor?.failure}
     private var overviewWidth:CGFloat?
@@ -107,7 +110,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         }
     }
     @objc private func statusStyleChanged(_ note:Notification) {
-        guard let keys = note.userInfo?["keys"] as? [String],keys.contains(GitStatusStyle.key) else {return}
+        guard let keys = note.userInfo?["keys"] as? [String],keys.contains(where:{$0 == GitStatusStyle.key || $0 == GitTerminology.key}) else {return}
         updateStatusStyle()
     }
     private func updateStatusStyle() {
@@ -146,7 +149,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let ended = wasExecuting && !executing; wasExecuting = executing
         if monitor == nil,!path.isEmpty {
             let feed = GitWorkspaceMonitor.directory(path); monitor = feed
-            feed.attach(self) { [weak self,weak feed] changed,meaningful in
+            feed.attach(self,spaceChanged:{ [weak self] in self?.updateStatusStyle() }) { [weak self,weak feed] changed,meaningful in
                 guard let self,let feed,self.monitor === feed else {return}
                 self.gitDidChange(changed:changed,meaningful:meaningful)
             }
@@ -222,7 +225,10 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         if monitor.loading && !monitor.hasBaseline && failure == nil && !popover.isShown {
             git.isHidden = false; git.image = sourceIcon(.generic); git.title = L10n.text(.workspace,"status.gitDidChange.title"); git.contentTintColor = .secondaryLabelColor
         } else if popover.isShown {
-            if !showsChanges && changed {presentPopoverContent()}
+            if !showsChanges {
+                if !monitor.loading {refreshStashes()}
+                if changed {presentPopoverContent()}
+            }
         } else if changed {
             presentStatus(); updateDirectory(); onStatusChange()
         }
@@ -239,23 +245,45 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         guard let snapshot else {return}
         git.image = sourceIcon(snapshot.repositoryKind)
         let font = git.font!
-        let style = PetPreferences.shared.gitStatusStyle
-        let heading = snapshot.title+(snapshot.initial ? L10n.text(.workspace,"status.heading") : "")
-        let compactHeading = snapshot.operation.map {heading+" · "+$0.compactTitle} ?? heading
-        let help = NSMutableAttributedString(string:compactHeading,attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.labelColor])
+        let preferences = PetPreferences.shared
+        let style = preferences.gitStatusStyle, terms = preferences.gitTerminology
+        let heading = snapshot.title+(snapshot.initial ? terms.text("status.heading") : "")
+        func statusHeading(font:NSFont,color:NSColor) -> NSMutableAttributedString {
+            let text = NSMutableAttributedString(string:heading,attributes:[.font:font,.foregroundColor:color])
+            if let operation = snapshot.operation {
+                text.append(NSAttributedString(string:" "+operation.compactTitle,attributes:[.font:font,.foregroundColor:StatusTextColor.red]))
+            }
+            return text
+        }
+        let helpFont = NSFont.systemFont(ofSize:11)
+        let help = statusHeading(font:helpFont,color:.labelColor)
+        let space = snapshot.pushSpace ?? snapshot.remoteSpace
+        let spaceStatus = space.flatMap {spaceStatuses[$0]}
+        if space != nil {
+            let attributes:[NSAttributedString.Key:Any] = [.font:helpFont,.foregroundColor:NSColor.labelColor]
+            help.append(NSAttributedString(string:"\n"+L10n.text(.workspace,"spaceStatus.title")+" · ",attributes:attributes))
+            help.append(GitStatusText.spaceDetail(spaceStatus,font:helpFont))
+        }
         git.setHoverHelp(help) { [weak self] in
             guard let self,!self.popover.isShown else {return false}
             return self.git.imagePosition == .imageOnly || self.git.hasTruncatedTitle(in:self.git.contentBounds)
         }
-        let text = NSMutableAttributedString(string:compactHeading+"  ")
+        let text = statusHeading(font:font,color:.secondaryLabelColor)
+        text.append(NSAttributedString(string:"  "))
         text.append(GitStatusText.compact(snapshot,font:font,style:style))
+        if let badge = GitStatusText.spaceBadge(spaceStatus,font:font) {
+            text.append(NSAttributedString(string:" "))
+            text.append(badge)
+        }
         text.addAttribute(.font,value:font,range:NSRange(location:0,length:text.length))
         if git.attributedTitle != text {git.attributedTitle = text}
         git.contentTintColor = .secondaryLabelColor
-        let tracking = GitStatusText.tracking(snapshot,font:font).string
-        let repository = snapshot.repositoryKind == .generic ? nil : snapshot.repositoryKind.title
-        let push = snapshot.pushTarget.map {GitStatusText.pushTitle+"："+GitStatusText.push($0,font:font).string}
-        let accessibility = [repository,heading,snapshot.detachedSummary,snapshot.operation?.detailTitle,snapshot.summary,L10n.text(.workspace,"status.accessibility")+tracking,push]
+        let tracking = GitStatusText.tracking(snapshot,font:font,terms:terms).string
+        let repository = snapshot.repositoryKind == .generic ? nil : snapshot.repositoryKind.title(using:terms)
+        let push = snapshot.pushTarget.map {terms.format("status.pushAccessibility",GitStatusText.pushTitle(terms),GitStatusText.push($0,font:font,terms:terms).string)}
+        let spaceSummary = space.map {_ in L10n.text(.workspace,"spaceStatus.title")+" "+GitStatusText.spaceStatusTitle(spaceStatus)}
+        let accessibility = [repository,heading,snapshot.detachedSummary(using:terms),snapshot.operation?.detailTitle(using:terms),
+            snapshot.summary(using:terms),terms.text("status.accessibility")+tracking,push,spaceSummary]
         git.setAccessibilityValue(accessibility.compactMap {$0}.joined(separator:"，"))
     }
     @objc private func openDetails() {
@@ -266,6 +294,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         if popover.isShown && showsChanges == changes {popover.performClose(nil); return}
         popover.close(); showsChanges = changes
         popover.behavior = .transient; popover.animates = DisclosureMotion.enabled
+        if !changes {refreshStashes()}
         presentPopoverContent()
         popover.show(relativeTo:anchor.bounds,of:anchor,preferredEdge:.maxY)
         popoverDismissal.start(for:popover,anchor:anchor)
@@ -282,12 +311,34 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         if let previous,let updated = content as? GitWorkspaceDetails {updated.restoreReadingPosition(from:previous)}
     }
     private func makeDetails() -> GitWorkspaceDetails {
-        let content = GitWorkspaceDetails(snapshot:snapshot,failure:failure ?? monitor?.observationFailure,loading:monitor?.loading == true,style:PetPreferences.shared.gitStatusStyle)
+        let loading = monitor?.loading == true || stashRequest != nil
+        let preferences = PetPreferences.shared
+        let content = GitWorkspaceDetails(snapshot:snapshot,stashes:stashes,stashLoading:stashRequest != nil && stashes.isEmpty,
+            failure:failure ?? monitor?.observationFailure ?? stashFailure,loading:loading,style:preferences.gitStatusStyle,
+            terms:preferences.gitTerminology,spaceStatuses:spaceStatuses)
         content.onRetry = { [weak self] in self?.refreshGit() }
         return content
     }
+    private func refreshStashes() {
+        stashRequest?.cancel(); stashRequest = nil
+        guard let snapshot,snapshot.stashes > 0 else {stashes = []; stashFailure = nil; return}
+        let query = GitWorkspaceRequest(); stashRequest = query
+        query.startStashes(directory:snapshot.root,previous:stashes) { [weak self,weak query] result in
+            guard let self,let query,self.stashRequest === query else {return}
+            self.stashRequest = nil
+            guard self.popover.isShown,!self.showsChanges else {return}
+            let oldStashes = self.stashes, oldFailure = self.stashFailure
+            switch result {
+            case .success(let stashes):self.stashes = stashes; self.stashFailure = nil
+            case .failure(let error):self.stashFailure = error.localizedDescription
+            }
+            if oldStashes != self.stashes || oldFailure != self.stashFailure || oldStashes.isEmpty {self.presentPopoverContent()}
+            else {(self.popover.contentViewController as? GitWorkspaceDetails)?.setLoading(self.monitor?.loading == true)}
+        }
+    }
     func popoverDidClose(_ notification:Notification) {
         popoverDismissal.stop(); popover.contentViewController = nil
+        stashRequest?.cancel(); stashRequest = nil; stashes = []; stashFailure = nil
         guard active else {return}
         presentStatus(); updateDirectory(); updateChanges(fileEdits); onStatusChange()
     }
@@ -295,9 +346,22 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
 }
 
 private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,NSTableViewDelegate {
-    private enum Row {case heading(GitWorkspaceStatus.Group,Int), file(GitWorkspaceStatus.Entry)}
+    private enum Row {
+        case operation(String), heading(GitWorkspaceStatus.Group,Int), file(GitWorkspaceStatus.Entry)
+        case stashHeading(String), stashSubject(String), stashLoading, stashFile(path:String,commit:String)
+        var file:FileIdentity? {
+            switch self {
+            case .file(let entry):return .init(path:entry.path,group:entry.group,stashCommit:nil)
+            case .stashFile(let path,let commit):return .init(path:path,group:nil,stashCommit:commit)
+            case .operation,.heading,.stashHeading,.stashSubject,.stashLoading:return nil
+            }
+        }
+    }
+    private struct FileIdentity:Equatable {let path:String, group:GitWorkspaceStatus.Group?, stashCommit:String?}
     private let snapshot:GitWorkspaceStatus?, failure:String?
     private let style:GitStatusStyle
+    private let terms:GitTerminology
+    private let spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result]
     private var loading:Bool
     private var retryButton:NSButton?
     func setLoading(_ loading:Bool) {
@@ -308,41 +372,45 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     private var rows = [Row]()
     private let table = WorkspaceFileTable()
     var onRetry:() -> Void = {}
-    private func fileEntry(at row:Int) -> GitWorkspaceStatus.Entry? {
-        guard rows.indices.contains(row),case .file(let entry) = rows[row] else {return nil}
-        return entry
-    }
     func restoreReadingPosition(from previous:GitWorkspaceDetails) {
         view.layoutSubtreeIfNeeded()
         if let origin = previous.table.enclosingScrollView?.contentView.bounds.origin,let scroll = table.enclosingScrollView {
             scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
         }
-        let selected = previous.table.selectedRowIndexes.compactMap {index -> GitWorkspaceStatus.Entry? in
-            guard previous.rows.indices.contains(index),case .file(let entry) = previous.rows[index] else {return nil}
-            return entry
+        let selected = previous.table.selectedRowIndexes.compactMap {index in
+            previous.rows.indices.contains(index) ? previous.rows[index].file : nil
         }
         let indices = rows.indices.filter {index in
-            guard case .file(let entry) = rows[index] else {return false}
-            return selected.contains {$0.path == entry.path && $0.group == entry.group}
+            rows[index].file.map {selected.contains($0)} ?? false
         }
         table.selectRowIndexes(IndexSet(indices),byExtendingSelection:false)
     }
-    init(snapshot:GitWorkspaceStatus?,failure:String?,loading:Bool,style:GitStatusStyle) {
+    init(snapshot:GitWorkspaceStatus?,stashes:[GitWorkspaceStatus.Stash],stashLoading:Bool,failure:String?,loading:Bool,
+         style:GitStatusStyle,terms:GitTerminology,spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result]) {
         self.snapshot = snapshot; self.failure = failure; self.loading = loading
-        self.style = style
+        self.style = style; self.terms = terms; self.spaceStatuses = spaceStatuses
         super.init(nibName:nil,bundle:nil)
         if let snapshot {
+            if let operation = snapshot.operation {rows.append(.operation(operation.detailTitle(using:terms)))}
             for group in GitWorkspaceStatus.Group.allCases {
                 let entries = snapshot.entries.filter {$0.group == group}
                 if !entries.isEmpty {rows.append(.heading(group,entries.count)); rows += entries.map(Row.file)}
             }
         }
+        for (index,stash) in stashes.enumerated() {
+            let reference = "stash@{\(index)}"
+            let titleKey = terms == .english && stash.paths.count == 1 ? "status.stashFileTitle" : "status.stashFilesTitle"
+            rows.append(.stashHeading(terms.format(titleKey,reference,String(stash.paths.count))))
+            if !stash.subject.isEmpty {rows.append(.stashSubject(stash.subject))}
+            rows += stash.paths.map {.stashFile(path:$0,commit:stash.commit)}
+        }
+        if stashLoading {rows.append(.stashLoading)}
     }
     required init?(coder:NSCoder) {fatalError()}
     override func loadView() {
         let detailWidth:CGFloat = 420
         let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
-        let heading = NSTextField(labelWithString:snapshot?.title ?? L10n.text(.workspace,"status.heading.2"))
+        let heading = NSTextField(labelWithString:snapshot?.title ?? terms.text("status.heading.2"))
         heading.font = .systemFont(ofSize:13,weight:.semibold)
         heading.maximumNumberOfLines = 1
         heading.lineBreakMode = .byTruncatingMiddle
@@ -395,7 +463,10 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
         if let snapshot {
             let summaryInset:CGFloat = 10, columnSpacing:CGFloat = 6
-            let captionWidth:CGFloat = snapshot.pushTarget == nil ? 40 : ceil((GitStatusText.pushTitle as NSString).size(withAttributes:[.font:summaryFont]).width)+4
+            let workspaceTitle = terms.text("status.metadata.text"), remoteTitle = terms.text("status.metadata.text.2")
+            let upstreamTitle = terms.text("gitStatusText.repository.text"), pushTitle = GitStatusText.pushTitle(terms)
+            let captionTitles = [workspaceTitle,remoteTitle,upstreamTitle] + (snapshot.pushTarget == nil ? [] : [pushTitle])
+            let captionWidth = max(40,ceil(captionTitles.map {($0 as NSString).size(withAttributes:[.font:summaryFont]).width}.max() ?? 0)+4)
             let valueWidth = detailWidth-2*summaryInset-captionWidth-columnSpacing
             let summary = NSStackView(); summary.orientation = .vertical; summary.alignment = .leading; summary.spacing = 6
             func metadata(_ title:String,_ value:NSView) {
@@ -411,28 +482,41 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             let workspace = WorkspaceLinkButton(); workspace.font = summaryFont
             workspace.update(path:snapshot.root)
             workspace.onOpen = {FinderFileReveal.openDirectory($0)}
-            metadata(L10n.text(.workspace,"status.metadata.text"),workspace)
+            metadata(workspaceTitle,workspace)
             if let url = snapshot.remoteWebURL {
                 let repository = [snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}.joined(separator:"/")
-                metadata(L10n.text(.workspace,"status.metadata.text.2"),RepositoryLinkButton(url:url,label:[snapshot.remoteName,repository.isEmpty ? nil : repository].compactMap {$0}.joined(separator:" · ")))
-            } else if snapshot.remoteName == "." {metadata(L10n.text(.workspace,"status.metadata.text.2"),label(L10n.text(.workspace,"status.metadata.text.3")))}
+                metadata(remoteTitle,RepositoryLinkButton(url:url,label:[snapshot.remoteName,repository.isEmpty ? nil : repository].compactMap {$0}.joined(separator:" · ")))
+            } else if snapshot.remoteName == "." {metadata(remoteTitle,label(terms.text("status.metadata.text.3")))}
             else if let remote = snapshot.remoteName {
-                metadata(L10n.text(.workspace,"status.metadata.text.2"),label(([remote]+[snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}).joined(separator:" · ")))
-            } else {metadata(L10n.text(.workspace,"status.metadata.text.2"),label(snapshot.remoteNames.isEmpty ? L10n.text(.workspace,"status.metadata.text.4") : snapshot.remoteNames.joined(separator:"、")))}
-            let upstream = GitStatusText.tracking(snapshot,font:summaryFont,style:style)
-            metadata(L10n.text(.workspace,"gitStatusText.repository.text"),selectableLabel(upstream,width:valueWidth))
+                metadata(remoteTitle,label(([remote]+[snapshot.remoteHost,snapshot.remoteRepository].compactMap {$0}).joined(separator:" · ")))
+            } else {metadata(remoteTitle,label(snapshot.remoteNames.isEmpty ? terms.text("status.metadata.text.4") : snapshot.remoteNames.joined(separator:"、")))}
+            let upstream = GitStatusText.tracking(snapshot,font:summaryFont,style:style,terms:terms)
+            metadata(upstreamTitle,selectableLabel(upstream,width:valueWidth))
             if let pushTarget = snapshot.pushTarget {
-                let push = GitStatusText.push(pushTarget,font:summaryFont,style:style)
-                metadata(GitStatusText.pushTitle,selectableLabel(push,width:valueWidth))
+                let push = GitStatusText.push(pushTarget,font:summaryFont,style:style,terms:terms)
+                metadata(pushTitle,selectableLabel(push,width:valueWidth))
             }
             stack.addArrangedSubview(RoundedSectionBackground(content:summary,horizontalInset:summaryInset,verticalInset:8,solidFill:true))
-            let states = GitStatusText.stateDetails(snapshot,font:summaryFont,style:style)
+            let remoteSpace = snapshot.remoteSpace, pushSpace = snapshot.pushSpace
+            let spaces = [remoteSpace == pushSpace ? nil : remoteSpace,pushSpace].compactMap {$0}
+            for space in spaces {
+                let title = GitStatusText.spaceHeading(font:.systemFont(ofSize:11,weight:.semibold))
+                let detail = GitStatusText.spaceDetail(spaceStatuses[space],font:summaryFont,space:spaces.count > 1 ? space : nil)
+                let inset:CGFloat = 4
+                let body = selectableLabel(detail,width:detailWidth-2*inset)
+                let section = NSStackView(views:[NSTextField(labelWithAttributedString:title),body])
+                section.orientation = .vertical; section.alignment = .leading; section.spacing = 3
+                section.edgeInsets = NSEdgeInsets(top:2,left:inset,bottom:2,right:inset)
+                stack.addArrangedSubview(section)
+                body.widthAnchor.constraint(equalTo:section.widthAnchor,constant:-2*inset).isActive = true
+            }
+            let states = GitStatusText.stateDetails(snapshot,font:summaryFont,terms:terms)
             if states.length > 0 {stack.addArrangedSubview(selectableLabel(states,width:detailWidth))}
-            if rows.isEmpty {
-                let clean = NSAttributedString(string:L10n.text(.workspace,"gitStatusText.clean"),attributes:[.font:summaryFont,.foregroundColor:StatusTextColor.green])
+            if snapshot.clean {
+                let clean = GitStatusText.cleanLabel(font:summaryFont,style:style,terms:terms)
                 stack.addArrangedSubview(selectableLabel(clean,width:detailWidth))
             }
-        } else {stack.addArrangedSubview(label(failure ?? (loading ? L10n.text(.workspace,"status.metadata.text.6") : L10n.text(.workspace,"status.metadata.text.7"))))}
+        } else {stack.addArrangedSubview(label(failure ?? (loading ? L10n.text(.workspace,"status.metadata.text.6") : terms.text("status.metadata.text.7"))))}
         if !rows.isEmpty {
             let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
             scroll.contentView.drawsBackground = false
@@ -441,14 +525,15 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
             table.addTableColumn(column); table.rowHeight = 26; table.intercellSpacing = .zero
             table.delegate = self; table.dataSource = self
             table.fileURLForRow = { [weak self] row in
-                guard let self,let entry = fileEntry(at:row),let root = snapshot?.root else {return nil}
-                return URL(fileURLWithPath:root,isDirectory:true).appendingPathComponent(entry.path)
+                guard let self,rows.indices.contains(row),let file = rows[row].file,let root = snapshot?.root else {return nil}
+                return URL(fileURLWithPath:root,isDirectory:true).appendingPathComponent(file.path)
             }
             table.fileGroupForRow = { [weak self] row in
                 guard let self,rows.indices.contains(row) else {return nil}
                 switch rows[row] {
                 case .heading(let group,_):return group
                 case .file(let entry):return entry.group
+                case .operation,.stashHeading,.stashSubject,.stashLoading,.stashFile:return nil
                 }
             }
             table.setAccessibilityLabel(L10n.text(.workspace,"status.metadata.text.8"))
@@ -461,34 +546,57 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         preferredContentSize = view.fittingSize
     }
     private func rowHeight(_ row:Int) -> CGFloat {
-        if case .heading = rows[row] {return row == 0 ? 22 : 30}
-        return 26
+        switch rows[row] {
+        case .operation,.heading,.stashHeading:return row == 0 ? 22 : 30
+        case .stashSubject,.stashLoading:return 20
+        case .file,.stashFile:return 26
+        }
     }
     func tableView(_ tableView:NSTableView,heightOfRow row:Int) -> CGFloat {rowHeight(row)}
     func numberOfRows(in tableView:NSTableView) -> Int {rows.count}
     func tableView(_ tableView:NSTableView,rowViewForRow row:Int) -> NSTableRowView? {
-        if case .file = rows[row] {return WorkspaceFileTableRow()}
-        return nil
+        rows[row].file == nil ? nil : WorkspaceFileTableRow()
     }
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
-        switch rows[row] {
-        case .heading(let group,let count):
-            let font = NSFont.systemFont(ofSize:11,weight:.semibold)
-            let text = NSTextField(labelWithString:""); text.attributedStringValue = GitStatusText.groupDetail(group,count:count,font:font,style:style)
-            text.setAccessibilityLabel(L10n.format(.workspace,"status.tableView.text",String(describing:group.title),String(describing:count)))
+        func heading(_ title:NSAttributedString,accessibility:String,subordinate:Bool = false) -> NSView {
+            let text = NSTextField(labelWithString:""); text.attributedStringValue = title
+            text.lineBreakMode = .byTruncatingTail
+            text.setAccessibilityLabel(accessibility)
+            if subordinate {text.setHoverHelp(accessibility) { [weak text] in text?.hasTruncatedText == true }}
             let cell = TopDownView(); cell.addSubview(text); text.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
-                text.leadingAnchor.constraint(equalTo:cell.leadingAnchor,constant:4),
+                text.leadingAnchor.constraint(equalTo:cell.leadingAnchor,constant:subordinate ? 28 : 4),
                 text.trailingAnchor.constraint(lessThanOrEqualTo:cell.trailingAnchor,constant:-6),
-                text.centerYAnchor.constraint(equalTo:cell.centerYAnchor,constant:row == 0 ? 0 : 3)
+                text.centerYAnchor.constraint(equalTo:cell.centerYAnchor,constant:subordinate || row == 0 ? 0 : 3)
             ])
             return cell
+        }
+        func note(_ title:String) -> NSView {
+            let text = NSAttributedString(string:title,attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.secondaryLabelColor])
+            return heading(text,accessibility:title,subordinate:true)
+        }
+        let font = NSFont.systemFont(ofSize:11,weight:.semibold)
+        switch rows[row] {
+        case .operation(let title):
+            return heading(GitStatusText.operationDetail(title,font:font),accessibility:title)
+        case .heading(let group,let count):
+            let accessibility = terms.format("status.tableView.text",terms.text(group.titleKey),String(count))
+            return heading(GitStatusText.groupDetail(group,count:count,font:font,style:style,terms:terms),accessibility:accessibility)
+        case .stashHeading(let title):
+            return heading(GitStatusText.stashDetail(title,font:font,style:style),accessibility:title)
+        case .stashSubject(let subject):
+            return note(subject)
+        case .stashLoading:
+            return note(terms.text("status.stashLoading"))
+        case .stashFile(let path,_):
+            return WorkspaceFileRow(title:(path as NSString).lastPathComponent,symbol:"doc",color:.secondaryLabelColor,
+                detail:path,directory:(path as NSString).deletingLastPathComponent)
         case .file(let entry):
             let (symbol,color) = WorkspaceFileRow.symbol(for:entry)
             let parent = (entry.path as NSString).deletingLastPathComponent
             return WorkspaceFileRow(title:(entry.path as NSString).lastPathComponent,symbol:symbol,color:color,
-                detail:entry.originalPath.map {$0+" → "+entry.path} ?? entry.path,directory:parent,change:entry.change.title)
+                detail:entry.originalPath.map {$0+" → "+entry.path} ?? entry.path,directory:parent,change:entry.change.title(using:terms))
         }
     }
-    func tableView(_ tableView:NSTableView,shouldSelectRow row:Int) -> Bool {if case .file = rows[row] {return true}; return false}
+    func tableView(_ tableView:NSTableView,shouldSelectRow row:Int) -> Bool {rows[row].file != nil}
 }

@@ -4,7 +4,7 @@ enum L10n {
     enum Table:String {
         case about = "About", animations = "Animations", app = "App", conversation = "Conversation"
         case diagnostics = "Diagnostics", dialogue = "Dialogue", settings = "Settings"
-        case tasks = "Tasks", usage = "Usage", workspace = "Workspace"
+        case tasks = "Tasks", usage = "Usage", workspace = "Workspace", englishGit = "WorkspaceGitEnglish"
     }
 
     private static let bundle:Bundle = {

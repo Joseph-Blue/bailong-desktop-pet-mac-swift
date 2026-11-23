@@ -1,5 +1,19 @@
 import Foundation
 
+enum GitTerminology:CaseIterable {
+    case localized, english
+
+    static let key = "gitTerminologyInEnglish"
+
+    func text(_ key:String) -> String {
+        L10n.text(self == .english ? .englishGit : .workspace,key)
+    }
+
+    func format(_ key:String,_ arguments:String...) -> String {
+        String(format:text(key),arguments:arguments)
+    }
+}
+
 struct GitWorkspaceStatus:Equatable {
     enum RepositoryKind {
         case generic, github, gitlab, gitee, gitea, forgejo, huggingFace, remote
@@ -18,61 +32,70 @@ struct GitWorkspaceStatus:Equatable {
             }
         }
 
-        var title:String {
+        var title:String {title(using:.localized)}
+
+        func title(using terms:GitTerminology) -> String {
             switch self {
-            case .generic: return L10n.text(.workspace,"gitStatusText.generic")
+            case .generic: return terms.text("gitStatusText.generic")
             case .github: return "GitHub"
             case .gitlab: return "GitLab"
             case .gitee: return "Gitee"
             case .gitea: return "Gitea"
             case .forgejo: return "Forgejo"
             case .huggingFace: return "Hugging Face"
-            case .remote: return L10n.text(.workspace,"gitStatusText.remote")
+            case .remote: return terms.text("gitStatusText.remote")
             }
         }
     }
     enum Group:CaseIterable {
         case conflicted, staged, unstaged, untracked
-        var title:String {
+        var titleKey:String {
             switch self {
-            case .conflicted:return L10n.text(.workspace,"gitWorkspace.conflicted")
-            case .staged:return L10n.text(.workspace,"gitWorkspace.conflicted.2")
-            case .unstaged:return L10n.text(.workspace,"gitWorkspace.conflicted.3")
-            case .untracked:return L10n.text(.workspace,"gitWorkspace.conflicted.4")
+            case .conflicted:return "gitWorkspace.conflicted"
+            case .staged:return "gitWorkspace.conflicted.2"
+            case .unstaged:return "gitWorkspace.conflicted.3"
+            case .untracked:return "gitWorkspace.conflicted.4"
             }
         }
     }
     enum Change:Equatable {
         case added, deleted, renamed, copied, typeChanged, submodule, modified, conflict(String)
-        var title:String {
+        func title(using terms:GitTerminology) -> String {
             switch self {
-            case .added:return L10n.text(.workspace,"gitWorkspace.change.text")
-            case .deleted:return L10n.text(.workspace,"gitWorkspace.change.text.2")
-            case .renamed:return L10n.text(.workspace,"gitWorkspace.change.text.3")
-            case .copied:return L10n.text(.workspace,"gitWorkspace.change.text.4")
-            case .typeChanged:return L10n.text(.workspace,"gitWorkspace.change.text.5")
-            case .submodule:return L10n.text(.workspace,"gitWorkspace.change.text.7")
-            case .modified:return L10n.text(.workspace,"gitWorkspace.change.text.6")
+            case .added:return terms.text("gitWorkspace.change.text")
+            case .deleted:return terms.text("gitWorkspace.change.text.2")
+            case .renamed:return terms.text("gitWorkspace.change.text.3")
+            case .copied:return terms.text("gitWorkspace.change.text.4")
+            case .typeChanged:return terms.text("gitWorkspace.change.text.5")
+            case .submodule:return terms.text("gitWorkspace.change.text.7")
+            case .modified:return terms.text("gitWorkspace.change.text.6")
             case .conflict(let code):
                 switch code {
-                case "DD":return L10n.text(.workspace,"gitWorkspace.changes")
-                case "AU":return L10n.text(.workspace,"gitWorkspace.changes.2")
-                case "UD":return L10n.text(.workspace,"gitWorkspace.changes.3")
-                case "UA":return L10n.text(.workspace,"gitWorkspace.changes.4")
-                case "DU":return L10n.text(.workspace,"gitWorkspace.changes.5")
-                case "AA":return L10n.text(.workspace,"gitWorkspace.changes.6")
-                case "UU":return L10n.text(.workspace,"gitWorkspace.changes.7")
-                default:return Group.conflicted.title
+                case "DD":return terms.text("gitWorkspace.changes")
+                case "AU":return terms.text("gitWorkspace.changes.2")
+                case "UD":return terms.text("gitWorkspace.changes.3")
+                case "UA":return terms.text("gitWorkspace.changes.4")
+                case "DU":return terms.text("gitWorkspace.changes.5")
+                case "AA":return terms.text("gitWorkspace.changes.6")
+                case "UU":return terms.text("gitWorkspace.changes.7")
+                default:return terms.text(Group.conflicted.titleKey)
                 }
             }
         }
     }
     struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:Change}
+    struct Stash:Equatable {let commit:String, subject:String, paths:[String]}
     struct Operation:Equatable {
-        let compactTitle:String, detailTitle:String
-        init(_ compactTitle:String, detailTitle:String? = nil) {
-            self.compactTitle = compactTitle
-            self.detailTitle = detailTitle ?? compactTitle
+        let compactTitle:String
+        private let detailKey:String, progress:String?
+        init(_ name:String, detailKey:String, progress:String? = nil) {
+            compactTitle = progress.map {name+" "+$0} ?? name
+            self.detailKey = detailKey
+            self.progress = progress
+        }
+        func detailTitle(using terms:GitTerminology) -> String {
+            if let progress {return terms.format(detailKey,progress)}
+            return terms.text(detailKey)
         }
     }
     struct RemoteAddress:Equatable {
@@ -120,7 +143,6 @@ struct GitWorkspaceStatus:Equatable {
     struct PushTarget:Equatable {
         let remote:String, branch:String, address:RemoteAddress?
         let ahead:Int?, behind:Int?
-        var kind:RepositoryKind {RepositoryKind(host:address?.host)}
     }
     var root = "", branch = "", commit = "", tag:String?, upstream:String?
     var ahead:Int?, behind:Int?, stashes = 0
@@ -131,25 +153,32 @@ struct GitWorkspaceStatus:Equatable {
     var pushTarget:PushTarget?
     var entries = [Entry]()
     var observationPaths = [String]()
+    var remoteSpace:HuggingFaceSpace? {HuggingFaceSpace(host:remoteHost,repository:remoteRepository)}
+    var pushSpace:HuggingFaceSpace? {
+        pushTarget?.address.flatMap {HuggingFaceSpace(host:$0.host,repository:$0.repository)}
+    }
     var repositoryKind:RepositoryKind {
+        if let pushHost = pushTarget?.address?.host {return RepositoryKind(host:pushHost)}
         guard let remoteName,remoteName != "." else {return .generic}
         return RepositoryKind(host:remoteHost)
     }
     var counts:[Group:Int] {entries.reduce(into:[:]) {$0[$1.group,default:0] += 1}}
     var clean:Bool {entries.isEmpty}
-    static let stashLabel = L10n.text(.workspace,"gitWorkspace.stashLabel")
-    var stashSummary:String? {stashes > 0 ? L10n.format(.workspace,"gitWorkspace.text",String(describing:Self.stashLabel),String(describing:stashes)) : nil}
-    var detachedSummary:String? {detached ? L10n.text(.workspace,"gitWorkspace.text.2") : nil}
+    func detachedSummary(using terms:GitTerminology) -> String? {
+        detached ? terms.text("gitWorkspace.text.2") : nil
+    }
     var title:String {
         guard detached else {return branch}
         if let tag {return "#"+tag}
         return "@"+commit.prefix(8)
     }
-    var summary:String {
+    func summary(using terms:GitTerminology) -> String {
         let counts = counts
-        var parts = Group.allCases.compactMap {group in counts[group].map {group.title+L10n.format(.workspace,"gitWorkspace.text.3",String(describing:$0))}}
-        if parts.isEmpty {parts.append(L10n.text(.workspace,"gitWorkspace.text.4"))}
-        if let stashSummary {parts.append(stashSummary)}
+        var parts = Group.allCases.compactMap {group in
+            counts[group].map {terms.text(group.titleKey)+terms.format("gitWorkspace.text.3",String($0))}
+        }
+        if parts.isEmpty {parts.append(terms.text("gitStatusText.clean"))}
+        if stashes > 0 {parts.append(terms.format("gitWorkspace.text",terms.text("gitWorkspace.stashLabel"),String(stashes)))}
         return parts.joined(separator:" · ")
     }
     static func parse(_ data:Data) throws -> Self {
@@ -220,7 +249,7 @@ final class GitWorkspaceRequest {
         task.arguments = ["--no-optional-locks","-C",directory]+arguments
         var environment = ProcessInfo.processInfo.environment
         environment["LC_ALL"] = "C"; environment["GIT_TERMINAL_PROMPT"] = "0"
-        if arguments.first == "rev-list" {environment["GIT_NO_LAZY_FETCH"] = "1"}
+        environment["GIT_NO_LAZY_FETCH"] = "1"
         // 会话 cwd 是唯一目标，不继承启动桌宠的终端中指向其他仓库的 Git 环境。
         for key in ["GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE","GIT_COMMON_DIR"] {environment.removeValue(forKey:key)}
         task.environment = environment; task.standardOutput = pipe; task.standardError = pipe
@@ -264,6 +293,23 @@ final class GitWorkspaceRequest {
         var value = String(decoding:data,as:UTF8.self)
         if value.hasSuffix("\n") {value.removeLast()}
         return value
+    }
+    func readStashes(directory:String,previous:[GitWorkspaceStatus.Stash] = []) throws -> [GitWorkspaceStatus.Stash] {
+        let fields = try run(directory,["stash","list","-z","--format=%H%x00%gs"]).1
+            .split(separator:0,omittingEmptySubsequences:false).dropLast()
+        guard fields.count.isMultiple(of:2) else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.stashListError"))}
+        let cached = Dictionary(previous.map {($0.commit,$0.paths)},uniquingKeysWith:{first,_ in first})
+        let options = ["--name-only","-z","--no-renames","--no-ext-diff","--no-textconv"]
+        return try stride(from:fields.startIndex,to:fields.endIndex,by:2).map {index in
+            let commit = String(decoding:fields[index],as:UTF8.self)
+            let subject = String(decoding:fields[index+1],as:UTF8.self)
+            if let paths = cached[commit] {return .init(commit:commit,subject:subject,paths:paths)}
+            let worktree = try run(directory,["-c","stash.showOnlyUntracked=false","stash","show","--include-untracked"]+options+[commit,"--"]).1
+            // 暂存后又把工作树改回 HEAD 时，文件仍保存在 stash 的索引快照里。
+            let indexTree = try run(directory,["diff-tree","--no-commit-id","-r"]+options+[commit+"^1",commit+"^2","--"]).1
+            let paths = Set((worktree.split(separator:0)+indexTree.split(separator:0)).map {String(decoding:$0,as:UTF8.self)})
+            return .init(commit:commit,subject:subject,paths:paths.sorted())
+        }
     }
     func read(directory:String) throws -> GitWorkspaceStatus? {
         // 明确区分普通目录和查询失败，错误不能显示成干净。
@@ -375,7 +421,7 @@ final class GitWorkspaceRequest {
                 return nil
             }
         }
-        if exists("rebase-apply/applying") {return .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text"))}
+        if exists("rebase-apply/applying") {return .init("am",detailKey:"gitWorkspace.rebaseStep.text")}
         let progressPaths:(current:String,total:String)
         if exists("rebase-apply") {
             progressPaths = ("rebase-apply/next","rebase-apply/last")
@@ -383,23 +429,29 @@ final class GitWorkspaceRequest {
             progressPaths = ("rebase-merge/msgnum","rebase-merge/end")
         } else {
             let markers:[(path:String, operation:GitWorkspaceStatus.Operation)] = [
-                ("MERGE_HEAD", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.2"))),
-                ("CHERRY_PICK_HEAD", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.3"), detailTitle:L10n.text(.workspace,"gitWorkspace.rebaseStep.text.4"))),
-                ("REVERT_HEAD", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.5"), detailTitle:L10n.text(.workspace,"gitWorkspace.rebaseStep.text.6"))),
-                ("BISECT_LOG", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.7")))
+                ("MERGE_HEAD", .init("merge",detailKey:"gitWorkspace.rebaseStep.text.2")),
+                ("CHERRY_PICK_HEAD", .init("cherry",detailKey:"gitWorkspace.rebaseStep.text.4")),
+                ("REVERT_HEAD", .init("revert",detailKey:"gitWorkspace.rebaseStep.text.6")),
+                ("BISECT_LOG", .init("bisect",detailKey:"gitWorkspace.rebaseStep.text.7"))
             ]
             return markers.first {exists($0.path)}?.operation
         }
         if let current = try rebaseStep(progressPaths.current), let total = try rebaseStep(progressPaths.total),
            current > 0, current <= total {
             let progress = "\(current)/\(total)"
-            return .init(L10n.format(.workspace,"gitWorkspace.rebaseStep.text.8",String(describing:progress)), detailTitle:L10n.format(.workspace,"gitWorkspace.rebaseStep.text.9",String(describing:progress)))
+            return .init("rebase",detailKey:"gitWorkspace.rebaseStep.text.9",progress:progress)
         }
-        return .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.10"), detailTitle:L10n.text(.workspace,"gitWorkspace.rebaseStep.text.11"))
+        return .init("rebase",detailKey:"gitWorkspace.rebaseStep.text.11")
     }
     func start(directory:String,completion:@escaping (Result<GitWorkspaceStatus?,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async { [self] in
             let result = Result {try read(directory:directory)}
+            DispatchQueue.main.async {completion(result)}
+        }
+    }
+    func startStashes(directory:String,previous:[GitWorkspaceStatus.Stash],completion:@escaping (Result<[GitWorkspaceStatus.Stash],Error>) -> Void) {
+        DispatchQueue.global(qos:.utility).async { [self] in
+            let result = Result {try readStashes(directory:directory,previous:previous)}
             DispatchQueue.main.async {completion(result)}
         }
     }
