@@ -17,6 +17,10 @@ final class ChatComposer: NSObject {
     private let recovery = NSStackView()
     private var recoveryActions = [ActionButton]()
     private let composerClose = BubbleCloseButton()
+    private let header = NSStackView()
+    private let preferences:PetPreferences
+    private var closeButtonOnRight = false
+    private var closeButtonScreenMidX:CGFloat?
     private(set) var composerFooterButtons = [ActionButton]()
     private var composerButtonHeight:NSLayoutConstraint?
     private var localDismissMonitor:Any?, globalDismissMonitor:Any?
@@ -48,7 +52,8 @@ final class ChatComposer: NSObject {
     var onSubmit:() -> Void = {}, onFolder:() -> Void = {}, onNew:() -> Void = {}, onHistory:() -> Void = {}, onHide:() -> Void = {}
     var onNewDefault:() -> Void = {}
     var onLayoutSizeChange:() -> Void = {}
-    init(models:ChatModelSettings) {
+    init(models:ChatModelSettings,preferences:PetPreferences = .shared) {
+        self.preferences = preferences
         super.init()
         composer.tracksContentCursor = true; composer.acceptsMouseMovedEvents = true
         composer.level = NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1); composer.contentMinSize = NSSize(width:540,height:420)
@@ -69,7 +74,8 @@ final class ChatComposer: NSObject {
         composerClose.onClose = { [weak self] in self?.hideComposer() }
         composerClose.widthAnchor.constraint(equalToConstant:24).isActive = true
         composerClose.heightAnchor.constraint(equalToConstant:24).isActive = true
-        let header = NSStackView(views:[composerClose,status,NSView()]); header.spacing = 8; header.alignment = .centerY
+        for view in [composerClose,status,NSView()] {header.addArrangedSubview(view)}
+        header.orientation = .horizontal; header.spacing = 8; header.alignment = .centerY
         composerButton = ActionButton("发送") { [weak self] in guard let self else{return}; self.onSubmit() }
         ChatViewLayout.configureSendButton(composerButton)
         composerButton.emphasize()
@@ -138,7 +144,26 @@ final class ChatComposer: NSObject {
         composerEditor.onTextChange = { [weak self] in self?.updateLayout() }
         composerModel.onSummaryChange = { [weak self] in self?.updateLayout() }
         composerEditor.send = { [weak self] in guard let self else{return}; self.onSubmit() }
-
+        NotificationCenter.default.addObserver(self,selector:#selector(closeButtonPreferenceChanged(_:)),
+                                               name:PetPreferences.didChange,object:preferences)
+        refreshCloseButtonPosition()
+    }
+    func move(to origin:NSPoint,screenFrame:CGRect? = nil) {
+        composerMotion.move(to:origin)
+        closeButtonScreenMidX = (screenFrame ?? composer.screen?.visibleFrame)?.midX
+        refreshCloseButtonPosition()
+    }
+    @objc private func closeButtonPreferenceChanged(_ note:Notification) {
+        guard (note.userInfo?["keys"] as? [String])?.contains(BubbleCloseButtonPosition.key) == true else {return}
+        refreshCloseButtonPosition()
+    }
+    private func refreshCloseButtonPosition() {
+        let onRight = preferences.bubbleCloseButtonPosition.isOnRight(
+            windowMidX:composerMotion.frame.midX,screenMidX:closeButtonScreenMidX,wasOnRight:closeButtonOnRight)
+        guard onRight != closeButtonOnRight else {return}
+        closeButtonOnRight = onRight
+        header.removeArrangedSubview(composerClose)
+        header.insertArrangedSubview(composerClose,at:onRight ? header.arrangedSubviews.count : 0)
     }
     func prepareLayout() {
         updateLayout(force:true)

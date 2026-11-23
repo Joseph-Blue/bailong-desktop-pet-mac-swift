@@ -2,7 +2,7 @@
 
 ## API 供应商图标
 
-OpenAI 模板图来自 OpenAI 桌面端的 chatgptTemplate@2x.png。
+OpenAI 模板图来自 OpenAI 桌面端的 `chatgptTemplate@2x.png`。
 
 DeepSeek、xAI、Mistral、Kimi 与智谱 GLM 图标来自各自开放平台的站点标识。
 

@@ -4,14 +4,15 @@ import Darwin
 /// 终端开关与输出由主队列处理。桌面 IPC 工作队列仅读取当次监视实例。
 final class TerminalMonitor {
     private static let development = ProcessInfo.processInfo.environment["BAILONG_DEV_RUN"] == "1"
+    private static let animationDetailsOnStart = !CommandLine.arguments.contains("--no-monitor-animation")
     private static let stateLock = NSLock()
-    private static var current:TerminalMonitor? = development ? TerminalMonitor() : nil
+    private static var current:TerminalMonitor? = development && !CommandLine.arguments.contains("--no-monitor") ? TerminalMonitor() : nil
     static var active:TerminalMonitor? {development ? stateLock.withLock {current} : nil}
-    private(set) var showsAnimation = !CommandLine.arguments.contains("--monitor") || CommandLine.arguments.contains("--monitor-animation")
+    private(set) var showsAnimation = TerminalMonitor.animationDetailsOnStart
 
     static func keyboard(onEnable:@escaping (TerminalMonitor) -> Void) -> DispatchSourceRead? {
         guard development,CommandLine.arguments.contains("--monitor-keys"),isatty(STDIN_FILENO) == 1 else {return nil}
-        var resumeAnimation = active?.showsAnimation ?? true
+        var resumeAnimation = active?.showsAnimation ?? animationDetailsOnStart
         let source = DispatchSource.makeReadSource(fileDescriptor:STDIN_FILENO,queue:.main)
         source.setEventHandler {
             var bytes = [UInt8](repeating:0,count:64)

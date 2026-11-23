@@ -42,7 +42,7 @@ enum SettingsSection: Int, CaseIterable {
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
         case .activity: return PetGestureSetting.all.map(\.key) + ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
         case .messages: return MessageSettingsPage.preferenceKeys + [PetPreferences.tokenDetailsKey]
-        case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity"]
+        case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity",BubbleCloseButtonPosition.key]
         case .advanced: return ["defaultWorkspace"]
         case .about: return []
         case .updates: return ["automaticallyCheckUpdates"]
@@ -53,6 +53,27 @@ enum SettingsSection: Int, CaseIterable {
 
 enum MessagePurpose { case interaction, progress, result, attention, quota, preview }
 enum AnimationSelection { case general, idle, docked, task }
+
+enum BubbleCloseButtonPosition:String, CaseIterable {
+    case upperLeft, upperRight, towardScreenCenter
+
+    static let key = "bubbleCloseButtonPosition"
+    static let title = "气泡关闭按钮位置"
+    static let help = "仅适用于消息气泡和临时输入窗。选择「靠向屏幕中央」时，如果窗口中心在屏幕左半边，关闭按钮显示在右上角。如果窗口中心在右半边，关闭按钮显示在左上角。"
+    static var options:[(String,String)] {
+        [(upperLeft.rawValue,"左上角"),(upperRight.rawValue,"右上角"),(towardScreenCenter.rawValue,"靠向屏幕中央")]
+    }
+
+    func isOnRight(windowMidX:CGFloat,screenMidX:CGFloat?,wasOnRight:Bool) -> Bool {
+        switch self {
+        case .upperLeft: return false
+        case .upperRight: return true
+        case .towardScreenCenter:
+            guard let screenMidX,windowMidX != screenMidX else {return wasOnRight}
+            return windowMidX < screenMidX
+        }
+    }
+}
 
 enum SendShortcut: String, CaseIterable {
     case commandReturn, returnToSend, controlOrCommandReturn
@@ -93,6 +114,7 @@ final class PetPreferences {
         "automaticallyCheckUpdates":false,"defaultWorkspace":"","petChatFastMode":false,
         "taskInfoBarEnabled":true,"gitWindowEnabled":false,GitStatusStyle.key:GitStatusStyle.defaultStyle.rawValue,tokenDetailsKey:false,TokenCountFormat.key:TokenCountFormat.full.rawValue,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
+        BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.upperLeft.rawValue,
         "showDiagnostics":false,"diagnosticsPinned":true,"preloadWholeAnimation":false,"animationBufferFrames":12,"animationQuality":"512","animationFPSLimit":"full","animationOpeningCache":true,
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
         "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,BrowserSearchEngine.key:BrowserSearchEngine.defaultEngine.rawValue,
@@ -150,7 +172,7 @@ final class PetPreferences {
     static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
         TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue),GitStatusStyle.key:GitStatusStyle.allCases.map(\.rawValue),BrowserSearchEngine.key:BrowserSearchEngine.allCases.map(\.rawValue),
-        ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue)]
+        ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue),BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.allCases.map(\.rawValue)]
         .merging(PetGestureSetting.all.map {($0.key,PetGestureSetting.actions.map(\.0))}) {_, gesture in gesture}
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
@@ -207,6 +229,7 @@ final class PetPreferences {
     func string(_ key: String) -> String {value(key) as? String ?? ""}
     var tokenCountFormat:TokenCountFormat {TokenCountFormat(rawValue:string(TokenCountFormat.key)) ?? .full}
     var gitStatusStyle:GitStatusStyle {GitStatusStyle(rawValue:string(GitStatusStyle.key)) ?? .defaultStyle}
+    var bubbleCloseButtonPosition:BubbleCloseButtonPosition {BubbleCloseButtonPosition(rawValue:string(BubbleCloseButtonPosition.key)) ?? .upperLeft}
     var animationBufferFrames: Int { Int(number("animationBufferFrames")) }
     var defaultWorkspace:URL {
         let path = string("defaultWorkspace")

@@ -46,16 +46,21 @@
 
 ```sh
 ./build.command                   # 构建 Apple Silicon 正式结构 App
+./build.command --dmg              # 构建 App 并在同一目录输出 DMG
 ./build.command x86_64            # 构建 Intel App
 ./build.command --resources-zip /绝对路径/bailong-dev-assets-2026-11-10.zip
                                   # 导入指定路径的素材包并构建
 ./build.command --check           # 仅检查编译环境与运行素材
 ./run-dev.command                 # 启动开发程序，默认显示协议、会话和逐段动画
-./run-dev.command --monitor       # 启动时收起逐段动画明细
 ./run-dev.command --build-only     # 仅编译开发可执行文件（无需运行素材）
+./launch.command                  # 打开本机架构的已构建 App
 ```
 
-**终端日志**随开发程序启动，默认显示 Codex 协议、会话状态和逐段动画。交互终端按 `M` 暂停或恢复日志，按 `A` 收起或展开逐段动画，无需回车。用 `./run-dev.command > bailong-monitor.log` 可将本次标准输出保存为纯文本。[终端监视说明](docs/开发资源获取.md#终端监视)
+三个入口均支持 `--help`、`-h`、`help` 和 `'?'`。参数有误时会显示原因和对应帮助。
+
+用 `./build.command --dmg-background '头图.png'` 可以为 DMG 指定 PNG 或 TIFF 头图。支持相对路径和绝对路径。[DMG 打包说明](docs/开发资源获取.md#dmg-打包)
+
+**终端监视**默认开启，也可显式传入 `--monitor`。用 `--no-monitor` 从暂停状态启动，或用 `--no-monitor-animation` 收起逐段动画明细。交互终端按 `M` 暂停或恢复监视，按 `A` 切换逐段动画，无需回车。[终端监视说明](docs/开发资源获取.md#终端监视)
 
 - **素材导入**：默认仅补齐缺失文件；追加 `--replace-resources` 会先备份同名旧文件至 `.build/resource-import/` 再替换，追加 `--download-resources` 则直接拉取清单指定版本的素材包。
 - **SDK 档位**：构建脚本自动检测当前 SDK 并选择最高可用档位（可通过 `BAILONG_BUILD_PROFILE=auto|full|glass|plain` 或 `SDKROOT` 显式指定）。三档编译产物的最低运行系统均为 macOS 14：

@@ -53,21 +53,24 @@ final class AboutPageController: NSViewController {
         versionDetails.orientation = .vertical
         versionDetails.alignment = .centerX
         versionDetails.spacing = 4
-        let buildCommit = Paths.localBuildCommit
+        let buildCommit = Paths.isReleaseBuild ? nil : Paths.localBuildCommit
+        let buildType = Paths.isReleaseBuild ? "正式版 Release" : "本地构建"
+        let buildLabel = NSTextField(labelWithString:buildCommit.map {"\(buildType) \($0.prefix(8))"} ?? buildType)
+        buildLabel.font = .systemFont(ofSize:12)
+        buildLabel.textColor = .secondaryLabelColor
         if let commit = buildCommit {
-            let commitLabel = NSTextField(labelWithString:"本地构建 \(commit.prefix(8))")
-            commitLabel.font = .systemFont(ofSize:12)
-            commitLabel.textColor = .secondaryLabelColor
             let copy = HoverIconButton(symbol:"doc.on.doc",label:"拷贝提交号")
             copy.bezelStyle = .inline
             copy.hoverHelp = "拷贝完整提交号哈希"
             copy.widthAnchor.constraint(equalToConstant:20).isActive = true
             copy.heightAnchor.constraint(equalToConstant:20).isActive = true
             CopyFeedback.attach(to:copy) {commit}
-            let commitRow = NSStackView(views:[commitLabel,copy])
+            let commitRow = NSStackView(views:[buildLabel,copy])
             commitRow.alignment = .centerY
             commitRow.spacing = 4
             versionDetails.addArrangedSubview(commitRow)
+        } else {
+            versionDetails.addArrangedSubview(buildLabel)
         }
 
         tabs.tabViewType = .topTabsBezelBorder; tabs.drawsBackground = false
@@ -96,7 +99,7 @@ final class AboutPageController: NSViewController {
             title.trailingAnchor.constraint(lessThanOrEqualTo:root.trailingAnchor,constant:-24),
             versionDetails.topAnchor.constraint(equalTo:title.bottomAnchor,constant:6),
             versionDetails.centerXAnchor.constraint(equalTo:root.centerXAnchor),
-            tabs.topAnchor.constraint(equalTo:versionDetails.bottomAnchor,constant:buildCommit == nil ? 22 : 10),
+            tabs.topAnchor.constraint(equalTo:versionDetails.bottomAnchor,constant:10),
             tabs.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:24),
             tabs.trailingAnchor.constraint(equalTo:root.trailingAnchor,constant:-24),
             tabs.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-24)

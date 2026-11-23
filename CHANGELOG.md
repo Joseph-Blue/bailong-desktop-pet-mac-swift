@@ -2,6 +2,15 @@
 
 本文件记录 `joseph/dev` 的开发迭代。提交与历史快照见 [开发变更索引](docs/开发变更索引.md)，正式版说明见 [`main` 分支变更记录](https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift/blob/main/CHANGELOG.md)。
 
+## 未发布
+
+- 「外观 → 消息窗口」新增「气泡关闭按钮位置」。消息气泡和临时输入窗可固定在左上角或右上角，也可随窗口在屏幕中的位置选择靠中央的一侧。默认左上角。
+- 「关于 → 第三方许可」和仓库许可文档以行内代码显示 `chatgptTemplate@2x.png`，避免将文件名识别为邮件链接。
+- `build.command`、`run-dev.command` 和 `launch.command` 统一帮助入口，参数有误时直接显示用法。开发运行的 `--monitor` 显式开启监视，`--no-monitor` 从暂停状态启动，`--no-monitor-animation` 收起逐段动画明细。
+- `build.command --dmg` 在 App 同目录生成安装映像。`--dmg-artwork` 使用本机白龙头图，缺失时可在终端输入路径。`--dmg-background` 支持直接指定 PNG 或 TIFF 头图的相对或绝对路径。
+- 普通 App 构建与开发运行在「关于」显示「本地构建」。有 Git 提交号时显示前 8 位并支持拷贝完整提交号。显式使用 `build.command --release` 时，构建标记只显示「正式版 Release」。
+- 「检查更新」在产品名前缀与 `v` 版本号之间留一个空格。
+
 ## [0.9.0-dev5] — 2026-11-21
 
 - 新版通信方式支持试用项目级命令审批 Hook。气泡显示命令与理由，可允许这一次、拒绝，或转到 Codex 处理。[启用方法](docs/来源与架构.md#current-tasks)

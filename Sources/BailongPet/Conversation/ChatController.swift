@@ -6,7 +6,7 @@ let persona = "你是桌宠应用中的少女角色，温柔、聪明、认真�
 final class ChatController {
     let pet: PetController
     let store: HistoryStore
-    let ui = ChatInterface()
+    let ui:ChatInterface
     private let workspacePanel = WorkspaceStatusPanel()
     let connection = CodexConnection()
     var selected: Conversation // 历史窗口浏览目标
@@ -101,6 +101,7 @@ final class ChatController {
     }
     init(pet: PetController) throws {
         self.pet = pet; store = try HistoryStore(recording:pet.preferences.bool("recordHistory"))
+        ui = ChatInterface(models:ChatModelSettings(),preferences:pet.preferences)
         let workspace = Paths.data.appendingPathComponent("Workspace")
         try FileManager.default.createDirectory(at:workspace,withIntermediateDirectories:true)
         selected = store.conversations.last(where:{!$0.external}) ?? store.create(cwd:pet.preferences.defaultWorkspace.path)
@@ -434,9 +435,10 @@ final class ChatController {
     private var composerSide:BubblePlacement.Side?
     func positionComposer() {
         guard pet.composerVisible else{return}
+        let screenFrame = pet.screen.visibleFrame
         let result = BubblePlacement.resolve(size:ui.composerFrame.size,pet:pet.visiblePetFrame,
-            screen:pet.screen.visibleFrame,preferred:[.above,.below,.right,.left],previous:composerSide)
-        composerSide = result.side; ui.moveComposer(to:result.frame.origin)
+            screen:screenFrame,preferred:[.above,.below,.right,.left],previous:composerSide)
+        composerSide = result.side; ui.moveComposer(to:result.frame.origin,screenFrame:screenFrame)
     }
 
     private func showWorkspace(_ key:String? = nil) {

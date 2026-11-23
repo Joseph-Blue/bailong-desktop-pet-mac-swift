@@ -25,7 +25,7 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     var status:NSTextField {composerView.status}
     var composerVisible:Bool {composerView.composerVisible}
     var composerFrame:NSRect {composerView.composerMotion.frame}
-    func moveComposer(to origin:NSPoint) {composerView.composerMotion.move(to:origin)}
+    func moveComposer(to origin:NSPoint,screenFrame:CGRect? = nil) {composerView.move(to:origin,screenFrame:screenFrame)}
     let history = HistoryWindow(contentRect:NSRect(x:0,y:0,width:1100,height:850),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
     let historyEditor = MessageEditor(), transcript = MessageTextView()
     private let historySplit = NSSplitViewController()
@@ -99,8 +99,8 @@ final class ChatInterface: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private var listSnapshot = [String]()
     private var searchDataSignature = [String]()
     override convenience init() {self.init(models:ChatModelSettings())}
-    init(models: ChatModelSettings) {
-        self.models = models; composerView = ChatComposer(models:composerModels)
+    init(models: ChatModelSettings,preferences:PetPreferences = .shared) {
+        self.models = models; composerView = ChatComposer(models:composerModels,preferences:preferences)
         super.init()
         history.collectionBehavior.insert(.fullScreenNone)
         composer.title = ""; history.title = PetPreferences.productName+" · 历史对话"

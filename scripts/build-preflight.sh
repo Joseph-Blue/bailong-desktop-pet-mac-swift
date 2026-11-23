@@ -80,11 +80,11 @@ bailong_source_commit() {
     fi
 }
 
-bailong_local_build_plist_entry() {
-    local commit="$1" ci="${CI:-}" branch
-    [[ -n "$commit" ]] || return 0
-    [[ -z "$ci" || "$ci" == false || "$ci" == 0 ]] || return 0
-    branch="$(git branch --show-current)" || return 1
-    [[ -n "$branch" && "$branch" != main ]] || return 0
-    print -r -- "<key>BailongLocalBuildCommit</key><string>$commit</string>"
+bailong_build_plist_entry() {
+    local commit="$1" release_build="${2:-0}"
+    if (( release_build )); then
+        print -r -- '<key>BailongReleaseBuild</key><true/>'
+    elif [[ -n "$commit" ]]; then
+        print -r -- "<key>BailongLocalBuildCommit</key><string>$commit</string>"
+    fi
 }

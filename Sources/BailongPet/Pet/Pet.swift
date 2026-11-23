@@ -182,6 +182,7 @@ final class PetController: NSObject, NSMenuDelegate {
         move(constrained(position, screen: target)); activityOrigin = position
         playbackRate = preferences.speed(current.id); wasQuiet = preferences.isQuiet(); nextLeisure = now + preferences.activityInterval
         bubble.preferences = preferences
+        progressBubble.preferences = preferences
         sound = NSSound(contentsOf: Paths.resources.appendingPathComponent("sounds/click.wav"), byReference: true)
         status.button?.image = AppIcons.petTemplate
         status.button?.title = AppIcons.petTemplate == nil ? PetPreferences.productName : ""

@@ -4,10 +4,10 @@ cd "${0:A:h:h}"
 source scripts/terminal-ui.sh
 
 source scripts/build-preflight.sh
-source scripts/build-resources.sh
 source scripts/build-options.sh
 bailong_entry=dev; bailong_entry_command=run-dev.command
 bailong_parse_options "$@"
+source scripts/build-resources.sh
 source_commit="$(bailong_source_commit)"
 bailong_header "开发程序" "$target_arch" "$source_commit"
 bailong_check_tools
@@ -24,9 +24,9 @@ dev_dir=".build/dev"
 binary="$dev_dir/BailongPetDev"
 bailong_check_output "$dev_dir"
 if (( bailong_check_only )); then bailong_ok "检查通过"; exit 0; fi
-local_build_entry="$(bailong_local_build_plist_entry "$source_commit")"
+build_plist_entry="$(bailong_build_plist_entry "$source_commit")"
 dev_build_environment="$bailong_build_environment
-local_build_entry=$local_build_entry"
+build_plist_entry=$build_plist_entry"
 mkdir -p .build/module-cache
 rebuild=0
 [[ -x "$binary" ]] || rebuild=1
@@ -48,7 +48,7 @@ if (( rebuild )); then
 <key>CFBundleIdentifier</key><string>com.bailongpet.appkit</string>
 <key>CFBundleName</key><string>白龙桌宠Swift（开发）</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
-$local_build_entry
+$build_plist_entry
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>CFBundleAllowMixedLocalizations</key><true/>
 <key>LSUIElement</key><true/>
@@ -78,8 +78,8 @@ export BAILONG_DEV_RUN=1
 # 保留父脚本处理 ^C；不再 exec 替换为应用，才能执行超时终止。
 setopt nobgnice
 bailong_run_args=()
-(( ! bailong_monitor )) || bailong_run_args+=(--monitor)
-(( ! bailong_monitor_animation )) || bailong_run_args+=(--monitor-animation)
+if [[ "$bailong_monitor" == --no-monitor ]]; then bailong_run_args+=(--no-monitor); fi
+if [[ "$bailong_monitor_animation" == --no-monitor-animation ]]; then bailong_run_args+=(--no-monitor-animation); fi
 if [[ -t 0 && -t 1 && "${BAILONG_INTERACTIVE:-1}" != 0 ]]; then
     bailong_saved_tty="$(stty -g)"
     stty -icanon -echo min 1 time 0

@@ -25,7 +25,11 @@ final class Bubble {
     private var placementSide:BubblePlacement.Side?
     private var placementArea:CGRect?
     var targetFrame: NSRect {motion.frame}
-    func move(to origin: NSPoint) {motion.move(to:origin)}
+    func move(to origin: NSPoint, screenFrame:CGRect? = nil) {
+        motion.move(to:origin)
+        closeButtonScreenMidX = (screenFrame ?? window.screen?.visibleFrame)?.midX
+        refreshCloseButtonPosition()
+    }
     private let title = BubbleHeadingField(wrappingLabelWithString:"")
     private let headingSpinner = NSTextField(labelWithString:"")
     private let headingIcon = TaskActivitySymbolView(frame:.zero)
@@ -38,6 +42,9 @@ final class Bubble {
     var workspaceProvider:(String) -> (conversation:Conversation,executing:Bool)? = {_ in nil}
     var onVisibilityChange:() -> Void = {}
     private let closeButton = BubbleCloseButton()
+    private var closeButtonOnRight = false
+    private var closeButtonScreenMidX:CGFloat?
+    private var closeButtonPreferenceObserver:NSObjectProtocol?
     private var details: ActionButton!
     private var codexButton: ActionButton!
     private var retryButton: ActionButton!
@@ -76,6 +83,7 @@ final class Bubble {
     private var taskFinishedAt: Date?
     private var timedTaskKey: String?
     private var layoutBodyHeight = 0.0
+    private var headingHeight:CGFloat = 0
     private var elapsedLayoutWidth = 0.0
     private var scale = 1.0
     var preferences = PetPreferences.shared
@@ -258,6 +266,14 @@ final class Bubble {
         }
         scroll.setBody(text,height:0)
         closeButton.onClose = { [weak self] in self?.hide(); self?.onClose() }
+        closeButtonPreferenceObserver = NotificationCenter.default.addObserver(
+            forName:PetPreferences.didChange,object:nil,queue:.main
+        ) { [weak self] note in
+            guard let self,note.object as? PetPreferences === self.preferences,
+                  (note.userInfo?["keys"] as? [String])?.contains(BubbleCloseButtonPosition.key) == true,
+                  self.visible else {return}
+            self.refreshCloseButtonPosition()
+        }
         details = ActionButton("查看记录详情") { [weak self] in
             guard let self else{return}
             if let form = self.questionForm,let submit = self.onQuestionSubmit {
@@ -371,13 +387,15 @@ final class Bubble {
     private var usesCustomAspect:Bool {preferences.bool("bubbleAspectEnabled") && kind != "progressToast" && !kind.hasPrefix("quota") && questionModels.isEmpty}
     private var aspectWidth:CGFloat {sqrt(320*240*preferences.number("bubbleAspectRatio"))*scale}
     private var spinnerWidth:CGFloat {headingSpinner.isHidden ? 0 : InlineStatusLayout.brailleFieldSize(font:title.font!).width+6*scale}
-    private var headingPrefixWidth:CGFloat {headingActivity == nil ? 0 : spinnerWidth+headingIcon.layoutSize.width+6*scale}
+    private func headingPrefixWidth(spinnerWidth:CGFloat) -> CGFloat {
+        headingActivity == nil ? 0 : spinnerWidth+headingIcon.layoutSize.width+6*scale
+    }
     private var minimumLayoutWidth:CGFloat {
         if kind == "progressToast" {
             let font = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
             let detailWidth = (currentBody as NSString).size(withAttributes:[.font:font]).width+52*scale
             let elapsedWidth = taskStartedAt == nil ? 0 : elapsedGroupWidth+10*scale
-            let titleWidth = (plainHeading as NSString).size(withAttributes:[.font:title.font!]).width+64*scale+headingPrefixWidth+elapsedWidth
+            let titleWidth = (plainHeading as NSString).size(withAttributes:[.font:title.font!]).width+64*scale+headingPrefixWidth(spinnerWidth:spinnerWidth)+elapsedWidth
             return min(360*scale,max(280*scale,titleWidth,detailWidth))
         }
         let gap = 8*scale
@@ -395,6 +413,44 @@ final class Bubble {
     }
     private var layoutWidth:CGFloat {min(max(questionSize?.width ?? 0,minimumLayoutWidth),kind == "progressToast" ? 360*scale : .greatestFiniteMagnitude,placementArea?.width ?? .greatestFiniteMagnitude)}
     private var bodyLayout:BubbleBodyLayout {BubbleBodyLayout(width:layoutWidth,scale:scale)}
+    private var closeButtonSlotWidth:CGFloat {32*scale}
+    private var headingReservedWidth:CGFloat {
+        32*scale+closeButtonSlotWidth+(taskStartedAt == nil ? 0 : elapsedLayoutWidth+10*scale)
+    }
+    @discardableResult private func updateCloseButtonSide() -> Bool {
+        let onRight = preferences.bubbleCloseButtonPosition.isOnRight(
+            windowMidX:targetFrame.midX,screenMidX:closeButtonScreenMidX,wasOnRight:closeButtonOnRight)
+        guard onRight != closeButtonOnRight else {return false}
+        closeButtonOnRight = onRight
+        return true
+    }
+    private func refreshCloseButtonPosition() {
+        guard updateCloseButtonSide() else {return}
+        layoutHeading(in:window.frame.size)
+        window.refreshContentCursor()
+    }
+    private func layoutHeading(in size:NSSize) {
+        let margin = 16*scale
+        let prefixX = margin+(closeButtonOnRight ? 0 : closeButtonSlotWidth)
+        let spinnerWidth = self.spinnerWidth
+        let prefixWidth = headingPrefixWidth(spinnerWidth:spinnerWidth)
+        title.frame = NSRect(x:prefixX+prefixWidth,y:size.height-margin-headingHeight,
+                             width:max(1,size.width-headingReservedWidth-prefixWidth),height:headingHeight)
+        if headingActivity != nil {
+            headingSpinner.font = title.font
+            headingSpinner.frame = NSRect(x:prefixX,y:title.frame.minY,width:spinnerWidth,height:headingHeight)
+            if !headingSpinner.isHidden {
+                InlineStatusLayout.alignBraille(headingSpinner,to:InlineStatusLayout.baseline(of:title))
+            }
+            headingIcon.frame.origin.x = prefixX+spinnerWidth
+            InlineStatusLayout.align(headingIcon,to:title,side:headingIcon.layoutSize.height,width:headingIcon.layoutSize.width)
+        }
+        if taskStartedAt != nil {layoutElapsed(in:size)}
+        let closeSide = 24*scale
+        let inset = margin-2*scale
+        closeButton.frame.origin.x = closeButtonOnRight ? size.width-inset-closeSide : inset
+        InlineStatusLayout.align(closeButton,to:title,side:closeSide)
+    }
     private func layout(bodyHeight: Double) {
         layoutBodyHeight = bodyHeight
         configureButtons()
@@ -402,15 +458,11 @@ final class Bubble {
         let bottomMargin = workspaceAttached ? 8*scale : margin
         let targetBodyLayout = self.bodyLayout
         if !questionModels.isEmpty {window.minSize = NSSize(width:min(minimumLayoutWidth,placementArea?.width ?? minimumLayoutWidth),height:220*scale)}
-        let hasElapsed = taskStartedAt != nil
-        let elapsedWidth = hasElapsed ? elapsedGroupWidth : 0
-        elapsedLayoutWidth = elapsedWidth
-        let headingSpinnerWidth = spinnerWidth, headingPrefix = headingPrefixWidth
-        let headingReservedWidth = margin*2+32*scale+headingPrefix+(hasElapsed ? elapsedWidth+10*scale : 0)
-        let headingWidth = max(1,w-headingReservedWidth)
+        elapsedLayoutWidth = taskStartedAt == nil ? 0 : elapsedGroupWidth
+        let headingWidth = max(1,w-headingReservedWidth-headingPrefixWidth(spinnerWidth:spinnerWidth))
         let font = title.font!
         let firstLineHeight = (font.ascender-font.descender+font.leading).rounded(.up)+4
-        let headingHeight = max(firstLineHeight,title.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
+        headingHeight = max(firstLineHeight,title.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:headingWidth,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
         let buttonHeight = self.buttonHeight, gap = 8*scale
         let columnWidth = (w-2*margin-gap)/2
         let codexInNavigation = pendingAttention && !codexButton.isHidden
@@ -440,28 +492,15 @@ final class Bubble {
         motion.onResize = { [weak self] size in
             guard let self else {return}
             let height = size.height
-            let titleWidth = isToast ? max(1,size.width-headingReservedWidth) : headingWidth
             let bodyLayout = isToast ? BubbleBodyLayout(width:size.width,scale:scale) : targetBodyLayout
-            self.title.frame = NSRect(x:margin+32*scale+headingPrefix,y:height-margin-headingHeight,width:titleWidth,height:headingHeight)
-            if self.headingActivity != nil {
-                let spinnerWidth = InlineStatusLayout.brailleFieldSize(font:font).width
-                self.headingSpinner.font = font
-                self.headingSpinner.frame = NSRect(x:margin+32*scale,y:self.title.frame.minY,width:spinnerWidth,height:headingHeight)
-                InlineStatusLayout.alignBraille(self.headingSpinner,to:InlineStatusLayout.baseline(of:self.title))
-                self.headingIcon.frame.origin.x = margin+32*scale+headingSpinnerWidth
-                InlineStatusLayout.align(self.headingIcon,to:self.title,side:self.headingIcon.layoutSize.height,width:self.headingIcon.layoutSize.width)
-            }
-            if hasElapsed {self.layoutElapsed(in:size)}
+            self.updateCloseButtonSide()
+            self.layoutHeading(in:size)
             self.workspace.frame = NSRect(x:bodyLayout.inset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-4*scale))
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSize.width,height:progressIconSide)
             self.taskProgress.frame = NSRect(x:bodyLayout.inset+progressIconSize.width+6*scale,y:progressY,width:max(0,bodyLayout.contentWidth-progressIconSize.width-6*scale),height:progressLineHeight)
             InlineStatusLayout.align(self.taskProgressIcon,toLineIn:self.taskProgress,font:progressFont,side:progressIconSide,width:progressIconSize.width)
             if !self.taskProgress.isHidden {self.taskProgress.start()}
-            let closeSide = 24*scale
-            self.closeButton.frame = NSRect(x:margin-2*scale,y:height-margin-firstLineHeight/2-closeSide/2,width:closeSide,height:closeSide)
-            InlineStatusLayout.align(self.closeButton,to:self.title,side:closeSide)
-            self.closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
             let textHeight = max(0,height-chromeHeight)
             let viewport = bodyLayout.viewport(y:bottomMargin+footer,height:ceil(textHeight))
             self.scroll.setViewport(viewport,targetHeight:targetTextHeight)
@@ -532,6 +571,7 @@ final class Bubble {
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
         let same = self.kind == kind && scroll.documentView === text
         self.kind = kind; self.scale = scale; displayedFailure = failure
+        closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
         if kind != "progressToast" {motion.originXForWidth = nil}
         self.headingActivity = kind == "progressToast" ? headingActivity : attentionAction ? .waiting(approval:timing?.status == "waitingForApproval" || approval != nil) : nil
         headingIcon.isHidden = self.headingActivity == nil
@@ -796,7 +836,7 @@ final class Bubble {
         elapsedIcon.contentTintColor = color; elapsedLabel.textColor = color
     }
     private func layoutElapsed(in size: NSSize) {
-        let margin = 16*scale, side = 13*scale
+        let margin = 16*scale+(closeButtonOnRight ? closeButtonSlotWidth : 0), side = 13*scale
         elapsedLabel.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.medium)
         elapsedLabel.maximumNumberOfLines = 1; elapsedLabel.usesSingleLineMode = true
         let textSize = elapsedLabel.fittingSize
@@ -917,11 +957,14 @@ final class Bubble {
             && !avoiding.contains {current.intersects($0.insetBy(dx:-4,dy:-4))}
         if !keepOrigin {
             motion.keepsTopEdge = result.side == .below
-            move(to:result.frame.origin); placementSide = result.side
+            move(to:result.frame.origin,screenFrame:screen.visibleFrame); placementSide = result.side
         }
         placement = (rect,dock,area,size)
     }
-    deinit { countdown.stop(); headingTimer?.invalidate(); quotaBody?.stop(); elapsedTimer?.invalidate() }
+    deinit {
+        if let closeButtonPreferenceObserver {NotificationCenter.default.removeObserver(closeButtonPreferenceObserver)}
+        countdown.stop(); headingTimer?.invalidate(); quotaBody?.stop(); elapsedTimer?.invalidate()
+    }
     private func releaseHiddenDisplay() {
         // 卡片及问卷草稿已由 cardStore 保存；淡出结束后释放当前显示的独立持有。
         window.makeFirstResponder(nil)

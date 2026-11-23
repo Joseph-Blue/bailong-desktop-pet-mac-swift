@@ -5,6 +5,13 @@ struct GitHubRelease: Decodable {
     let body: String?
     let draft: Bool
     let prerelease: Bool
+
+    var displayTag: String {
+        for prefix in ["白龙桌宠Swift","白龙娘桌宠"] where tag_name.hasPrefix(prefix + "v") {
+            return "\(prefix) \(tag_name.dropFirst(prefix.count))"
+        }
+        return tag_name
+    }
 }
 
 struct UpdateFailure: Error {
@@ -206,7 +213,7 @@ final class UpdateChecker: NSObject {
             releaseURL = Self.repository.appendingPathComponent("releases/tag").appendingPathComponent(release.tag_name)
             if let local = SemanticVersion(Paths.version), let remote = SemanticVersion.releaseTag(release.tag_name) {
                 newer = local < remote
-                status = newer ? "发现新版本：\(release.tag_name)" : local == remote ? "已是最新正式版本" : "本地版本领先于最新正式发布"
+                status = newer ? "发现新版本：\(release.displayTag)" : local == remote ? "已是最新正式版本" : "本地版本领先于最新正式发布"
             } else {
                 failure = UpdateFailure(title:"无法比较版本",message:"当前应用的版本号无法识别，请手动查看发布页。",detail:"当前版本：\(Paths.version)")
                 self.release = nil
@@ -356,7 +363,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         disclosure.state = detailsExpanded ? .on : .off
         disclosure.setAccessibilityLabel(detailsExpanded ? "收起技术详情" : "显示技术详情")
         details.string = checker.technicalDetails
-        versions.stringValue = "当前版本：\(Paths.version)" + (hasNotes ? "    最新正式版：\(checker.release!.tag_name)" : "")
+        versions.stringValue = "当前版本：\(Paths.version)" + (hasNotes ? "    最新正式版：\(checker.release!.displayTag)" : "")
         timestamp.stringValue = "上次检查："+checker.lastCheckText
         retry.keyEquivalent = failed ? "\r" : ""; download.keyEquivalent = !failed && !checker.checking ? "\r" : ""
         retry.title = failed ? "重试" : "重新检查"; retry.isEnabled = !checker.checking; retry.emphasize(failed)

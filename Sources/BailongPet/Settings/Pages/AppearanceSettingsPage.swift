@@ -73,6 +73,8 @@ final class AppearanceSettingsPage {
             controls.widthAnchor.constraint(equalToConstant:244).isActive = true
             materialRows.append(form.conditional(form.row("玻璃不透明度",control:controls),when:{$0.usesGlass && !$0.bool("glassFollowsSystem")}))
         }
+        materialRows.append(form.choice(BubbleCloseButtonPosition.title,BubbleCloseButtonPosition.key,
+                                        BubbleCloseButtonPosition.options,help:BubbleCloseButtonPosition.help))
         materialRows.append(form.row("气泡效果",control:ActionButton("预览气泡") { [weak self] in self?.showPreview() }))
         form.group("消息窗口",materialRows,symbol:"macwindow")
     }
@@ -91,14 +93,19 @@ final class AppearanceSettingsPage {
     }
     func showPreview() {
         previewDismissal?.cancel()
-        if materialPreview == nil {materialPreview = Bubble(); materialPreview?.onDetails = { [weak self] in self?.onPreviewDetails() }}
+        if materialPreview == nil {
+            let preview = Bubble()
+            preview.preferences = preferences
+            preview.onDetails = { [weak self] in self?.onPreviewDetails() }
+            materialPreview = preview
+        }
         guard let preview = materialPreview else {return}
         if !preview.visible {preview.show(title:preferences.petName,body:preferences.statusLine("greetingTemplate"),kind:"preview",scale:preferences.number("bubblePercent")/100,seconds:0,details:true)}
         guard let screen = window.screen ?? NSScreen.main else {return}
         let visible = screen.visibleFrame, size = preview.targetFrame.size
         let x = min(visible.maxX-size.width-12,max(visible.minX+12,window.frame.maxX+12))
         let y = min(visible.maxY-size.height-12,max(visible.minY+12,window.frame.maxY-size.height-72))
-        preview.move(to:NSPoint(x:x,y:y))
+        preview.move(to:NSPoint(x:x,y:y),screenFrame:visible)
         if glassSlider?.tracking != true {schedulePreviewDismissal()}
     }
     private func schedulePreviewDismissal() {
