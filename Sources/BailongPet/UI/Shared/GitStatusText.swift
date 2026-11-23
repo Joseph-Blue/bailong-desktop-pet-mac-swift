@@ -52,29 +52,6 @@ enum GitStatusText {
     ]
     static let pushTitle = L10n.text(.workspace,"gitStatusText.pushTitle.text")
 
-    private static func inlineLegend(_ items:[Indicator],font:NSFont,style:GitStatusStyle) -> NSAttributedString {
-        let text = NSMutableAttributedString()
-        for item in items {
-            if text.length > 0 {text.append(NSAttributedString(string:" ",attributes:[.font:font]))}
-            text.append(marked(item,label:item.label,font:font,style:style,separator:""))
-        }
-        return text
-    }
-    private static let compactLegends = Dictionary(uniqueKeysWithValues:GitStatusStyle.allCases.map {style in
-        let font = NSFont.systemFont(ofSize:11)
-        let standard = inlineLegend(groups.map(\.indicator)+[stash]+upstreamIndicators.map(\.indicator),font:font,style:style)
-        let extended = NSMutableAttributedString(attributedString:standard)
-        extended.append(NSAttributedString(string:"\n",attributes:[.font:font]))
-        extended.append(inlineLegend(pushIndicators.map(\.indicator),font:font,style:style))
-        return (style,(standard:standard,withPush:NSAttributedString(attributedString:extended)))
-    })
-    static func legend(_ style:GitStatusStyle,_ status:GitWorkspaceStatus) -> NSAttributedString {
-        let legend = compactLegends[style]!
-        guard let push = status.pushTarget else {return legend.standard}
-        let hasPushCounts = pushIndicators.contains {(push[keyPath:$0.count] ?? 0) > 0}
-        return hasPushCounts ? legend.withPush : legend.standard
-    }
-
     static let settingsLegendFont = NSFont.systemFont(ofSize:11)
     private static func repositoryIcon(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSAttributedString {
         InlineStatusLayout.imageAttachment(GitIcons.repository(kind),description:kind.title,font:settingsLegendFont,side:settingsLegendFont.pointSize,color:.labelColor)
@@ -192,10 +169,10 @@ enum GitStatusText {
         let item = groups.first {$0.group == group}!.indicator
         return marked(item,label:item.label+" · \(count)",font:font,style:style)
     }
-    private static func marked(_ item:Indicator,label:String,font:NSFont,style:GitStatusStyle,separator:String = " ") -> NSAttributedString {
+    private static func marked(_ item:Indicator,label:String,font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let markerFont = style == .gitCLI ? NSFont.monospacedSystemFont(ofSize:font.pointSize,weight:.semibold) : font
         let text = NSMutableAttributedString(attributedString:markerText(item.marker(style),font:markerFont,color:item.color))
-        text.append(NSAttributedString(string:separator+label,attributes:[.font:font,.foregroundColor:item.color]))
+        text.append(NSAttributedString(string:" "+label,attributes:[.font:font,.foregroundColor:item.color]))
         return text
     }
     private static func markerText(_ marker:String,font:NSFont,color:NSColor) -> NSAttributedString {

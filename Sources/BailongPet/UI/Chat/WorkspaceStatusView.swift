@@ -242,8 +242,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let style = PetPreferences.shared.gitStatusStyle
         let heading = snapshot.title+(snapshot.initial ? L10n.text(.workspace,"status.heading") : "")
         let compactHeading = snapshot.operation.map {heading+" · "+$0.compactTitle} ?? heading
-        let help = NSMutableAttributedString(string:compactHeading+"\n",attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.labelColor])
-        help.append(GitStatusText.legend(style,snapshot))
+        let help = NSMutableAttributedString(string:compactHeading,attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.labelColor])
         git.setHoverHelp(help) { [weak self] in
             guard let self,!self.popover.isShown else {return false}
             return self.git.imagePosition == .imageOnly || self.git.hasTruncatedTitle(in:self.git.contentBounds)
