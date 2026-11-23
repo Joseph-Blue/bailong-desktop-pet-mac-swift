@@ -3,8 +3,8 @@ import Foundation
 // 中文说明只用于显示；原始错误继续用于技术详情与历史记录。
 struct CodexErrorMessage {
     enum Category {case modelConnection, model, quota, balance, budget, sessionBudget, rateLimit, authentication, busy, network, context, request, permission, writer, localConnection, unknown}
-    static let reconnectStopped = "重新连接失败，Codex 已停止重试。"
-    static let reconnectAdvice = "检查你的网络或节点环境。"
+    static let reconnectStopped = L10n.text(.conversation,"codexErrorMessage.reconnectStopped")
+    static let reconnectAdvice = L10n.text(.conversation,"codexErrorMessage.reconnectAdvice")
     static let reconnectFailed = reconnectStopped+reconnectAdvice
     let category:Category
     let original:String
@@ -19,7 +19,7 @@ struct CodexErrorMessage {
         let decoded = try? JSONSerialization.jsonObject(with:Data(raw.utf8),options:.fragmentsAllowed)
         let object = decoded as? [String:Any] ?? [:]
         let error = object["error"] as? [String:Any] ?? object
-        message = error["message"] as? String ?? decoded as? String ?? (object.isEmpty ? raw : "Codex 未提供错误说明。")
+        message = error["message"] as? String ?? decoded as? String ?? (object.isEmpty ? raw : L10n.text(.conversation,"codexErrorMessage.category.text"))
         let text = message.lowercased()
         let info = error["codexErrorInfo"] ?? error["errorInfo"]
         let infoObject = info as? [String:Any] ?? [:]
@@ -28,41 +28,41 @@ struct CodexErrorMessage {
         let httpStatus = infoObject.values.compactMap {($0 as? [String:Any])?["httpStatusCode"] as? Int}.first
         let connection = has("httpConnectionFailed","responseStreamConnectionFailed","responseStreamDisconnected","responseTooManyFailedAttempts")
         if text.contains("already has an active writer") {
-            category = .writer; title = "暂时无法在桌宠中使用这条会话"; body = "请在 Codex 中继续这条会话，或在桌宠中新建对话。"
+            category = .writer; title = L10n.text(.conversation,"codexErrorMessage.has.title"); body = L10n.text(.conversation,"codexErrorMessage.has.heading")
         } else if has("localConnectionDisconnected") {
-            category = .localConnection; title = "与本机 Codex 的连接已断开"; body = "桌宠无法继续接收任务状态。请打开 Codex 确认任务结果。"
+            category = .localConnection; title = L10n.text(.conversation,"codexErrorMessage.has.title.2"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.2")
         } else if has("contextWindowExceeded","context_length_exceeded") || text.contains("context window exceeded") || text.contains("maximum context length") {
-            category = .context; title = "对话上下文已超限"; body = "当前对话已超过模型的上下文上限。请在 Codex 中压缩上下文或新建对话。"
+            category = .context; title = L10n.text(.conversation,"codexErrorMessage.has.title.3"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.3")
         } else if has("sessionBudgetExceeded") {
-            category = .sessionBudget; title = "本次任务预算已用尽"; body = "本次任务已达到预算上限，请在 Codex 中检查会话预算设置。"
+            category = .sessionBudget; title = L10n.text(.conversation,"codexErrorMessage.has.title.4"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.4")
         } else if has("usageLimitExceeded") || text.contains("you've hit your usage limit") || text.contains("you have hit your usage limit") {
-            category = .quota; title = "Codex 使用额度已用尽"; body = "当前账号的 Codex 使用额度已用尽。请在 Codex 中查看额度恢复时间或调整套餐。"
+            category = .quota; title = L10n.text(.conversation,"codexErrorMessage.has.title.5"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.5")
         } else if has("credit_balance_exhausted") || text.contains("insufficient balance") || text.contains("insufficient credits") {
-            category = .balance; title = "API 余额不足"; body = "当前 API 余额不足，请到对应服务商补充余额。"
+            category = .balance; title = L10n.text(.conversation,"codexErrorMessage.has.title.6"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.6")
         } else if has("project_budget_exceeded","organization_usage_limit_exceeded","billing_hard_limit_reached") {
-            category = .budget; title = "API 已达到用量上限"; body = "当前 API 已达到用量上限，请检查服务商的用量设置。"
+            category = .budget; title = L10n.text(.conversation,"codexErrorMessage.has.title.7"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.7")
         } else if has("insufficient_quota") || text.contains("exceeded your current quota") {
-            category = .budget; title = "API 可用额度不足"; body = "当前 API 可用额度不足，请检查对应服务商的余额和用量上限。"
+            category = .budget; title = L10n.text(.conversation,"codexErrorMessage.has.title.8"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.8")
         } else if text.contains("model") && (text.contains("not supported when using codex with") || text.contains("not supported with a chatgpt account") || text.contains("not supported with api key")) {
-            category = .modelConnection; title = "模型与当前连接方式不匹配"; body = "当前模型不支持此连接方式。请在 Codex 中切换到匹配的模型或服务商。"
+            category = .modelConnection; title = L10n.text(.conversation,"codexErrorMessage.has.title.9"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.9")
         } else if has("model_not_found") || (text.contains("model") && text.contains("does not exist or you do not have access")) {
-            category = .model; title = "当前连接无法使用这个模型"; body = "模型不存在或当前账号没有访问权限，请在 Codex 中重新选择模型。"
+            category = .model; title = L10n.text(.conversation,"codexErrorMessage.has.title.10"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.10")
         } else if has("unauthorized","invalid_api_key","token_expired","refresh_token_expired","refresh_token_reused") || httpStatus == 401 || text.contains("incorrect api key") || text.contains("authentication token has expired") {
-            category = .authentication; title = "身份验证失败"; body = "当前连接的身份验证失败，请在 Codex 中重新登录或检查 API 配置。"
+            category = .authentication; title = L10n.text(.conversation,"codexErrorMessage.has.title.11"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.11")
         } else if has("rateLimitExceeded","rate_limit_exceeded","slow_down") || text.contains("rate limit reached") {
-            category = .rateLimit; title = "请求频率受限"; body = "请求过于频繁，请稍后重试。"
+            category = .rateLimit; title = L10n.text(.conversation,"codexErrorMessage.has.title.12"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.12")
         } else if has("serverOverloaded","policyCapacityUnavailable","internalServerError") || text.contains("server is overloaded") || text.contains("server is busy") {
-            category = .busy; title = "模型服务繁忙"; body = "模型服务暂时无法处理请求，请稍后重试。"
+            category = .busy; title = L10n.text(.conversation,"codexErrorMessage.has.title.13"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.13")
         } else if httpStatus == 403 {
-            category = .permission; title = "当前连接没有访问权限"; body = "当前服务拒绝访问，请在 Codex 中检查账号权限和服务商配置。"
+            category = .permission; title = L10n.text(.conversation,"codexErrorMessage.has.title.14"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.14")
         } else if httpStatus == 400 || has("badRequest","invalidPrompt","invalid_request_error") {
-            category = .request; title = "请求未被当前服务接受"; body = "请查看技术详情，并检查当前模型、参数和附件设置。"
+            category = .request; title = L10n.text(.conversation,"codexErrorMessage.has.title.15"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.15")
         } else if connection || text.contains("stream disconnected before completion") || text.contains("error sending request for url") || text.contains("connection reset by peer") || text.contains("request timed out") {
-            category = .network; title = "重新连接失败"; body = Self.reconnectFailed
+            category = .network; title = L10n.text(.conversation,"codexErrorMessage.has.title.16"); body = Self.reconnectFailed
         } else if has("sandboxError") || text.contains("permission denied") || text.contains("operation not permitted") {
-            category = .permission; title = "操作权限不足"; body = "本次操作没有所需权限，请查看技术详情中的受限操作。"
+            category = .permission; title = L10n.text(.conversation,"codexErrorMessage.has.title.17"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.16")
         } else {
-            category = .unknown; title = "Codex 任务未能完成"; body = "Codex 报告了错误，请查看技术详情。"
+            category = .unknown; title = L10n.text(.conversation,"codexErrorMessage.has.title.18"); body = L10n.text(.conversation,"codexErrorMessage.has.heading.17")
         }
     }
     static func encode(_ raw:Any?) -> String {
@@ -76,7 +76,7 @@ struct CodexErrorMessage {
         let expression = #"(?i)\breconnecting\s*\.?\.?\.?\s*(\d+)\s*/\s*(\d+)"#
         let range = message.range(of:expression,options:.regularExpression)
         let progress = range.map {String(message[$0]).filter {$0.isNumber || $0 == "/"}} ?? ""
-        return .init(title:"正在重新连接"+(progress.isEmpty ? "…" : " "+progress+"…"),kind:.status,statusSymbol:"wifi.exclamationmark")
+        return .init(title:L10n.text(.conversation,"codexErrorMessage.retryActivity.title")+(progress.isEmpty ? "…" : " "+progress+"…"),kind:.status,statusSymbol:"wifi.exclamationmark")
     }
 }
 
@@ -102,7 +102,7 @@ struct CodexConnectionProgress {
     mutating func receiveProgress() {
         guard let current = activity else {return}
         if current.statusSymbol == "wifi.exclamationmark" {
-            status = .init(title:"连接已恢复，继续处理。",kind:.status,statusSymbol:"wifi")
+            status = .init(title:L10n.text(.conversation,"codexErrorMessage.receiveProgress.title"),kind:.status,statusSymbol:"wifi")
             recoveredAt = ProcessInfo.processInfo.systemUptime
         } else if current.statusSymbol == "wifi.slash" {status = nil}
     }

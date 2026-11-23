@@ -11,14 +11,14 @@ enum SubscriptionManagement {
             return ["Team","Business","Enterprise","Edu","Science"].contains(where:{plan.hasPrefix($0)}) ? .organization : .personal
         }
     }
-    var title:String {self == .api || self == .bedrock || self == .gcp ? "计费管理" : "订阅管理"}
+    var title:String {self == .api || self == .bedrock || self == .gcp ? L10n.text(.usage,"subscriptionManagement.forAccount.text") : L10n.text(.usage,"subscriptionManagement.forAccount.text.2")}
     var destinations:[(String,String)] {
         switch self {
-        case .personal:return [("ChatGPT 网页订阅","https://chatgpt.com/settings/billing"),("Google Play 订阅","https://play.google.com/store/account/subscriptions"),("Apple 订阅","https://apps.apple.com/account/subscriptions")]
-        case .organization:return [("ChatGPT 工作区管理","https://chatgpt.com/")]
-        case .api:return [("OpenAI API 计费","https://platform.openai.com/settings/organization/billing/overview")]
-        case .bedrock:return [("AWS 计费","https://console.aws.amazon.com/billing/")]
-        case .gcp:return [("Google Cloud 计费","https://console.cloud.google.com/billing")]
+        case .personal:return [(L10n.text(.usage,"subscriptionManagement.forAccount.text.3"),"https://chatgpt.com/settings/billing"),(L10n.text(.usage,"subscriptionManagement.forAccount.text.4"),"https://play.google.com/store/account/subscriptions"),(L10n.text(.usage,"subscriptionManagement.forAccount.text.5"),"https://apps.apple.com/account/subscriptions")]
+        case .organization:return [(L10n.text(.usage,"subscriptionManagement.forAccount.text.6"),"https://chatgpt.com/")]
+        case .api:return [(L10n.text(.usage,"subscriptionManagement.forAccount.text.7"),"https://platform.openai.com/settings/organization/billing/overview")]
+        case .bedrock:return [(L10n.text(.usage,"subscriptionManagement.forAccount.text.8"),"https://console.aws.amazon.com/billing/")]
+        case .gcp:return [(L10n.text(.usage,"subscriptionManagement.forAccount.text.9"),"https://console.cloud.google.com/billing")]
         }
     }
 }
@@ -45,7 +45,7 @@ final class SubscriptionManagementButton:NSButton {
         for (label,url) in management.destinations {add(label,url)}
         if management == .personal || management == .organization {
             menu.addItem(.separator())
-            add("ChatGPT Token 用量","https://chatgpt.com/profile")
+            add(L10n.text(.usage,"subscriptionManagement.add.text"),"https://chatgpt.com/profile")
         }
         menu.popUp(positioning:nil,at:NSPoint(x:0,y:bounds.maxY),in:self)
     }

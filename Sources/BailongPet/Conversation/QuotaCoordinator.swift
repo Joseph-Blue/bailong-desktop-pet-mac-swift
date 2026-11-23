@@ -184,9 +184,9 @@ final class QuotaCoordinator {
             }
         }
         if apiProvider == nil {
-            overview.rows.append(QuotaRow(title:"今日用量",value:dailyUsage.value,detail:dailyUsage.detail,remaining:nil,retry:dailyUsage.failed,wrapsValue:true,loading:dailyUsage.isLoading,usage:dailyUsage.usage,subtitle:"（本机日志）"))
+            overview.rows.append(QuotaRow(title:L10n.text(.usage,"quotaCoordinator.render.title"),value:dailyUsage.value,detail:dailyUsage.detail,remaining:nil,retry:dailyUsage.failed,wrapsValue:true,loading:dailyUsage.isLoading,usage:dailyUsage.usage,subtitle:L10n.text(.usage,"quotaCoordinator.render.subtitle")))
         }
-        if pet.bubble.kind != "quota" {pet.say("Codex 额度",body:" ",kind:"quota")}
+        if pet.bubble.kind != "quota" {pet.say(L10n.text(.usage,"quotaCoordinator.render.text"),body:" ",kind:"quota")}
         let preserveScroll = presented
         presented = true
         pet.bubble.quotaRows(overview,scale:Double(pet.bubblePercent)/100,failure:failure,cachedAt:cachedAt,retry:{ [weak self] in self?.query(forceRefresh:true) },preserveScroll:preserveScroll)

@@ -61,7 +61,7 @@ final class Bubble {
     private var isBrowsingCards:Bool {cardStore.isBrowsingCards}
     private var submittingQuestion:Bool {questionForm?.isSubmitting == true}
     var onCardLayout:() -> Void = {}
-    var taskProvider:() -> BubbleTaskOverview = {BubbleTaskOverview(status:"任务同步尚未初始化")}
+    var taskProvider:() -> BubbleTaskOverview = {BubbleTaskOverview(status:L10n.text(.tasks,"bubble.move.text"))}
     private var taskList:BubbleTaskList?
     private let countdown = BubbleCountdown()
     private var headingTimer: Timer?
@@ -209,7 +209,7 @@ final class Bubble {
         if changedCard {scroll.showTop()}
         if card.showsTaskOverview && preferences.bool("showTaskOverview") {
             let list = BubbleTaskList(width:bodyLayout.contentWidth,scale:scale*preferences.number("messageFontSize")/13,provider:{ [weak self] in
-                self?.taskProvider() ?? BubbleTaskOverview(status:"任务同步已停止")
+                self?.taskProvider() ?? BubbleTaskOverview(status:L10n.text(.tasks,"bubble.renderCard.text"))
             })
             taskList = list
             list.onResize = { [weak self,weak list] height in
@@ -274,7 +274,7 @@ final class Bubble {
                   self.visible else {return}
             self.refreshCloseButtonPosition()
         }
-        details = ActionButton("查看记录详情") { [weak self] in
+        details = ActionButton(L10n.text(.tasks,"bubble.button")) { [weak self] in
             guard let self else{return}
             if let form = self.questionForm,let submit = self.onQuestionSubmit {
                 if !form.isLast {form.advance(); return}
@@ -283,7 +283,7 @@ final class Bubble {
                 if form.answers.isEmpty {self.onQuestionsSkipped?(form.skippedIDs); self.resolveQuestions(taskKey:self.questionTaskKey); return}
                 let taskKey = self.questionTaskKey, skipped = self.onQuestionsSkipped
                 form.isSubmitting = true; self.updateCardNavigation()
-                self.previousQuestion.isEnabled = false; self.skipQuestion.isEnabled = false; self.details.isEnabled = false; self.details.title = "正在提交…"
+                self.previousQuestion.isEnabled = false; self.skipQuestion.isEnabled = false; self.details.isEnabled = false; self.details.title = L10n.text(.tasks,"bubble.title")
                 submit(form.answers) { [weak self,weak form] error in
                     guard let self,let form else {return}
                     form.isSubmitting = false; self.updateCardNavigation()
@@ -292,7 +292,7 @@ final class Bubble {
                             self.previousQuestion.isEnabled = form.canGoBack; self.skipQuestion.isEnabled = form.canSkip
                             self.details.isEnabled = form.canAdvance; self.details.title = form.actionTitle
                         }
-                        showError("回答未提交",error)
+                        showError(L10n.text(.tasks,"bubble.error"),error)
                     } else {
                         skipped?(form.skippedIDs); self.resolveQuestions(taskKey:taskKey,form:form)
                     }
@@ -302,8 +302,8 @@ final class Bubble {
             let action = self.onDetails
             self.hide(); self.onClose(); action()
         }
-        approvalReject = ActionButton("拒绝") { [weak self] in self?.submitApproval(false) }
-        approvalAllow = ActionButton("允许这一次") { [weak self] in self?.submitApproval(true) }
+        approvalReject = ActionButton(L10n.text(.tasks,"bubble.button.2")) { [weak self] in self?.submitApproval(false) }
+        approvalAllow = ActionButton(L10n.text(.tasks,"bubble.button.3")) { [weak self] in self?.submitApproval(true) }
         for button in [approvalReject!,approvalAllow!] {
             button.acceptsKeyboardActivation = false; button.keyEquivalent = ""
             button.imagePosition = .imageLeading
@@ -314,22 +314,22 @@ final class Bubble {
         approvalReject.isHidden = true; approvalAllow.isHidden = true
         previousCard = ActionButton("") { [weak self] in self?.navigateCard(-1) }
         nextCard = ActionButton("") { [weak self] in self?.navigateCard(1) }
-        replyButton = ActionButton("快捷回复") { [weak self] in
+        replyButton = ActionButton(L10n.text(.tasks,"bubble.button.4")) { [weak self] in
             guard let self,let index = self.cardIndex,let action = self.cards[index].reply else {return}
             self.hide(); action()
         }
         replyButton.keepsAccentWhenInactive = true; replyButton.emphasize()
-        for (button,symbol,name) in [(previousCard!,"chevron.left","上一条消息"),(nextCard!,"chevron.right","下一条消息")] {
+        for (button,symbol,name) in [(previousCard!,"chevron.left",L10n.text(.tasks,"bubble.text")),(nextCard!,"chevron.right",L10n.text(.tasks,"bubble.text.2"))] {
             button.image = NSImage(systemSymbolName:symbol,accessibilityDescription:name)
             button.imagePosition = .imageOnly; button.setAccessibilityLabel(name)
         }
         cardCount.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); cardCount.textColor = .secondaryLabelColor; cardCount.alignment = .center
         [previousCard!,nextCard!,replyButton!,cardCount].forEach {$0.isHidden = true}
-        previousQuestion = ActionButton("< 上一题") { [weak self] in self?.questionForm?.previousPage() }
-        skipQuestion = ActionButton("跳过") { [weak self] in self?.questionForm?.skipPage() }
+        previousQuestion = ActionButton(L10n.text(.tasks,"bubble.button.5")) { [weak self] in self?.questionForm?.previousPage() }
+        skipQuestion = ActionButton(L10n.text(.tasks,"bubble.button.6")) { [weak self] in self?.questionForm?.skipPage() }
         previousQuestion.isHidden = true; skipQuestion.isHidden = true
         details.keepsAccentWhenInactive = true
-        codexButton = ActionButton("转到 Codex") { [weak self] in
+        codexButton = ActionButton(L10n.text(.tasks,"bubble.button.7")) { [weak self] in
             guard let self else {return}
             let action = self.onCodex
             self.approval?.request.handoffToCodex()
@@ -337,8 +337,8 @@ final class Bubble {
         }
         codexButton.image = AppIcons.openAI; codexButton.imagePosition = .imageLeading; codexButton.imageScaling = .scaleProportionallyDown
         codexButton.keepsAccentWhenInactive = true
-        retryButton = ActionButton("重试") {}; retryButton.keepsAccentWhenInactive = true; retryButton.emphasize(); retryButton.isHidden = true
-        elapsedIcon.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"任务已处理时间")
+        retryButton = ActionButton(L10n.text(.tasks,"bubble.button.8")) {}; retryButton.keepsAccentWhenInactive = true; retryButton.emphasize(); retryButton.isHidden = true
+        elapsedIcon.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:L10n.text(.tasks,"bubble.accessibilityDescription"))
         elapsedIcon.contentTintColor = .labelColor
         elapsedLabel.alignment = .right; elapsedLabel.textColor = .labelColor
         elapsedIcon.isHidden = true; elapsedLabel.isHidden = true
@@ -572,7 +572,7 @@ final class Bubble {
         if !visible || kind == "interaction" && !isBrowsingCards {placement = nil; placementSide = nil}
         let same = self.kind == kind && scroll.documentView === text
         self.kind = kind; self.scale = scale; displayedFailure = failure
-        closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:"关闭气泡")?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
+        closeButton.image = NSImage(systemSymbolName:"xmark",accessibilityDescription:L10n.text(.tasks,"bubble.render.accessibilityDescription"))?.withSymbolConfiguration(.init(pointSize:13*scale,weight:.regular))
         if kind != "progressToast" {motion.originXForWidth = nil}
         self.headingActivity = kind == "progressToast" ? headingActivity : attentionAction ? .waiting(approval:timing?.status == "waitingForApproval" || approval != nil) : nil
         headingIcon.isHidden = self.headingActivity == nil
@@ -597,7 +597,7 @@ final class Bubble {
         approvalAllow.keyEquivalent = ""
         approvalReject.isEnabled = approval?.ready == true
         approvalAllow.isEnabled = approval?.ready == true && approval?.request.canAllow == true
-        approvalAllow.title = approval?.request.allowTitle ?? "允许这一次"
+        approvalAllow.title = approval?.request.allowTitle ?? L10n.text(.tasks,"bubble.button.3")
         window.defaultButtonCell = nil
         activityTiming = timing
         configureElapsed(start:timing?.start,key:taskKey,finished:timing?.finished,status:timing?.status)
@@ -622,7 +622,7 @@ final class Bubble {
         refreshWorkspace(relayout:false)
         let bodyFont = NSFont.systemFont(ofSize:preferences.number("messageFontSize")*scale)
         if let failure {onDetails = {failure.showDetails()}}
-        details.title = failure == nil ? "查看记录详情" : "技术详情…"; details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
+        details.title = failure == nil ? L10n.text(.tasks,"bubble.button") : L10n.text(.tasks,"bubble.render.heading"); details.isEnabled = true; details.isHidden = !enabled || attentionAction; details.emphasize(replyButton.isHidden); retryButton.isHidden = true
         codexButton.isHidden = !enabled; codexButton.emphasize(attentionAction && approval == nil)
         configureButtons()
         if attentionAction && !questions.isEmpty {
@@ -647,7 +647,7 @@ final class Bubble {
                 previousQuestion.isHidden = false; skipQuestion.isHidden = false
                 previousQuestion.isEnabled = questionForm?.canGoBack == true; skipQuestion.isEnabled = questionForm?.canSkip == true
                 questionForm?.onSubmit = { [weak self] in self?.details.performClick(nil) }
-                details.title = submittingQuestion ? "正在提交…" : questionForm?.actionTitle ?? "提交回答"; details.emphasize(); details.isHidden = false; details.isEnabled = !submittingQuestion && questionForm?.canAdvance == true
+                details.title = submittingQuestion ? L10n.text(.tasks,"bubble.title") : questionForm?.actionTitle ?? L10n.text(.tasks,"bubble.render.heading.2"); details.emphasize(); details.isHidden = false; details.isEnabled = !submittingQuestion && questionForm?.canAdvance == true
                 codexButton.emphasize(false)
             }
             layoutQuestions()
@@ -695,12 +695,12 @@ final class Bubble {
     private func submitApproval(_ allow:Bool) {
         guard let form = approval,form.ready,!allow || form.request.canAllow else {return}
         let context = TerminalMonitor.active.flatMap { _ in relatedConversation.map {TerminalMonitor.context($0,turn:form.request.turn)} }
-        if let context {TerminalMonitor.active?.write(.approval,context+"  外部  ·  "+(allow ? "提交允许" : "提交拒绝"))}
+        if let context {TerminalMonitor.active?.write(.approval,context+L10n.text(.tasks,"desktopSync.attention.text")+(allow ? L10n.text(.tasks,"bubble.context.text") : L10n.text(.tasks,"bubble.context.text.2")))}
         form.isSubmitting = true; renderCard()
         form.request.submit(allow:allow) { [weak self,weak form] error in
             if let context {
-                if let error {TerminalMonitor.active?.write(.approval,context+"  外部审批未确认  ·  "+TerminalMonitor.errorCode(error),.warning)}
-                else {TerminalMonitor.active?.write(.approval,context+(form?.request.isHook == true ? "  审批决定已交给 Hook" : "  外部审批已确认"),.success)}
+                if let error {TerminalMonitor.active?.write(.approval,context+L10n.text(.tasks,"bubble.error.text")+TerminalMonitor.errorCode(error),.warning)}
+                else {TerminalMonitor.active?.write(.approval,context+(form?.request.isHook == true ? L10n.text(.tasks,"bubble.error.text.2") : L10n.text(.tasks,"bubble.error.text.3")),.success)}
             }
             guard let self,let form else {return}
             form.isSubmitting = false
@@ -808,9 +808,9 @@ final class Bubble {
         if recordPresentation,visible,let monitor = TerminalMonitor.active {
             let shown = headingActivity ?? activity
             if let timing = activityTiming,let key = timing.key,let conversation = relatedConversation {
-                let source = pendingAttention ? "待处理卡" : kind == "progressToast" ? "短进展" : "主气泡"
+                let source = pendingAttention ? L10n.text(.tasks,"bubble.source") : kind == "progressToast" ? L10n.text(.tasks,"bubble.source.2") : L10n.text(.tasks,"bubble.source.3")
                 let turn = key == "own" ? timing.activityKey : key.split(separator:":").last.map(String.init)
-                let label = shown?.monitorLabel ?? timing.status.map(TerminalMonitor.status) ?? "无进展行"
+                let label = shown?.monitorLabel ?? timing.status.map(TerminalMonitor.status) ?? L10n.text(.tasks,"bubble.label.text")
                 let next = MonitoredPresentation(conversation:conversation,taskKey:key,turn:turn,source:source,label:label)
                 if next != monitoredPresentation {
                     var change = label
@@ -852,7 +852,7 @@ final class Bubble {
         guard let start = taskStartedAt else {return}
         let value = TaskTiming.elapsed(start:start,end:taskFinishedAt ?? Date())
         if elapsedLabel.stringValue != value {
-            elapsedLabel.stringValue = value; elapsedLabel.setAccessibilityLabel("已处理 "+value)
+            elapsedLabel.stringValue = value; elapsedLabel.setAccessibilityLabel(L10n.text(.tasks,"bubble.refreshElapsed.text")+value)
         }
         if visible && abs(elapsedGroupWidth-elapsedLayoutWidth) > 0.5 {layout(bodyHeight:layoutBodyHeight)}
         layoutElapsed(in:window.frame.size)
@@ -876,10 +876,10 @@ final class Bubble {
         onDetails = {failure.showDetails()}
         show(title:taskStatus.map {preferences.taskResultLine($0)} ?? failure.title, body:failure.message, kind:"error", scale:scale, seconds:0, details:true, timing:.init(start:taskStartedAt,finished:taskFinishedAt,status:taskStatus),failure:failure)
         purpose = .attention
-        details.title = "技术详情…"
+        details.title = L10n.text(.tasks,"bubble.render.heading")
         codexButton.isHidden = true
-        if let retry {retryButton.title = "重试"; retryButton.isHidden = false; retryButton.callback = retry}
-        else if failure.openDesktop {retryButton.title = "打开 Codex"; retryButton.isHidden = false; retryButton.callback = {CodexConnection.openDesktop()}}
+        if let retry {retryButton.title = L10n.text(.tasks,"bubble.button.8"); retryButton.isHidden = false; retryButton.callback = retry}
+        else if failure.openDesktop {retryButton.title = L10n.text(.tasks,"bubble.showFailure.title"); retryButton.isHidden = false; retryButton.callback = {CodexConnection.openDesktop()}}
         layout(bodyHeight:layoutBodyHeight)
         refreshStandalone = { [weak self] in
             guard let self else {return}
@@ -893,7 +893,7 @@ final class Bubble {
         if let failure {
             purpose = .attention; countdown.stop()
             codexButton.isHidden = true
-            onDetails = {failure.showDetails()}; details.title = "技术详情…"; details.isHidden = false; details.emphasize(false)
+            onDetails = {failure.showDetails()}; details.title = L10n.text(.tasks,"bubble.render.heading"); details.isHidden = false; details.emphasize(false)
         }
         configureButtons()
         let body = QuotaBubbleBody(overview,scale:scale,preferences:preferences,cachedAt:cachedAt,failed:failure != nil,retry:retry)

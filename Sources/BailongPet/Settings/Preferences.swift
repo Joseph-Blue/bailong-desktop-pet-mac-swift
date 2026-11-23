@@ -4,37 +4,29 @@ enum ProjectSendChannel:String, CaseIterable {
     case modern, legacy
 
     static let key = "projectSendChannel"
-    static let group = "Codex 项目对话"
-    static let settingTitle = "Codex 桌面端通信方式"
+    static let group = L10n.text(.settings,"projectSendChannel.group")
+    static let settingTitle = L10n.text(.settings,"projectSendChannel.settingTitle")
     static let legacyVersion = "26.1111.21308"
     static let modernVersion = "26.1117.41037"
     static let modernSeries = "26.1117"
-    static let help = """
-    新版（推荐）
-    适配新版 Codex 桌面端，使用新的会话通信机制。\(modernSeries) 系列起默认选用，适配基准为 \(modernVersion)。
-
-    旧版（兼容）
-    沿用原有 IPC 通信机制，适用于仍支持该接口的旧版 Codex 桌面端。\(modernSeries) 之前默认选用，适配基准为 \(legacyVersion)。
-
-    默认按桌面端版本选择。手动切换后保留选择。恢复本页默认值后重新自动选择。
-    """
+    static let help = L10n.format(.settings,"projectSendChannel.help",String(describing:modernSeries),String(describing:modernVersion),String(describing:modernSeries),String(describing:legacyVersion))
     static func recommended(for version:String?) -> Self {
         guard let version,let current = SemanticVersion(version),
               let cutoff = SemanticVersion(modernSeries+".0") else {return .modern}
         return current < cutoff ? .legacy : .modern
     }
-    var title:String {self == .modern ? "新版（推荐）" : "旧版（兼容）"}
+    var title:String {self == .modern ? L10n.text(.settings,"projectSendChannel.option.modern") : L10n.text(.settings,"projectSendChannel.option.legacy")}
     static var options:[(String,String)] {allCases.map {($0.rawValue,$0.title)}}
 }
 
 struct PlaybackSettingsError: LocalizedError {
     let key:String
-    var errorDescription:String? {"播放设置「"+key+"」无效。"}
+    var errorDescription:String? {L10n.text(.settings,"preferences.playbackSettingsError.text")+key+L10n.text(.settings,"preferences.playbackSettingsError.text.2")}
 }
 
 enum SettingsSection: Int, CaseIterable {
     case general, identity, activity, messages, appearance, advanced, developer, updates, about
-    var title: String { ["通用","称呼与个性","动作与活动","消息与提醒","外观","高级","画质与性能","更新","关于"][rawValue] }
+    var title: String { [L10n.text(.settings,"sections.general"),L10n.text(.settings,"sections.identity"),L10n.text(.settings,"sections.activity"),L10n.text(.settings,"sections.messages"),L10n.text(.settings,"sections.appearance"),L10n.text(.settings,"sections.advanced"),L10n.text(.settings,"sections.performance"),L10n.text(.settings,"sections.updates"),L10n.text(.settings,"search.add.text.118")][rawValue] }
     var symbol: String { ["gearshape","person.crop.circle","figure.walk","bubble.left.and.bubble.right","paintpalette","slider.horizontal.3","speedometer","arrow.triangle.2.circlepath","info.circle"][rawValue] }
     var keys: [String] {
         switch self {
@@ -58,10 +50,10 @@ enum BubbleCloseButtonPosition:String, CaseIterable {
     case upperLeft, upperRight, towardScreenCenter
 
     static let key = "bubbleCloseButtonPosition"
-    static let title = "气泡关闭按钮位置"
-    static let help = "仅适用于消息气泡和临时输入窗。选择「靠向屏幕中央」时，如果窗口中心在屏幕左半边，关闭按钮显示在右上角。如果窗口中心在右半边，关闭按钮显示在左上角。"
+    static let title = L10n.text(.settings,"bubbleCloseButtonPosition.title")
+    static let help = L10n.text(.settings,"bubbleCloseButtonPosition.help")
     static var options:[(String,String)] {
-        [(upperLeft.rawValue,"左上角"),(upperRight.rawValue,"右上角"),(towardScreenCenter.rawValue,"靠向屏幕中央")]
+        [(upperLeft.rawValue,L10n.text(.settings,"bubbleCloseButtonPosition.option.upperLeft")),(upperRight.rawValue,L10n.text(.settings,"bubbleCloseButtonPosition.option.upperRight")),(towardScreenCenter.rawValue,L10n.text(.settings,"bubbleCloseButtonPosition.option.inward"))]
     }
 
     func isOnRight(windowMidX:CGFloat,screenMidX:CGFloat?,wasOnRight:Bool) -> Bool {
@@ -81,12 +73,12 @@ enum SendShortcut: String, CaseIterable {
         switch self {
         case .commandReturn:return "⌘↩"
         case .returnToSend:return "↩"
-        case .controlOrCommandReturn:return "⌃↩ 或 ⌘↩"
+        case .controlOrCommandReturn:return L10n.text(.settings,"preferences.controlOrCommandReturn")
         }
     }
-    var newlineLabel: String {self == .returnToSend ? "⇧↩ 或 ⌥↩" : "↩"}
-    var hint: String {"发送：\(sendLabel)\n换行：\(newlineLabel)"}
-    static var options:[(String,String)] {allCases.map {($0.rawValue,"发送：\($0.sendLabel)\t换行：\($0.newlineLabel)")}}
+    var newlineLabel: String {self == .returnToSend ? L10n.text(.settings,"preferences.sendShortcut.text") : "↩"}
+    var hint: String {L10n.format(.settings,"preferences.sendShortcut.text.2",String(describing:sendLabel),String(describing:newlineLabel))}
+    static var options:[(String,String)] {allCases.map {($0.rawValue,L10n.format(.settings,"preferences.sendShortcut.text.3",String(describing:$0.sendLabel),String(describing:$0.newlineLabel)))}}
     func action(modifiers: NSEvent.ModifierFlags) -> Bool? {
         let flags = modifiers.intersection([.command,.shift,.option,.control])
         switch self {
@@ -119,12 +111,12 @@ final class PetPreferences {
         "animationSmoothTransition":true,"animationEdgeCleanup":true,"quotaCacheEnabled":false,"quotaCacheSeconds":60.0,
         "rememberPosition":true,"preferredDisplay":"","autoFullscreen":true,BrowserSearchEngine.key:BrowserSearchEngine.defaultEngine.rawValue,
         ProjectSendChannel.key:ProjectSendChannel.modern.rawValue,
-        "ownerName":"","customAddress":"","petName":"白龙娘",
-        "greetingTemplate":"{用户名}，{桌宠名}已经准备好啦。","customLines":[String:String](),"randomWorkingLines":true,
-        "taskProgressTemplate":"{用户名}，我还在留意进展…","taskUpdateTemplate":"{用户名}，我忙到这一步啦…","taskSuccessTemplate":"{用户名}，完成啦！",
-        "taskFailureTemplate":"{用户名}，这次任务执行失败。","taskInterruptedTemplate":"{用户名}，任务已中断。",
-        "quotaLoadingTemplate":"让我看看额度还有多少……",
-        "taskAnswerTemplate":"{用户名}，这一步需要你选一下。","taskApprovalTemplate":"{用户名}，这一步需要你批准。",
+        "ownerName":"","customAddress":"","petName":L10n.text(.settings,"identity.names.4"),
+        "greetingTemplate":L10n.text(.dialogue,"dialogue.greetingTemplate"),"customLines":[String:String](),"randomWorkingLines":true,
+        "taskProgressTemplate":L10n.text(.dialogue,"dialogue.taskProgressTemplate"),"taskUpdateTemplate":L10n.text(.dialogue,"dialogue.taskUpdateTemplate"),"taskSuccessTemplate":L10n.text(.dialogue,"dialogue.taskSuccessTemplate"),
+        "taskFailureTemplate":L10n.text(.dialogue,"dialogue.taskFailureTemplate"),"taskInterruptedTemplate":L10n.text(.dialogue,"dialogue.taskInterruptedTemplate"),
+        "quotaLoadingTemplate":L10n.text(.settings,"preferences.labels.text"),
+        "taskAnswerTemplate":L10n.text(.dialogue,"dialogue.taskAnswerTemplate"),"taskApprovalTemplate":L10n.text(.dialogue,"dialogue.taskApprovalTemplate"),
         "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
         "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"taskOpening":true,"taskCelebration":true,
@@ -149,17 +141,17 @@ final class PetPreferences {
     }
     static var glassAvailabilityDescription: String {
         #if BAILONG_SDK_GLASS
-        return "macOS 26 起支持液态玻璃材质。"
+        return L10n.text(.settings,"preferences.petPreferences.text.2")
         #else
-        return "此构建未包含液态玻璃，使用普通材质。"
+        return L10n.text(.settings,"preferences.petPreferences.text.3")
         #endif
     }
     var usesGlass: Bool {Self.glassAvailable && string("bubbleMaterial") == "glass"}
     private(set) var desktopVersion:CodexConnection.DesktopVersion?
     private var automaticChannel:ProjectSendChannel = .modern
     var projectChannelHint:String {
-        let current = desktopVersion.map {"当前桌面端 "+$0.display} ?? "未检测到 Codex 桌面端"
-        return current+"，建议选择「"+automaticChannel.title+"」。"
+        let current = desktopVersion.map {L10n.text(.settings,"preferences.petPreferences.text.4")+$0.display} ?? L10n.text(.settings,"preferences.petPreferences.text.5")
+        return current+L10n.text(.settings,"preferences.petPreferences.text.6")+automaticChannel.title+"」。"
     }
     func refreshDesktopVersion() {
         let version = CodexConnection.detectDesktopVersion()
@@ -200,7 +192,7 @@ final class PetPreferences {
     }
     func validatePlayback() throws {
         guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {
-            throw PetFailure(message:"这份设置来自更高版本，请使用新版应用打开。原设置已保留。")
+            throw PetFailure(message:L10n.text(.settings,"preferences.validatePlayback.message"))
         }
         var repaired = [String:Any]()
         for key in ["animationQuality","animationFPSLimit"] where !Self.choices[key]!.contains(string(key)) {
@@ -214,7 +206,7 @@ final class PetPreferences {
         }
         if !repaired.isEmpty {
             defaults.set(repaired,forKey:"compatibilityRecoveredValues")
-            compatibilityNotice = "部分画质、帧率或播放设置无法使用，已恢复默认值。可导出备份查看原设置。"
+            compatibilityNotice = L10n.text(.settings,"preferences.validatePlayback.text")
         }
     }
 
@@ -252,22 +244,22 @@ final class PetPreferences {
         NotificationCenter.default.post(name:Self.didChange,object:self,userInfo:info)
     }
     func reset(_ keys: [String]) {for key in keys {defaults.removeObject(forKey:key)}; notify(keys)}
-    var petName: String {let s = string("petName").trimmingCharacters(in:.whitespacesAndNewlines); return s.isEmpty ? "白龙娘" : s}
+    var petName: String {let s = string("petName").trimmingCharacters(in:.whitespacesAndNewlines); return s.isEmpty ? L10n.text(.settings,"identity.names.4") : s}
     // 产品身份固定；petName 只用于角色称呼和互动文案。
-    static let productName = "白龙桌宠Swift"
+    static let productName = L10n.text(.settings,"preferences.productName")
     var appName: String {Self.productName}
     var ownerName:String {
         let name = string("ownerName").trimmingCharacters(in:.whitespacesAndNewlines)
-        return name.isEmpty ? "主人" : name
+        return name.isEmpty ? L10n.text(.settings,"preferences.reset.text") : name
     }
     // 模板自行选择变量；特定称呼留空沿用用户名。
     var address: String {
         let custom = string("customAddress").trimmingCharacters(in:.whitespacesAndNewlines)
         if custom.isEmpty {return ownerName}
-        return TemplateSyntax.render(custom,values:["{桌宠名}":petName,"{用户名}":ownerName])
+        return TemplateSyntax.render(custom,values:[TemplateSyntax.petName:petName,TemplateSyntax.userName:ownerName])
     }
     func template(_ text: String) -> String {
-        TemplateSyntax.render(text,values:["{特定称呼}":address,"{桌宠名}":petName,"{用户名}":ownerName])
+        TemplateSyntax.render(text,values:[TemplateSyntax.customAddress:address,TemplateSyntax.petName:petName,TemplateSyntax.userName:ownerName])
     }
     func statusLine(_ key:String) -> String {
         let value = string(key)
@@ -277,17 +269,17 @@ final class PetPreferences {
         let key = bool("randomWorkingLines") ? ConversationLines.working.randomElement()!.key : "taskProgressTemplate"
         return statusLine(key)
     }
-    var sensitiveQuestionNotice: String {template("（已隐藏{桌宠名}的敏感信息提问）")}
-    var sensitiveInputNotice: String {template("（已隐藏{用户名}的敏感信息输入）")}
+    var sensitiveQuestionNotice: String {template(L10n.text(.conversation,"preferences.sensitiveQuestionNotice"))}
+    var sensitiveInputNotice: String {template(L10n.text(.conversation,"preferences.sensitiveInputNotice"))}
     func taskResultLine(_ status:String) -> String {
         statusLine(status == "completed" ? "taskSuccessTemplate" : TaskOutcome.stoppedStatuses.contains(status) ? "taskInterruptedTemplate" : "taskFailureTemplate")
     }
     // 只传入应用自带文案，不对用户消息、模型正文或历史记录做全局替换。
-    func templateSource(_ text:String) -> String {text.replacingOccurrences(of:"白龙娘",with:"{桌宠名}").replacingOccurrences(of:"白龙",with:"{桌宠名}").replacingOccurrences(of:"主人",with:"{用户名}")}
+    func templateSource(_ text:String) -> String {text.replacingOccurrences(of:"白龙娘",with:TemplateSyntax.petName).replacingOccurrences(of:"白龙",with:TemplateSyntax.petName).replacingOccurrences(of:"主人",with:TemplateSyntax.userName)}
     func fixedText(_ text: String) -> String {template(templateSource(text))}
     func line(for clip: Clip) -> String? {
         if let custom = (value("customLines") as? [String:String])?[clip.id], !custom.isEmpty {return template(custom)}
-        return clip.line.map(fixedText)
+        return clip.localizedLine.map(fixedText)
     }
     func setLine(_ text: String, for id: String) {
         var lines = value("customLines") as? [String:String] ?? [:]
@@ -369,10 +361,10 @@ final class PetPreferences {
     func importData(_ data: Data, clipIDs: Set<String>) throws {
         guard let document = try JSONSerialization.jsonObject(with:data) as? [String:Any],
               let schema = document["schemaVersion"] as? Int,var values = document["settings"] as? [String:Any] else {
-            throw PetFailure(message:"请选择本应用导出的设置文件。")
+            throw PetFailure(message:L10n.text(.settings,"preferences.importData.message"))
         }
         guard (1...SettingsStorage.schemaVersion).contains(schema) else {
-            throw PetFailure(message:"无法读取这份设置文件（格式版本 \(schema)），请使用保存它的应用版本。当前设置未改变。")
+            throw PetFailure(message:L10n.format(.settings,"preferences.importData.message.2",String(describing:schema)))
         }
         values = TemplateSyntax.migrate(values)
         values = ConversationLines.migrateReceivedLine(values)
@@ -385,9 +377,9 @@ final class PetPreferences {
         values.removeValue(forKey:"gitWindowPinned")
         values.removeValue(forKey:"gitWindowSeconds")
         if let favorites = values.removeValue(forKey:"favorites") {
-            guard Self.valid(favorites,key:"favorites",baseline:[String](),clipIDs:clipIDs) else {throw PetFailure(message:"旧设置中的偏爱动作无法读取。当前设置未改变。")}
+            guard Self.valid(favorites,key:"favorites",baseline:[String](),clipIDs:clipIDs) else {throw PetFailure(message:L10n.text(.settings,"preferences.importData.message.3"))}
             let rawWeights = values["animationWeights"] ?? [String:Int]()
-            guard Self.valid(rawWeights,key:"animationWeights",baseline:[String:Int](),clipIDs:clipIDs),let weights = rawWeights as? [String:Int] else {throw PetFailure(message:"旧设置中的动作权重无法读取。当前设置未改变。")}
+            guard Self.valid(rawWeights,key:"animationWeights",baseline:[String:Int](),clipIDs:clipIDs),let weights = rawWeights as? [String:Int] else {throw PetFailure(message:L10n.text(.settings,"preferences.importData.message.4"))}
             values["animationWeights"] = Self.combinedAnimationWeights(weights,favorites:favorites as! [String])
         }
 
@@ -396,7 +388,7 @@ final class PetPreferences {
             // dev.7 / dev.8 导出包含旧开关；统一流式后只校验类型，不恢复旧播放策略。
             if key == "lowResourceMode", let n = value as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() { continue }
             guard let baseline = Self.defaults[key], Self.valid(value,key:key,baseline:baseline,clipIDs:clipIDs) else {
-                throw PetFailure(message:"设置项「\(key)」无法使用或数值超出范围。当前设置未改变。")
+                throw PetFailure(message:L10n.format(.settings,"preferences.importData.message.5",String(describing:key)))
             }
         }
         // 全部验证后才一次应用；未提供的已知设置回到默认值。

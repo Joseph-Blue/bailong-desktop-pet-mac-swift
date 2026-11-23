@@ -37,7 +37,7 @@ final class QuestionForm: NSView {
     }
     var isLast:Bool {currentIndex == questions.count-1}
     var complete:Bool {isLast && questions.enumerated().allSatisfy {skipped.contains($0.element.id) || !answer(at:$0.offset).isEmpty}}
-    var actionTitle:String {isLast ? (answers.isEmpty && complete ? "关闭" : "提交回答") : "下一题 >"}
+    var actionTitle:String {isLast ? (answers.isEmpty && complete ? L10n.text(.tasks,"questionForm.answer.text") : L10n.text(.tasks,"questionForm.answer.text.2")) : L10n.text(.tasks,"questionForm.answer.text.3")}
     var canAdvance:Bool {enabled && (isLast ? complete : !answer(at:currentIndex).isEmpty || skipped.contains(questions[currentIndex].id))}
     init(questions:[TaskQuestion],width:CGFloat,scale:CGFloat,fontSize:CGFloat) {
         self.questions = questions; self.scale = scale; self.fontSize = fontSize
@@ -46,13 +46,13 @@ final class QuestionForm: NSView {
             for oi in 0..<(q.options.isEmpty ? 0 : q.options.count+1) {
                 let button = AccentChoiceButton(title:"",type:.radio); button.target = self; button.action = #selector(selectOption(_:))
                 button.identifier = .init(q.id); button.tag = qi*1000+oi
-                button.setAccessibilityLabel(oi < q.options.count ? q.options[oi].title : "其他"); radios.append(button)
+                button.setAccessibilityLabel(oi < q.options.count ? q.options[oi].title : L10n.text(.tasks,"questionForm.title")); radios.append(button)
             }
             let input = MessageEditor(frame:NSRect(x:0,y:0,width:width,height:80*scale))
             let box = ChatViewLayout.inputBox(input)
-            input.placeholder = q.options.isEmpty ? "输入回答" : "其他回答或补充说明"
+            input.placeholder = q.options.isEmpty ? L10n.text(.tasks,"questionForm.text") : L10n.text(.tasks,"questionForm.text.2")
             input.update(font:.systemFont(ofSize:fontSize),editable:true)
-            input.setAccessibilityLabel(q.prompt+"：输入回答")
+            input.setAccessibilityLabel(q.prompt+L10n.text(.tasks,"questionForm.text.3"))
             input.onTextChange = { [weak self] in self?.changedInput(qi) }
             input.send = { [weak self] in self?.advance() }
             inputs.append(input); editors.append(box); addSubview(box)
@@ -97,14 +97,14 @@ final class QuestionForm: NSView {
             field.frame.size = NSSize(width:width,height:ceil(field.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:100000)).height))
             return field
         }
-        let page = text("第 \(qi+1) / \(questions.count) 题"+(skipped.contains(q.id) ? " · 已跳过" : ""),11*scale,usable,true)
+        let page = text(L10n.format(.tasks,"questionForm.page",String(describing:qi+1),String(describing:questions.count))+(skipped.contains(q.id) ? L10n.text(.tasks,"questionForm.page.2") : ""),11*scale,usable,true)
         pageLabel = page; page.frame.origin = NSPoint(x:inset,y:y); add(page); y += page.frame.height+10*scale
         let prompt = text(q.prompt,fontSize,usable); prompt.frame.origin = NSPoint(x:inset,y:y); add(prompt); y += prompt.frame.height+8*scale
         for button in radios where button.tag/1000 == qi {
             let oi = button.tag % 1000
             let option = oi < q.options.count ? q.options[oi] : nil
             let x = inset+24*scale
-            let title = option.map {"\(oi+1). "+$0.title+($0.recommended ? "（推荐）" : "")} ?? "其他"
+            let title = option.map {"\(oi+1). "+$0.title+($0.recommended ? L10n.text(.tasks,"questionForm.text.heading") : "")} ?? L10n.text(.tasks,"questionForm.title")
             let name = QuestionOptionLabel(wrappingLabelWithString:title)
             let font = NSFont.systemFont(ofSize:fontSize)
             name.font = font
@@ -147,7 +147,7 @@ final class QuestionForm: NSView {
         guard enabled else {return}
         let qi = sender.tag/1000, oi = sender.tag%1000, q = questions[qi]
         skipped.remove(q.id); refreshPageLabel(); selected[q.id] = oi < q.options.count ? q.options[oi].title : nil
-        inputs[qi].placeholder = oi < q.options.count ? "补充说明（可选）" : "输入回答"
+        inputs[qi].placeholder = oi < q.options.count ? L10n.text(.tasks,"questionForm.selectOption.text") : L10n.text(.tasks,"questionForm.text")
         for button in radios where button.identifier == sender.identifier {button.state = button === sender ? .on : .off}
         onChange()
     }
@@ -159,7 +159,7 @@ final class QuestionForm: NSView {
         onChange()
     }
     private func refreshPageLabel() {
-        pageLabel?.stringValue = "第 \(currentIndex+1) / \(questions.count) 题"+(skipped.contains(questions[currentIndex].id) ? " · 已跳过" : "")
+        pageLabel?.stringValue = L10n.format(.tasks,"questionForm.page",String(describing:currentIndex+1),String(describing:questions.count))+(skipped.contains(questions[currentIndex].id) ? L10n.text(.tasks,"questionForm.page.2") : "")
     }
     private func setEnabled(_ value:Bool) {
         enabled = value

@@ -59,12 +59,12 @@ final class TaskMessageAccumulator {
             }
         }
         case "turn/plan/updated":
-            let labels = ["pending":"待开始","inProgress":"进行中","completed":"已完成"]
+            let labels = ["pending":L10n.text(.tasks,"taskMessageAccumulator.labels"),"inProgress":L10n.text(.tasks,"taskMessageAccumulator.labels.2"),"completed":L10n.text(.tasks,"taskMessageAccumulator.labels.3")]
             steps["plan"] = (p["plan"] as? [[String:Any]] ?? []).map {step in
-                let state = labels[step["status"] as? String ?? ""] ?? "状态未提供"
+                let state = labels[step["status"] as? String ?? ""] ?? L10n.text(.tasks,"taskMessageAccumulator.state")
                 return state+" · "+(step["step"] as? String ?? "")
             }.joined(separator:"\n")
-            taskActivity = .init(title:"正在更新计划",detail:steps["plan"] ?? "",toolOperation:.plan)
+            taskActivity = .init(title:L10n.text(.tasks,"taskMessageAccumulator.receive.title"),detail:steps["plan"] ?? "",toolOperation:.plan)
         default:return false
         }
         return true
@@ -94,7 +94,7 @@ final class TaskMessageAccumulator {
                 messages[id] = link; imageMessageIDs.insert(id); steps.removeValue(forKey:id)
                 taskActivity = nil
             } else if ["inProgress","running"].contains(item["status"] as? String ?? "") {
-                steps[id] = "正在生成图片"
+                steps[id] = L10n.text(.tasks,"taskMessageAccumulator.record.text")
             } else {steps.removeValue(forKey:id)}
         case "reasoning":
             // 只读取协议公开 summary，不读取 content 或加密推理字段。
@@ -106,8 +106,8 @@ final class TaskMessageAccumulator {
             if editsByItem[id] == nil {editOrder.append(id)}
             editsByItem[id] = FileEditSummary.read(item)
             steps.removeValue(forKey:id)
-        case "mcpToolCall", "dynamicToolCall": steps[id] = "\(item["status"] ?? "") · \(item["tool"] ?? "工具")"
-        case "webSearch": steps[id] = "搜索：\(item["query"] ?? "")"
+        case "mcpToolCall", "dynamicToolCall": steps[id] = "\(item["status"] ?? "") · \(item["tool"] ?? L10n.text(.tasks,"taskMessageAccumulator.record.text.2"))"
+        case "webSearch": steps[id] = L10n.format(.tasks,"taskMessageAccumulator.record.text.3",String(describing:item["query"] ?? ""))
         default:break
         }
     }

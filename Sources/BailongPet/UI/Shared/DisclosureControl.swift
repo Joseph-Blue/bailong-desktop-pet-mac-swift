@@ -25,7 +25,7 @@ final class DisclosureControl:NSControl {
         didSet {invalidateIntrinsicContentSize(); needsDisplay = true}
     }
     var chevronTint:NSColor = .labelColor {didSet {needsDisplay = true}}
-    var accessibilityTitle = "明细" {didSet {updateAccessibility()}}
+    var accessibilityTitle = L10n.text(.app,"disclosureControl.accessibilityTitle") {didSet {updateAccessibility()}}
 
     // 仅供测试或外部模拟悬停验证，不参与业务逻辑。
     var isShowingHoverHighlight:Bool {expandable && (hovering || pressed)}
@@ -72,7 +72,7 @@ final class DisclosureControl:NSControl {
 
     private func updateAccessibility() {
         setAccessibilityRole(expandable ? .button : .staticText)
-        setAccessibilityLabel(expandable ? (expanded ? "收起"+accessibilityTitle : "展开"+accessibilityTitle) : storage.string)
+        setAccessibilityLabel(expandable ? (expanded ? L10n.text(.app,"disclosureControl.updateAccessibility.text")+accessibilityTitle : L10n.text(.app,"disclosureControl.updateAccessibility.text.2")+accessibilityTitle) : storage.string)
     }
 
     override func acceptsFirstMouse(for event:NSEvent?) -> Bool {expandable}
@@ -194,7 +194,7 @@ final class DisclosureControl:NSControl {
         let plain = storage.string.replacingOccurrences(of:"\t",with:" ").trimmingCharacters(in:.whitespacesAndNewlines)
         guard !plain.isEmpty else {return nil}
         let menu = NSMenu()
-        let copy = NSMenuItem(title:"拷贝",action:#selector(copySummary),keyEquivalent:"")
+        let copy = NSMenuItem(title:L10n.text(.app,"disclosureControl.copy"),action:#selector(copySummary),keyEquivalent:"")
         copy.target = self; menu.addItem(copy)
         return menu
     }

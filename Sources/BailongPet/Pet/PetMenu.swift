@@ -24,29 +24,29 @@ enum PetMenu {
             item.image?.isTemplate = true
             let child = NSMenu(title:title); item.submenu = child; menu.addItem(item); return child
         }
-        menu.addItem(MenuAction("打开对话",symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
-        menu.addItem(MenuAction("历史会话",symbol:"book") { [weak pet] in pet?.onHistory(nil) })
-        menu.addItem(MenuAction("查询额度",symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
-        let codex = MenuAction("跳转到 Codex") {CodexConnection.openDesktop()}
+        menu.addItem(MenuAction(L10n.text(.app,"application.installMenuBar.menuItem.2"),symbol:"bubble.left.and.bubble.right") { [weak pet] in pet?.onComposer() })
+        menu.addItem(MenuAction(L10n.text(.app,"menu.history"),symbol:"book") { [weak pet] in pet?.onHistory(nil) })
+        menu.addItem(MenuAction(L10n.text(.app,"menu.checkUsage"),symbol:AppIcons.quotaSymbol) { [weak pet] in pet?.soundOnce(); pet?.onQuota() })
+        let codex = MenuAction(L10n.text(.app,"menu.openCodex")) {CodexConnection.openDesktop()}
         codex.image = AppIcons.openAI?.copy() as? NSImage
         codex.image?.size = NSSize(width:16,height:16)
         menu.addItem(codex)
         menu.addItem(.separator())
-        menu.addItem(MenuAction("播放随机动画",symbol:"shuffle") {random()})
-        let animations = submenu("播放动作",symbol:"play.rectangle")
-        for (name,clips,symbol) in [("待机动作",pet.catalog.idles+pet.catalog.extras,"figure.stand"),("互动动作",pet.catalog.variants,"figure.play"),("工作动作",pet.catalog.work,"briefcase"),("移动动作",pet.catalog.movementAnimationsForDisplay,"figure.walk.motion")] {
+        menu.addItem(MenuAction(L10n.text(.app,"menu.randomAnimation"),symbol:"shuffle") {random()})
+        let animations = submenu(L10n.text(.app,"menu.playAnimation"),symbol:"play.rectangle")
+        for (name,clips,symbol) in [(L10n.text(.app,"menu.idleAnimations"),pet.catalog.idles+pet.catalog.extras,"figure.stand"),(L10n.text(.app,"menu.interactionAnimations"),pet.catalog.variants,"figure.play"),(L10n.text(.app,"menu.workAnimations"),pet.catalog.work,"briefcase"),(L10n.text(.app,"menu.movementAnimations"),pet.catalog.movementAnimationsForDisplay,"figure.walk.motion")] {
             let item = NSMenuItem(title:name,action:nil,keyEquivalent:""), group = NSMenu(title:name)
             item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
             item.image?.isTemplate = true
             for clip in clips {group.addItem(MenuAction(clip.title) { [weak pet] in pet?.preview(clip) })}
             item.submenu = group; animations.addItem(item)
         }
-        let switches = submenu("快捷开关",symbol:"switch.2")
+        let switches = submenu(L10n.text(.app,"menu.quickToggles"),symbol:"switch.2")
         switches.autoenablesItems = false
-        switches.addItem(MenuAction("自主移动",checked:pet.autoMove,symbol:"figure.walk.motion") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
-        switches.addItem(MenuAction("播放音效",checked:pet.soundEnabled,symbol:"speaker.wave.2") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
-        switches.addItem(MenuAction("任务气泡提醒",checked:pet.taskBubbles,symbol:"bell.badge") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
-        let progressToast = MenuAction("思考与工具进展小气泡",checked:pet.preferences.bool("progressToastEnabled"),symbol:"bubble.left") { [weak pet] in
+        switches.addItem(MenuAction(L10n.text(.app,"menu.autoMove"),checked:pet.autoMove,symbol:"figure.walk.motion") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoMove,for:"autoMove") })
+        switches.addItem(MenuAction(L10n.text(.app,"menu.soundEffects"),checked:pet.soundEnabled,symbol:"speaker.wave.2") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.soundEnabled,for:"soundEnabled") })
+        switches.addItem(MenuAction(L10n.text(.app,"menu.taskAlerts"),checked:pet.taskBubbles,symbol:"bell.badge") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.taskBubbles,for:"taskBubbles") })
+        let progressToast = MenuAction(L10n.text(.app,"menu.progressToast"),checked:pet.preferences.bool("progressToastEnabled"),symbol:"bubble.left") { [weak pet] in
             guard let pet else {return}
             pet.preferences.set(!pet.preferences.bool("progressToastEnabled"),for:"progressToastEnabled")
         }
@@ -55,23 +55,23 @@ enum PetMenu {
         let workspace = MenuAction("") { [weak pet] in pet?.onWorkspace() }
         workspace.identifier = .init("workspaceStatus")
         workspace.image = GitIcons.git; switches.addItem(workspace)
-        switches.addItem(MenuAction("全屏时自动隐藏",checked:pet.autoFullscreen,symbol:"square.arrowtriangle.4.outward") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
+        switches.addItem(MenuAction(L10n.text(.app,"menu.hideInFullScreen"),checked:pet.autoFullscreen,symbol:"square.arrowtriangle.4.outward") { [weak pet] in guard let pet else{return}; pet.preferences.set(!pet.autoFullscreen,for:"autoFullscreen") })
         switches.addItem(.separator())
-        switches.addItem(MenuAction("启动设置…",symbol:"power") { [weak pet] in pet?.showSettings(section:.general) })
+        switches.addItem(MenuAction(L10n.text(.app,"menu.startupSettings"),symbol:"power") { [weak pet] in pet?.showSettings(section:.general) })
         switches.addItem(.separator())
         switches.addItem(visibilityItem())
         menu.addItem(.separator())
-        menu.addItem(MenuAction("更改桌宠、气泡与文字大小…",symbol:"textformat.size") { [weak pet] in pet?.showSettings(section:.appearance) })
-        menu.addItem(MenuAction("更改桌宠称呼和台词…",symbol:"person.text.rectangle") { [weak pet] in pet?.showSettings(section:.identity) })
-        menu.addItem(MenuAction("设置…",symbol:"gearshape") { [weak pet] in pet?.showSettings() })
-        let tools = submenu("工具与帮助",symbol:"questionmark.circle")
-        tools.addItem(MenuAction("任务同步状态…",symbol:"arrow.triangle.2.circlepath") { [weak pet] in guard let pet else{return}; let a = NSAlert(); a.messageText = "Codex 任务同步状态"; a.informativeText = pet.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:"任务同步"); a.addButton(withTitle:"知道了"); a.applyAccent(); a.runModal() })
-        tools.addItem(MenuAction("性能统计…",symbol:"chart.xyaxis.line") { [weak pet] in pet?.showDiagnostics() })
+        menu.addItem(MenuAction(L10n.text(.app,"menu.resize"),symbol:"textformat.size") { [weak pet] in pet?.showSettings(section:.appearance) })
+        menu.addItem(MenuAction(L10n.text(.app,"menu.namesAndDialogue"),symbol:"person.text.rectangle") { [weak pet] in pet?.showSettings(section:.identity) })
+        menu.addItem(MenuAction(L10n.text(.app,"application.settings"),symbol:"gearshape") { [weak pet] in pet?.showSettings() })
+        let tools = submenu(L10n.text(.app,"menu.toolsAndHelp"),symbol:"questionmark.circle")
+        tools.addItem(MenuAction(L10n.text(.app,"menu.taskSyncStatus"),symbol:"arrow.triangle.2.circlepath") { [weak pet] in guard let pet else{return}; let a = NSAlert(); a.messageText = L10n.text(.app,"menu.taskSyncTitle"); a.informativeText = pet.syncStatus(); a.icon = NSImage(systemSymbolName:"arrow.triangle.2.circlepath",accessibilityDescription:L10n.text(.app,"menu.taskSyncAccessibility")); a.addButton(withTitle:L10n.text(.app,"menu.gotIt")); a.applyAccent(); a.runModal() })
+        tools.addItem(MenuAction(L10n.text(.app,"menu.diagnostics"),symbol:"chart.xyaxis.line") { [weak pet] in pet?.showDiagnostics() })
         tools.addItem(.separator())
-        tools.addItem(MenuAction("检查更新…",symbol:"arrow.down.circle") {UpdateWindow.show()})
-        tools.addItem(MenuAction("关于"+pet.preferences.appName+"…",symbol:"info.circle") { [weak pet] in pet?.showSettings(section:.about) })
+        tools.addItem(MenuAction(L10n.text(.app,"application.installMenuBar.menuItem"),symbol:"arrow.down.circle") {UpdateWindow.show()})
+        tools.addItem(MenuAction(L10n.text(.app,"application.about")+pet.preferences.appName+"…",symbol:"info.circle") { [weak pet] in pet?.showSettings(section:.about) })
         menu.addItem(.separator())
-        menu.addItem(MenuAction("退出"+pet.preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak pet] in pet?.onQuit() })
+        menu.addItem(MenuAction(L10n.text(.app,"application.quit")+pet.preferences.appName,symbol:"rectangle.portrait.and.arrow.right") { [weak pet] in pet?.onQuit() })
         refreshVisibility(in:menu,pet:pet)
         menu.showProvidedImages()
         switches.showProvidedImages()
@@ -79,8 +79,8 @@ enum PetMenu {
     }
     static func refreshVisibility(in menu:NSMenu,pet:PetController) {
         let show = pet.hidden || NSApp.isHidden
-        let workspaceTitle = pet.preferences.bool("gitWindowEnabled") ? "隐藏工作区状态条" : "显示工作区状态条"
-        let petTitle = show ? "显示桌宠" : "隐藏桌宠"
+        let workspaceTitle = pet.preferences.bool("gitWindowEnabled") ? L10n.text(.app,"menu.hideWorkspaceStatus") : L10n.text(.app,"menu.showWorkspaceStatus")
+        let petTitle = show ? L10n.text(.app,"menu.showPet") : L10n.text(.app,"menu.hidePet")
         let petIcon = NSImage(systemSymbolName:show ? "eye" : "eye.slash",accessibilityDescription:nil)?.withSymbolConfiguration(.init(pointSize:14,weight:.regular))
         petIcon?.isTemplate = true
         let items = menu.items + menu.items.compactMap(\.submenu).flatMap(\.items)

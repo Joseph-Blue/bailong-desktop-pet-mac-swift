@@ -3,7 +3,7 @@ import CoreImage
 
 // 只覆盖本应用外观；nil 交给 AppKit 随系统明暗模式实时更新。
 enum AppAppearance {
-    static let choices = [("system","跟随系统"),("light","浅色"),("dark","深色")]
+    static let choices = [("system",L10n.text(.settings,"appearance.choices")),("light",L10n.text(.settings,"appearance.choices.2")),("dark",L10n.text(.settings,"appearance.choices.3"))]
     static var selection: String {SettingsStorage.defaults.string(forKey:"appearanceMode") ?? "system"}
     private static let systemColorObserver = NotificationCenter.default.addObserver(forName:NSColor.systemColorsDidChangeNotification,object:nil,queue:.main) { _ in
         NotificationCenter.default.post(name:AppAccent.didChange,object:nil)
@@ -31,7 +31,7 @@ enum AppAppearance {
 
 enum AppAccent {
     static let didChange = Notification.Name("BailongAccentDidChange")
-    static let choices = [("system","跟随系统"),("blue","蓝色"),("purple","紫色"),("pink","粉色"),("red","红色"),("orange","橙色"),("yellow","黄色"),("green","绿色"),("gray","石墨色"),("custom","自定义")]
+    static let choices = [("system",L10n.text(.settings,"appearance.choices")),("blue",L10n.text(.settings,"appearance.choices.4")),("purple",L10n.text(.settings,"appearance.choices.5")),("pink",L10n.text(.settings,"appearance.choices.6")),("red",L10n.text(.settings,"appearance.choices.7")),("orange",L10n.text(.settings,"appearance.choices.8")),("yellow",L10n.text(.settings,"appearance.choices.9")),("green",L10n.text(.settings,"appearance.choices.10")),("gray",L10n.text(.settings,"appearance.choices.11")),("custom",L10n.text(.settings,"appearance.render.text.2"))]
     static var selection: String {SettingsStorage.defaults.string(forKey:"accentStyle") ?? "system"}
     static var color: NSColor {color(for:selection)}
     static let selectedTextBackground = NSColor(name:nil) { _ in
@@ -311,7 +311,7 @@ final class SettingsFooterButton: NSButton {
 extension NSAlert {
     // 视觉主操作与回车默认操作分开，审批仍默认拒绝。
     func applyAccent(primary: Int = 0, keyboardDefault: Int? = 0) {
-        if buttons.isEmpty {addButton(withTitle:"好")}
+        if buttons.isEmpty {addButton(withTitle:L10n.text(.app,"nativeControls.showError.button"))}
         layout()
         let dangerous = buttons.contains(where: \.hasDestructiveAction)
         for (index,button) in buttons.enumerated() {

@@ -3,13 +3,13 @@ import Foundation
 enum TokenCountFormat:String,CaseIterable {
     case full,international,chinese
     static let key = "tokenCountFormat"
-    static let options = [(full.rawValue,"完整数字"),(international.rawValue,"K / M / B"),(chinese.rawValue,"万 / 亿")]
+    static let options = [(full.rawValue,L10n.text(.usage,"tokenUsage.options")),(international.rawValue,"K / M / B"),(chinese.rawValue,L10n.text(.usage,"tokenUsage.options.2"))]
     func number(_ value:Int64) -> String {
         let units:[(size:Int64,name:String)]
         switch self {
         case .full:return TokenUsage.formatted(value)
         case .international:units = [(1_000,"K"),(1_000_000,"M"),(1_000_000_000,"B")]
-        case .chinese:units = [(10_000,"万"),(100_000_000,"亿")]
+        case .chinese:units = [(10_000,L10n.text(.usage,"tokenUsage.number.text")),(100_000_000,L10n.text(.usage,"tokenUsage.number.text.2"))]
         }
         guard let index = units.lastIndex(where:{value >= $0.size}) else {return TokenUsage.formatted(value)}
         var unit = units[index]
@@ -46,13 +46,13 @@ struct TokenUsage:Codable,Equatable {
     static func amount(_ value:Int64,separator:String = " ",format:TokenCountFormat = .full) -> String {format.number(value)+separator+unit(value)}
     var signature:String {"\(input):\(cachedInput):\(output):\(total)"}
     func detailRows(format:TokenCountFormat) -> [(label:String,number:String,unit:String)] {
-        var cacheLabel = "缓存命中"
+        var cacheLabel = L10n.text(.usage,"tokenUsage.cacheLabel")
         if input > 0 {
             let rate = Decimal(cachedInput)/Decimal(input)
             let percentage = rate.formatted(.percent.precision(.fractionLength(1)).rounded(rule:.toNearestOrAwayFromZero).locale(Locale(identifier:"en_US")))
             cacheLabel += " (\(percentage))"
         }
-        return zip(["输入",cacheLabel,"输出"],[input,cachedInput,output]).map {label,value in
+        return zip([L10n.text(.usage,"tokenUsage.detailRows.text"),cacheLabel,L10n.text(.usage,"tokenUsage.detailRows.text.2")],[input,cachedInput,output]).map {label,value in
             (label,format.number(value),Self.unit(value))
         }
     }

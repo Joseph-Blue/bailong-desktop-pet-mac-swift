@@ -134,3 +134,6 @@
 "updates.refresh.heading" = "重试";
 "updates.refresh.heading.2" = "取消检查";
 "updates.refresh.text.4" = "此版本未提供更新说明。";
+
+/* 应用接入补充 */
+"aboutPage.labels.text" = "Forgejo · Caesar Schinas，经 Simple Icons 收录（CC BY-SA 4.0）";

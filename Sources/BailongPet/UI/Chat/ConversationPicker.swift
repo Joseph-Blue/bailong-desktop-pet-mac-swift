@@ -8,12 +8,12 @@ final class ConversationPicker:NSButton {
 
     init() {
         super.init(frame:.zero)
-        title = "选择会话…"; bezelStyle = .rounded
+        title = L10n.text(.conversation,"conversationPicker.title"); bezelStyle = .rounded
         image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
         target = self; action = #selector(open)
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
-        setAccessibilityLabel("选择目标会话")
+        setAccessibilityLabel(L10n.text(.conversation,"conversationPicker.text"))
     }
     required init?(coder:NSCoder) {fatalError()}
 
@@ -98,7 +98,7 @@ private final class ConversationSearchPanel:ContentCursorPanel {
         isOpaque = false; backgroundColor = .clear; hasShadow = true
         isReleasedWhenClosed = false; hidesOnDeactivate = false; animationBehavior = .none
         setAccessibilityRole(.popover)
-        setAccessibilityLabel("会话搜索")
+        setAccessibilityLabel(L10n.text(.conversation,"conversationPicker.text.2"))
     }
 
     func present() {
@@ -157,7 +157,7 @@ private final class ConversationSearchPanel:ContentCursorPanel {
 
 private final class ConversationPickerContent:NSViewController,NSTableViewDataSource,NSTableViewDelegate {
     let search = NSSearchField()
-    private let table = NSTableView(), empty = label("没有可选会话")
+    private let table = NSTableView(), empty = label(L10n.text(.conversation,"conversationPicker.table"))
     private let conversations:[Conversation]
     private var filtered = [Conversation]()
     var onSelect:(String) -> Void = {_ in}
@@ -166,7 +166,7 @@ private final class ConversationPickerContent:NSViewController,NSTableViewDataSo
     override func loadView() {
         view = NSView(frame:NSRect(x:0,y:0,width:400,height:320))
         search.focusRingType = .none
-        search.placeholderString = "搜索会话标题或工作区"; search.target = self; search.action = #selector(filter)
+        search.placeholderString = L10n.text(.conversation,"conversationPicker.loadView.text"); search.target = self; search.action = #selector(filter)
         search.sendsSearchStringImmediately = true
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.verticalScrollElasticity = .allowed
@@ -196,6 +196,6 @@ private final class ConversationPickerContent:NSViewController,NSTableViewDataSo
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         let conversation = filtered[row]
         let active = conversation.turns.last.map {activeStatuses.contains($0.status)} ?? false
-        return HistoryConversationCell(title:conversation.title,external:conversation.external,snippet:(active ? "执行中 · " : "")+conversation.cwd)
+        return HistoryConversationCell(title:conversation.title,external:conversation.external,snippet:(active ? L10n.text(.conversation,"conversationPicker.tableView.text") : "")+conversation.cwd)
     }
 }

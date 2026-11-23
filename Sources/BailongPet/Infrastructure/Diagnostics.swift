@@ -79,15 +79,15 @@ private struct ProcessStatistics {
             let swapinsEnd = MemoryLayout<task_vm_info_data_t>.offset(of: \.ledger_swapins)! + MemoryLayout<Int64>.size
             if Int(count) * MemoryLayout<integer_t>.size >= swapinsEnd, memory.ledger_swapins >= 0 {
                 result.swapins = UInt64(memory.ledger_swapins)
-            } else { result.memoryError = "系统未返回进程换入计数" }
-        } else { result.memoryError = "task_info 错误 \(memoryStatus)" }
+            } else { result.memoryError = L10n.text(.diagnostics,"diagnostics.read.text") }
+        } else { result.memoryError = L10n.format(.diagnostics,"diagnostics.read.text.2",String(describing:memoryStatus)) }
         return result
     }
     static func systemSwapText() -> String {
         var swap = xsw_usage()
         var size = MemoryLayout.size(ofValue: swap)
         guard sysctlbyname("vm.swapusage", &swap, &size, nil, 0) == 0 else {
-            return "不可用（vm.swapusage errno \(errno)）"
+            return L10n.format(.diagnostics,"diagnostics.systemSwapText.text",String(describing:errno))
         }
         return memoryText(swap.xsu_used)
     }
@@ -109,19 +109,19 @@ private enum DeviceIdentity {
         #if arch(arm64)
         let architecture = "arm64 / Apple Silicon"
         #elseif arch(x86_64)
-        let architecture = "x86_64 / Intel 指令集"
+        let architecture = L10n.text(.diagnostics,"diagnostics.architecture")
         #else
-        let architecture = "未知编译架构"
+        let architecture = L10n.text(.diagnostics,"diagnostics.architecture.2")
         #endif
         let info = ProcessInfo.processInfo
         let gpu = MTLCreateSystemDefaultDevice()
         let commit = Paths.localBuildCommit.map { " · \($0.prefix(8))" } ?? ""
-        return "桌宠版本 \(Paths.version)\(commit) · \(architecture)\n进程 \(info.processName) · PID \(info.processIdentifier)\nCPU \(systemString("machdep.cpu.brand_string") ?? "型号不可用") · \(systemString("hw.machine") ?? "架构不可用") · \(info.processorCount) 核\nGPU \(gpu?.name ?? "不可用") · \(gpu?.architecture.name ?? "架构不可用")\nmacOS \(info.operatingSystemVersionString)"
+        return L10n.format(.diagnostics,"diagnostics.systemString.text",String(describing:Paths.version),String(describing:commit),String(describing:architecture),String(describing:info.processName),String(describing:info.processIdentifier),String(describing:systemString("machdep.cpu.brand_string") ?? L10n.text(.diagnostics,"diagnostics.systemString.text.2")),String(describing:systemString("hw.machine") ?? L10n.text(.diagnostics,"diagnostics.systemString.text.3")),String(describing:info.processorCount),String(describing:gpu?.name ?? L10n.text(.diagnostics,"diagnostics.systemString.text.4")),String(describing:gpu?.architecture.name ?? L10n.text(.diagnostics,"diagnostics.systemString.text.3")),String(describing:info.operatingSystemVersionString))
     }()
 }
 
 final class DiagnosticsPanel: NSObject, NSWindowDelegate {
-    private static let underflowTitle = "本段动画等帧次数"
+    private static let underflowTitle = L10n.text(.diagnostics,"diagnostics.underflowTitle")
 
     private struct Reading {
         var fps: Double?
@@ -145,13 +145,13 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
     private var previous = ProcessStatistics()
     private var reading = Reading()
     private var previousGPU: GPUStatistics.Snapshot?
-    private var gpuStatus = "等待采样"
+    private var gpuStatus = L10n.text(.diagnostics,"diagnostics.gpuStatus")
     private var swapinRate: Double?
     private var sampledAt = ProcessInfo.processInfo.systemUptime
     init(pet: PetController) {
         self.pet = pet
         super.init()
-        window.title = "应用性能信息统计"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.title = L10n.text(.diagnostics,"diagnostics.title"); window.isReleasedWhenClosed = false; window.delegate = self
         window.hidesOnDeactivate = false
         updatePin()
         window.isExcludedFromWindowsMenu = false
@@ -160,8 +160,8 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let container = NSView()
         window.contentView = container
         let rows = [
-            ("更新 FPS", fpsValue), ("CPU 总体", cpuValue), ("运行内存 (RAM)", ramValue),
-            ("GPU（应用组）", gpuValue), (Self.underflowTitle, underflowValue)
+            (L10n.text(.diagnostics,"diagnostics.text"), fpsValue), (L10n.text(.diagnostics,"diagnostics.text.2"), cpuValue), (L10n.text(.diagnostics,"diagnostics.text.3"), ramValue),
+            (L10n.text(.diagnostics,"diagnostics.text.4"), gpuValue), (Self.underflowTitle, underflowValue)
         ]
         let grid = NSGridView(views: rows.map { name, value -> [NSView] in
             let title = NSTextField(labelWithString: name)
@@ -171,7 +171,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
             value.setAccessibilityLabel(name)
             guard value === underflowValue else { return [title, value] }
 
-            let titleWithHelp = title.withHoverHelpIcon("播放时，到了该换帧的时间，新画面还没准备好，暂时停在上一帧。每次连续等待记为 1 次。")
+            let titleWithHelp = title.withHoverHelpIcon(L10n.text(.diagnostics,"diagnostics.titleWithHelp"))
             return [titleWithHelp, value]
         })
         grid.column(at: 0).xPlacement = .leading
@@ -183,22 +183,22 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         container.addSubview(grid)
         grid.translatesAutoresizingMaskIntoConstraints = false
 
-        let closeButton = ActionButton("关闭") { [weak self] in self?.window.performClose(nil) }
-        let copyButton = ActionButton("拷贝完整诊断") {}
-        copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "拷贝")
+        let closeButton = ActionButton(L10n.text(.diagnostics,"diagnostics.closeButton")) { [weak self] in self?.window.performClose(nil) }
+        let copyButton = ActionButton(L10n.text(.diagnostics,"diagnostics.copyButton")) {}
+        copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: L10n.text(.diagnostics,"diagnostics.accessibilityDescription"))
         copyButton.imagePosition = .imageLeading; copyButton.emphasize()
         CopyFeedback.attach(to:copyButton,didCopy:{ [weak window] text in
             if let window {Self.showCopiedInformation(text,for:window)}
         }) { [weak self] in self?.copyInformation() }
         let actions = NSStackView(views: [closeButton, copyButton]); actions.orientation = .horizontal; actions.spacing = 8
         container.addSubview(actions); actions.translatesAutoresizingMaskIntoConstraints = false
-        let pinIcon = NSImageView(image: NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "置顶")!)
+        let pinIcon = NSImageView(image: NSImage(systemSymbolName: "pin.fill", accessibilityDescription: L10n.text(.diagnostics,"diagnostics.pinIcon"))!)
         pinIcon.contentTintColor = .secondaryLabelColor
         pinIcon.widthAnchor.constraint(equalToConstant: 14).isActive = true
         pinIcon.heightAnchor.constraint(equalToConstant: 14).isActive = true
-        let pinLabel = NSTextField(labelWithString: "置顶显示"); pinLabel.font = .systemFont(ofSize: 12)
+        let pinLabel = NSTextField(labelWithString: L10n.text(.diagnostics,"diagnostics.pinLabel")); pinLabel.font = .systemFont(ofSize: 12)
         pinSwitch.controlSize = .small; pinSwitch.target = self; pinSwitch.action = #selector(togglePin)
-        pinSwitch.setAccessibilityLabel("置顶显示")
+        pinSwitch.setAccessibilityLabel(L10n.text(.diagnostics,"diagnostics.pinLabel"))
         let pinControls = NSStackView(views: [pinIcon, pinLabel, pinSwitch])
         pinControls.orientation = .horizontal; pinControls.alignment = .centerY; pinControls.spacing = 6
         container.addSubview(pinControls); pinControls.translatesAutoresizingMaskIntoConstraints = false
@@ -239,7 +239,7 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         pet?.playbackScheduling = PlaybackSchedulingStatistics()
         previous = ProcessStatistics.read(); swapinRate = nil; reading = Reading()
         switch GPUStatistics.read() {
-        case .success(let snapshot): previousGPU = snapshot; gpuStatus = "等待采样"
+        case .success(let snapshot): previousGPU = snapshot; gpuStatus = L10n.text(.diagnostics,"diagnostics.gpuStatus")
         case .failure(let error): previousGPU = nil; gpuStatus = error.message
         }
         updateMetrics()
@@ -282,8 +282,8 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         case .success(let snapshot):
             if let last = previousGPU, last.coalition == snapshot.coalition, snapshot.nanoseconds >= last.nanoseconds {
                 gpu = Double(snapshot.nanoseconds - last.nanoseconds) / 1_000_000_000 / elapsed * 100
-                gpuStatus = "应用组 \(snapshot.coalition)"
-            } else { gpuStatus = "重新建立采样基线" }
+                gpuStatus = L10n.format(.diagnostics,"diagnostics.sample.text",String(describing:snapshot.coalition))
+            } else { gpuStatus = L10n.text(.diagnostics,"diagnostics.sample.text.2") }
             previousGPU = snapshot
         case .failure(let error): previousGPU = nil; gpuStatus = error.message
         }
@@ -302,18 +302,18 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         }
         update(fpsValue, number(reading.fps))
         update(cpuValue, totalCPU.map { number($0) + "%" } ?? "—")
-        update(ramValue, previous.footprint.map(memoryText) ?? "不可用")
-        update(gpuValue, reading.gpu.map { String(format: "%.2f%%", $0) } ?? (previousGPU == nil ? "不可用" : "—"))
+        update(ramValue, previous.footprint.map(memoryText) ?? L10n.text(.diagnostics,"diagnostics.systemString.text.4"))
+        update(gpuValue, reading.gpu.map { String(format: "%.2f%%", $0) } ?? (previousGPU == nil ? L10n.text(.diagnostics,"diagnostics.systemString.text.4") : "—"))
         let underflows = pet?.animation?.stream?.statistics().underflows
-        update(underflowValue, underflows.map { "\($0) 次" } ?? "—")
+        update(underflowValue, underflows.map { L10n.format(.diagnostics,"diagnostics.update.text",String(describing:$0)) } ?? "—")
     }
     private func number(_ value: Double?) -> String {
         value.map { String(format: "%.1f", $0) } ?? "—"
     }
     static func showCopiedInformation(_ text:String,for parent:NSWindow) {
         let alert = NSAlert()
-        alert.messageText = "已将当前的完整诊断拷贝至剪贴板"
-        let symbol = NSImage(systemSymbolName:"chart.xyaxis.line",accessibilityDescription:"应用性能信息统计")?
+        alert.messageText = L10n.text(.diagnostics,"diagnostics.showCopiedInformation.messageText")
+        let symbol = NSImage(systemSymbolName:"chart.xyaxis.line",accessibilityDescription:L10n.text(.diagnostics,"diagnostics.title"))?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize:36,weight:.semibold).applying(.init(paletteColors:[.white])))
         alert.icon = NSImage(size:NSSize(width:64,height:64),flipped:false) { rect in
             AppAccent.color.setFill()
@@ -329,12 +329,12 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         body.attributedStringValue = NSAttributedString(string:text,attributes:[
             .font:NSFont.monospacedSystemFont(ofSize:12,weight:.regular),.foregroundColor:NSColor.labelColor
         ])
-        body.setAccessibilityLabel("完整诊断")
+        body.setAccessibilityLabel(L10n.text(.diagnostics,"diagnostics.showCopiedInformation.text"))
         scroll.hasVerticalScroller = true
         scroll.documentView = body
         let box = MessageTextBoxSurface(scroll:scroll)
         alert.accessoryView = box
-        alert.addButton(withTitle:"知道了")
+        alert.addButton(withTitle:L10n.text(.diagnostics,"diagnostics.showCopiedInformation.button"))
         alert.applyAccent()
         box.layoutSubtreeIfNeeded()
         let width = scroll.documentLayoutWidth
@@ -352,63 +352,63 @@ final class DiagnosticsPanel: NSObject, NSWindowDelegate {
         let count = pet.animation?.frameCount ?? 0
         let index = pet.animation?.stream?.current?.index ?? pet.frameIndex
         let resolution = pet.currentFrame?.image.width ?? pet.animationResolution(for:pet.current)
-        let automatic = pet.preferences.usesAutomaticAnimationResolution ? "自动 · " : ""
-        let limit = pet.preferences.string("animationFPSLimit") == "full" ? "满帧" : pet.preferences.string("animationFPSLimit") + " FPS"
-        let state = pet.hidden ? "隐藏" : pet.loading ? "解码中" : "播放"
+        let automatic = pet.preferences.usesAutomaticAnimationResolution ? L10n.text(.diagnostics,"diagnostics.automatic") : ""
+        let limit = pet.preferences.string("animationFPSLimit") == "full" ? L10n.text(.diagnostics,"diagnostics.limit") : pet.preferences.string("animationFPSLimit") + " FPS"
+        let state = pet.hidden ? L10n.text(.diagnostics,"diagnostics.state") : pet.loading ? L10n.text(.diagnostics,"diagnostics.state.2") : L10n.text(.diagnostics,"diagnostics.state.3")
         let preloadEnabled = pet.preferences.bool("preloadWholeAnimation")
-        var playback = "\(preloadEnabled ? "整段预加载" : "流式播放") · \(pet.current.title) · \(state) · \(String(format: "%.2f", pet.playbackRate))×\n画质 \(automatic)\(resolution)×\(resolution) · 上限 \(limit)\n帧 \(count == 0 ? 0 : index + 1)/\(count) · 累计 \(frames.total) · 图层更新 \(number(reading.draws))/s"
+        var playback = L10n.format(.diagnostics,"diagnostics.playback",String(describing:preloadEnabled ? L10n.text(.diagnostics,"diagnostics.playback.2") : L10n.text(.diagnostics,"diagnostics.playback.3")),String(describing:pet.current.title),String(describing:state),String(describing:String(format: "%.2f", pet.playbackRate)),String(describing:automatic),String(describing:resolution),String(describing:resolution),String(describing:limit),String(describing:count == 0 ? 0 : index + 1),String(describing:count),String(describing:frames.total),String(describing:number(reading.draws)))
         func milliseconds(_ value: Double?) -> String { value.map { String(format:"%.1f ms",$0 * 1000) } ?? "—" }
-        playback += "\n最长图像更新间隔（本次统计）\(milliseconds(frames.longestFrameHold))"
+        playback += L10n.format(.diagnostics,"diagnostics.milliseconds.text",String(describing:milliseconds(frames.longestFrameHold)))
         let scheduling = pet.playbackScheduling
-        playback += "\n调度 \(number(scheduling.callbackRate))/s · 回调延后：平均 \(milliseconds(scheduling.averageDelay)) · 最长 \(milliseconds(scheduling.longestDelay)) · ≥ 一帧 \(scheduling.overdueFrames) 次"
+        playback += L10n.format(.diagnostics,"diagnostics.milliseconds.text.2",String(describing:number(scheduling.callbackRate)),String(describing:milliseconds(scheduling.averageDelay)),String(describing:milliseconds(scheduling.longestDelay)),String(describing:scheduling.overdueFrames))
         if let timing = pet.animation?.loadTiming {
-            playback += "\n本段加载：请求→首帧 \(milliseconds(timing.firstFrameAt - timing.requestedAt)) · 起播准备 \(milliseconds(timing.readyAt - timing.firstFrameAt))"
-            playback += "\n准备→交接 \(milliseconds(timing.handedAt.map { $0 - timing.readyAt })) · 交接→图层 \(milliseconds(timing.submittedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } }))"
-            playback += "\n请求→图层 \(milliseconds(timing.submittedAt.map { $0 - timing.requestedAt }))"
+            playback += L10n.format(.diagnostics,"diagnostics.milliseconds.text.3",String(describing:milliseconds(timing.firstFrameAt - timing.requestedAt)),String(describing:milliseconds(timing.readyAt - timing.firstFrameAt)))
+            playback += L10n.format(.diagnostics,"diagnostics.milliseconds.text.4",String(describing:milliseconds(timing.handedAt.map { $0 - timing.readyAt })),String(describing:milliseconds(timing.submittedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } })))
+            playback += L10n.format(.diagnostics,"diagnostics.milliseconds.text.5",String(describing:milliseconds(timing.submittedAt.map { $0 - timing.requestedAt })))
         }
         let cache = pet.decoder.residentFrameStatistics(additionalImages: pet.view.transitionImage.map { [$0] } ?? [])
         var preloadText: String
         if preloadEnabled {
             if let progress = pet.decoder.preloadingStatistics() {
                 let title = pet.catalog.all.first { $0.id == progress.id }?.title ?? progress.id
-                preloadText = "整段预加载：\(title) · \(progress.frames)/\(progress.total) 帧"
+                preloadText = L10n.format(.diagnostics,"diagnostics.milliseconds.text.6",String(describing:title),String(describing:progress.frames),String(describing:progress.total))
             } else if pet.loading {
-                preloadText = "整段预加载：准备中"
+                preloadText = L10n.text(.diagnostics,"diagnostics.milliseconds.text.7")
             } else {
-                preloadText = "整段预加载：\(pet.current.title) · \(count) 帧"
+                preloadText = L10n.format(.diagnostics,"diagnostics.milliseconds.text.8",String(describing:pet.current.title),String(describing:count))
             }
         } else if let stream = pet.animation?.stream {
             let buffer = stream.statistics()
-            preloadText = "流式缓冲 \(buffer.buffered)/\(stream.capacity) 帧\n\(Self.underflowTitle) \(buffer.underflows) 次 · 最长等待 \(milliseconds(buffer.longestUnderflow))\n本段读取 \(buffer.decoded) 帧 · 像素处理 \(buffer.converted) 帧 · 跳过 \(buffer.skipped) 帧\n本段回调跨过可用帧 \(buffer.expired) 帧\n整段预加载：关闭"
+            preloadText = L10n.format(.diagnostics,"diagnostics.milliseconds.text.9",String(describing:buffer.buffered),String(describing:stream.capacity),String(describing:Self.underflowTitle),String(describing:buffer.underflows),String(describing:milliseconds(buffer.longestUnderflow)),String(describing:buffer.decoded),String(describing:buffer.converted),String(describing:buffer.skipped),String(describing:buffer.expired))
             if let startup = stream.startup {
-                preloadText += "\n起播 \(startup.frames) 帧 · 余量 \(milliseconds(startup.seconds))"
+                preloadText += L10n.format(.diagnostics,"diagnostics.milliseconds.text.10",String(describing:startup.frames),String(describing:milliseconds(startup.seconds)))
                 if startup.reused > 0 {
-                    let continuation = buffer.continued.map { $0 ? "缺帧前接续" : "缺帧后接续" } ?? "接续准备中"
-                    preloadText += " · 复用 \(startup.reused) 帧 · \(continuation)\n缓存区间重读 \(buffer.replayed) 个样本，跳过像素处理"
+                    let continuation = buffer.continued.map { $0 ? L10n.text(.diagnostics,"diagnostics.milliseconds.text.11") : L10n.text(.diagnostics,"diagnostics.milliseconds.text.12") } ?? L10n.text(.diagnostics,"diagnostics.milliseconds.text.13")
+                    preloadText += L10n.format(.diagnostics,"diagnostics.milliseconds.text.14",String(describing:startup.reused),String(describing:continuation),String(describing:buffer.replayed))
                 }
             }
         } else {
-            preloadText = "流式缓冲：准备中"
+            preloadText = L10n.text(.diagnostics,"diagnostics.milliseconds.text.15")
         }
         if pet.preferences.bool("animationOpeningCache"), !preloadEnabled {
-            preloadText += "\n开头缓存 \(memoryText(UInt64(cache.openingBytes))) / 24 MiB · \(cache.openingClips) 段 · 累计命中 \(cache.hits) 次"
+            preloadText += L10n.format(.diagnostics,"diagnostics.milliseconds.text.16",String(describing:memoryText(UInt64(cache.openingBytes))),String(describing:cache.openingClips),String(describing:cache.hits))
         }
-        let transition = !pet.preferences.bool("animationSmoothTransition") ? "关闭" :
-            (!pet.preferences.bool("bubbleMotion") || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) ? "动态效果已停用" :
-            pet.view.transitionImage == nil ? "开启 · 等待相近轮廓交接" : "180 ms 淡化中"
-        preloadText += "\n动作平滑过渡：\(transition) · 孤立杂点清理：\(pet.preferences.bool("animationEdgeCleanup") ? "开启" : "关闭")"
-        let swapinText = previous.swapins.map { $0 > 0 ? "累计 \(memoryText($0))" : "未观察到换入" }
-            ?? previous.memoryError ?? "不可用"
+        let transition = !pet.preferences.bool("animationSmoothTransition") ? L10n.text(.diagnostics,"diagnostics.closeButton") :
+            (!pet.preferences.bool("bubbleMotion") || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) ? L10n.text(.diagnostics,"diagnostics.milliseconds.text.17") :
+            pet.view.transitionImage == nil ? L10n.text(.diagnostics,"diagnostics.milliseconds.text.18") : L10n.text(.diagnostics,"diagnostics.milliseconds.text.19")
+        preloadText += L10n.format(.diagnostics,"diagnostics.milliseconds.text.20",String(describing:transition),String(describing:pet.preferences.bool("animationEdgeCleanup") ? L10n.text(.diagnostics,"diagnostics.milliseconds.text.21") : L10n.text(.diagnostics,"diagnostics.closeButton")))
+        let swapinText = previous.swapins.map { $0 > 0 ? L10n.format(.diagnostics,"diagnostics.milliseconds.text.22",String(describing:memoryText($0))) : L10n.text(.diagnostics,"diagnostics.milliseconds.text.23") }
+            ?? previous.memoryError ?? L10n.text(.diagnostics,"diagnostics.systemString.text.4")
         let swapRateText = swapinRate.map { " · \(memoryText(UInt64($0.rounded())))/s" } ?? ""
-        let resources = "CPU 总体 \(number(totalCPU))% · 单核基准 \(number(reading.cpu))%\n"
-            + "运行内存 (RAM) \(previous.footprint.map(memoryText) ?? previous.memoryError ?? "不可用")\n"
-            + "GPU（应用组）\(reading.gpu.map { String(format: "%.2f%%", $0) } ?? gpuStatus)\n"
-            + "本进程压缩 \(previous.compressed.map(memoryText) ?? "不可用") · 系统 Swap \(ProcessStatistics.systemSwapText())\n"
-            + "本进程 Swap-in：\(swapinText)\(swapRateText)\n"
-            + "帧像素合计 \(memoryText(UInt64(cache.bytes))) · \(cache.frames) 帧 · 已发布 \(cache.clips) 段\n"
-            + "\(preloadText)\n动画磁盘缓存 0 B"
-        let connections = "Codex 桌面端  \(CodexConnection.desktopDiagnostics)\n只读同步  \(pet.syncDiagnostics())\nCodex CLI  \(pet.cliDiagnostics())"
-        let frameRates = "更新 FPS \(number(reading.fps)) · HI \(number(frames.high)) · LO \(number(frames.low))"
+        let resources = L10n.format(.diagnostics,"diagnostics.resources",String(describing:number(totalCPU)),String(describing:number(reading.cpu)))
+            + L10n.format(.diagnostics,"diagnostics.milliseconds.text.24",String(describing:previous.footprint.map(memoryText) ?? previous.memoryError ?? L10n.text(.diagnostics,"diagnostics.systemString.text.4")))
+            + L10n.format(.diagnostics,"diagnostics.milliseconds.text.25",String(describing:reading.gpu.map { String(format: "%.2f%%", $0) } ?? gpuStatus))
+            + L10n.format(.diagnostics,"diagnostics.milliseconds.text.26",String(describing:previous.compressed.map(memoryText) ?? L10n.text(.diagnostics,"diagnostics.systemString.text.4")),String(describing:ProcessStatistics.systemSwapText()))
+            + L10n.format(.diagnostics,"diagnostics.milliseconds.text.27",String(describing:swapinText),String(describing:swapRateText))
+            + L10n.format(.diagnostics,"diagnostics.milliseconds.text.28",String(describing:memoryText(UInt64(cache.bytes))),String(describing:cache.frames),String(describing:cache.clips))
+            + L10n.format(.diagnostics,"diagnostics.milliseconds.text.29",String(describing:preloadText))
+        let connections = L10n.format(.diagnostics,"diagnostics.connections",String(describing:CodexConnection.desktopDiagnostics),String(describing:pet.syncDiagnostics()),String(describing:pet.cliDiagnostics()))
+        let frameRates = L10n.format(.diagnostics,"diagnostics.frameRates",String(describing:number(reading.fps)),String(describing:number(frames.high)),String(describing:number(frames.low)))
         return [window.title, frameRates, playback, resources, DeviceIdentity.text, connections].joined(separator: "\n\n")
     }
     deinit { timer?.invalidate(); NotificationCenter.default.removeObserver(self) }

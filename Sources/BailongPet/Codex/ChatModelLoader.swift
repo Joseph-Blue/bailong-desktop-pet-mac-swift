@@ -52,7 +52,7 @@ final class ChatModelLoader {
                         self.connection.call("config/read",["includeLayers":false,"cwd":directory]) { response in
                             finish(response.flatMap { value in
                                 guard let config = value["config"] as? [String:Any] else {
-                                    return .failure(CodexProtocol.Failure.malformed("缺少工作区模型配置"))
+                                    return .failure(CodexProtocol.Failure.malformed(L10n.text(.conversation,"chatModelLoader.page.text")))
                                 }
                                 return .success((models,config))
                             })

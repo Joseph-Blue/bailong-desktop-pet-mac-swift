@@ -2,15 +2,15 @@ import AppKit
 import Carbon
 
 enum FinderAutomationPermission {
-    private static let queue = DispatchQueue(label:"白龙桌宠 访达授权",qos:.userInitiated)
+    private static let queue = DispatchQueue(label:L10n.text(.settings,"systemPermissions.queue.label"),qos:.userInitiated)
     enum State {
         case allowed, notRequested, denied, unavailable(OSStatus)
         var title:String {
             switch self {
-            case .allowed:return "已允许"
-            case .notRequested:return "尚未授权"
-            case .denied:return "未允许"
-            case .unavailable(let code):return code == procNotFound ? "访达未运行" : "状态读取失败（\(code)）"
+            case .allowed:return L10n.text(.settings,"systemPermissions.allowed")
+            case .notRequested:return L10n.text(.settings,"systemPermissions.notRequested")
+            case .denied:return L10n.text(.settings,"systemPermissions.denied")
+            case .unavailable(let code):return code == procNotFound ? L10n.text(.settings,"systemPermissions.state.text") : L10n.format(.settings,"systemPermissions.unavailable",String(describing:code))
             }
         }
     }
@@ -33,13 +33,13 @@ enum FinderAutomationPermission {
 enum SystemPermissionSettings {
     static func open(_ pane:String) {
         let url = URL(string:"x-apple.systempreferences:com.apple.preference.security?"+pane)!
-        if !NSWorkspace.shared.open(url) {showError("无法打开系统设置",PetFailure(message:"请打开系统设置 → 隐私与安全性。"))}
+        if !NSWorkspace.shared.open(url) {showError(L10n.text(.settings,"systemPermissions.open.error"),PetFailure(message:L10n.text(.settings,"systemPermissions.open.message")))}
     }
 }
 
 // 状态查询不请求授权；只有明确点击按钮才触发系统授权。
 final class FinderPermissionControl:NSStackView {
-    private let status = NSTextField(labelWithString:"正在检查…")
+    private let status = NSTextField(labelWithString:L10n.text(.settings,"systemPermissions.finderPermissionControl.text"))
     private var state:FinderAutomationPermission.State?
     private var checking = false
     private var button:ActionButton!
@@ -47,7 +47,7 @@ final class FinderPermissionControl:NSStackView {
         super.init(frame:frame)
         orientation = .horizontal; alignment = .centerY; spacing = 8
         status.font = .systemFont(ofSize:11); status.textColor = .secondaryLabelColor
-        button = ActionButton("授权…") { [weak self] in self?.performAction() }
+        button = ActionButton(L10n.text(.settings,"systemPermissions.button")) { [weak self] in self?.performAction() }
         addArrangedSubview(status); addArrangedSubview(button)
         NotificationCenter.default.addObserver(self,selector:#selector(refresh(_:)),name:NSWindow.didBecomeKeyNotification,object:nil)
     }
@@ -60,11 +60,11 @@ final class FinderPermissionControl:NSStackView {
         FinderAutomationPermission.check(ask:ask) { [weak self] result in
             guard let self else {return}
             self.checking = false; self.state = result; self.status.stringValue = result.title
-            self.status.setAccessibilityLabel("访达自动化："+result.title)
+            self.status.setAccessibilityLabel(L10n.text(.settings,"systemPermissions.check.text")+result.title)
             switch result {
-            case .notRequested:self.button.title = "授权…"
-            case .unavailable:self.button.title = "重新检查"
-            default:self.button.title = "系统设置…"
+            case .notRequested:self.button.title = L10n.text(.settings,"systemPermissions.button")
+            case .unavailable:self.button.title = L10n.text(.settings,"systemPermissions.unavailable.2")
+            default:self.button.title = L10n.text(.settings,"settingsWindow.general.button.6")
             }
             self.button.isEnabled = true
         }

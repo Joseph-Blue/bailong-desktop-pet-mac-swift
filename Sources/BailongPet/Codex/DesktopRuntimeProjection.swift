@@ -74,7 +74,7 @@ enum DesktopRuntimeProjection {
     }
     // false 表示补丁将已裁剪的轮次改成目标身份，调用方须取得完整快照。
     static func patch(_ patch:[String:Any],state:inout [String:Any],keepingTurns:Set<String>) throws -> Bool {
-        guard let path = patch["path"] as? [Any],let operation = patch["op"] as? String else {throw PetFailure(message:"Codex 实时状态增量格式不兼容。")}
+        guard let path = patch["path"] as? [Any],let operation = patch["op"] as? String else {throw PetFailure(message:L10n.text(.tasks,"desktopRuntimeProjection.patch.message"))}
         if path.isEmpty,let raw = patch["value"] as? [String:Any] {state = conversation(raw,keepingTurns:keepingTurns); return true}
         var value = patch["value"] ?? NSNull()
         var changedTurnIdentity = false
@@ -134,7 +134,7 @@ enum DesktopRuntimeProjection {
         }
         var root:Any = state
         try apply(&root,path:ArraySlice(path),operation:operation,value:value)
-        guard let result = root as? [String:Any] else {throw PetFailure(message:"Codex 实时状态根节点无效。")}
+        guard let result = root as? [String:Any] else {throw PetFailure(message:L10n.text(.tasks,"desktopRuntimeProjection.patch.message.2"))}
         state = changedTurnIdentity ? conversation(result,keepingTurns:keepingTurns) : result
         return true
     }
@@ -142,23 +142,23 @@ enum DesktopRuntimeProjection {
         guard let head = path.first else {return node}
         if let key = head as? String,let object = node as? [String:Any],let child = object[key] {return try self.node(child,path:path.dropFirst())}
         if let index = head as? Int,let array = node as? [Any],array.indices.contains(index) {return try self.node(array[index],path:path.dropFirst())}
-        throw PetFailure(message:"Codex 实时状态路径已变化。")
+        throw PetFailure(message:L10n.text(.tasks,"desktopRuntimeProjection.node.message"))
     }
     private static func apply(_ node:inout Any,path:ArraySlice<Any>,operation:String,value:Any) throws {
         guard let head = path.first else {node = value; return}
         let tail = path.dropFirst()
         if let key = head as? String,var object = node as? [String:Any] {
             if tail.isEmpty {if operation == "remove" {object.removeValue(forKey:key)} else {object[key] = value}}
-            else {guard var child = object[key] else {throw PetFailure(message:"Codex 实时状态路径已变化。")}; try apply(&child,path:tail,operation:operation,value:value); object[key] = child}
+            else {guard var child = object[key] else {throw PetFailure(message:L10n.text(.tasks,"desktopRuntimeProjection.node.message"))}; try apply(&child,path:tail,operation:operation,value:value); object[key] = child}
             node = object
         } else if let index = head as? Int,var array = node as? [Any],index >= 0 {
             if tail.isEmpty && operation == "add",index <= array.count {array.insert(value,at:index)}
             else {
-                guard array.indices.contains(index) else {throw PetFailure(message:"Codex 实时状态索引已变化。")}
+                guard array.indices.contains(index) else {throw PetFailure(message:L10n.text(.tasks,"desktopRuntimeProjection.apply.message"))}
                 if tail.isEmpty && operation == "remove" {array.remove(at:index)}
                 else {var child = array[index]; try apply(&child,path:tail,operation:operation,value:value); array[index] = child}
             }
             node = array
-        } else {throw PetFailure(message:"Codex 实时状态路径不兼容。")}
+        } else {throw PetFailure(message:L10n.text(.tasks,"desktopRuntimeProjection.apply.message.2"))}
     }
 }

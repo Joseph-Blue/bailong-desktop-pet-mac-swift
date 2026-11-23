@@ -9,9 +9,9 @@ enum TaskOutcome {
         if status != "completed",let description = CodexErrorMessage(error) {return description.body}
         if !final.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {return final}
         switch status {
-        case "completed": return "任务已完成，Codex 未提供文字回复。"
-        case _ where stoppedStatuses.contains(status): return "本次任务已中断，未收到最终回复。"
-        default: return "本次任务执行失败，Codex 未提供错误说明。"
+        case "completed": return L10n.text(.tasks,"taskOutcome.body.text")
+        case _ where stoppedStatuses.contains(status): return L10n.text(.tasks,"taskOutcome.body.text.2")
+        default: return L10n.text(.tasks,"taskOutcome.body.text.3")
         }
     }
 }

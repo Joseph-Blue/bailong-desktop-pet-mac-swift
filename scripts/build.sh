@@ -39,7 +39,8 @@ bailong_compile "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimizati
 bailong_phase_end
 bailong_phase_begin "2/$phase_count" "编译跟随助手"
 bailong_compile "$bailong_swiftc" $bailong_sdk_flags -O -swift-version 5 -target "$target_arch-apple-macosx14.0" \
-    -module-cache-path .build/module-cache Sources/BailongPet/Infrastructure/FollowMonitor.swift Tools/FollowHelper/main.swift \
+    -module-cache-path .build/module-cache Sources/BailongPet/Infrastructure/Localization.swift \
+    Sources/BailongPet/Infrastructure/FollowMonitor.swift Tools/FollowHelper/main.swift \
     -framework AppKit -o ".build/$target_arch/BailongFollow"
 bailong_phase_end
 
@@ -53,6 +54,7 @@ cp ".build/$target_arch/BailongPet" "$staging/Contents/MacOS/BailongPet"
 "$bailong_resource_tool" copy-app "$bailong_resource_manifest" "$PWD/local-assets" "$staging/Contents/Resources"
 cp "${bailong_provider_icons[@]}" "$staging/Contents/Resources/"
 cp VERSION THIRD-PARTY-NOTICES.md "$staging/Contents/Resources/"
+cp -R "$bailong_localization_dir"/*.lproj "$staging/Contents/Resources/"
 cat > "$staging/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,13 +74,18 @@ $build_plist_entry
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>CFBundleAllowMixedLocalizations</key><true/>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSAppleEventsUsageDescription</key><string>点击本机文件链接时，恢复对应的访达窗口并选中文件。</string>
 <key>CFBundleIconFile</key><string>BailongPet</string>
 </dict></plist>
 PLIST
+bailong_localize_info_plist "$staging/Contents/Info.plist"
 helper="$staging/Contents/Library/Helpers/BailongFollow.app"
 mkdir -p "$helper/Contents/MacOS"
 cp ".build/$target_arch/BailongFollow" "$helper/Contents/MacOS/BailongFollow"
+for localization in "$bailong_localization_dir"/*.lproj; do
+    localized_helper="$helper/Contents/Resources/${localization:t}"
+    mkdir -p "$localized_helper"
+    cp "$localization/App.strings" "$localized_helper/"
+done
 cat > "$helper/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -89,6 +96,7 @@ cat > "$helper/Contents/Info.plist" <<PLIST
 <key>CFBundleExecutable</key><string>BailongFollow</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>${version%%-*}</string>
+<key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 </dict></plist>

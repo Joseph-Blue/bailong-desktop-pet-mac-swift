@@ -33,7 +33,7 @@ rebuild=0
 source_manifest="${(F)swift_sources}"
 [[ -f "$dev_dir/sources.txt" && "$(<"$dev_dir/sources.txt")" == "$source_manifest" ]] || rebuild=1
 [[ -f "$dev_dir/environment.txt" && "$(<"$dev_dir/environment.txt")" == "$dev_build_environment" ]] || rebuild=1
-for source in $swift_sources VERSION scripts/swift-sources.sh scripts/swift-environment.sh "${0:A}"; do
+for source in $swift_sources VERSION scripts/swift-sources.sh scripts/swift-environment.sh scripts/build-resources.sh "$bailong_info_strings" "${0:A}"; do
     if [[ "$source" -nt "$binary" ]]; then rebuild=1; break; fi
 done
 
@@ -53,9 +53,9 @@ $build_plist_entry
 <key>CFBundleAllowMixedLocalizations</key><true/>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSAppleEventsUsageDescription</key><string>点击本机文件链接时，恢复对应的访达窗口并选中文件。</string>
 </dict></plist>
 PLIST
+    bailong_localize_info_plist "$dev_dir/Info.plist"
     bailong_compile "$bailong_swiftc" $bailong_sdk_flags -O -whole-module-optimization -swift-version 5 \
         -target "$target_arch-apple-macosx14.0" -module-cache-path .build/module-cache \
         $swift_sources -framework AppKit -framework AVFoundation -framework CoreImage -framework Metal -lsqlite3 \

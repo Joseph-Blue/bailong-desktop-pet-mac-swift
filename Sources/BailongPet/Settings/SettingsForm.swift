@@ -314,16 +314,16 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         let count = NSTextField(labelWithString:"")
         count.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular); count.alignment = .right
         count.widthAnchor.constraint(equalToConstant:54).isActive = true
-        let clear = NSButton(image:NSImage(systemSymbolName:"xmark.circle.fill",accessibilityDescription:"清空"+title)!,target:nil,action:nil)
+        let clear = NSButton(image:NSImage(systemSymbolName:"xmark.circle.fill",accessibilityDescription:L10n.text(.settings,"settingsForm.clear")+title)!,target:nil,action:nil)
         clear.isBordered = false; clear.contentTintColor = .secondaryLabelColor
-        clear.setAccessibilityLabel("清空"+title)
+        clear.setAccessibilityLabel(L10n.text(.settings,"settingsForm.clear")+title)
         clear.widthAnchor.constraint(equalToConstant:20).isActive = true
         clear.heightAnchor.constraint(equalToConstant:24).isActive = true
         let updateCount: (String)->Void = {value in
             let length = allowsTokens ? TemplateSyntax.count(value) : value.count
             count.stringValue = "\(length)/\(limit)"
             count.textColor = length >= limit ? .systemRed : .secondaryLabelColor
-            count.setAccessibilityLabel("已输入 \(length) 字，上限 \(limit) 字")
+            count.setAccessibilityLabel(L10n.format(.settings,"settingsForm.entry.text",String(describing:length),String(describing:limit)))
             clear.isEnabled = !value.isEmpty
         }
         updateCount(value)
@@ -401,7 +401,7 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
     }
     func text(_ title: String, _ key: String, placeholder: String = "", limit: Int = 20, action:NSView? = nil) -> NSView {
         let identity = SettingsTemplateTokens.items.first(where:{$0.setting == key})
-        let fallback = ["ownerName":"主人","petName":"白龙娘"][key]
+        let fallback = ["ownerName":L10n.text(.settings,"preferences.reset.text"),"petName":L10n.text(.settings,"identity.names.4")][key]
             ?? (key.hasSuffix("Template") ? PetPreferences.defaults[key] as? String : nil)
         return entry(title,value:preferences.string(key),placeholder:placeholder,emptyFallback:fallback,limit:limit,allowsTokens:!["ownerName","petName"].contains(key),identity:identity,action:action) { [weak self] value in self?.preferences.set(value,for:key) }
     }
@@ -410,19 +410,19 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         return dependent(row(title,detail:detail,control:controls),requires:requires,unless:unless)
     }
     func animationPreviewButton(_ title:String,compact:Bool = false,action:@escaping () -> Void) -> ActionButton {
-        let button = ActionButton("播放",action)
+        let button = ActionButton(L10n.text(.settings,"settingsForm.animationPreviewButton.button"),action)
         button.image = NSImage(systemSymbolName:"play.fill",accessibilityDescription:nil)
         button.imagePosition = .imageLeading
-        button.setAccessibilityLabel("播放"+title)
+        button.setAccessibilityLabel(L10n.text(.settings,"settingsForm.animationPreviewButton.button")+title)
         if compact {button.controlSize = .small; button.font = .systemFont(ofSize:11)}
         return button
     }
     func animationWeight(_ clip:Clip) -> NSView {
         let range = PetPreferences.clipWeightRange(clip.id)
-        let slider = numericSlider(clip.title+"权重",value:preferences.weight(clip.id),range:Double(range.lowerBound)...Double(range.upperBound),step:1,suffix:"") { [weak self] value in
+        let slider = numericSlider(clip.title+L10n.text(.settings,"settingsForm.slider"),value:preferences.weight(clip.id),range:Double(range.lowerBound)...Double(range.upperBound),step:1,suffix:"") { [weak self] value in
             self?.preferences.setWeight(Int(value),for:clip.id)
         }
-        return alignedRow(leading:label("权重"),control:slider)
+        return alignedRow(leading:label(L10n.text(.settings,"settingsForm.slider")),control:slider)
     }
     private func numericSlider(_ title:String,value:Double,range:ClosedRange<Double>,step:Double,suffix:String,minimumLabel:String? = nil,changed:@escaping (Double) -> Void) -> SettingsSliderControl {
         let slider = NSSlider(value:value,minValue:range.lowerBound,maxValue:range.upperBound,target:nil,action:nil)
@@ -452,10 +452,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         slider.isContinuous = false; slider.trackFillColor = AppAccent.color
         slider.numberOfTickMarks = 7; slider.tickMarkPosition = .below; slider.allowsTickMarkValuesOnly = false
         slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
-        slider.setAccessibilityLabel("动画缓冲帧数")
+        slider.setAccessibilityLabel(L10n.text(.settings,"search.add.text.88"))
         let number = NSTextField(string: String(preferences.animationBufferFrames))
         number.alignment = .right; number.widthAnchor.constraint(equalToConstant: 54).isActive = true
-        number.setAccessibilityLabel("输入动画缓冲帧数"); number.delegate = self
+        number.setAccessibilityLabel(L10n.text(.settings,"settingsForm.bufferFrames.text.2")); number.delegate = self
         // 不用 formatter 阻止退出非法输入；提交时统一回到默认值。
         let commit: (String) -> Void = { [weak self] text in
             guard let self else { return }
@@ -467,10 +467,10 @@ final class SettingsForm:NSObject,NSTextFieldDelegate {
         textEndActions[ObjectIdentifier(number)] = commit
         attach(number) { sender in commit(sender.stringValue) }
         attach(slider) { sender in commit(String(Int(sender.doubleValue.rounded()))) }
-        let unit = label("帧"); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
+        let unit = label(L10n.text(.settings,"settingsForm.unit")); unit.font = .systemFont(ofSize:11); unit.textColor = .secondaryLabelColor
         unit.widthAnchor.constraint(equalToConstant:22).isActive = true
-        let controls = SettingsSliderControl(number:number,unit:unit,slider:slider,limits:("6 帧","240 帧"),ticks:7)
-        let result = row("动画缓冲帧数", detail:"限制播放中保留的后续帧数；起播准备约四分之一秒。", control: controls)
+        let controls = SettingsSliderControl(number:number,unit:unit,slider:slider,limits:(L10n.text(.settings,"settingsForm.controls"),L10n.text(.settings,"settingsForm.controls.2")),ticks:7)
+        let result = row(L10n.text(.settings,"search.add.text.88"), detail:L10n.text(.settings,"settingsForm.result"), control: controls)
         return dependent(result,requires:[],unless:["preloadWholeAnimation"])
     }
     func time(_ title: String, _ key: String, requires:[String] = []) -> NSView {

@@ -2,7 +2,7 @@ import Foundation
 
 enum ConversationKind:Int,CaseIterable {
     case persona, project
-    var title:String {self == .persona ? "桌宠人设对话" : "Codex 项目对话"}
+    var title:String {self == .persona ? L10n.text(.conversation,"conversationInput.conversationKind.text") : L10n.text(.conversation,"conversationInput.conversationKind.text.2")}
     var symbol:String {self == .persona ? "bubble.left" : "folder"}
 }
 extension Conversation {
@@ -55,8 +55,8 @@ final class ChatDraftCache {
 
 // 两个界面共用的显示状态，不持有发送逻辑或改变任务生命周期。
 struct ChatInputState {
-    static let jumpToCodexTitle = "跳转到 Codex"
-    static let steeringHint = "Codex 新版桌面端通信方式暂不支持插话，点击「\(jumpToCodexTitle)」进入原会话。"
+    static let jumpToCodexTitle = L10n.text(.conversation,"conversationInput.jumpToCodexTitle")
+    static let steeringHint = L10n.format(.conversation,"conversationInput.steeringHint",String(describing:jumpToCodexTitle))
     var conversation:Conversation?
     var kind:ConversationKind = .persona
     var runningTitle:String?
@@ -81,7 +81,7 @@ struct ChatInputState {
         if stopping {return preferences.statusLine("taskStoppingTemplate")}
         if executing {return preferences.statusLine("conversationBusyTemplate")}
         if newConversation {return preferences.statusLine("conversationNewTemplate")}
-        return preferences.fixedText("主人，今天想让我帮什么忙呀？")
+        return preferences.fixedText(L10n.text(.dialogue,"dialogue.askWhatToHelp"))
     }
     var historyNote:String {
         if !note.isEmpty {return note}
@@ -89,19 +89,19 @@ struct ChatInputState {
         return PetPreferences.shared.statusLine(newConversation ? "conversationNewTemplate" : "historyIdleTemplate")
     }
     var note:String {
-        if readOnly {return "历史只读：请在设置 → 高级导出原文件或重新读取"}
-        if conversation == nil {return "请选择 Codex 项目对话"}
-        if sending {return replyNote ?? "正在发送…"}
-        if unconfirmed {return replyNote ?? "发送结果待确认，草稿已保留"}
+        if readOnly {return L10n.text(.conversation,"conversationInput.canSend.text")}
+        if conversation == nil {return L10n.text(.conversation,"conversationInput.canSend.text.2")}
+        if sending {return replyNote ?? L10n.text(.conversation,"conversationInput.canSend.text.3")}
+        if unconfirmed {return replyNote ?? L10n.text(.conversation,"conversationInput.canSend.text.4")}
         if stopping {return PetPreferences.shared.statusLine("taskStoppingTemplate")}
         if ownsRunningTask {return PetPreferences.shared.statusLine("historyBusyTemplate")}
-        if let runningTitle {return "桌宠任务正在执行："+runningTitle}
+        if let runningTitle {return L10n.text(.conversation,"conversationInput.canSend.text.5")+runningTitle}
         if let replyNote {return replyNote}
         if showsSteeringHint {return Self.steeringHint}
         if kind == .project {
-            if replyMode == nil {return "当前会话等待处理，请转到 Codex"}
-            if !desktopReady {return "发送时连接原会话；未就绪时打开 Codex"}
-            return replyMode == .steer ? "执行中 · 发送后插话" : ""
+            if replyMode == nil {return L10n.text(.conversation,"conversationInput.canSend.text.6")}
+            if !desktopReady {return L10n.text(.conversation,"conversationInput.canSend.text.7")}
+            return replyMode == .steer ? L10n.text(.conversation,"conversationInput.canSend.text.8") : ""
         }
         return ""
     }

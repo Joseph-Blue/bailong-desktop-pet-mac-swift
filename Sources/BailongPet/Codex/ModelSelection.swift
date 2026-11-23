@@ -15,10 +15,10 @@ enum CodexServiceTier {
     static func hasLightning(_ tier:String?) -> Bool {isFast(tier) || tier == "ultrafast"}
     static func displayName(_ tier:String) -> String {
         switch tier {
-        case "fast","priority":return "快速（1.5倍速度）"
-        case "ultrafast":return "超快"
-        case "default","standard":return "标准速度"
-        case "flex":return "灵活"
+        case "fast","priority":return L10n.text(.conversation,"modelSelection.displayName.text")
+        case "ultrafast":return L10n.text(.conversation,"modelSelection.displayName.text.2")
+        case "default","standard":return L10n.text(.conversation,"modelSelection.displayName.text.3")
+        case "flex":return L10n.text(.conversation,"modelSelection.displayName.text.4")
         default:return tier
         }
     }
@@ -116,22 +116,22 @@ final class ChatModelSettings {
     }
     // 与已安装 Codex 的简中本地化一致，Max / Ultra 保留原文，不按模型另起译名。
     static func effortName(_ raw: String) -> String {
-        ["none":"无","minimal":"极低","low":"轻度","medium":"中","high":"高","xhigh":"极高","max":"Max","ultra":"Ultra","persistent":"持续"][raw] ?? raw
+        ["none":L10n.text(.conversation,"modelSelection.effortName.text"),"minimal":L10n.text(.conversation,"modelSelection.effortName.text.2"),"low":L10n.text(.conversation,"modelSelection.effortName.text.3"),"medium":L10n.text(.conversation,"modelSelection.effortName.text.4"),"high":L10n.text(.conversation,"modelSelection.effortName.text.5"),"xhigh":L10n.text(.conversation,"modelSelection.effortName.text.6"),"max":"Max","ultra":"Ultra","persistent":L10n.text(.conversation,"modelSelection.effortName.text.7")][raw] ?? raw
     }
-    var effortTitle: String {currentEffort.map(Self.effortName) ?? (providerMismatch ? "未记录" : "不可调")}
+    var effortTitle: String {currentEffort.map(Self.effortName) ?? (providerMismatch ? L10n.text(.conversation,"modelSelection.effortName.text.8") : L10n.text(.conversation,"modelSelection.effortName.text.9"))}
     var effortExplanation: String {
-        guard let effort = currentEffort else {return "跟随 Codex 的模型与推理强度设置。"}
-        let descriptions = ["none":"直接作答，不额外展开推理。", "minimal":"尽量减少思考，适合简单任务。",
-            "low":"少量思考，优先响应速度。", "medium":"平衡思考深度与响应速度。",
-            "high":"充分分析问题，适合较复杂的任务。", "xhigh":"深入分析复杂问题，可能需要更长时间。",
-            "max":"投入更多推理，适合难度较高的任务；在 Codex 中默认隐藏显示。",
-            "ultra":"使用最高档推理投入，适合需要深入分析的任务；在特定情况下会更频繁派遣子代理。"]
-        return descriptions[effort] ?? "使用当前模型提供的「\(Self.effortName(effort))」推理强度。"
+        guard let effort = currentEffort else {return L10n.text(.conversation,"modelSelection.effortName.text.10")}
+        let descriptions = ["none":L10n.text(.conversation,"modelSelection.descriptions"), "minimal":L10n.text(.conversation,"modelSelection.descriptions.2"),
+            "low":L10n.text(.conversation,"modelSelection.effortName.text.11"), "medium":L10n.text(.conversation,"modelSelection.effortName.text.12"),
+            "high":L10n.text(.conversation,"modelSelection.effortName.text.13"), "xhigh":L10n.text(.conversation,"modelSelection.effortName.text.14"),
+            "max":L10n.text(.conversation,"modelSelection.effortName.text.15"),
+            "ultra":L10n.text(.conversation,"modelSelection.effortName.text.16")]
+        return descriptions[effort] ?? L10n.format(.conversation,"modelSelection.effortName.text.17",String(describing:Self.effortName(effort)))
     }
     var defaultTitle: String {
         let id = configuredModel ?? models.first(where:{$0.isDefault})?.model
-        let name = models.first(where:{$0.model == id})?.displayName ?? id ?? "未获取模型"
-        return "默认（"+name+" - 跟随 Codex）"
+        let name = models.first(where:{$0.model == id})?.displayName ?? id ?? L10n.text(.conversation,"modelSelection.effortName.text.18")
+        return L10n.text(.conversation,"modelSelection.effortName.text.19")+name+L10n.text(.conversation,"modelSelection.effortName.text.20")
     }
     func syncWithCodex() {
         defaults.removeObject(forKey:"petChatModel")
@@ -177,10 +177,10 @@ final class ChatModelSettings {
     }
     func parameters() throws -> [String:Any] {
         if providerMismatch {
-            throw PetFailure(message:"此对话使用 \(providerTitle ?? "原供应商")。请在 Codex 切回该供应商并刷新模型，或新建桌宠对话。")
+            throw PetFailure(message:L10n.format(.conversation,"chatController.submit.text",String(describing:providerTitle ?? L10n.text(.conversation,"modelSelection.parameters.error"))))
         }
         if let modelOverride, !models.contains(where:{$0.model == modelOverride}) {
-            throw PetFailure(message:"所选模型暂不可用，请打开模型选择器刷新或选择其他模型。")
+            throw PetFailure(message:L10n.text(.conversation,"modelSelection.parameters.message.2"))
         }
         var result = [String:Any]()
         // 关闭时明确覆盖旧线程的快速档，不能省略后继承上轮设置。
@@ -188,7 +188,7 @@ final class ChatModelSettings {
         if let model = currentModelID {result["model"] = model}
         if let effort = currentEffort {
             if let currentModel, !currentModel.supportedReasoningEfforts.contains(where:{$0.reasoningEffort == effort}) {
-                throw PetFailure(message:"当前模型不支持所选推理强度，请重新选择。")
+                throw PetFailure(message:L10n.text(.conversation,"modelSelection.parameters.message.3"))
             }
             result["effort"] = effort
         }

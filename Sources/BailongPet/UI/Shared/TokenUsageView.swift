@@ -19,8 +19,8 @@ enum TokenUsageDetailText {
 // 额度汇总复用展开控件，明细继续用可选择的 TextKit 文字。
 final class QuotaTokenUsageView:NSView {
     override var isFlipped:Bool {true}
-    private let heading = NSTextField(labelWithString:"今日用量")
-    private let source = NSTextField(labelWithString:"（本机日志）")
+    private let heading = NSTextField(labelWithString:L10n.text(.usage,"tokenUsageView.heading"))
+    private let source = NSTextField(labelWithString:L10n.text(.usage,"tokenUsageView.source"))
     private let disclosure = DisclosureControl(frame:.zero)
     private let detail = SelectableRichText(frame:.zero)
     private let scale:CGFloat, expanded:Bool
@@ -31,7 +31,7 @@ final class QuotaTokenUsageView:NSView {
               keys.contains(TokenCountFormat.key) || (keys.contains(PetPreferences.tokenDetailsKey) && preferences.bool(PetPreferences.tokenDetailsKey) != expanded) else {return}
         onExpansionChange(!expanded && note.userInfo?["sender"] as? QuotaTokenUsageView === self)
     }
-    init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat,headingText:String = "今日用量",format:TokenCountFormat = .full) {
+    init(usage:TokenUsage,expanded:Bool,scale:CGFloat,fontScale:CGFloat,headingText:String = L10n.text(.usage,"tokenUsageView.heading"),format:TokenCountFormat = .full) {
         self.scale = scale; self.expanded = expanded
         super.init(frame:.zero)
         autoresizesSubviews = false
@@ -44,7 +44,7 @@ final class QuotaTokenUsageView:NSView {
         disclosure.baseFont = amountFont
         disclosure.chevronTint = primaryTextColor.withAlphaComponent(0.82)
         disclosure.expanded = expanded
-        disclosure.accessibilityTitle = headingText+" Token 明细"
+        disclosure.accessibilityTitle = headingText+L10n.text(.usage,"tokenUsageView.text")
         disclosure.attributedTitle = NSAttributedString(string:TokenUsage.amount(usage.total,format:format),attributes:[.font:amountFont,.foregroundColor:primaryTextColor])
         disclosure.onToggle = { [weak self] in self?.onToggle() }
         detail.isHidden = !expanded

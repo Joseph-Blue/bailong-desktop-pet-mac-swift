@@ -665,3 +665,18 @@
 /* 文本编辑与网页搜索 */
 "textInteraction.group" = "网页搜索";
 "textInteraction.settingTitle" = "搜索引擎";
+
+/* 应用接入补充 */
+"messageSettingsPage.key.text" = "%1$@停留时间";
+"messageSettingsPage.labels.text" = " P10k PL10K VS Code VSCode Git CLI Git 状态图例 远端仓库图标 GitLab Gitee Gitea Forgejo Codeberg Hugging Face 冲突 已暂存 未暂存 未跟踪 贮藏 Stash 领先 落后 上游 推送目标 Push Remote";
+"messageSettingsPage.heading.labelWithString" = "图例：";
+"messageSettingsPage.infoTitle.text" = "更多远端仓库图标";
+"preferences.labels.text" = "让我看看额度还有多少……";
+"preferences.template.text" = "{特定称呼}";
+"settingsSearch.remoteIconKeywords.text" = "远端仓库 GitLab Gitee Gitea Forgejo Hugging Face Remix Icon Icon Monks Simple Icons CC BY-SA";
+"settingsSearch.labels.text" = " Git 状态符号 bash-git-prompt Powerlevel10k ";
+"settingsSearch.labels.keywords" = "开源许可 许可证 英文原文 图标 Lucide Brands ISC GitHub LobeHub MIT ";
+"systemPermissions.queue.label" = "白龙桌宠 访达授权";
+"templateSyntax.aliases.text" = "{称呼}";
+"templateSyntax.aliases.text.2" = "{名字}";
+"templateSyntax.aliases.text.3" = "{桌宠}";

@@ -108,7 +108,7 @@ final class WorkspaceFileRow:NSView {
                 }
                 row.addArrangedSubview(counts)
             } else {
-                let count = NSTextField(labelWithString:"未提供"); count.font = Self.countFont; count.textColor = .secondaryLabelColor; count.alignment = .right
+                let count = NSTextField(labelWithString:L10n.text(.workspace,"workspaceFileList.count")); count.font = Self.countFont; count.textColor = .secondaryLabelColor; count.alignment = .right
                 count.widthAnchor.constraint(equalToConstant:countWidths.added+8+countWidths.removed).isActive = true
                 row.addArrangedSubview(count)
             }
@@ -118,18 +118,18 @@ final class WorkspaceFileRow:NSView {
             icon.widthAnchor.constraint(equalToConstant:16),icon.heightAnchor.constraint(equalToConstant:16),
             row.leadingAnchor.constraint(equalTo:leadingAnchor,constant:4),row.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-6),row.centerYAnchor.constraint(equalTo:centerYAnchor)
         ])
-        hoverHelp = detail; setAccessibilityLabel((change.map {$0+"，"} ?? "")+detail+(lines.map {"，新增 \($0.added) 行，删除 \($0.removed) 行"} ?? ""))
+        hoverHelp = detail; setAccessibilityLabel((change.map {$0+"，"} ?? "")+detail+(lines.map {L10n.format(.workspace,"workspaceFileList.text",String(describing:$0.added),String(describing:$0.removed))} ?? ""))
     }
     required init?(coder:NSCoder) {fatalError()}
     static let countFont = NSFont.monospacedSystemFont(ofSize:12,weight:.semibold)
     static func symbol(for entry:GitWorkspaceStatus.Entry) -> (String,NSColor) {
         if entry.group == .conflicted {return ("exclamationmark.triangle",StatusTextColor.red)}
         switch entry.change {
-        case "新增":return ("plus.circle",StatusTextColor.green)
-        case "删除":return ("minus.circle",StatusTextColor.red)
-        case "重命名":return ("arrow.right",StatusTextColor.blue)
-        case "复制":return ("doc.on.doc",StatusTextColor.teal)
-        case "类型变化","子模块变化":return ("square.stack.3d.up",StatusTextColor.purple)
+        case .added:return ("plus.circle",StatusTextColor.green)
+        case .deleted:return ("minus.circle",StatusTextColor.red)
+        case .renamed:return ("arrow.right",StatusTextColor.blue)
+        case .copied:return ("doc.on.doc",StatusTextColor.teal)
+        case .typeChanged,.submodule:return ("square.stack.3d.up",StatusTextColor.purple)
         default:return ("pencil",StatusTextColor.orange)
         }
     }
@@ -143,7 +143,7 @@ final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableV
     init(edits:[FileEditSummary],directory:String) {
         self.edits = edits; self.directory = directory
         let lines = edits.compactMap(\.lines)
-        let minimum = ceil(("未提供" as NSString).size(withAttributes:[.font:WorkspaceFileRow.countFont]).width/2)
+        let minimum = ceil((L10n.text(.workspace,"workspaceFileList.count") as NSString).size(withAttributes:[.font:WorkspaceFileRow.countFont]).width/2)
         countWidths = (max(minimum,ceil(lines.map {FileEditRendering.count($0.added,added:true,font:WorkspaceFileRow.countFont).size().width}.max() ?? 0)),max(minimum,ceil(lines.map {FileEditRendering.count($0.removed,added:false,font:WorkspaceFileRow.countFont).size().width}.max() ?? 0)))
         repeatedNames = Set(Dictionary(grouping:edits,by:{($0.path as NSString).lastPathComponent}).filter {$0.value.count > 1}.keys)
         super.init(nibName:nil,bundle:nil)
@@ -156,7 +156,7 @@ final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableV
             guard let self,self.edits.indices.contains(row) else {return nil}
             return URL(fileURLWithPath:self.edits[row].path,relativeTo:URL(fileURLWithPath:self.directory,isDirectory:true)).standardizedFileURL
         }
-        table.setAccessibilityLabel("本轮文件修改，双击在访达中显示，右键显示文件操作")
+        table.setAccessibilityLabel(L10n.text(.workspace,"workspaceFileList.loadView.text"))
         let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.drawsBackground = false; scroll.contentView.drawsBackground = false; scroll.verticalScrollElasticity = .allowed
         view = NSView(frame:NSRect(x:0,y:0,width:440,height:min(340,max(32,CGFloat(edits.count)*34))+16))
@@ -180,7 +180,7 @@ final class RepositoryLinkButton:NSButton,LinkCursorControl {
         attributedTitle = NSAttributedString(string:label ?? url.absoluteString,attributes:attributes)
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         setHoverHelp(url.absoluteString) { [weak self] in self?.hasTruncatedTitle == true }
-        target = self; action = #selector(open); setAccessibilityLabel("打开仓库网页："+url.absoluteString)
+        target = self; action = #selector(open); setAccessibilityLabel(L10n.text(.workspace,"workspaceFileList.text.2")+url.absoluteString)
     }
     required init?(coder:NSCoder) {fatalError()}
     override func acceptsFirstMouse(for event:NSEvent?) -> Bool {true}

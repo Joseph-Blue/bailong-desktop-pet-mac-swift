@@ -6,7 +6,7 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
         let group:String, id:String?, offset:CGFloat
     }
     private enum Row {
-        case heading(String), item(SettingsListItem)
+        case heading(String,SettingsLineResetGroup?), item(SettingsListItem)
         var item:SettingsListItem? {if case .item(let item) = self {return item}; return nil}
     }
     let section:SettingsSection
@@ -25,7 +25,7 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
         self.section = section; self.play = play
         var grouped = [Row](), previous:String?
         for item in items {
-            if item.group != previous {grouped.append(.heading(item.group)); previous = item.group}
+            if item.group != previous {grouped.append(.heading(item.group,item.lineResetGroup)); previous = item.group}
             grouped.append(.item(item))
         }
         rows = grouped
@@ -52,12 +52,12 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
             scroll.topAnchor.constraint(equalTo:backButton.bottomAnchor,constant:14),scroll.centerXAnchor.constraint(equalTo:centerXAnchor),
             scroll.widthAnchor.constraint(lessThanOrEqualToConstant:680),preferredWidth,scroll.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-12)
         ])
-        let name = NSTableColumn(identifier:.init("name")); name.title = "动作"; name.minWidth = 115
+        let name = NSTableColumn(identifier:.init("name")); name.title = L10n.text(.settings,"settingsItemList.title"); name.minWidth = 115
         name.resizingMask = .autoresizingMask; table.addTableColumn(name)
         table.style = .fullWidth
         if section == .activity {
             table.usesAlternatingRowBackgroundColors = true
-            for (key,title,width) in [("play","试播",CGFloat(56)),("speed","播放速度",98),("weight","权重",88)] {
+            for (key,title,width) in [("play",L10n.text(.settings,"settingsItemList.text"),CGFloat(56)),("speed",L10n.text(.settings,"activity.speed"),98),("weight",L10n.text(.settings,"settingsForm.slider"),88)] {
                 let column = NSTableColumn(identifier:.init(key)); column.title = title
                 column.headerCell.alignment = .center
                 column.width = width; column.minWidth = width; column.maxWidth = width; column.resizingMask = []
@@ -67,7 +67,7 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
         table.floatsGroupRows = false
         table.backgroundColor = .clear; table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.allowsColumnReordering = false; table.autoresizingMask = [.width]; table.allowsEmptySelection = true
-        table.setAccessibilityLabel(section == .identity ? "台词列表" : "动作列表")
+        table.setAccessibilityLabel(section == .identity ? L10n.text(.settings,"settingsItemList.text.4") : L10n.text(.settings,"settingsItemList.text.5"))
         table.dataSource = self; table.delegate = self; table.target = self; table.action = #selector(activateRow)
         scroll.drawsBackground = false; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.documentView = table
@@ -102,13 +102,13 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
     }
     func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int) -> NSView? {
         switch rows[row] {
-        case .heading(let title):
+        case .heading(let title,let resetGroup):
             let field = NSTextField(labelWithString:title); field.font = .systemFont(ofSize:13,weight:.semibold)
             let stack = NSStackView(views:[field]); stack.alignment = .centerY
             stack.edgeInsets = NSEdgeInsets(top:0,left:8,bottom:0,right:8)
-            if section == .identity,let group = SettingsLineResetGroup(rawValue:title) {
-                let restore = ActionButton("恢复本组默认台词") { [weak self] in self?.restoreGroup(group) }
-                restore.controlSize = .small; restore.setAccessibilityLabel("恢复"+title+"默认值")
+            if section == .identity,let group = resetGroup {
+                let restore = ActionButton(L10n.text(.settings,"settingsItemList.restore")) { [weak self] in self?.restoreGroup(group) }
+                restore.controlSize = .small; restore.setAccessibilityLabel(L10n.text(.settings,"identity.restore.text")+title+L10n.text(.settings,"settingsItemList.tableView.text.2"))
                 stack.addArrangedSubview(NSView()); stack.addArrangedSubview(restore)
             }
             return stack
@@ -158,7 +158,7 @@ final class SettingsItemList:NSView,NSTableViewDataSource,NSTableViewDelegate {
             field.stringValue = column == "name" ? clip.title : "—"
             field.textColor = column == "name" ? .labelColor : .tertiaryLabelColor
         } else if let button = cell.control as? ActionButton {
-            button.setAccessibilityLabel("播放"+clip.title)
+            button.setAccessibilityLabel(L10n.text(.settings,"settingsForm.animationPreviewButton.button")+clip.title)
             button.callback = { [weak self] in self?.preview(item) }
         } else if let choice = cell.control as? SettingsActionChoice {
             choice.configure(clip:clip,speed:column == "speed",preferences:form.preferences)
@@ -222,7 +222,7 @@ private final class SettingsActionChoice:AccentPopUpButton {
     func configure(clip:Clip,speed:Bool,preferences:PetPreferences) {
         self.clipID = clip.id; self.speed = speed; self.preferences = preferences
         controlSize = .small
-        setAccessibilityLabel(clip.title+(speed ? "播放速度" : "权重"))
+        setAccessibilityLabel(clip.title+(speed ? L10n.text(.settings,"activity.speed") : L10n.text(.settings,"settingsForm.slider")))
         menu?.delegate = nil; removeAllItems(); populated = false
         let current = speed ? preferences.clipSpeed(clip.id) : preferences.weight(clip.id)
         addOption(current); selectItem(at:0)
@@ -248,7 +248,7 @@ private final class SettingsActionChoice:AccentPopUpButton {
 
 private final class SettingsSummaryCell:NSTableCellView {
     private let name = NSTextField(labelWithString:""), summary = SettingsTemplateField(string:"")
-    private let button = NSButton(image:NSImage(systemSymbolName:"play.fill",accessibilityDescription:"播放")!,target:nil,action:nil)
+    private let button = NSButton(image:NSImage(systemSymbolName:"play.fill",accessibilityDescription:L10n.text(.settings,"settingsForm.animationPreviewButton.button"))!,target:nil,action:nil)
     private var onPlay:(() -> Void)?
     init() {
         super.init(frame:.zero)
@@ -269,7 +269,7 @@ private final class SettingsSummaryCell:NSTableCellView {
         name.stringValue = item.title; summary.stringValue = item.summary(preferences); summary.hoverHelp = summary.stringValue
         setAccessibilityLabel(item.title+"，"+summary.stringValue)
         summary.refreshHighlight()
-        button.isHidden = item.preview == nil; button.setAccessibilityLabel("播放"+item.title); self.onPlay = onPlay
+        button.isHidden = item.preview == nil; button.setAccessibilityLabel(L10n.text(.settings,"settingsForm.animationPreviewButton.button")+item.title); self.onPlay = onPlay
     }
     @objc private func play() {onPlay?()}
 }

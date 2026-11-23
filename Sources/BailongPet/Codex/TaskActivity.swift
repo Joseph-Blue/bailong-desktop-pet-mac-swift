@@ -8,35 +8,35 @@ struct TaskActivity:Equatable {
         case document, spreadsheet, presentation, mail, calendar, code
         var monitorName:String {
             switch self {
-            case .tool:return "工具调用"
-            case .command:return "运行命令"
-            case .read:return "读取文件"
-            case .search:return "搜索内容"
-            case .listFiles:return "列出文件"
-            case .edit:return "修改文件"
-            case .webSearch:return "搜索网页"
-            case .webOpen:return "打开网页"
-            case .webFind:return "页内查找"
-            case .imageGeneration:return "生成图片"
-            case .imageView:return "查看图片"
-            case .compaction:return "压缩上下文"
-            case .plan:return "更新计划"
-            case .collaboration:return "协调子任务"
-            case .waiting:return "等待子任务"
-            case .review:return "代码审查"
-            case .document:return "文档操作"
-            case .spreadsheet:return "表格操作"
-            case .presentation:return "演示文稿操作"
-            case .mail:return "邮件操作"
-            case .calendar:return "日历操作"
-            case .code:return "代码工具"
+            case .tool:return L10n.text(.tasks,"taskActivity.tool")
+            case .command:return L10n.text(.tasks,"taskActivity.command")
+            case .read:return L10n.text(.tasks,"taskActivity.read")
+            case .search:return L10n.text(.tasks,"taskActivity.search")
+            case .listFiles:return L10n.text(.tasks,"taskActivity.listFiles")
+            case .edit:return L10n.text(.tasks,"taskActivity.edit")
+            case .webSearch:return L10n.text(.tasks,"taskActivity.webSearch")
+            case .webOpen:return L10n.text(.tasks,"taskActivity.webOpen")
+            case .webFind:return L10n.text(.tasks,"taskActivity.webFind")
+            case .imageGeneration:return L10n.text(.tasks,"taskActivity.imageGeneration")
+            case .imageView:return L10n.text(.tasks,"taskActivity.imageView")
+            case .compaction:return L10n.text(.tasks,"taskActivity.compaction")
+            case .plan:return L10n.text(.tasks,"taskActivity.plan")
+            case .collaboration:return L10n.text(.tasks,"taskActivity.collaboration")
+            case .waiting:return L10n.text(.tasks,"taskActivity.waiting")
+            case .review:return L10n.text(.tasks,"taskActivity.review")
+            case .document:return L10n.text(.tasks,"taskActivity.document")
+            case .spreadsheet:return L10n.text(.tasks,"taskActivity.spreadsheet")
+            case .presentation:return L10n.text(.tasks,"taskActivity.presentation")
+            case .mail:return L10n.text(.tasks,"taskActivity.mail")
+            case .calendar:return L10n.text(.tasks,"taskActivity.calendar")
+            case .code:return L10n.text(.tasks,"taskActivity.code")
             }
         }
     }
     enum Outcome:String {
         case failed, declined, cancelled, interrupted
         var label:String {
-            switch self {case .failed:return "失败"; case .declined:return "被拒绝"; case .cancelled:return "已取消"; case .interrupted:return "已中断"}
+            switch self {case .failed:return L10n.text(.tasks,"taskActivity.failed"); case .declined:return L10n.text(.tasks,"taskActivity.failed.2"); case .cancelled:return L10n.text(.tasks,"taskActivity.failed.3"); case .interrupted:return L10n.text(.tasks,"taskActivity.failed.4")}
         }
         var symbol:String {
             switch self {case .failed:return "exclamationmark.circle.fill"; case .declined:return "hand.raised.slash.fill"; case .cancelled,.interrupted:return "xmark.circle.fill"}
@@ -126,23 +126,23 @@ struct TaskActivity:Equatable {
     var monitorLabel:String {
         let label:String
         switch kind {
-        case .reasoning:label = "思考"
-        case .reply:label = "正在回复"
-        case .tool:label = toolOperation.monitorName+(finished && outcome == nil ? "结束" : "")
-        case .status:label = isReconnecting ? "正在重连" : "状态提示"
-        case .attention:label = statusSymbol == "hand.raised" ? "等待审批" : "等待回答"
+        case .reasoning:label = L10n.text(.tasks,"taskActivity.reasoning")
+        case .reply:label = L10n.text(.tasks,"taskActivity.reply")
+        case .tool:label = toolOperation.monitorName+(finished && outcome == nil ? L10n.text(.tasks,"taskActivity.append.text") : "")
+        case .status:label = isReconnecting ? L10n.text(.tasks,"taskActivity.append.text.2") : L10n.text(.tasks,"taskActivity.status")
+        case .attention:label = statusSymbol == "hand.raised" ? L10n.text(.tasks,"taskActivity.append.text.3") : L10n.text(.tasks,"taskActivity.attention")
         }
         return outcome.map {label+"（"+$0.label+"）"} ?? label
     }
     static func waiting(approval:Bool) -> TaskActivity {
-        .init(title:approval ? "等待批准" : "等待回答",kind:.attention,statusSymbol:approval ? "hand.raised" : "questionmark.bubble")
+        .init(title:approval ? L10n.text(.tasks,"taskActivity.waiting.text") : L10n.text(.tasks,"taskActivity.attention"),kind:.attention,statusSymbol:approval ? "hand.raised" : "questionmark.bubble")
     }
     // 保留命令入口、子命令和参数；长命令及文件清单使用有界摘要。
     var displayDetail:String {
         guard kind == .tool else {return detail}
         let lines = detail.split(whereSeparator:{$0.isNewline}).map(String.init)
         var result = lines.prefix(3).map {Self.short($0)}
-        if lines.count > 3 {result.append("另有 \(lines.count-3) 项")}
+        if lines.count > 3 {result.append(L10n.format(.tasks,"taskActivity.waiting.text.2",String(describing:lines.count-3)))}
         return result.joined(separator:"\n")
     }
     var text:String {displayDetail.isEmpty ? title : title+"\n\n"+displayDetail}
@@ -155,7 +155,7 @@ struct TaskActivity:Equatable {
         // 多行脚本只取入口行；不把脚本正文压成一整条跑马灯或 hover。
         let end = command.firstIndex(where:{$0.isNewline}) ?? command.endIndex
         let firstLine = short(String(command[..<end]))
-        return firstLine+(end == command.endIndex ? "" : " …（多行命令）")
+        return firstLine+(end == command.endIndex ? "" : L10n.text(.tasks,"taskActivity.commandSummary.text"))
     }
     var symbolName:String {
         switch kind {
@@ -238,33 +238,33 @@ struct TaskActivity:Equatable {
     static func from(type:String,status:String?,summary:String = "",tool:String? = nil,command:String? = nil,
                      actions:[[String:Any]] = [],paths:[String] = [],text:String = "",webAction:[String:Any] = [:]) -> TaskActivity? {
         // reasoning 项结束只表示这一段摘要结束，不能将仍在执行的轮次改成“思考摘要”。
-        if type == "reasoning" {return .init(title:"正在思考",detail:summary,kind:.reasoning)}
+        if type == "reasoning" {return .init(title:L10n.text(.tasks,"taskActivity.from.title"),detail:summary,kind:.reasoning)}
         var operation:ToolOperation
         var action:String
         switch type {
-        case "commandExecution":operation = .command; action = "运行命令"
-        case "fileChange":operation = .edit; action = "修改文件"
-        case "mcpToolCall","dynamicToolCall":operation = knownTools[tool ?? ""] ?? .tool; action = "调用工具"
+        case "commandExecution":operation = .command; action = L10n.text(.tasks,"taskActivity.command")
+        case "fileChange":operation = .edit; action = L10n.text(.tasks,"taskActivity.edit")
+        case "mcpToolCall","dynamicToolCall":operation = knownTools[tool ?? ""] ?? .tool; action = L10n.text(.tasks,"taskActivity.from.text")
         case "webSearch":
             switch webAction["type"] as? String {
-            case "openPage":operation = .webOpen; action = "打开网页"
-            case "findInPage":operation = .webFind; action = "在网页内查找"
-            case "other":operation = .webSearch; action = "浏览网页"
-            default:operation = .webSearch; action = "搜索网页"
+            case "openPage":operation = .webOpen; action = L10n.text(.tasks,"taskActivity.webOpen")
+            case "findInPage":operation = .webFind; action = L10n.text(.tasks,"taskActivity.from.text.2")
+            case "other":operation = .webSearch; action = L10n.text(.tasks,"taskActivity.from.text.3")
+            default:operation = .webSearch; action = L10n.text(.tasks,"taskActivity.webSearch")
             }
-        case "imageGeneration":operation = .imageGeneration; action = "生成图片"
-        case "imageView":operation = .imageView; action = "查看图片"
-        case "contextCompaction":operation = .compaction; action = "压缩上下文"
-        case "plan":operation = .plan; action = "制定计划"
-        case "enteredReviewMode","exitedReviewMode":operation = .review; action = "审查代码"
+        case "imageGeneration":operation = .imageGeneration; action = L10n.text(.tasks,"taskActivity.imageGeneration")
+        case "imageView":operation = .imageView; action = L10n.text(.tasks,"taskActivity.imageView")
+        case "contextCompaction":operation = .compaction; action = L10n.text(.tasks,"taskActivity.compaction")
+        case "plan":operation = .plan; action = L10n.text(.tasks,"taskActivity.from.text.4")
+        case "enteredReviewMode","exitedReviewMode":operation = .review; action = L10n.text(.tasks,"taskActivity.from.text.5")
         case "collabAgentToolCall","collabToolCall":
             switch tool {
-            case "spawnAgent":operation = .collaboration; action = "派发子任务"
-            case "wait":operation = .waiting; action = "等待子代理"
-            case "sendInput":operation = .collaboration; action = "向子代理发送消息"
-            case "resumeAgent":operation = .collaboration; action = "恢复子代理"
-            case "closeAgent":operation = .collaboration; action = "关闭子代理"
-            default:operation = .collaboration; action = "协调子代理"
+            case "spawnAgent":operation = .collaboration; action = L10n.text(.tasks,"taskActivity.from.text.6")
+            case "wait":operation = .waiting; action = L10n.text(.tasks,"taskActivity.from.text.7")
+            case "sendInput":operation = .collaboration; action = L10n.text(.tasks,"taskActivity.from.text.8")
+            case "resumeAgent":operation = .collaboration; action = L10n.text(.tasks,"taskActivity.from.text.9")
+            case "closeAgent":operation = .collaboration; action = L10n.text(.tasks,"taskActivity.from.text.10")
+            default:operation = .collaboration; action = L10n.text(.tasks,"taskActivity.from.text.11")
             }
         default:return nil
         }
@@ -275,7 +275,7 @@ struct TaskActivity:Equatable {
             let types = Set(actions.compactMap {$0["type"] as? String})
             if types.count == 1,let actionType = types.first {
                 operation = ["read":.read,"search":.search,"listFiles":.listFiles][actionType] ?? .command
-                action = ["read":"读取文件","search":"搜索内容","listFiles":"列出文件"][actionType] ?? action
+                action = ["read":L10n.text(.tasks,"taskActivity.read"),"search":L10n.text(.tasks,"taskActivity.search"),"listFiles":L10n.text(.tasks,"taskActivity.listFiles")][actionType] ?? action
             }
         }
         var detail = type == "commandExecution" ? commandSummary(command) : tool ?? ""
@@ -283,13 +283,13 @@ struct TaskActivity:Equatable {
             detail = actions.map { entry in
                 let path = entry["path"] as? String ?? ""
                 // 被拒绝、失败及取消不能写成“已读取／已搜索”。
-                func label(_ verb:String) -> String {outcome != nil ? verb : (succeeded ? "已" : "正在")+verb}
+                func label(_ verb:String) -> String {outcome != nil ? verb : (succeeded ? L10n.text(.tasks,"taskActivity.label.text") : L10n.text(.tasks,"taskActivity.label.text.2"))+verb}
                 switch entry["type"] as? String {
-                case "read":return label("读取")+" "+(entry["name"] as? String ?? path)
-                case "listFiles":return label("列出文件")+(path.isEmpty ? "" : " · "+path)
+                case "read":return label(L10n.text(.tasks,"taskActivity.label.text.3"))+" "+(entry["name"] as? String ?? path)
+                case "listFiles":return label(L10n.text(.tasks,"taskActivity.listFiles"))+(path.isEmpty ? "" : " · "+path)
                 case "search":
                     let query = entry["query"] as? String ?? ""
-                    return label("搜索")+(query.isEmpty ? "" : "「"+query+"」")+(path.isEmpty ? "" : " · "+path)
+                    return label(L10n.text(.tasks,"taskActivity.label.text.4"))+(query.isEmpty ? "" : "「"+query+"」")+(path.isEmpty ? "" : " · "+path)
                 default:
                     let reported = commandSummary(entry["command"] as? String)
                     return reported.isEmpty ? commandSummary(command) : reported
@@ -310,9 +310,9 @@ struct TaskActivity:Equatable {
         }
         let title:String
         if let outcome {title = action+" · "+outcome.label}
-        else if type == "enteredReviewMode" {title = "已进入代码审查"}
-        else if type == "exitedReviewMode" {title = "代码审查已结束"}
-        else {title = (succeeded ? "已" : "正在")+action}
+        else if type == "enteredReviewMode" {title = L10n.text(.tasks,"taskActivity.label.title")}
+        else if type == "exitedReviewMode" {title = L10n.text(.tasks,"taskActivity.label.title.2")}
+        else {title = (succeeded ? L10n.text(.tasks,"taskActivity.label.text") : L10n.text(.tasks,"taskActivity.label.text.2"))+action}
         return .init(title:title,detail:detail,finished:ended || type == "enteredReviewMode" || type == "exitedReviewMode",toolOperation:operation,outcome:outcome)
     }
     static func from(item:[String:Any]) -> TaskActivity? {
@@ -341,7 +341,7 @@ struct TaskActivity:Equatable {
                 fields.append(.text(command.isEmpty ? commandSummary(item["command"] as? String) : command))
             }
         }
-        if actions.count > 3 {fields.append(.text("另有 \(actions.count-3) 项"))}
+        if actions.count > 3 {fields.append(.text(L10n.format(.tasks,"taskActivity.waiting.text.2",String(describing:actions.count-3))))}
         return fields
     }
     static func current(items:[[String:Any]]) -> TaskActivity? {
@@ -349,7 +349,7 @@ struct TaskActivity:Equatable {
         var result:Entry?, runningTool:Entry?
         for item in items {
             if item["type"] as? String == "agentMessage" {
-                result = (item,.init(title:"正在回复",kind:.reply)); continue
+                result = (item,.init(title:L10n.text(.tasks,"taskActivity.reply"),kind:.reply)); continue
             }
             guard let next = from(item:item) else {continue}
             if next.kind == .tool,!next.finished,["inProgress","running"].contains(item["status"] as? String ?? "") {runningTool = (item,next)}
@@ -404,7 +404,7 @@ struct TaskActivity:Equatable {
                 "collabAgentToolCall","collabToolCall","error"].contains(type) {
                 closeGroup()
                 if let activity = from(item:item) {standalone = hidingToolFailures && activity.isToolFailure ? nil : header(activity)}
-                else if type == "agentMessage",closed == nil {standalone = .init(title:"正在回复",kind:.reply)}
+                else if type == "agentMessage",closed == nil {standalone = .init(title:L10n.text(.tasks,"taskActivity.reply"),kind:.reply)}
             }
         }
         if isOpen,!group.isEmpty {
@@ -415,7 +415,7 @@ struct TaskActivity:Equatable {
             if let last = displayed.last,[.read,.search,.listFiles].contains(last.activity.toolOperation) {
                 return activeGroupHeader(last.item,last.activity)
             }
-            return .init(title:heading ?? "正在思考",kind:.reasoning)
+            return .init(title:heading ?? L10n.text(.tasks,"taskActivity.from.title"),kind:.reasoning)
         }
         return standalone ?? closed ?? heading.map {GroupHeader(title:$0,kind:.reasoning)}
     }
@@ -436,17 +436,17 @@ struct TaskActivity:Equatable {
         case .read:
             let path = action["path"] as? String ?? action["name"] as? String ?? ""
             let name = (path as NSString).lastPathComponent
-            title = "正在读取"+(path.isEmpty ? "文件" : " "+name)
+            title = L10n.text(.tasks,"taskActivity.activeGroupHeader.title")+(path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading") : " "+name)
             subject = .read(short(name))
         case .search:
             let path = action["path"] as? String ?? "",query = action["query"] as? String ?? ""
-            title = !path.isEmpty ? "正在搜索文件夹 "+path : !query.isEmpty ? "正在搜索「"+query+"」" : "正在搜索文件"
+            title = !path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.2")+path : !query.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.3")+query+"」" : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.4")
             subject = path.isEmpty ? .query(short(query)) : .folder(short(path))
         case .listFiles:
             let path = action["path"] as? String ?? ""
-            title = path.isEmpty ? "正在列出文件" : "正在列出文件夹 "+path
+            title = path.isEmpty ? L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.5") : L10n.text(.tasks,"taskActivity.activeGroupHeader.heading.6")+path
             subject = .folder(short(path))
-        case .edit:title = "正在修改文件"
+        case .edit:title = L10n.text(.tasks,"taskActivity.edit.2")
         default:return header(activity)
         }
         return .init(title:short(title),operation:activity.toolOperation,subject:subject)
@@ -473,10 +473,10 @@ struct TaskActivity:Equatable {
             }
             if categories[key] == nil {categories[key] = activity}
         }
-        let labels = [("tool","已调用工具"),("edit","已修改文件"),("explore","已读取文件"),("command","已运行命令"),("web","已搜索网页")]
+        let labels = [("tool",L10n.text(.tasks,"taskActivity.labels")),("edit",L10n.text(.tasks,"taskActivity.labels.2")),("explore",L10n.text(.tasks,"taskActivity.labels.3")),("command",L10n.text(.tasks,"taskActivity.labels.4")),("web",L10n.text(.tasks,"taskActivity.labels.5"))]
         let parts = labels.filter {categories[$0.0] != nil}.map(\.1)+failures
         let first = labels.compactMap {categories[$0.0]}.first ?? failure
-        return .init(title:parts.isEmpty ? "工具活动已结束" : parts.joined(separator:"、"),
+        return .init(title:parts.isEmpty ? L10n.text(.tasks,"taskActivity.completedGroupHeader.text") : parts.joined(separator:"、"),
                      operation:first?.toolOperation ?? .tool,finished:true,outcome:failure?.outcome)
     }
     private static func reasoningHeading(_ summary:String) -> String? {

@@ -7,9 +7,9 @@ enum DailyTokenUsage {
 
     var value:String {
         switch self {
-        case .loading:return "加载中"
+        case .loading:return L10n.text(.usage,"dailyTokenUsage.loading")
         case .available(let usage):return TokenUsage.amount(usage.total)
-        case .failed:return "读取失败"
+        case .failed:return L10n.text(.usage,"dailyTokenUsage.failed")
         }
     }
     var usage:TokenUsage? {if case .available(let usage) = self {return usage}; return nil}

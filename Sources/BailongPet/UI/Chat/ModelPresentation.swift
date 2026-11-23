@@ -68,7 +68,7 @@ class ModelSummaryButton:NSButton {
         guard summaryText != text || showsLightning != lightning || self.providerIcon !== providerIcon else {return false}
         summaryText = text; showsLightning = lightning; self.providerIcon = providerIcon
         title = text
-        setAccessibilityValue((lightning ? "快速模式 · " : "")+text)
+        setAccessibilityValue((lightning ? L10n.text(.conversation,"modelPresentation.setSummary.text") : "")+text)
         applySummaryIcons()
         invalidateIntrinsicContentSize()
         needsDisplay = true
@@ -107,7 +107,7 @@ class ModelSummaryButton:NSButton {
         }
         // 标题为独立绘制的供应商图标保留同样的宽度。
         if let providerIcon {append(separateProviderIcon == nil ? providerIcon : nil)}
-        if showsLightning,let bolt = NSImage(systemSymbolName:"bolt",accessibilityDescription:"快速模式") {append(bolt)}
+        if showsLightning,let bolt = NSImage(systemSymbolName:"bolt",accessibilityDescription:L10n.text(.conversation,"modelPresentation.bolt")) {append(bolt)}
         value.append(NSAttributedString(string:text,attributes:[.font:font]))
         attributedTitle = value
     }

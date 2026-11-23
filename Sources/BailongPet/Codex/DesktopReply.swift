@@ -9,12 +9,12 @@ enum DesktopReply {
         return nil
     }
     struct OwnerUnavailable:LocalizedError {
-        var errorDescription:String? {"Codex 尚未加载这条会话。"}
+        var errorDescription:String? {L10n.text(.conversation,"desktopReply.ownerUnavailable.text")}
     }
     private static func initialize(timeout:Int,deadline:Date?) throws -> DesktopSocket {
         let connection = try DesktopSocket(timeoutSeconds:timeout)
         let initialized = try connection.call("initialize",params:["clientType":"bailong-pet"],version:0,deadline:deadline)
-        guard let client = (initialized["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:"Codex 未返回本机连接标识。")}
+        guard let client = (initialized["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.submit.message.2"))}
         connection.clientID = client
         return connection
     }
@@ -71,7 +71,7 @@ enum DesktopReply {
                 let (connection,target) = try connect(thread:thread,timeout:30,deadline:deadline,discoveryDeadline:discoveryDeadline,wakeOnOwnerBroadcast:wakeOnOwnerBroadcast)
                 let response = try connection.call("thread-follower-read-model-settings",params:["conversationId":thread],version:1,target:target,deadline:deadline)
                 guard let result = response["result"] as? [String:Any],let settings = result["settings"] as? [String:Any],
-                      let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:"Codex 未提供当前会话的模型设置。")}
+                      let model = settings["model"] as? String,!model.isEmpty else {throw PetFailure(message:L10n.text(.conversation,"desktopReply.prepareConnection.message"))}
                 let liveEffort = settings["reasoningEffort"] as? String
                 let recordedEffort = liveEffort == nil ? try DesktopHistoryReader.recordedReasoningEffort(thread:thread,model:model) : nil
                 // read-model-settings v1 不返回速度；从同一 owner 的实时快照读取，不能按模型名推断。
@@ -91,7 +91,7 @@ enum DesktopReply {
                   let params = frame["params"] as? [String:Any],params["hostId"] as? String == "local",
                   params["conversationId"] as? String == thread else {continue}
             guard let version = frame["version"] as? Int,DesktopApprovalReader.supportedStreamVersions.contains(version) else {
-                throw PetFailure(message:"Codex 会话速度状态协议不兼容。")
+                throw PetFailure(message:L10n.text(.conversation,"desktopReply.readServiceTier.message"))
             }
             guard let change = params["change"] as? [String:Any],change["type"] as? String == "snapshot",
                   let state = change["conversationState"] as? [String:Any] else {continue}
@@ -99,7 +99,7 @@ enum DesktopReply {
             try connection.broadcast("thread-stream-following-changed",params:["hostId":"local","conversationId":thread,"following":false],version:1)
             return tier
         }
-        throw PetFailure(message:"未收到 Codex 原会话的速度设置。")
+        throw PetFailure(message:L10n.text(.conversation,"desktopReply.readServiceTier.message.2"))
     }
     static func serviceTier(in state:[String:Any]) -> String? {
         if let settings = state["latestThreadSettings"] as? [String:Any],let tier = settings["serviceTier"] {
@@ -127,7 +127,7 @@ enum DesktopReply {
     }
     struct Unconfirmed: LocalizedError {
         let underlying:Error
-        var errorDescription:String? {"尚未收到发送确认。请先到 Codex 查看消息是否已发送，确认未发送后再重试。\n\n"+underlying.localizedDescription}
+        var errorDescription:String? {L10n.text(.conversation,"desktopReply.unconfirmed.text")+underlying.localizedDescription}
     }
     static func submit(thread:String,previousTurn:String,cwd:String,text:String,mode:Mode,connectionDeadline:Date,prepared:PreparedConnection? = nil,onConnected:@escaping () -> Void,completion:@escaping (Result<Receipt,Error>) -> Void) {
         DispatchQueue.global(qos:.userInitiated).async {
@@ -136,7 +136,7 @@ enum DesktopReply {
                 do {
                     // 路由发现只看发起时的客户端；短请求让新打开的会话及时参与下一次发现。
                     if let prepared {
-                        guard prepared.thread == thread else {throw PetFailure(message:"准备连接与发送会话不一致。")}
+                        guard prepared.thread == thread else {throw PetFailure(message:L10n.text(.conversation,"desktopReply.submit.message"))}
                         (connection,target) = (prepared.socket,prepared.owner)
                     }
                     else {(connection,target) = try connect(thread:thread,timeout:30,deadline:min(connectionDeadline,Date().addingTimeInterval(2)),wakeOnOwnerBroadcast:true)}
@@ -156,7 +156,7 @@ enum DesktopReply {
                             "input":request["input"]!,"clientUserMessageId":messageID,"attachments":[],
                             "restoreMessage":["text":text,"cwd":cwd,"context":["workspaceRoots":[cwd]]]],version:1,target:target)
                         guard let envelope = response["result"] as? [String:Any],let result = envelope["result"] as? [String:Any],
-                              let id = result["turnId"] as? String,id == previousTurn else {throw PetFailure(message:"Codex 未确认插话进入原轮次。")}
+                              let id = result["turnId"] as? String,id == previousTurn else {throw PetFailure(message:L10n.text(.conversation,"desktopReply.submit.message.2"))}
                         return Receipt(turnID:id,status:"inProgress")
                     }
                     // 本机 26.1027.30824：start-turn v2；问卷 steer-turn 仍使用 v1。
@@ -167,7 +167,7 @@ enum DesktopReply {
                           let turn = result["turn"] as? [String:Any],
                           let id = turn["id"] as? String,!id.isEmpty,id != previousTurn,
                           let status = turn["status"] as? String else {
-                        throw PetFailure(message:"Codex 未返回新轮次的确认信息。")
+                        throw PetFailure(message:L10n.text(.conversation,"desktopReply.submit.message.3"))
                     }
                     return Receipt(turnID:id,status:status)
                 } catch {throw Unconfirmed(underlying:error)}

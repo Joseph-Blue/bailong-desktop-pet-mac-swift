@@ -13,7 +13,7 @@ extension NSMenu {
 
 func showError(_ title: String, _ error: Error) {
     let alert = NSAlert(); alert.messageText = title; alert.informativeText = error.localizedDescription
-    alert.alertStyle = .warning; alert.addButton(withTitle: "好")
+    alert.alertStyle = .warning; alert.addButton(withTitle: L10n.text(.app,"nativeControls.showError.button"))
     alert.applyAccent(); NSApp.activate(ignoringOtherApps: true); alert.runModal()
 }
 func label(_ text: String, bold: Bool = false) -> NSTextField {
@@ -166,7 +166,7 @@ final class BubbleCloseButton: HoverIconButton {
     override var alignmentRectInsets:NSEdgeInsets {NSEdgeInsets(top:0,left:0,bottom:0,right:0)}
     var onClose:() -> Void = {}
     init() {
-        super.init(symbol:"xmark",label:"关闭气泡")
+        super.init(symbol:"xmark",label:L10n.text(.tasks,"bubble.render.accessibilityDescription"))
         target = self; action = #selector(closeBubble)
     }
     required init?(coder:NSCoder) {fatalError()}
@@ -398,7 +398,7 @@ enum TaskQuestionLayout {
                 y += 8*scale
                 let padding = 10*scale, numberWidth = 18*scale, gap = 6*scale
                 let contentX = padding+numberWidth+gap, contentWidth = width-contentX-padding
-                let badge = option.recommended ? text("推荐",detailFont,34*scale,color:AppAccent.foregroundColor) : nil
+                let badge = option.recommended ? text(L10n.text(.tasks,"nativeControls.badge"),detailFont,34*scale,color:AppAccent.foregroundColor) : nil
                 let titleWidth = contentWidth-(badge.map {$0.frame.width+gap} ?? 0)
                 let name = text(option.title,bodyFont,titleWidth)
                 name.frame.origin = NSPoint(x:contentX,y:padding)

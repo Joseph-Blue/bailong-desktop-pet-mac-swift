@@ -13,7 +13,7 @@ struct PublicAgentMessage:Equatable {
 }
 
 struct DesktopQuestionNotice {
-    static let openInCodex = "这个问题需要你转到 Codex 回复。"
+    static let openInCodex = L10n.text(.conversation,"desktopSync.openInCodex")
     let body:String
     let form:QuestionPresentation?
 
@@ -77,7 +77,7 @@ struct PublicSnapshot {
 
 final class DesktopSync {
     let chat: ChatController
-    private let queue = DispatchQueue(label:"白龙娘外部任务只读观察",qos:.utility,autoreleaseFrequency:.workItem)
+    private let queue = DispatchQueue(label:L10n.text(.tasks,"desktopSync.queue.label"),qos:.utility,autoreleaseFrequency:.workItem)
     private let permissionHook = DesktopPermissionListener()
     private var hookChannel:ProjectSendChannel?
     private var hookStartError:String?
@@ -90,7 +90,7 @@ final class DesktopSync {
         monitorReadIssue = issue
         guard let monitor = TerminalMonitor.active else {return}
         if let issue {monitor.write(.desktop,issue,.warning)}
-        else {monitor.write(.desktop,"任务与审批同步恢复",.success)}
+        else {monitor.write(.desktop,L10n.text(.tasks,"desktopSync.issue.text"),.success)}
     }
     private var lastTitleSync = Date.distantPast
     private var lastHistoryRead = Date.distantPast
@@ -109,19 +109,19 @@ final class DesktopSync {
         UserDefaults.standard.set(clearedBefore,forKey:"desktopHistoryClearedBefore")
         for key in running {chat.pet.taskEnded(key,status:"interrupted")}
         running.removeAll(); tracked.removeAll(); fingerprints.removeAll(); noticedAt.removeAll(); changedAt.removeAll()
-        chat.desktopSession.observedTurns = []; chat.desktopTaskReadStatus = "正在同步 Codex 任务状态…"
+        chat.desktopSession.observedTurns = []; chat.desktopTaskReadStatus = L10n.text(.conversation,"chatController.quota.text")
     }
-    private(set) var diagnostics = "等待同步"
+    private(set) var diagnostics = L10n.text(.conversation,"desktopSync.diagnostics")
     func reportMonitorState(to monitor:TerminalMonitor) {
         let turns = chat.desktopSession.observedTurns.filter(\.active)
-        let phase = initial ? "等待首次同步" : "活跃轮次 \(turns.count)"
-        monitor.write(.desktop,"观察快照  ·  "+phase+(monitorReadIssue.map {"  ·  "+$0} ?? ""))
+        let phase = initial ? L10n.text(.conversation,"desktopSync.phase") : L10n.format(.conversation,"desktopSync.phase.2",String(describing:turns.count))
+        monitor.write(.desktop,L10n.text(.tasks,"desktopSync.phase.text")+phase+(monitorReadIssue.map {"  ·  "+$0} ?? ""))
         for turn in turns {
-            monitor.write(.desktop,"轮次#"+TerminalMonitor.tag(turn.turnID)+"  "+TerminalMonitor.status(turn.status)
+            monitor.write(.desktop,L10n.text(.tasks,"desktopSync.phase.text.2")+TerminalMonitor.tag(turn.turnID)+"  "+TerminalMonitor.status(turn.status)
                 + (turn.activity.map {"  ·  "+$0.monitorLabel} ?? ""))
         }
     }
-    var status = "正在准备读取本机 Codex 的任务记录。\n读取成功后，这里会显示任务数量、当前状态和最近刷新时间。"
+    var status = L10n.text(.conversation,"desktopSync.reportMonitorState.text")
     init(chat: ChatController) {
         self.chat = chat
         permissionHook.canPresent = { [weak chat] in
@@ -138,7 +138,7 @@ final class DesktopSync {
         queue.async {self.approvalReader.close()}
         do {try permissionHook.start()}
         catch {
-            let message = "桌宠审批通道未启动："+error.localizedDescription
+            let message = L10n.text(.conversation,"desktopSync.configurePermissionHook.message")+error.localizedDescription
             hookStartError = message; TerminalMonitor.active?.write(.approval,message,.warning)
         }
     }
@@ -187,12 +187,12 @@ final class DesktopSync {
                             }
                         }
                         if self.approvalReader.unavailableCount > 0 {
-                            approvalError = "\(self.approvalReader.unavailableCount) 个会话尚未收到 Codex 实时状态。"
+                            approvalError = L10n.format(.conversation,"desktopSync.poll.text",String(describing:self.approvalReader.unavailableCount))
                             monitorIssue = approvalError
                         }
                     } catch {
                         approvalError = error.localizedDescription
-                        monitorIssue = "读取实时审批失败  ·  "+TerminalMonitor.errorCode(error)
+                        monitorIssue = L10n.text(.conversation,"desktopSync.poll.text.2")+TerminalMonitor.errorCode(error)
                     }
                 }
                 let titles = try DesktopHistoryReader.readTitles(titleIDs)
@@ -213,8 +213,8 @@ final class DesktopSync {
                     let displayChanged = values.contains {self.fingerprints[$0.key] != $0.fingerprint || self.tracked[$0.key]?.activity != $0.activity}
                     let recordsChanged = self.accept(values)
                     if let approvalError = approvalError ?? (legacy ? nil : self.hookStartError) {
-                        self.diagnostics += " · 审批同步失败："+approvalError
-                        self.status += "\n\n实时审批状态未同步："+approvalError
+                        self.diagnostics += L10n.text(.conversation,"desktopSync.poll.text.3")+approvalError
+                        self.status += L10n.text(.conversation,"desktopSync.poll.text.4")+approvalError
                     }
                     if recordsChanged || changed {self.chat.persist()}
                     else if displayChanged {self.chat.refresh()}
@@ -223,8 +223,8 @@ final class DesktopSync {
             catch {DispatchQueue.main.async {
                 self.reading = false
                 self.permissionHook.discard()
-                self.recordReadIssue("读取任务记录失败  ·  "+TerminalMonitor.errorCode(error))
-                self.chat.desktopSession.observedTurns = []; self.chat.desktopTaskReadStatus = "Codex 当前任务状态读取失败"; self.diagnostics = "读取失败：" + error.localizedDescription; self.status = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n"+error.localizedDescription}}
+                self.recordReadIssue(L10n.text(.conversation,"desktopSync.poll.text.5")+TerminalMonitor.errorCode(error))
+                self.chat.desktopSession.observedTurns = []; self.chat.desktopTaskReadStatus = L10n.text(.conversation,"desktopSync.poll.text.6"); self.diagnostics = L10n.text(.conversation,"desktopSync.poll.text.7") + error.localizedDescription; self.status = L10n.text(.conversation,"desktopSync.poll.text.8")+error.localizedDescription}}
         }
     }
     private func accept(_ values: [PublicSnapshot]) -> Bool {
@@ -303,15 +303,15 @@ final class DesktopSync {
                 let context = {TerminalMonitor.context(conversation.key,turn:value.turn)}
                 if previous?.status != value.status {
                     let level:TerminalMonitor.Level = value.status == "failed" ? .error : value.status == "completed" ? .success : .info
-                    monitor.write(.desktop,context()+"  观察到轮次状态  ·  "+TerminalMonitor.status(value.status),level)
+                    monitor.write(.desktop,context()+L10n.text(.tasks,"desktopSync.level.text")+TerminalMonitor.status(value.status),level)
                 }
                 if active,let activity = value.activity,previous?.activity?.monitorLabel != activity.monitorLabel {
-                    monitor.write(.desktop,context()+"  进展  ·  "+activity.monitorLabel,activity.outcome == .failed ? .error : .info)
+                    monitor.write(.desktop,context()+L10n.text(.tasks,"desktopSync.activity.text")+activity.monitorLabel,activity.outcome == .failed ? .error : .info)
                 }
                 if previous?.approvalID != value.approvalID || previousAttention != value.attention?.kind {
-                    if value.approval != nil {monitor.write(.approval,context()+"  外部  ·  收到实时审批请求")}
-                    else if let attention = value.attention {monitor.write(.approval,context()+"  外部  ·  "+(attention.kind == .approval ? "记录显示等待审批" : "记录显示等待回答"))}
-                    else if previousAttention != nil {monitor.write(.approval,context()+"  外部  ·  观察结果已无待处理请求")}
+                    if value.approval != nil {monitor.write(.approval,context()+L10n.text(.tasks,"desktopSync.labels.text"))}
+                    else if let attention = value.attention {monitor.write(.approval,context()+L10n.text(.tasks,"desktopSync.attention.text")+(attention.kind == .approval ? L10n.text(.tasks,"desktopSync.attention.text.2") : L10n.text(.tasks,"desktopSync.attention.text.3")))}
+                    else if previousAttention != nil {monitor.write(.approval,context()+L10n.text(.tasks,"desktopSync.attention.text.4"))}
                 }
             }
             tracked[key] = value
@@ -374,7 +374,7 @@ final class DesktopSync {
                     let question = DesktopQuestionNotice(value.attention,channel:channel,submit:{ [weak self] answers,completion in
                         self?.submitAnswers(value,answers:answers,completion:completion)
                     },skip:{ [weak self] ids in self?.skippedQuestionIDs.formUnion(ids) })
-                    let statusText = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? "任务正在等待你的处理，请回到原 Codex 窗口。" : quiet ? "已经有一会儿没有新进度，任务尚未报告完成。" : value.messages.isEmpty ? value.step : value.agentMessages.last(where:{!$0.isFinal})?.text ?? value.messages
+                    let statusText = !value.alert.isEmpty ? value.alert : ["waitingForInput","waitingForApproval"].contains(value.status) ? L10n.text(.conversation,"desktopSync.statusText") : quiet ? L10n.text(.tasks,"taskReminder.showTaskReminder.text") : value.messages.isEmpty ? value.step : value.agentMessages.last(where:{!$0.isFinal})?.text ?? value.messages
                     let text = question?.body ?? statusText
                     let questionIDs = value.attention?.questions.map(\.id).joined(separator:"\u{001f}") ?? ""
                     let signature = (value.attention?.kind.rawValue ?? "progress")+":"+value.approvalID+":"+questionIDs+":"+text
@@ -400,7 +400,7 @@ final class DesktopSync {
             }
         }
         if initial {
-            TerminalMonitor.active?.write(.desktop,"首次同步完成  ·  读取 \(values.count) 个轮次  ·  活跃 \(currentActive.count)",.success)
+            TerminalMonitor.active?.write(.desktop,L10n.format(.tasks,"desktopSync.labels.text.2",String(describing:values.count),String(describing:currentActive.count)),.success)
             initial = false
         }
         let present = Set(values.map{$0.key}), missing = running.subtracting(present)
@@ -410,7 +410,7 @@ final class DesktopSync {
         fingerprints = fingerprints.filter {retained.contains($0.key)}
         changedAt = changedAt.filter {retained.contains($0.key)}
         noticedAt = noticedAt.filter {retained.contains($0.key)}
-        diagnostics = "\(values.count) 条 · 活跃 \(running.count) · 待更新 \(missing.count) · " + Date().formatted(.dateTime.hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))
+        diagnostics = L10n.format(.conversation,"desktopSync.accept.text",String(describing:values.count),String(describing:running.count),String(describing:missing.count)) + Date().formatted(.dateTime.hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))
         status = Self.describeStatus(values,missing:missing.count)
         return changed
     }
@@ -421,7 +421,7 @@ final class DesktopSync {
                 let current = try DesktopHistoryReader.read(excluded:[],watched:[snapshot]).first {$0.key == snapshot.key}
                 guard let current,current.attention?.isSensitive == false,
                       Set(questions.map(\.id)).isSubset(of:Set(current.attention?.questions.map(\.id) ?? [])),!questions.isEmpty else {
-                    throw PetFailure(message:"这道问题已回答或已结束，请查看 Codex 当前状态。")
+                    throw PetFailure(message:L10n.text(.conversation,"desktopSync.submitAnswers.message"))
                 }
                 DispatchQueue.main.async {
                     guard self.chat.pet.preferences.projectSendChannel == .legacy else {
@@ -440,21 +440,21 @@ final class DesktopSync {
         let unknown = records.filter {!known.contains($0.status)}.count
         let conversations = Set(records.map(\.logical)).count
         var lines = [
-            "当前读取到 \(records.count) 条任务记录，来自 \(conversations) 个 Codex 会话。",
+            L10n.format(.conversation,"desktopSync.describeStatus.text",String(describing:records.count),String(describing:conversations)),
             "",
-            "正在进行：\(working) 条",
-            "等待你批准：\(counts["waitingForApproval"] ?? 0) 条",
-            "等待你补充信息：\(counts["waitingForInput"] ?? 0) 条",
-            "已完成：\(counts["completed"] ?? 0) 条",
-            "已失败：\(counts["failed"] ?? 0) 条",
-            "已停止：\(stopped) 条"
+            L10n.format(.conversation,"desktopSync.describeStatus.text.2",String(describing:working)),
+            L10n.format(.conversation,"desktopSync.describeStatus.text.3",String(describing:counts["waitingForApproval"] ?? 0)),
+            L10n.format(.conversation,"desktopSync.describeStatus.text.4",String(describing:counts["waitingForInput"] ?? 0)),
+            L10n.format(.conversation,"desktopSync.describeStatus.text.5",String(describing:counts["completed"] ?? 0)),
+            L10n.format(.conversation,"desktopSync.describeStatus.text.6",String(describing:counts["failed"] ?? 0)),
+            L10n.format(.conversation,"desktopSync.describeStatus.text.7",String(describing:stopped))
         ]
-        if unknown > 0 {lines.append("状态尚不明确：\(unknown) 条")}
-        if missing > 0 {lines.append("另有 \(missing) 条此前仍在进行的任务暂时读不到，正在等待状态更新。")}
+        if unknown > 0 {lines.append(L10n.format(.conversation,"desktopSync.describeStatus.text.8",String(describing:unknown)))}
+        if missing > 0 {lines.append(L10n.format(.conversation,"desktopSync.describeStatus.text.9",String(describing:missing)))}
         lines += [
-            "", "最近刷新："+Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),
+            "", L10n.text(.conversation,"desktopSync.describeStatus.text.10")+Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),
         ]
         return lines.joined(separator:"\n")
     }
-    func close() {permissionHook.stop(); diagnostics = "已停止"; stopped = true; timer?.invalidate(); queue.async {self.approvalReader.close()}; status = "任务同步已停止，当前不会读取新的任务状态。"}
+    func close() {permissionHook.stop(); diagnostics = L10n.text(.conversation,"desktopSync.close.text"); stopped = true; timer?.invalidate(); queue.async {self.approvalReader.close()}; status = L10n.text(.conversation,"desktopSync.close.text.2")}
 }

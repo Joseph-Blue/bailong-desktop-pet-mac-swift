@@ -150,14 +150,14 @@ final class MessageTextView: LinkTextView {
             let id = section.id
             let control = fileDisclosures[id]?.control ?? DisclosureControl(frame:.zero)
             if control.superview == nil {
-                control.accessibilityTitle = "文件列表"
+                control.accessibilityTitle = L10n.text(.conversation,"messageTextView.prepareFileDisclosures.text")
                 control.onToggle = { [weak self] in self?.toggleFileDisclosure(id) }
                 addSubview(control)
             }
             let extraCount = section.edits.count-FileEditRendering.previewCount
-            let title = expanded ? "收起文件列表" : "再显示 \(extraCount) 个文件"
+            let title = expanded ? L10n.text(.conversation,"messageTextView.prepareFileDisclosures.heading") : L10n.format(.conversation,"messageTextView.prepareFileDisclosures.heading.2",String(describing:extraCount))
             if control.expanded != expanded {control.expanded = expanded}
-            control.setAccessibilityValue(expanded ? nil : "\(extraCount) 个文件")
+            control.setAccessibilityValue(expanded ? nil : L10n.format(.conversation,"messageTextView.prepareFileDisclosures.text.2",String(describing:extraCount)))
             let font = NSFont.monospacedDigitSystemFont(ofSize:max(11,section.font.pointSize-1),weight:.regular)
             control.setInlineTitle(title,font:font)
             let leadingSpace = textContainerInset.width+(textContainer?.lineFragmentPadding ?? 0)

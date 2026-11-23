@@ -72,7 +72,7 @@ final class Turn: Codable {
         owned = try c.decode(Bool.self,forKey:.owned)
         finished = try c.decode(Bool.self,forKey:.finished)
         if let id = try c.decodeIfPresent(String.self,forKey:.bodyID) {
-            guard let disk = decoder.userInfo[.historyDatabase] as? HistoryDatabase else {throw PetFailure(message:"历史正文引用缺少数据库")}
+            guard let disk = decoder.userInfo[.historyDatabase] as? HistoryDatabase else {throw PetFailure(message:L10n.text(.conversation,"history.message"))}
             bodyReference = HistoryBodyReference(id:id,disk:disk)
         } else {bodyReference = HistoryBodyReference(try HistoryBody(from:decoder))}
     }
@@ -131,7 +131,7 @@ final class Conversation: Codable {
     var threadID: String? = nil
     var modelProvider: String? = nil
     var createdWithChatGPT: Bool? = nil
-    var title = "新对话"
+    var title = L10n.text(.conversation,"history.conversation.title")
     var localTitle: String? = nil
     var cwd = ""
     var external = false
@@ -163,9 +163,9 @@ struct HistoryDocument: Codable {
     func validateIdentity() throws {
         var keys = Set<String>(), turns = Set<String>()
         for conversation in conversations {
-            guard keys.insert(conversation.key).inserted else {throw PetFailure(message:"历史包含重复会话标识，原文件已保留。")}
+            guard keys.insert(conversation.key).inserted else {throw PetFailure(message:L10n.text(.conversation,"history.validateIdentity.message"))}
             for turn in conversation.turns {
-                guard turns.insert(turn.key).inserted else {throw PetFailure(message:"历史包含重复轮次标识，原文件已保留。")}
+                guard turns.insert(turn.key).inserted else {throw PetFailure(message:L10n.text(.conversation,"history.validateIdentity.message.2"))}
             }
         }
     }
@@ -181,7 +181,7 @@ final class HistoryStore {
     func clearBodyCache() {database?.clearCache()}
     var cachedBodyBytes:Int {database?.cachedBytes ?? 0}
     var isReadOnly:Bool {readOnlyReason != nil}
-    private let queue = DispatchQueue(label:"白龙娘历史保存")
+    private let queue = DispatchQueue(label:L10n.text(.conversation,"history.queue.label"))
     private let lock = NSLock()
     private let url: URL
     private var exportSourceURL:URL
@@ -209,7 +209,7 @@ final class HistoryStore {
             func readLegacy() throws -> HistoryDocument {
                 let old = try JSONDecoder().decode(HistoryDocument.self,from:Data(contentsOf:url))
                 try old.validateIdentity()
-                guard [1,2].contains(old.schemaVersion) else {throw PetFailure(message:"历史格式不支持："+String(old.schemaVersion))}
+                guard [1,2].contains(old.schemaVersion) else {throw PetFailure(message:L10n.text(.conversation,"history.readLegacy.message")+String(old.schemaVersion))}
                 return old
             }
             if !existed,FileManager.default.fileExists(atPath:url.path) {legacy = try readLegacy()}
@@ -227,11 +227,11 @@ final class HistoryStore {
             }
             archive = makeSnapshot(preservingExcluded:false)
             for conversation in conversations {for turn in conversation.turns where turn.owned && (activeStatuses.contains(turn.status) || turn.status == "unknown") {
-                turn.status = "interrupted"; turn.error = "上次程序退出，任务未确认完成。"
+                turn.status = "interrupted"; turn.error = L10n.text(.conversation,"history.readLegacy.text")
             }}
         } catch {
-            initialReadOnlyReason = "历史读取或升级未完成，原文件保留："+error.localizedDescription
-            TerminalMonitor.active?.write(.history,"打开或迁移历史失败，进入只读模式  ·  "+TerminalMonitor.errorCode(error),.error)
+            initialReadOnlyReason = L10n.text(.conversation,"history.readLegacy.text.2")+error.localizedDescription
+            TerminalMonitor.active?.write(.history,L10n.text(.conversation,"history.readLegacy.text.3")+TerminalMonitor.errorCode(error),.error)
         }
         database?.onReadFailure = { [weak self] error in self?.onError(error) }
         if policy.disabled || !recording {
@@ -244,7 +244,7 @@ final class HistoryStore {
         policy.excludedTurns.formUnion(conversations.flatMap {$0.turns.map(\.key)})
     }
     func requireWritable() throws {
-        if let readOnlyReason {throw PetFailure(message:readOnlyReason+" 请在设置 → 高级中导出原文件或重新读取。")}
+        if let readOnlyReason {throw PetFailure(message:readOnlyReason+L10n.text(.conversation,"history.requireWritable.error"))}
     }
     func exportOriginal(to destination:URL) throws {
         queue.sync {}
@@ -293,7 +293,7 @@ final class HistoryStore {
                 if excluded {frozen = true; if let previous = oldTurns[t.key] {copy.turns.append(previous)}}
                 else {copy.turns.append(t.snapshot())}
             }
-            if frozen {copy.title = old?.title ?? "对话记录"; copy.localTitle = old?.localTitle}
+            if frozen {copy.title = old?.title ?? L10n.text(.conversation,"history.makeSnapshot.heading"); copy.localTitle = old?.localTitle}
             if !preservingExcluded || !copy.turns.isEmpty || old != nil {records.append(copy)}
         }
         return HistoryDocument(conversations:records,recordingPolicy:policy)
@@ -324,7 +324,7 @@ final class HistoryStore {
             }
             guard let (document,epoch) = next else {return}
             do {
-                guard let database else {throw PetFailure(message:"历史数据库未打开")}
+                guard let database else {throw PetFailure(message:L10n.text(.conversation,"history.drain.message"))}
                 try database.write(document)
                 DispatchQueue.main.async { [self] in if lock.withLock({writeEpoch == epoch && !suspended}) {onSaved()} }
             } catch {
@@ -368,7 +368,7 @@ final class HistoryStore {
     }
     private func commitManagement(_ document:HistoryDocument) throws {
         try requireWritable()
-        guard let database else {throw PetFailure(message:"历史数据库未打开")}
+        guard let database else {throw PetFailure(message:L10n.text(.conversation,"history.drain.message"))}
         try database.write(document)
         archive = document
         lock.withLock {suspended = false; pending = nil; writeEpoch += 1}
@@ -380,7 +380,7 @@ final class HistoryStore {
         queue.sync {}
         let fresh = HistoryRecordingPolicy(externalBefore:Date().timeIntervalSince1970,disabled:!recording)
         let document = HistoryDocument(conversations:[],recordingPolicy:fresh)
-        guard let database else {throw PetFailure(message:"历史数据库未打开")}
+        guard let database else {throw PetFailure(message:L10n.text(.conversation,"history.drain.message"))}
         try database.write(document)
         database.clearCache()
         conversations.removeAll(); archive = document; policy = fresh

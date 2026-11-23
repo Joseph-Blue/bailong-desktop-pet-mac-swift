@@ -8,15 +8,15 @@ enum DesktopQuestionReply {
         DispatchQueue.global(qos:.userInitiated).async {
             do {
                 let replies = questions.filter {!(answers[$0.id] ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}.map {["questionItemId":$0.id,"question":$0.prompt,"answer":answers[$0.id] ?? ""]}
-                guard !replies.isEmpty else {throw PetFailure(message:"请填写回答后再提交。")}
+                guard !replies.isEmpty else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.submit.message"))}
                 let json = try JSONSerialization.data(withJSONObject:replies)
                 let text = "<send_user_message_question_reply>\n"+String(decoding:json,as:UTF8.self)+"\n</send_user_message_question_reply>"
                 let connection = try DesktopSocket()
                 let initial = try connection.call("initialize",params:["clientType":"bailong-pet"],version:0)
-                guard let client = (initial["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:"Codex 未返回本机连接标识。")}
+                guard let client = (initial["result"] as? [String:Any])?["clientId"] as? String else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.submit.message.2"))}
                 connection.clientID = client
                 let owner = try connection.call("thread-owner-discovery",params:["hostId":"local","conversationId":thread],version:1)
-                guard let target = owner["handledByClientId"] as? String else {throw PetFailure(message:"未找到原会话窗口，请转到 Codex 回答。")}
+                guard let target = owner["handledByClientId"] as? String else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.submit.message.3"))}
                 let input:[[String:Any]] = [["type":"text","text":text,"text_elements":[]]]
                 _ = try connection.call("thread-follower-steer-turn",params:["conversationId":thread,"input":input,
                     "clientUserMessageId":UUID().uuidString,"attachments":[],
@@ -29,18 +29,18 @@ enum DesktopQuestionReply {
 
 final class DesktopSocket {
     struct Unavailable:LocalizedError {
-        var errorDescription:String? {"Codex 本机通信尚未就绪。"}
+        var errorDescription:String? {L10n.text(.tasks,"desktopQuestionReply.unavailable.text")}
     }
     struct Disconnected:LocalizedError {
-        var errorDescription:String? {"Codex 本机连接已断开。"}
+        var errorDescription:String? {L10n.text(.tasks,"desktopQuestionReply.disconnected.text")}
     }
     struct ResponseTimeout:LocalizedError {
         var method:String? = nil
-        var errorDescription:String? {method.map {"Codex 请求超时（\($0)）。"} ?? "等待 Codex 响应超时。"}
+        var errorDescription:String? {method.map {L10n.format(.tasks,"desktopQuestionReply.responseTimeout.text",String(describing:$0))} ?? L10n.text(.tasks,"desktopQuestionReply.responseTimeout.text.2")}
     }
     struct RequestFailure:LocalizedError {
         let method:String, code:String
-        var errorDescription:String? {"Codex 请求失败（\(method)）：\(code)"}
+        var errorDescription:String? {L10n.format(.tasks,"desktopQuestionReply.requestFailure.text",String(describing:method),String(describing:code))}
     }
     struct WakeupInterrupt:Error {}
     private let fd:Int32
@@ -52,15 +52,15 @@ final class DesktopSocket {
         let path = root+"/ipc/ipc.sock"
         var address = sockaddr_un(); address.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(path.utf8CString)
-        guard bytes.count <= MemoryLayout.size(ofValue:address.sun_path) else {throw PetFailure(message:"Codex 本机通信路径过长。")}
+        guard bytes.count <= MemoryLayout.size(ofValue:address.sun_path) else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.message"))}
         var info = stat()
         if lstat(path,&info) != 0 {
             if errno == ENOENT {throw Unavailable()}
             throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))
         }
-        guard info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFSOCK else {throw PetFailure(message:"Codex 本机通信路径不是当前用户的套接字。")}
+        guard info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFSOCK else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.message.2"))}
         fd = socket(AF_UNIX,SOCK_STREAM,0)
-        guard fd >= 0 else {throw PetFailure(message:"无法创建本机通信连接。")}
+        guard fd >= 0 else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.message.3"))}
         var timeout = timeval(tv_sec:timeoutSeconds,tv_usec:0), noSignal:Int32 = 1
         setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout.size(ofValue:timeout)))
         setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,socklen_t(MemoryLayout.size(ofValue:timeout)))
@@ -83,7 +83,7 @@ final class DesktopSocket {
         func record(_ event:String,_ detail:String = "",_ level:TerminalMonitor.Level = .info) {
             guard let monitor,let start else {return}
             let rpc = method+" v\(version)  ·  RPC#"+TerminalMonitor.tag(id)
-            let thread = (params["conversationId"] as? String).map {"  会话#"+TerminalMonitor.tag($0)} ?? ""
+            let thread = (params["conversationId"] as? String).map {L10n.text(.tasks,"desktopQuestionReply.record.text")+TerminalMonitor.tag($0)} ?? ""
             let elapsed = TerminalMonitor.milliseconds(ProcessInfo.processInfo.systemUptime-start)
             monitor.write(.ipc,event+"  "+rpc+thread+"  ·  "+elapsed+detail,level)
         }
@@ -94,20 +94,20 @@ final class DesktopSocket {
             var request:[String:Any] = ["type":"request","requestId":id,"sourceClientId":clientID,"version":version,"method":method,"params":params,"timeoutMs":timeoutMs]
             if let target {request["targetClientId"] = target}
             try send(request)
-            record("→ 请求")
+            record(L10n.text(.tasks,"desktopQuestionReply.record.text.2"))
             let response = try receiveResponse(id:id,method:method,deadline:deadline,wakeup:wakeup)
-            record("← 回执","",.success)
+            record(L10n.text(.tasks,"desktopQuestionReply.record.text.3"),"",.success)
             return response
         } catch {
             if monitor != nil {
                 let reason:String
                 switch error {
-                case is ResponseTimeout:reason = "等待响应超时"
-                case is Disconnected:reason = "桌面端已断开"
-                case is RequestFailure:reason = "桌面端返回错误"
+                case is ResponseTimeout:reason = L10n.text(.tasks,"desktopQuestionReply.is")
+                case is Disconnected:reason = L10n.text(.tasks,"desktopQuestionReply.is.2")
+                case is RequestFailure:reason = L10n.text(.tasks,"desktopQuestionReply.is.3")
                 default:reason = TerminalMonitor.errorCode(error)
                 }
-                record("× 失败","  ·  "+reason,.error)
+                record(L10n.text(.tasks,"desktopQuestionReply.record.text.4"),"  ·  "+reason,.error)
             }
             throw error
         }
@@ -120,11 +120,11 @@ final class DesktopSocket {
             do {value = try receive(deadline:deadline)}
             catch is ResponseTimeout {throw ResponseTimeout(method:method)}
             catch is Disconnected {throw Disconnected()}
-            catch {throw PetFailure(message:"Codex 本机请求失败（\(method)）："+error.localizedDescription)}
+            catch {throw PetFailure(message:L10n.format(.tasks,"desktopQuestionReply.receiveResponse.message",String(describing:method))+error.localizedDescription)}
             if try handleControlFrame(value) {continue}
             if value["type"] as? String == "broadcast",wakeup?(value) == true {throw WakeupInterrupt()}
             guard value["type"] as? String == "response",value["requestId"] as? String == id else {continue}
-            guard value["resultType"] as? String == "success" else {throw RequestFailure(method:method,code:value["error"] as? String ?? "请求失败")}
+            guard value["resultType"] as? String == "success" else {throw RequestFailure(method:method,code:value["error"] as? String ?? L10n.text(.tasks,"desktopQuestionReply.receiveResponse.error"))}
             return value
         }
         throw ResponseTimeout(method:method)
@@ -173,8 +173,8 @@ final class DesktopSocket {
     }
     private func receive(deadline:Date) throws -> [String:Any] {
         let header = try read(4,deadline:deadline), size = header.enumerated().reduce(UInt32(0)) {$0 | UInt32($1.element) << (8*$1.offset)}
-        guard size > 0 && size <= 16*1024*1024 else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
-        guard let value = try JSONSerialization.jsonObject(with:read(Int(size),deadline:deadline)) as? [String:Any] else {throw PetFailure(message:"Codex 本机消息格式不兼容。")}
+        guard size > 0 && size <= 16*1024*1024 else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.receive.message"))}
+        guard let value = try JSONSerialization.jsonObject(with:read(Int(size),deadline:deadline)) as? [String:Any] else {throw PetFailure(message:L10n.text(.tasks,"desktopQuestionReply.receive.message"))}
         return value
     }
     private func read(_ count:Int,deadline:Date) throws -> Data {

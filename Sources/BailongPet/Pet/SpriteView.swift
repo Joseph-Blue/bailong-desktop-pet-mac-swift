@@ -113,8 +113,8 @@ final class SpriteView: NSView, CAAnimationDelegate {
             animation.loadTiming?.submittedAt = submitted
             if let transition = timing.monitorTransition,let monitor = TerminalMonitor.active,monitor.showsAnimation,let handed = timing.handedAt {
                 let ms = TerminalMonitor.milliseconds
-                let stages = ["请求→就绪 "+ms(timing.readyAt-timing.requestedAt),
-                              "就绪→交接 "+ms(handed-timing.readyAt),"交接→图层 "+ms(submitted-handed)]
+                let stages = [L10n.text(.diagnostics,"spriteView.stages")+ms(timing.readyAt-timing.requestedAt),
+                              L10n.text(.diagnostics,"spriteView.refreshFrame.text")+ms(handed-timing.readyAt),L10n.text(.diagnostics,"spriteView.refreshFrame.text.2")+ms(submitted-handed)]
                 monitor.write(.animation,([transition]+stages).joined(separator:"  ·  "))
                 animation.loadTiming?.monitorTransition = nil
             }

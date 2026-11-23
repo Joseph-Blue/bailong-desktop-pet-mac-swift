@@ -14,16 +14,16 @@ final class ActivitySettingsPage {
             form.choice(gesture.title, gesture.key, PetGestureSetting.actions, width:260, help:gesture.help)
         }
         form.group(PetGestureSetting.group,gestureRows,symbol:"computermouse")
-        form.group("桌宠吸边",[
-            form.toggle("屏幕左右边缘吸边","sideDockEnabled"),
-            form.slider("左右露出比例","sideExposurePercent",range:40...85,step:5,suffix:"%",requires:["sideDockEnabled"]),
-            form.toggle("顶部刘海吸边","notchDockEnabled",detail:"仅对带刘海的 MacBook 机型的内建屏幕生效。",symbol:"macbook.gen2"),
-            form.slider("从刘海露出比例","notchExposurePercent",range:40...85,step:5,suffix:"%",requires:["notchDockEnabled"])],symbol:"rectangle.inset.filled")
-        form.group("自主活动",[
-            form.slider("活动间隔","leisureInterval",range:5...180,suffix:"秒",detail:"到达间隔后，当前动作播放完再切换。"),
-            form.toggle("自主移动","autoMove"),form.choice("活动范围","movementRange",[("still","原地陪伴"),("nearby","小范围活动"),("screen","整个屏幕")],requires:["autoMove"]),form.toggle("减少重复动作","avoidRepeat",detail:"随机互动和自主活动会减少重复，任务动作始终避免连续重复。"),
-            form.slider("整体播放速度","playbackSpeed",range:0.75...1.5,step:0.05,suffix:"×",detail:"同时调整动作和移动速度；与单个动作的速度倍率相乘。")],symbol:"figure.walk.motion")
-        form.group("任务动作",[form.toggle("收到任务时播放开场","taskOpening"),form.toggle("完成任务时播放庆祝","taskCelebration")],symbol:"checklist")
+        form.group(L10n.text(.settings,"activity.render.text"),[
+            form.toggle(L10n.text(.settings,"activity.sideDockEnabled.title"),"sideDockEnabled"),
+            form.slider(L10n.text(.settings,"activity.sideExposurePercent.title"),"sideExposurePercent",range:40...85,step:5,suffix:"%",requires:["sideDockEnabled"]),
+            form.toggle(L10n.text(.settings,"activity.notchDockEnabled.title"),"notchDockEnabled",detail:L10n.text(.settings,"activity.notchDockEnabled.detail"),symbol:"macbook.gen2"),
+            form.slider(L10n.text(.settings,"activity.notchExposurePercent.title"),"notchExposurePercent",range:40...85,step:5,suffix:"%",requires:["notchDockEnabled"])],symbol:"rectangle.inset.filled")
+        form.group(L10n.text(.settings,"activity.render.text.2"),[
+            form.slider(L10n.text(.settings,"activity.leisureInterval.title"),"leisureInterval",range:5...180,suffix:L10n.text(.settings,"activity.leisureInterval.suffix"),detail:L10n.text(.settings,"activity.leisureInterval.detail")),
+            form.toggle(L10n.text(.settings,"activity.autoMove.title"),"autoMove"),form.choice(L10n.text(.settings,"activity.movementRange.title"),"movementRange",[("still",L10n.text(.settings,"activity.movementRange.option.still")),("nearby",L10n.text(.settings,"activity.movementRange.option.nearby")),("screen",L10n.text(.settings,"activity.movementRange.option.screen"))],requires:["autoMove"]),form.toggle(L10n.text(.settings,"activity.avoidRepeat.title"),"avoidRepeat",detail:L10n.text(.settings,"activity.avoidRepeat.detail")),
+            form.slider(L10n.text(.settings,"activity.playbackSpeed.title"),"playbackSpeed",range:0.75...1.5,step:0.05,suffix:"×",detail:L10n.text(.settings,"activity.playbackSpeed.detail"))],symbol:"figure.walk.motion")
+        form.group(L10n.text(.settings,"activity.render.text.3"),[form.toggle(L10n.text(.settings,"activity.taskOpening.title"),"taskOpening"),form.toggle(L10n.text(.settings,"activity.taskCelebration.title"),"taskCelebration")],symbol:"checklist")
         guard let catalog else {return}
         var rows = [ActivityActionRow]()
         let sizingForm = SettingsForm(content:NSStackView(),preferences:preferences,window:form.window)
@@ -32,10 +32,10 @@ final class ActivitySettingsPage {
             form.group(title,clips.map {clip in
                 let row = ActivityActionRow(title:clip.title,weightHeight:weighted ? weightHeight : 0) { [preferences,onPreview] window in
                     let form = SettingsForm(content:NSStackView(),preferences:preferences,window:window)
-                    let speed = form.popupControl(clip.title+"播放速度",options:Self.speedOptions,value:String(preferences.clipSpeed(clip.id)),width:100) {
+                    let speed = form.popupControl(clip.title+L10n.text(.settings,"activity.speed"),options:Self.speedOptions,value:String(preferences.clipSpeed(clip.id)),width:100) {
                         preferences.setSpeed(Double($0)!,for:clip.id)
                     }
-                    let caption = NSTextField(labelWithString:"速度")
+                    let caption = NSTextField(labelWithString:L10n.text(.settings,"activity.caption"))
                     caption.textColor = .secondaryLabelColor
                     let playback = form.content
                     playback.orientation = .horizontal; playback.alignment = .centerY; playback.spacing = 8
@@ -51,20 +51,20 @@ final class ActivitySettingsPage {
             viewport = SettingsRowViewport(rows:rows,scroll:scroll)
         }
     }
-    private static let speedOptions = PetPreferences.clipSpeedOptions.map {speed in (String(speed),speed == 1 ? "1×（默认）" : String(speed)+"×")}
+    private static let speedOptions = PetPreferences.clipSpeedOptions.map {speed in (String(speed),speed == 1 ? L10n.text(.settings,"activity.render.text.4") : String(speed)+"×")}
     private static func groups(_ catalog:Catalog) -> [(String,[Clip],Bool)] {
         [
-            ("待机动作",catalog.idles+catalog.extras,true),
-            ("互动动作",catalog.variants,true),
-            ("工作动作",catalog.work,true),
-            ("移动动作",catalog.movementAnimationsForDisplay,true),
-            ("鼠标与额度动作",[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation],false)
+            (L10n.text(.settings,"activity.groups.text"),catalog.idles+catalog.extras,true),
+            (L10n.text(.settings,"activity.groups.text.2"),catalog.variants,true),
+            (L10n.text(.settings,"activity.groups.text.3"),catalog.work,true),
+            (L10n.text(.settings,"activity.groups.text.4"),catalog.movementAnimationsForDisplay,true),
+            (L10n.text(.settings,"activity.groups.text.5"),[catalog.dragAnimation,catalog.landingAnimation,catalog.quotaAnimation],false)
         ]
     }
     static func items(catalog:Catalog?) -> [SettingsListItem] {
         guard let catalog else {return []}
         return groups(catalog).flatMap { title,clips,weighted in
-            clips.map {.init(group:title,title:$0.title,kind:.animation($0,weighted:weighted),keywords:"动画 播放速度 倍速 预览"+(weighted ? " 权重 随机 频率 偏爱" : ""))}
+            clips.map {.init(group:title,title:$0.title,kind:.animation($0,weighted:weighted),keywords:L10n.text(.settings,"activity.items.keywords")+(weighted ? L10n.text(.settings,"activity.items.text") : ""))}
         }
     }
 }

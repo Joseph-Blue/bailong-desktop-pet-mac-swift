@@ -8,7 +8,7 @@ final class ChatModeControl: AccentSegmentedControl {
         segmentCount = labels.count; trackingMode = .selectOne; segmentStyle = .rounded
         for (index,title) in labels.enumerated() {setLabel(title,forSegment:index)}
         selectedSegment = 0; target = self; action = #selector(changed)
-        setAccessibilityLabel("对话类型")
+        setAccessibilityLabel(L10n.text(.conversation,"composerControls.text"))
         setContentHuggingPriority(.required,for:.horizontal)
     }
     required init?(coder:NSCoder) {fatalError()}
@@ -17,7 +17,7 @@ final class ChatModeControl: AccentSegmentedControl {
 }
 
 final class ChatMetadataRow: NSStackView {
-    static let captionWidth = ("工作区" as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)
+    static let captionWidth = (L10n.text(.conversation,"composerControls.captionWidth") as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:12)]).width.rounded(.up)
     init(_ title:String,content:NSView,accessory:NSView? = nil,expandsContent:Bool = false) {
         super.init(frame:.zero)
         orientation = .horizontal; alignment = .centerY; distribution = .fill; spacing = 8
@@ -38,33 +38,33 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
     init() {
         super.init(frame:.zero)
         isEnabled = false
-        image = NSImage(systemSymbolName:"lock",accessibilityDescription:"只读"); imagePosition = .imageTrailing
+        image = NSImage(systemSymbolName:"lock",accessibilityDescription:L10n.text(.conversation,"composerControls.accessibilityDescription")); imagePosition = .imageTrailing
         setAccessibilityRole(.staticText)
     }
     required init?(coder:NSCoder) {fatalError()}
     func update(settings:DesktopReply.Settings?,conversation:Conversation?,notice:DesktopConversationSession.ModelNotice?) {
         if let settings {
-            let effort = settings.effort.map(ChatModelSettings.effortName) ?? "未提供"
+            let effort = settings.effort.map(ChatModelSettings.effortName) ?? L10n.text(.conversation,"composerControls.effort")
             let provider = settings.modelProvider ?? conversation?.modelProvider
             let identity = provider.map {APIProviderDirectory.identity(id:$0)}
             let providerIcon = provider == "openai" ? nil : AppIcons.apiProvider(identity?.catalogID)
-            let providerTitle = provider == nil ? "供应商未记录" : ModelPresentation.provider(provider,name:identity?.name,
+            let providerTitle = provider == nil ? L10n.text(.conversation,"composerControls.providerTitle") : ModelPresentation.provider(provider,name:identity?.name,
                 usesChatGPTAccount:conversation?.createdWithChatGPT == true)
-            let providerSummary = provider == nil ? "供应商未记录" : ModelPresentation.provider(provider,name:identity?.summaryName,
+            let providerSummary = provider == nil ? L10n.text(.conversation,"composerControls.providerTitle") : ModelPresentation.provider(provider,name:identity?.summaryName,
                 usesChatGPTAccount:conversation?.createdWithChatGPT == true)
-            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:providerSummary)+" · 只读",
+            setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:providerSummary)+L10n.text(.conversation,"composerControls.update.text"),
                 lightning:CodexServiceTier.hasLightning(settings.serviceTier),providerIcon:providerIcon)
-            let source = settings.effortFromHistory ? "推理强度来自会话记录。" : ""
-            var help = "沿用 Codex 原会话设置，当前只读。"+source
-            if let providerTitle {help += "\n供应商："+providerTitle}
-            help += "\n模型："+settings.model+"\n推理强度："+effort
-            if let tier = settings.serviceTier {help += "\n速度档位："+CodexServiceTier.displayName(tier)}
+            let source = settings.effortFromHistory ? L10n.text(.conversation,"composerControls.source") : ""
+            var help = L10n.text(.conversation,"composerControls.help")+source
+            if let providerTitle {help += L10n.text(.conversation,"composerControls.update.text.2")+providerTitle}
+            help += L10n.text(.conversation,"composerControls.update.text.3")+settings.model+L10n.text(.conversation,"composerControls.update.text.4")+effort
+            if let tier = settings.serviceTier {help += L10n.text(.conversation,"composerControls.update.text.5")+CodexServiceTier.displayName(tier)}
             hoverHelp = help
         } else {
-            setSummary(notice?.message ?? "正在读取 Codex 会话设置…",lightning:false)
+            setSummary(notice?.message ?? L10n.text(.conversation,"composerControls.update.text.6"),lightning:false)
             setHoverHelp(title) { [weak self] in self?.hasTruncatedTitle == true }
         }
-        setAccessibilityLabel("Codex 模型与推理强度，只读")
+        setAccessibilityLabel(L10n.text(.conversation,"composerControls.update.text.7"))
         setAccessibilityHelp(hoverHelp)
     }
 }
@@ -87,7 +87,7 @@ final class ChatReplyPreview: NSTextField {
         // 复用现有 Markdown 解析，仅生成显示摘要；历史仍保存原文。
         let plain = MarkdownText.render(markdown,font:font!).string.split(whereSeparator:{$0.isWhitespace}).joined(separator:" ")
         let excerpt = String(plain.prefix(180))+(plain.count > 180 ? "…" : "")
-        stringValue = excerpt.isEmpty ? "" : "最近回复："+excerpt
+        stringValue = excerpt.isEmpty ? "" : L10n.text(.conversation,"composerControls.update.text.8")+excerpt
         isHidden = excerpt.isEmpty
         let preview = plain.isEmpty ? nil : String(plain.prefix(200))+(plain.count > 200 ? "..." : "")
         let hasMore = plain.count > 180
@@ -114,7 +114,7 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
         focusRingType = .exterior; target = self; action = #selector(openDirectory)
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        setAccessibilityLabel("在访达中打开工作区")
+        setAccessibilityLabel(L10n.text(.workspace,"composerControls.text"))
         NotificationCenter.default.addObserver(self,selector:#selector(accentChanged),name:AppAccent.didChange,object:nil)
         update(path:"")
     }
@@ -122,7 +122,7 @@ final class WorkspaceLinkButton: NSButton,LinkCursorControl {
     @objc private func accentChanged() {needsDisplay = true}
     func update(path:String,displayName:String? = nil) {
         let color = path.isEmpty || !emphasizesLink ? NSColor.secondaryLabelColor : usesMonochromeLink ? .labelColor : AppAccent.foregroundColor
-        let text = path.isEmpty ? "未选择工作区" : displayName ?? (path as NSString).abbreviatingWithTildeInPath
+        let text = path.isEmpty ? L10n.text(.workspace,"composerControls.update.text") : displayName ?? (path as NSString).abbreviatingWithTildeInPath
         guard displayedPath != path || attributedTitle.string != text || attributedTitle.attribute(.foregroundColor,at:0,effectiveRange:nil) as? NSColor != color || attributedTitle.attribute(.font,at:0,effectiveRange:nil) as? NSFont != font else {return}
         displayedPath = path
         directory = path.isEmpty ? nil : URL(fileURLWithPath:path,isDirectory:true)

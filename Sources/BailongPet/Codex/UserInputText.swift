@@ -21,7 +21,7 @@ enum UserInputText {
                 let path = String(line[line.index(after:separator.lowerBound)...]).trimmingCharacters(in:.whitespaces)
                 let image = entry.components(separatedBy:"\n").contains("Image attachment: true")
                 if image {linkedImages += 1}
-                let name = image ? "图片" : URL(fileURLWithPath:path).lastPathComponent
+                let name = image ? L10n.text(.tasks,"userInputText.display.text") : URL(fileURLWithPath:path).lastPathComponent
                 let label = name.replacingOccurrences(of:"\\",with:"\\\\").replacingOccurrences(of:"[",with:"\\[").replacingOccurrences(of:"]",with:"\\]")
                 attachments.append("[\(label)](<\(URL(fileURLWithPath:path).absoluteString)>)")
             }
@@ -29,18 +29,18 @@ enum UserInputText {
                 text = body.trimmingCharacters(in:.whitespacesAndNewlines)
                 // 旧投影曾在完整包装末尾追加图片占位；已有同份图片链接时去掉该占位。
                 if linkedImages > 0 {
-                    let placeholder = linkedImages == 1 ? "[图片]" : "[图片 × \(linkedImages)]"
+                    let placeholder = linkedImages == 1 ? L10n.text(.tasks,"userInputText.placeholder") : L10n.format(.tasks,"userInputText.placeholder.2",String(describing:linkedImages))
                     if text == placeholder {text = ""}
                     else if text.hasSuffix("\n\n"+placeholder) {text.removeLast(2+placeholder.count)}
                 }
-                if attachments.isEmpty {attachments = ["[附件]"]}
+                if attachments.isEmpty {attachments = [L10n.text(.tasks,"userInputText.display.text.2")]}
             } else if !attachments.isEmpty {
                 // 包装尚未完整到达时只呈现已知附件，不把路径清单当用户提问。
                 text = ""
             }
         } else {
-            if images > 0 {attachments.append(images == 1 ? "[图片]" : "[图片 × \(images)]")}
-            if files > 0 {attachments.append(files == 1 ? "[附件]" : "[附件 × \(files)]")}
+            if images > 0 {attachments.append(images == 1 ? L10n.text(.tasks,"userInputText.placeholder") : L10n.format(.tasks,"userInputText.placeholder.2",String(describing:images)))}
+            if files > 0 {attachments.append(files == 1 ? L10n.text(.tasks,"userInputText.display.text.2") : L10n.format(.tasks,"userInputText.display.text.3",String(describing:files)))}
         }
         let body = limitBody && text.count > limit ? String(text.prefix(limit))+"…" : text
         return [body.trimmingCharacters(in:.whitespacesAndNewlines),attachments.joined(separator:"  ·  ")]

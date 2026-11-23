@@ -106,3 +106,7 @@
 "animation.work04.line" = "主人，让我翻翻资料，好答案就藏在这些书页里。";
 /* 放大镜查看细节 */
 "animation.work05.line" = "主人，让我仔细瞧瞧，小细节也逃不过龙娘的眼睛。";
+
+/* 应用接入补充 */
+"templateSyntax.aliases.text" = "{用户名}";
+"templateSyntax.aliases.text.2" = "{桌宠名}";

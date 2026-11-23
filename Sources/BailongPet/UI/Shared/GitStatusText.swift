@@ -10,9 +10,9 @@ enum GitStatusStyle:String,CaseIterable {
     }
     private var title:String {
         switch self {
-        case .bashGitPrompt:return "bash-git-prompt 符号风格"
-        case .powerlevel10k:return "Powerlevel10k 符号风格"
-        case .gitCLI:return "缩写字母风格"
+        case .bashGitPrompt:return L10n.text(.workspace,"gitStatusText.bashGitPrompt")
+        case .powerlevel10k:return L10n.text(.workspace,"gitStatusText.powerlevel10k")
+        case .gitCLI:return L10n.text(.workspace,"gitStatusText.gitCLI")
         }
     }
 }
@@ -35,22 +35,22 @@ enum GitStatusText {
         }
     }
     private static let groups:[(group:GitWorkspaceStatus.Group,indicator:Indicator)] = [
-        (.conflicted,Indicator("~","✖","C",GitWorkspaceStatus.Group.conflicted.rawValue,StatusTextColor.red)),
-        (.staged,Indicator("+","●","S",GitWorkspaceStatus.Group.staged.rawValue,StatusTextColor.green)),
-        (.unstaged,Indicator("!","✚","M",GitWorkspaceStatus.Group.unstaged.rawValue,StatusTextColor.orange)),
-        (.untracked,Indicator("?","…","?",GitWorkspaceStatus.Group.untracked.rawValue,.labelColor))
+        (.conflicted,Indicator("~","✖","C",GitWorkspaceStatus.Group.conflicted.title,StatusTextColor.red)),
+        (.staged,Indicator("+","●","S",GitWorkspaceStatus.Group.staged.title,StatusTextColor.green)),
+        (.unstaged,Indicator("!","✚","M",GitWorkspaceStatus.Group.unstaged.title,StatusTextColor.orange)),
+        (.untracked,Indicator("?","…","?",GitWorkspaceStatus.Group.untracked.title,.labelColor))
     ]
-    private static let clean = Indicator("✓","✔","✓","工作区干净",StatusTextColor.green)
+    private static let clean = Indicator("✓","✔","✓",L10n.text(.workspace,"gitStatusText.clean"),StatusTextColor.green)
     private static let stash = Indicator("*","⚑","SH",GitWorkspaceStatus.stashLabel,StatusTextColor.purple)
     private static let upstreamIndicators:[(indicator:Indicator,count:KeyPath<GitWorkspaceStatus,Int?>)] = [
-        (Indicator("⇣","↓","↓","落后上游",StatusTextColor.blue),\.behind),
-        (Indicator("⇡","↑","↑","领先上游",StatusTextColor.blue),\.ahead)
+        (Indicator("⇣","↓","↓",L10n.text(.workspace,"gitStatusText.upstreamIndicators.text"),StatusTextColor.blue),\.behind),
+        (Indicator("⇡","↑","↑",L10n.text(.workspace,"gitStatusText.upstreamIndicators.text.2"),StatusTextColor.blue),\.ahead)
     ]
     private static let pushIndicators:[(indicator:Indicator,count:KeyPath<GitWorkspaceStatus.PushTarget,Int?>)] = [
-        (Indicator("⇠","⇠","⇠","落后推送目标",StatusTextColor.blue),\.behind),
-        (Indicator("⇢","⇢","⇢","领先推送目标",StatusTextColor.blue),\.ahead)
+        (Indicator("⇠","⇠","⇠",L10n.text(.workspace,"gitStatusText.pushIndicators.text"),StatusTextColor.blue),\.behind),
+        (Indicator("⇢","⇢","⇢",L10n.text(.workspace,"gitStatusText.pushIndicators.text.2"),StatusTextColor.blue),\.ahead)
     ]
-    static let pushTitle = "推送目标 (Push Remote)"
+    static let pushTitle = L10n.text(.workspace,"gitStatusText.pushTitle.text")
 
     private static func inlineLegend(_ items:[Indicator],font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let text = NSMutableAttributedString()
@@ -85,7 +85,7 @@ enum GitStatusText {
     static let settingsRepositories: NSAttributedString = {
         let kinds:[GitWorkspaceStatus.RepositoryKind] = [.generic,.github,.remote]
         let repositories = kinds.map {kind in
-            let label = kind == .github ? kind.title+" 远端仓库" : kind.title
+            let label = kind == .github ? kind.title+L10n.text(.workspace,"gitStatusText.label.text") : kind.title
             let text = NSMutableAttributedString(attributedString:repositoryIcon(kind))
             text.append(repositoryLabel(" "+label))
             return text
@@ -96,7 +96,7 @@ enum GitStatusText {
         let rows = GitWorkspaceStatus.RepositoryKind.additionalRemotes.map {kind in
             [repositoryIcon(kind),repositoryLabel(kind.title)]
         }
-        return InlineStatusLayout.tabbedRows([[repositoryLabel("更多远端仓库图标：")]]+rows,
+        return InlineStatusLayout.tabbedRows([[repositoryLabel(L10n.text(.workspace,"gitStatusText.rows.text"))]]+rows,
                                              font:settingsLegendFont,columnGap:6,paragraphSpacing:2)
     }()
 
@@ -138,13 +138,13 @@ enum GitStatusText {
     }
     static func tracking(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle? = nil) -> NSAttributedString {
         let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
-        guard let upstream = status.upstream else {return NSAttributedString(string:"未设置",attributes:attributes)}
+        guard let upstream = status.upstream else {return NSAttributedString(string:L10n.text(.workspace,"gitStatusText.tracking.text"),attributes:attributes)}
         let text = NSMutableAttributedString(string:upstream,attributes:attributes)
         let counts = upstreamIndicators.compactMap {direction in
             status[keyPath:direction.count].map {(direction.indicator,$0)}
         }
         guard counts.count == upstreamIndicators.count else {
-            let state = status.initial ? "尚无本地提交" : "上游引用缺失"
+            let state = status.initial ? L10n.text(.workspace,"gitStatusText.state") : L10n.text(.workspace,"gitStatusText.state.2")
             text.append(NSAttributedString(string:" · "+state,attributes:attributes))
             return text
         }
@@ -153,7 +153,7 @@ enum GitStatusText {
     }
     static func push(_ target:GitWorkspaceStatus.PushTarget,font:NSFont,style:GitStatusStyle? = nil) -> NSAttributedString {
         let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
-        let destination = target.address.map {[$0.host,$0.repository].compactMap {$0}.joined(separator:"/")} ?? "多个推送地址"
+        let destination = target.address.map {[$0.host,$0.repository].compactMap {$0}.joined(separator:"/")} ?? L10n.text(.workspace,"gitStatusText.destination.text")
         let text = NSMutableAttributedString()
         if style != nil,let address = target.address {
             let icon = GitIcons.repository(target.kind)
@@ -180,7 +180,7 @@ enum GitStatusText {
     }
     static func stateDetails(_ status:GitWorkspaceStatus,font:NSFont,style:GitStatusStyle) -> NSAttributedString {
         let attributes:[NSAttributedString.Key:Any] = [.font:font,.foregroundColor:NSColor.labelColor]
-        let labels = [status.detachedSummary,status.initial ? "尚无提交记录" : nil,status.operation?.detailTitle]
+        let labels = [status.detachedSummary,status.initial ? L10n.text(.workspace,"gitStatusText.labels") : nil,status.operation?.detailTitle]
         let text = NSMutableAttributedString(string:labels.compactMap {$0}.joined(separator:" · "),attributes:attributes)
         if let stashSummary = status.stashSummary {
             if text.length > 0 {text.append(NSAttributedString(string:" · ",attributes:attributes))}

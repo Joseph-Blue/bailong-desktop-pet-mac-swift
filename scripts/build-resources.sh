@@ -1,7 +1,14 @@
 # 资源清单、下载和导入共用于 App 与开发入口。
 typeset -g bailong_resource_manifest="scripts/resource-manifest.json"
 typeset -g bailong_resource_tool=".build/resource-tools/BuildResources"
+typeset -g bailong_localization_dir="Resources/Localization"
+typeset -g bailong_info_strings="$bailong_localization_dir/zh-Hans.lproj/InfoPlist.strings"
 typeset -ga bailong_provider_icons=(Assets/ProviderIcons/{openai,deepseek,xai,mistral,kimi,zhipu,bailian,openrouter,groq,bedrock,vertexai}-logo.png)
+bailong_localize_info_plist() {
+    local permission_prompt
+    permission_prompt="$(/usr/bin/plutil -extract NSAppleEventsUsageDescription raw -o - "$bailong_info_strings")" || return
+    /usr/bin/plutil -insert NSAppleEventsUsageDescription -string "$permission_prompt" "$1"
+}
 bailong_prepare_resource_tool() {
     bailong_check_output .build/resource-tools
     mkdir -p .build/module-cache

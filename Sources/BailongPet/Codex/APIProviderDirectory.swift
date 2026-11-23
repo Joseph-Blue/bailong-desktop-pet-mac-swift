@@ -7,7 +7,7 @@ struct APIProviderIdentity: Equatable {
     let summaryName:String
     let pageURL:String?
 
-    var heading:String {"当前 API 供应商："+name}
+    var heading:String {L10n.text(.conversation,"apiProviderDirectory.apiProviderIdentity.text")+name}
 }
 
 enum APIProviderDirectory {
@@ -33,21 +33,21 @@ enum APIProviderDirectory {
         Entry(id:"mistral",aliases:["mistral"],hosts:["mistral.ai"],name:"Mistral AI",summaryName:"Mistral",
             pageURL:"https://admin.mistral.ai/organization/billing"),
         Entry(id:"kimi-cn",aliases:["kimi-cn","moonshot-cn"],hosts:["moonshot.cn"],
-            name:"Kimi（中国站）",summaryName:"Kimi CN",pageURL:"https://platform.kimi.com/console/pay"),
+            name:L10n.text(.conversation,"apiProviderDirectory.entry.name.3"),summaryName:"Kimi CN",pageURL:"https://platform.kimi.com/console/pay"),
         Entry(id:"kimi-global",aliases:["kimi-global","moonshot-global"],hosts:["moonshot.ai"],
-            name:"Kimi（国际站）",summaryName:"Kimi Global",pageURL:"https://platform.kimi.ai/console/account"),
+            name:L10n.text(.conversation,"apiProviderDirectory.entry.name.4"),summaryName:"Kimi Global",pageURL:"https://platform.kimi.ai/console/account"),
         Entry(id:"kimi",aliases:["kimi","moonshot"],hosts:[],name:"Kimi",summaryName:"Kimi",
             pageURL:nil),
         Entry(id:"zhipu-cn",aliases:["zhipu","zhipu-cn","bigmodel","glm"],hosts:["bigmodel.cn","zhipuai.cn"],
-            name:"智谱 GLM（中国站）",summaryName:"智谱 GLM",pageURL:"https://bigmodel.cn/finance-center/bill/expensebill/list"),
+            name:L10n.text(.conversation,"apiProviderDirectory.entry.name.5"),summaryName:L10n.text(.conversation,"apiProviderDirectory.entry.text.2"),pageURL:"https://bigmodel.cn/finance-center/bill/expensebill/list"),
         Entry(id:"zhipu-global",aliases:["zai","z-ai","zai-global","zhipu-global","glm-global"],hosts:["z.ai"],
-            name:"Z.AI GLM（国际站）",summaryName:"Z.AI",pageURL:"https://z.ai/manage-apikey/billing"),
+            name:L10n.text(.conversation,"apiProviderDirectory.entry.name.6"),summaryName:"Z.AI",pageURL:"https://z.ai/manage-apikey/billing"),
         Entry(id:"bailian-cn",aliases:["bailian-cn","bailian","dashscope","qwen-cn"],
             hosts:["cn-beijing.maas.aliyuncs.com","dashscope.aliyuncs.com"],
-            name:"阿里云百炼（北京）",summaryName:"百炼 CN",pageURL:"https://bailian.console.aliyun.com/"),
+            name:L10n.text(.conversation,"apiProviderDirectory.entry.name.7"),summaryName:L10n.text(.conversation,"apiProviderDirectory.entry.text.3"),pageURL:"https://bailian.console.aliyun.com/"),
         Entry(id:"bailian-global",aliases:["bailian-global","bailian-sg","dashscope-intl","qwen-global"],
             hosts:["ap-southeast-1.maas.aliyuncs.com","dashscope-intl.aliyuncs.com"],
-            name:"阿里云百炼（新加坡）",summaryName:"百炼 SG",pageURL:"https://modelstudio.console.alibabacloud.com/"),
+            name:L10n.text(.conversation,"apiProviderDirectory.entry.name.8"),summaryName:L10n.text(.conversation,"apiProviderDirectory.entry.text.4"),pageURL:"https://modelstudio.console.alibabacloud.com/"),
         Entry(id:"openrouter",aliases:["openrouter","open-router"],hosts:["openrouter.ai"],name:"OpenRouter",summaryName:"OpenRouter",
             pageURL:"https://openrouter.ai/settings/credits"),
         Entry(id:"groq",aliases:["groq"],hosts:["groq.com"],name:"Groq",summaryName:"Groq",

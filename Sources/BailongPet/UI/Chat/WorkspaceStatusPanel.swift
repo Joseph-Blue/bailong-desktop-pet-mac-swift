@@ -16,7 +16,7 @@ final class WorkspaceStatusPanel {
     var onShowRequested:() -> Void = {}
     var onHide:() -> Void = {}
     init() {
-        panel.title = "工作区状态条"; panel.isReleasedWhenClosed = false
+        panel.title = L10n.text(.workspace,"workspaceStatusPanel.title"); panel.isReleasedWhenClosed = false
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.hidesOnDeactivate = false; panel.level = .floating
         panel.becomesKeyOnlyIfNeeded = true; panel.isExcludedFromWindowsMenu = true

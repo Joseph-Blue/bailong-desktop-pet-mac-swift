@@ -22,11 +22,10 @@ final class GlassOpacitySlider: NSSlider {
 // 仅“称呼与个性”页使用；高亮是显示属性，偏好和剪贴板始终保留纯文本。
 enum SettingsTemplateTokens {
     struct Item {
-        let setting:String, name:String, keyEquivalent:String
+        let setting:String, name:String, token:String, keyEquivalent:String
         let color:NSColor
         let image:() -> NSImage?
-        var title:String {"插入"+name+"："}
-        var token:String {"{"+name+"}"}
+        var title:String {L10n.text(.settings,"settingsControls.item.text")+name+"："}
     }
     private static func ink(_ light:(CGFloat,CGFloat,CGFloat), _ dark:(CGFloat,CGFloat,CGFloat)) -> NSColor {
         NSColor(name:nil) {appearance in
@@ -35,11 +34,11 @@ enum SettingsTemplateTokens {
         }
     }
     static let items: [Item] = [
-        Item(setting:"ownerName",name:"用户名",keyEquivalent:"1",color:ink((0.48,0.22,0.62),(0.83,0.62,1)),
+        Item(setting:"ownerName",name:L10n.text(.settings,"settingsControls.ink.name"),token:TemplateSyntax.userName,keyEquivalent:"1",color:ink((0.48,0.22,0.62),(0.83,0.62,1)),
              image:{NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)}),
-        Item(setting:"petName",name:"桌宠名",keyEquivalent:"2",color:ink((0.62,0.27,0.02),(1,0.72,0.40)),
+        Item(setting:"petName",name:L10n.text(.settings,"settingsControls.ink.name.2"),token:TemplateSyntax.petName,keyEquivalent:"2",color:ink((0.62,0.27,0.02),(1,0.72,0.40)),
              image:{AppIcons.petAvatarTemplate}),
-        Item(setting:"customAddress",name:"特定称呼",keyEquivalent:"3",color:ink((0.12,0.34,0.68),(0.45,0.73,1)),
+        Item(setting:"customAddress",name:L10n.text(.settings,"identity.names.5"),token:TemplateSyntax.customAddress,keyEquivalent:"3",color:ink((0.12,0.34,0.68),(0.45,0.73,1)),
              image:{NSImage(systemSymbolName:"person.text.rectangle",accessibilityDescription:nil)})
     ]
     static func ranges(in text:String, apply:(NSRange,NSColor)->Void) {

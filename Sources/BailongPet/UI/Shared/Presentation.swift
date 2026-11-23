@@ -22,9 +22,9 @@ struct TaskAttention {
     var questions: [TaskQuestion] = []
     static func question(_ question: [String:Any]) -> TaskAttention {
         if question["isSecret"] as? Bool == true {
-            return TaskAttention(kind:.answer,body:"需要输入敏感信息，请前往处理。",isSensitive:true)
+            return TaskAttention(kind:.answer,body:L10n.text(.tasks,"presentation.question.text"),isSensitive:true)
         }
-        let prompt = question["question"] as? String ?? question["title"] as? String ?? "请补充信息。"
+        let prompt = question["question"] as? String ?? question["title"] as? String ?? L10n.text(.tasks,"presentation.prompt")
         let options = (question["options"] as? [Any] ?? []).compactMap {value -> TaskQuestionOption? in
             let object = value as? [String:Any]
             guard let title = value as? String ?? object?["label"] as? String else {return nil}
@@ -35,12 +35,12 @@ struct TaskAttention {
                 detail:object?["description"] as? String,
                 recommended:object?["recommended"] as? Bool == true || suffix != nil)
         }
-        return TaskAttention(kind:.answer,body:([prompt]+options.map {"• "+$0.title+($0.recommended ? "（推荐）" : "")+($0.detail.map {"："+$0} ?? "")}).joined(separator:"\n"),
+        return TaskAttention(kind:.answer,body:([prompt]+options.map {"• "+$0.title+($0.recommended ? L10n.text(.tasks,"presentation.suffixes") : "")+($0.detail.map {"："+$0} ?? "")}).joined(separator:"\n"),
             questions:[TaskQuestion(prompt:prompt,options:options,id:question["id"] as? String ?? "")])
     }
 
     static func approval(fileChange: Bool, reason: String?) -> TaskAttention {
-        let action = fileChange ? "等待批准文件修改。" : "等待批准执行操作。"
+        let action = fileChange ? L10n.text(.tasks,"presentation.action") : L10n.text(.tasks,"presentation.action.2")
         return TaskAttention(kind:.approval,body:[action,reason ?? ""].filter {!$0.isEmpty}.joined(separator:"\n"))
     }
 }
@@ -63,11 +63,11 @@ struct AppFailure {
     var openDesktop = false
     var statusSymbol:String? = nil
     static func animation(_ error: Error) -> AppFailure {
-        AppFailure(title:"这个动作暂时无法播放",message:"桌宠会保留当前画面。可以重试，或从菜单选择其他动作。",detail:error.localizedDescription)
+        AppFailure(title:L10n.text(.tasks,"presentation.animation.title"),message:L10n.text(.tasks,"presentation.animation.message"),detail:error.localizedDescription)
     }
     static func codex(_ raw: String) -> AppFailure {
         guard let error = CodexErrorMessage(raw) else {
-            return AppFailure(title:"Codex 任务未能完成",message:"Codex 未提供错误说明。",detail:raw)
+            return AppFailure(title:L10n.text(.tasks,"presentation.codex.title"),message:L10n.text(.tasks,"presentation.codex.message"),detail:raw)
         }
         return AppFailure(title:error.category == .network ? CodexErrorMessage.reconnectStopped : error.title,message:error.category == .network ? CodexErrorMessage.reconnectAdvice : error.body,detail:error.original,openDesktop:error.category == .writer || error.category == .localConnection,statusSymbol:error.symbol)
     }
@@ -75,7 +75,7 @@ struct AppFailure {
     func showDetails() {
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
         alert.setScrollableDetail(detail,size:NSSize(width:480,height:180))
-        alert.addButton(withTitle:"关闭"); alert.addButton(withTitle:"拷贝详情")
+        alert.addButton(withTitle:L10n.text(.tasks,"presentation.showDetails.button")); alert.addButton(withTitle:L10n.text(.tasks,"presentation.showDetails.button.2"))
         alert.applyAccent(primary:1,keyboardDefault:1)
         CopyFeedback.attach(to:alert.buttons[1]) {self.detail}
         alert.runModal()
@@ -104,16 +104,16 @@ struct QuotaOverview {
     var notice: String?
     var management:SubscriptionManagement = .personal
     var apiProvider:APIProviderIdentity? = nil
-    var usageHeading:String = "今日用量"
+    var usageHeading:String = L10n.text(.tasks,"presentation.usageHeading")
     var showsDeepSeekPricing: Bool {apiProvider?.catalogID == "deepseek"}
     func displayRows(at date:Date) -> [QuotaRow] {
         showsDeepSeekPricing ? rows + QuotaPresentation.deepSeekPricingRows(at:date) : rows
     }
     var subscriptionHeading: String {
         if let apiProvider {return apiProvider.heading}
-        if plan == "Free" {return "ChatGPT 免费用户"}
-        if management == .api || management == .bedrock || management == .gcp {return "计费方式 · "+plan}
-        return "ChatGPT 订阅 · "+plan
+        if plan == "Free" {return L10n.text(.tasks,"presentation.displayRows.text")}
+        if management == .api || management == .bedrock || management == .gcp {return L10n.text(.tasks,"presentation.displayRows.text.2")+plan}
+        return L10n.text(.tasks,"presentation.displayRows.text.3")+plan
     }
 }
 enum QuotaPresentation {
@@ -122,9 +122,9 @@ enum QuotaPresentation {
         "prolite":"Pro 100", "pro":"Pro 200", "promax":"Pro 500",
         "team":"Business Standard", "business":"Business Standard", "business_standard":"Business Standard", "self_serve_business":"Business Standard",
         "self_serve_business_prolite":"Business Premium", "business_premium":"Business Premium",
-        "self_serve_business_usage_based":"Business 按量计费", "business_usage_based":"Business 按量计费",
+        "self_serve_business_usage_based":L10n.text(.usage,"presentation.quotaPresentation.text"), "business_usage_based":L10n.text(.usage,"presentation.quotaPresentation.text"),
         "ent26":"Enterprise", "enterprise":"Enterprise", "hc":"Enterprise",
-        "enterprise_cbp_automation":"Enterprise（自动化）", "enterprise_cbp_usage_based":"Enterprise 按量计费",
+        "enterprise_cbp_automation":L10n.text(.usage,"presentation.quotaPresentation.text.2"), "enterprise_cbp_usage_based":L10n.text(.usage,"presentation.quotaPresentation.text.3"),
         "edu":"Edu", "education":"Edu", "edu_plus":"Edu Plus", "edu_pro":"Edu Pro",
         "sci":"Science", "sci_plus":"Science Plus"
     ]
@@ -149,24 +149,24 @@ enum QuotaPresentation {
     }
     static func plan(_ value: Any?, account: [String:Any]?) -> String {
         if let raw = rawPlan(value,account:account) {
-            return plans[raw] ?? (raw == "unknown" ? "套餐未识别" : "套餐："+raw)
+            return plans[raw] ?? (raw == "unknown" ? L10n.text(.usage,"presentation.plan.text") : L10n.text(.usage,"presentation.plan.text.2")+raw)
         }
         switch account?["type"] as? String {
-        case "apiKey": return "API 按量计费"
+        case "apiKey": return L10n.text(.usage,"presentation.plan.text.3")
         case "amazonBedrock": return "Amazon Bedrock"
         case "gcp": return "Google Cloud Vertex AI"
-        default: return "套餐信息暂不可用"
+        default: return L10n.text(.usage,"presentation.plan.text.6")
         }
     }
     static func resetDateText(_ date: Date) -> String {
-        "重置："+date.formatted(date:.abbreviated,time:.shortened).replacingOccurrences(of:"日 ",with:"日")
+        L10n.text(.usage,"presentation.resetDateText.text")+date.formatted(date:.abbreviated,time:.shortened).replacingOccurrences(of:"日 ",with:"日")
     }
     static func countdown(until date: Date, now: Date = Date()) -> String {
         let remaining = date.timeIntervalSince(now)
-        if remaining < 60 {return "<1分钟"}
+        if remaining < 60 {return L10n.text(.usage,"presentation.countdown.text")}
         let totalMinutes = Int(remaining/60)
         let days = totalMinutes/1440, hours = (totalMinutes%1440)/60, minutes = totalMinutes%60
-        return [days > 0 ? "\(days)天" : nil,hours > 0 ? "\(hours)小时" : nil,minutes > 0 ? "\(minutes)分钟" : nil]
+        return [days > 0 ? L10n.format(.usage,"presentation.countdown.text.2",String(describing:days)) : nil,hours > 0 ? L10n.format(.usage,"presentation.countdown.text.3",String(describing:hours)) : nil,minutes > 0 ? L10n.format(.usage,"presentation.countdown.text.4",String(describing:minutes)) : nil]
             .compactMap {$0}.joined()
     }
     static func reset(_ value: Any?, now: Date = Date()) -> String? {
@@ -175,19 +175,19 @@ enum QuotaPresentation {
         return resetDateText(date)+"\t"+countdown(until:date,now:now)
     }
     private static func periodTitle(minutes: Double?, role: String, monthlyOnly: Bool) -> String {
-        if monthlyOnly {return "30 天额度"}
-        guard let minutes, minutes > 0 else {return role == "primary" ? "主要额度" : "次要额度"}
+        if monthlyOnly {return L10n.text(.usage,"presentation.periodTitle.text")}
+        guard let minutes, minutes > 0 else {return role == "primary" ? L10n.text(.usage,"presentation.periodTitle.text.2") : L10n.text(.usage,"presentation.periodTitle.text.3")}
         if abs(minutes-43200) <= 2160 {
-            return minutes.truncatingRemainder(dividingBy:1440) == 0 ? String(format:"%.0f 天额度",minutes/1440) : "30 天额度"
+            return minutes.truncatingRemainder(dividingBy:1440) == 0 ? String(format:L10n.text(.usage,"presentation.periodTitle.text.4"),minutes/1440) : L10n.text(.usage,"presentation.periodTitle.text")
         }
-        if abs(minutes-10080) <= 1 {return "周额度"}
+        if abs(minutes-10080) <= 1 {return L10n.text(.usage,"presentation.periodTitle.text.5")}
         if minutes >= 1440 && minutes.truncatingRemainder(dividingBy:1440) == 0 {
-            return String(format:"%.0f 天额度",minutes/1440)
+            return String(format:L10n.text(.usage,"presentation.periodTitle.text.4"),minutes/1440)
         }
         if minutes.truncatingRemainder(dividingBy:60) == 0 {
-            return String(format:"%.0f 小时额度",minutes/60)
+            return String(format:L10n.text(.usage,"presentation.periodTitle.text.6"),minutes/60)
         }
-        return String(format:"%.0f 分钟额度",minutes)
+        return String(format:L10n.text(.usage,"presentation.periodTitle.text.7"),minutes)
     }
     static func overview(_ value: [String:Any], account: [String:Any]?, now: Date = Date()) -> QuotaOverview {
         let map = value["rateLimitsByLimitId"] as? [String:[String:Any]] ?? [:]
@@ -200,7 +200,7 @@ enum QuotaPresentation {
         var creditNotes = [String]()
         result.management = .forAccount(account,plan:result.plan)
         for (index,bucket) in buckets.enumerated() {
-            let name = string(bucket["limitName"]) ?? string(bucket["limitId"]) ?? "额度组 \(index+1)"
+            let name = string(bucket["limitName"]) ?? string(bucket["limitId"]) ?? L10n.format(.usage,"presentation.overview.text",String(describing:index+1))
             let prefix = buckets.count > 1 ? name+" · " : ""
             let before = result.rows.count
             let bucketRawPlan = rawPlan(bucket["planType"],account:account) ?? resolvedPlan
@@ -216,63 +216,63 @@ enum QuotaPresentation {
                 let period = periodTitle(minutes:number(window["windowDurationMins"]),role:key,monthlyOnly:monthlyOnly)
                 let remaining = number(window["usedPercent"]).map {max(0,min(100,100-$0))}
                 let resetDate = number(window["resetsAt"]).map {Date(timeIntervalSince1970:$0)}
-                result.rows.append(QuotaRow(title:prefix+period,value:remaining.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供",detail:resetDate == nil ? "重置时间暂未提供" : nil,remaining:remaining,resetsAt:resetDate))
+                result.rows.append(QuotaRow(title:prefix+period,value:remaining.map {String(format:L10n.text(.usage,"presentation.overview.text.2"),$0)} ?? L10n.text(.usage,"presentation.overview.text.3"),detail:resetDate == nil ? L10n.text(.usage,"presentation.overview.text.4") : nil,remaining:remaining,resetsAt:resetDate))
             }
             if let limit = bucket["individualLimit"] as? [String:Any] {
                 let remaining = number(limit["remainingPercent"]).map {max(0,min(100,$0))}
-                let amounts = [string(limit["used"]).map {"已用 "+$0},string(limit["limit"]).map {"上限 "+$0}].compactMap {$0}.joined(separator:" / ")
+                let amounts = [string(limit["used"]).map {L10n.text(.usage,"presentation.overview.text.5")+$0},string(limit["limit"]).map {L10n.text(.usage,"presentation.overview.text.6")+$0}].compactMap {$0}.joined(separator:" / ")
                 let resetDate = number(limit["resetsAt"]).map {Date(timeIntervalSince1970:$0)}
-                result.rows.append(QuotaRow(title:prefix+"个人使用限额",value:remaining.map {String(format:"剩余 %.0f%%",$0)} ?? "暂未提供",detail:amounts.isEmpty ? nil : amounts,remaining:remaining,resetsAt:resetDate))
+                result.rows.append(QuotaRow(title:prefix+L10n.text(.usage,"presentation.overview.text.7"),value:remaining.map {String(format:L10n.text(.usage,"presentation.overview.text.2"),$0)} ?? L10n.text(.usage,"presentation.overview.text.3"),detail:amounts.isEmpty ? nil : amounts,remaining:remaining,resetsAt:resetDate))
             }
             if let credits = bucket["credits"] as? [String:Any] {
                 let unlimited = credits["unlimited"] as? Bool == true
                 let balance = string(credits["balance"])
-                let amount = unlimited ? "不限额" : balance.map {"剩余 "+$0} ?? (credits["hasCredits"] as? Bool == false ? "无可用点数" : "余额暂未提供")
-                creditNotes.append(prefix+"可用点数 · "+amount)
+                let amount = unlimited ? L10n.text(.usage,"presentation.amount") : balance.map {L10n.text(.usage,"presentation.overview.text.8")+$0} ?? (credits["hasCredits"] as? Bool == false ? L10n.text(.usage,"presentation.overview.text.9") : L10n.text(.usage,"presentation.overview.text.10"))
+                creditNotes.append(prefix+L10n.text(.usage,"presentation.overview.text.11")+amount)
             }
             if result.rows.count == before,bucket["credits"] as? [String:Any] == nil {
-                result.rows.append(QuotaRow(title:prefix+"使用额度",value:"暂未提供",detail:"服务未返回额度窗口或点数信息。",remaining:nil))
+                result.rows.append(QuotaRow(title:prefix+L10n.text(.usage,"presentation.overview.text.12"),value:L10n.text(.usage,"presentation.overview.text.3"),detail:L10n.text(.usage,"presentation.overview.text.13"),remaining:nil))
             }
-            if bucket["spendControlReached"] as? Bool == true {result.notice = "已达到工作区设置的使用限额。"}
-            else if string(bucket["rateLimitReachedType"]) != nil {result.notice = "服务报告当前已达到使用限制。"}
+            if bucket["spendControlReached"] as? Bool == true {result.notice = L10n.text(.usage,"presentation.overview.text.14")}
+            else if string(bucket["rateLimitReachedType"]) != nil {result.notice = L10n.text(.usage,"presentation.overview.text.15")}
         }
-        if result.rows.isEmpty && creditNotes.isEmpty {result.rows = [QuotaRow(title:"使用额度",value:"暂未提供",detail:emptyMessage(account),remaining:nil)]}
+        if result.rows.isEmpty && creditNotes.isEmpty {result.rows = [QuotaRow(title:L10n.text(.usage,"presentation.overview.text.12"),value:L10n.text(.usage,"presentation.overview.text.3"),detail:emptyMessage(account),remaining:nil)]}
         let cards = QuotaResetCards(value)
         let hidesEmptyResetCards = isFreeOrGo || [.api,.bedrock,.gcp].contains(result.management)
         if !hidesEmptyResetCards || (cards.availableCount ?? 0) > 0 || !creditNotes.isEmpty {
-            result.rows.append(QuotaRow(title:"额度重置卡",value:cards.amount,detail:cards.detail,remaining:nil,footnote:creditNotes.isEmpty ? nil : creditNotes.joined(separator:"\n")))
+            result.rows.append(QuotaRow(title:L10n.text(.usage,"presentation.overview.title"),value:cards.amount,detail:cards.detail,remaining:nil,footnote:creditNotes.isEmpty ? nil : creditNotes.joined(separator:"\n")))
         }
-        if value["ordinaryUsageAllowed"] as? Bool == false {result.notice = "服务当前未允许使用包含额度。"}
+        if value["ordinaryUsageAllowed"] as? Bool == false {result.notice = L10n.text(.usage,"presentation.overview.text.16")}
         return result
     }
     static func emptyMessage(_ account: [String:Any]?) -> String {
         switch account?["type"] as? String {
-        case "apiKey": return "API 按量计费，不使用 ChatGPT 订阅额度。"
-        case "amazonBedrock","gcp": return "请在对应云服务中查看计费和使用限额。"
-        default: return "服务未返回额度信息；这不表示剩余额度为零或不限额。"
+        case "apiKey": return L10n.text(.usage,"presentation.emptyMessage.text")
+        case "amazonBedrock","gcp": return L10n.text(.usage,"presentation.emptyMessage.text.2")
+        default: return L10n.text(.usage,"presentation.emptyMessage.text.3")
         }
     }
     static func unavailable(account: [String:Any]?) -> QuotaOverview {
-        QuotaOverview(plan:plan(nil,account:account),rows:[QuotaRow(title:"使用额度",value:"暂时无法获取",detail:emptyMessage(account),remaining:nil)],notice:nil,management:.forAccount(account,plan:plan(nil,account:account)))
+        QuotaOverview(plan:plan(nil,account:account),rows:[QuotaRow(title:L10n.text(.usage,"presentation.overview.text.12"),value:L10n.text(.usage,"presentation.unavailable.text"),detail:emptyMessage(account),remaining:nil)],notice:nil,management:.forAccount(account,plan:plan(nil,account:account)))
     }
     static func api(_ provider:APIProviderIdentity,usage:DailyTokenUsage) -> QuotaOverview {
         let rows = [
-            QuotaRow(title:"当前 API 今日用量",value:usage.value,detail:usage.detail,remaining:nil,
-                retry:usage.failed,wrapsValue:true,loading:usage.isLoading,usage:usage.usage,subtitle:"（本机日志）")
+            QuotaRow(title:L10n.text(.usage,"presentation.api.title"),value:usage.value,detail:usage.detail,remaining:nil,
+                retry:usage.failed,wrapsValue:true,loading:usage.isLoading,usage:usage.usage,subtitle:L10n.text(.usage,"presentation.api.subtitle"))
         ]
-        return QuotaOverview(plan:provider.name,rows:rows,apiProvider:provider,usageHeading:"当前 API 今日用量")
+        return QuotaOverview(plan:provider.name,rows:rows,apiProvider:provider,usageHeading:L10n.text(.usage,"presentation.api.title"))
     }
     static func deepSeekPricingRows(at date:Date = Date()) -> [QuotaRow] {
         guard let pricing = DeepSeekPricing.snapshot(at:date) else {
-            return [QuotaRow(title:"峰谷定价",value:"时段未提供",detail:nil,remaining:nil)]
+            return [QuotaRow(title:L10n.text(.usage,"presentation.deepSeekPricingRows.title"),value:L10n.text(.usage,"presentation.deepSeekPricingRows.text"),detail:nil,remaining:nil)]
         }
-        var rows = [QuotaRow(title:"峰谷定价",value:pricing.title,detail:nil,remaining:nil,
+        var rows = [QuotaRow(title:L10n.text(.usage,"presentation.deepSeekPricingRows.title"),value:pricing.title,detail:nil,remaining:nil,
             tone:pricing.period == .peak ? .negative : .positive)]
         if let next = pricing.next {
             let nextPeriod:DeepSeekPricing.Period = pricing.period == .peak ? .offPeak : .peak
-            rows.append(QuotaRow(title:"下一个"+nextPeriod.title,value:DeepSeekPricing.timestamp(next),
+            rows.append(QuotaRow(title:L10n.text(.usage,"presentation.deepSeekPricingRows.title.2")+nextPeriod.title,value:DeepSeekPricing.timestamp(next),
                 detail:nil,remaining:nil,startsSection:false))
-            rows.append(QuotaRow(title:"距切换还有",value:DeepSeekPricing.countdown(until:next,now:date),
+            rows.append(QuotaRow(title:L10n.text(.usage,"presentation.deepSeekPricingRows.title.3"),value:DeepSeekPricing.countdown(until:next,now:date),
                 detail:nil,remaining:nil,startsSection:false,countdownTarget:next))
         }
         return rows

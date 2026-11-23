@@ -60,17 +60,17 @@ enum WorkspaceFileMenu {
         let menu = NSMenu()
         if let path {
             if let reveal {
-                let item = MenuAction("在访达中显示",reveal)
+                let item = MenuAction(L10n.text(.workspace,"workspaceFileActions.make.menuItem"),reveal)
                 let finder = AppIcons.finder.copy() as! NSImage; finder.size = NSSize(width:16,height:16)
                 item.image = finder; menu.addItem(item)
             }
-            menu.addItem(MenuAction("拷贝文件路径",symbol:"doc.on.doc") {copyPaths(path)})
+            menu.addItem(MenuAction(L10n.text(.workspace,"workspaceFileActions.make.menuItem.2"),symbol:"doc.on.doc") {copyPaths(path)})
             menu.addItem(.separator())
         }
         if let groupPaths {
-            menu.addItem(MenuAction("拷贝本组文件路径",symbol:"doc.on.clipboard") {copyFilePaths(groupPaths())})
+            menu.addItem(MenuAction(L10n.text(.workspace,"workspaceFileActions.make.menuItem.3"),symbol:"doc.on.clipboard") {copyFilePaths(groupPaths())})
         }
-        menu.addItem(MenuAction("拷贝所有文件路径",symbol:"list.bullet.clipboard") {copyFilePaths(allPaths())})
+        menu.addItem(MenuAction(L10n.text(.workspace,"workspaceFileActions.make.menuItem.4"),symbol:"list.bullet.clipboard") {copyFilePaths(allPaths())})
         menu.showProvidedImages()
         return menu
     }

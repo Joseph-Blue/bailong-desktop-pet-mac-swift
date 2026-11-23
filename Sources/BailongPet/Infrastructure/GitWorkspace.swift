@@ -20,19 +20,54 @@ struct GitWorkspaceStatus:Equatable {
 
         var title:String {
             switch self {
-            case .generic: return "通用 Git 仓库"
+            case .generic: return L10n.text(.workspace,"gitStatusText.generic")
             case .github: return "GitHub"
             case .gitlab: return "GitLab"
             case .gitee: return "Gitee"
             case .gitea: return "Gitea"
             case .forgejo: return "Forgejo"
             case .huggingFace: return "Hugging Face"
-            case .remote: return "其他远端仓库"
+            case .remote: return L10n.text(.workspace,"gitStatusText.remote")
             }
         }
     }
-    enum Group:String,CaseIterable {case conflicted = "冲突", staged = "已暂存", unstaged = "未暂存", untracked = "未跟踪"}
-    struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:String}
+    enum Group:CaseIterable {
+        case conflicted, staged, unstaged, untracked
+        var title:String {
+            switch self {
+            case .conflicted:return L10n.text(.workspace,"gitWorkspace.conflicted")
+            case .staged:return L10n.text(.workspace,"gitWorkspace.conflicted.2")
+            case .unstaged:return L10n.text(.workspace,"gitWorkspace.conflicted.3")
+            case .untracked:return L10n.text(.workspace,"gitWorkspace.conflicted.4")
+            }
+        }
+    }
+    enum Change:Equatable {
+        case added, deleted, renamed, copied, typeChanged, submodule, modified, conflict(String)
+        var title:String {
+            switch self {
+            case .added:return L10n.text(.workspace,"gitWorkspace.change.text")
+            case .deleted:return L10n.text(.workspace,"gitWorkspace.change.text.2")
+            case .renamed:return L10n.text(.workspace,"gitWorkspace.change.text.3")
+            case .copied:return L10n.text(.workspace,"gitWorkspace.change.text.4")
+            case .typeChanged:return L10n.text(.workspace,"gitWorkspace.change.text.5")
+            case .submodule:return L10n.text(.workspace,"gitWorkspace.change.text.7")
+            case .modified:return L10n.text(.workspace,"gitWorkspace.change.text.6")
+            case .conflict(let code):
+                switch code {
+                case "DD":return L10n.text(.workspace,"gitWorkspace.changes")
+                case "AU":return L10n.text(.workspace,"gitWorkspace.changes.2")
+                case "UD":return L10n.text(.workspace,"gitWorkspace.changes.3")
+                case "UA":return L10n.text(.workspace,"gitWorkspace.changes.4")
+                case "DU":return L10n.text(.workspace,"gitWorkspace.changes.5")
+                case "AA":return L10n.text(.workspace,"gitWorkspace.changes.6")
+                case "UU":return L10n.text(.workspace,"gitWorkspace.changes.7")
+                default:return Group.conflicted.title
+                }
+            }
+        }
+    }
+    struct Entry:Equatable {let path:String, originalPath:String?, group:Group, change:Change}
     struct Operation:Equatable {
         let compactTitle:String, detailTitle:String
         init(_ compactTitle:String, detailTitle:String? = nil) {
@@ -102,9 +137,9 @@ struct GitWorkspaceStatus:Equatable {
     }
     var counts:[Group:Int] {entries.reduce(into:[:]) {$0[$1.group,default:0] += 1}}
     var clean:Bool {entries.isEmpty}
-    static let stashLabel = "贮藏 (Stash)"
-    var stashSummary:String? {stashes > 0 ? "\(Self.stashLabel) \(stashes) 条" : nil}
-    var detachedSummary:String? {detached ? "当前不在任何分支上 (Detached HEAD)" : nil}
+    static let stashLabel = L10n.text(.workspace,"gitWorkspace.stashLabel")
+    var stashSummary:String? {stashes > 0 ? L10n.format(.workspace,"gitWorkspace.text",String(describing:Self.stashLabel),String(describing:stashes)) : nil}
+    var detachedSummary:String? {detached ? L10n.text(.workspace,"gitWorkspace.text.2") : nil}
     var title:String {
         guard detached else {return branch}
         if let tag {return "#"+tag}
@@ -112,15 +147,15 @@ struct GitWorkspaceStatus:Equatable {
     }
     var summary:String {
         let counts = counts
-        var parts = Group.allCases.compactMap {group in counts[group].map {group.rawValue+" \($0) 项"}}
-        if parts.isEmpty {parts.append("工作区干净")}
+        var parts = Group.allCases.compactMap {group in counts[group].map {group.title+L10n.format(.workspace,"gitWorkspace.text.3",String(describing:$0))}}
+        if parts.isEmpty {parts.append(L10n.text(.workspace,"gitWorkspace.text.4"))}
         if let stashSummary {parts.append(stashSummary)}
         return parts.joined(separator:" · ")
     }
     static func parse(_ data:Data) throws -> Self {
         var result = Self(), fields = data.split(separator:0,omittingEmptySubsequences:true).makeIterator()
-        func change(_ code:Character) -> String {
-            switch code {case "A":return "新增"; case "D":return "删除"; case "R":return "重命名"; case "C":return "复制"; case "T":return "类型变化"; default:return "修改"}
+        func change(_ code:Character) -> Change {
+            switch code {case "A":return .added; case "D":return .deleted; case "R":return .renamed; case "C":return .copied; case "T":return .typeChanged; default:return .modified}
         }
         while let field = fields.next() {
             let record = String(decoding:field,as:UTF8.self)
@@ -134,36 +169,35 @@ struct GitWorkspaceStatus:Equatable {
                 case "branch.upstream":result.upstream = value
                 case "branch.ab":
                     let pair = value.split(separator:" ")
-                    guard pair.count == 2,let ahead = Int(pair[0]),let behind = Int(pair[1]) else {throw GitWorkspaceFailure("Git 分支计数格式无效。")}
+                    guard pair.count == 2,let ahead = Int(pair[0]),let behind = Int(pair[1]) else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.change.error"))}
                     result.ahead = ahead; result.behind = abs(behind)
                 case "stash":result.stashes = Int(value) ?? 0
                 default:break
                 }
                 continue
             }
-            if record.hasPrefix("? ") {result.entries.append(Entry(path:String(record.dropFirst(2)),originalPath:nil,group:.untracked,change:"新增")); continue}
+            if record.hasPrefix("? ") {result.entries.append(Entry(path:String(record.dropFirst(2)),originalPath:nil,group:.untracked,change:.added)); continue}
             let kind = record.first, limit = kind == "1" ? 8 : kind == "2" ? 9 : kind == "u" ? 10 : 0
-            guard limit > 0 else {throw GitWorkspaceFailure("Git 文件状态格式无效。")}
+            guard limit > 0 else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.change.error.2"))}
             let parts = record.split(separator:" ",maxSplits:limit,omittingEmptySubsequences:false)
-            guard parts.count == limit+1,parts[1].count == 2 else {throw GitWorkspaceFailure("Git 文件状态不完整。")}
+            guard parts.count == limit+1,parts[1].count == 2 else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.change.error.3"))}
             let path = String(parts[limit]), xy = Array(parts[1])
             var original:String?
             if kind == "2" {
-                guard let old = fields.next() else {throw GitWorkspaceFailure("Git 重命名记录缺少原路径。")}
+                guard let old = fields.next() else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.change.error.4"))}
                 original = String(decoding:old,as:UTF8.self)
             }
             if kind == "u" {
-                let changes = ["DD":"双方删除","AU":"本地新增","UD":"本地修改／对方删除","UA":"对方新增","DU":"本地删除／对方修改","AA":"双方新增","UU":"双方修改"]
-                result.entries.append(Entry(path:path,originalPath:original,group:.conflicted,change:changes[String(parts[1])] ?? "冲突")); continue
+                result.entries.append(Entry(path:path,originalPath:original,group:.conflicted,change:.conflict(String(parts[1])))); continue
             }
             if xy[0] != "." {result.entries.append(Entry(path:path,originalPath:original,group:.staged,change:change(xy[0])))}
             if xy[1] != "." {result.entries.append(Entry(path:path,originalPath:original,group:.unstaged,change:change(xy[1])))}
             // 子模块自身的修改／未跟踪内容也属于当前工作树的变化。
             if xy[1] == ".",parts[2].hasPrefix("S"),parts[2].dropFirst().contains(where:{$0 != "."}) {
-                result.entries.append(Entry(path:path,originalPath:nil,group:.unstaged,change:"子模块变化"))
+                result.entries.append(Entry(path:path,originalPath:nil,group:.unstaged,change:.submodule))
             }
         }
-        guard !result.branch.isEmpty else {throw GitWorkspaceFailure("Git 未返回当前分支。")}
+        guard !result.branch.isEmpty else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.change.error.5"))}
         return result
     }
 }
@@ -216,11 +250,11 @@ final class GitWorkspaceRequest {
         task.waitUntilExit()
         lock.lock(); let wasCancelled = cancelled, wasTimedOut = timedOut; lock.unlock()
         if wasCancelled {throw CancellationError()}
-        if wasTimedOut {throw GitWorkspaceFailure("Git 状态查询超时，点击重试。")}
-        if exceeded {throw GitWorkspaceFailure("Git 状态超过 8 MiB，无法显示完整文件列表。")}
+        if wasTimedOut {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.run.error"))}
+        if exceeded {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.run.error.2"))}
         if task.terminationStatus != 0 && !(optional && task.terminationStatus == 1) {
             let message = String(decoding:data,as:UTF8.self).trimmingCharacters(in:.whitespacesAndNewlines)
-            throw GitWorkspaceFailure(message.isEmpty ? "Git 查询失败（\(task.terminationStatus)）。" : message)
+            throw GitWorkspaceFailure(message.isEmpty ? L10n.format(.workspace,"gitWorkspace.run.error.3",String(describing:task.terminationStatus)) : message)
         }
         return (task.terminationStatus,data)
     }
@@ -234,7 +268,7 @@ final class GitWorkspaceRequest {
     func read(directory:String) throws -> GitWorkspaceStatus? {
         // 明确区分普通目录和查询失败，错误不能显示成干净。
         var isDirectory:ObjCBool = false
-        guard FileManager.default.fileExists(atPath:directory,isDirectory:&isDirectory),isDirectory.boolValue else {throw GitWorkspaceFailure("工作区目录不存在或无法访问。")}
+        guard FileManager.default.fileExists(atPath:directory,isDirectory:&isDirectory),isDirectory.boolValue else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.read.error"))}
         var cursor = URL(fileURLWithPath:directory,isDirectory:true).standardizedFileURL.resolvingSymlinksInPath()
         var found = false
         while cursor.path != "/" {
@@ -282,7 +316,7 @@ final class GitWorkspaceRequest {
             let output = try gitString(directory,options+["for-each-ref","--count=1","--format=\(format)","--",localRef])!
             guard !output.isEmpty else {return nil}
             let fields = output.split(separator:"\0",omittingEmptySubsequences:false).map(String.init)
-            guard fields.count == 6 else {throw GitWorkspaceFailure("Git 推送引用格式无效。")}
+            guard fields.count == 6 else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.fields.text"))}
             guard fields[0] == localRef else {return nil}
             return (fields[1],fields[2],fields[3],fields[4],fields[5])
         }
@@ -321,7 +355,7 @@ final class GitWorkspaceRequest {
                 let counts = try gitString(directory,["rev-list","--left-right","--count",status.commit+"..."+trackedCommit,"--"])!
                     .split(whereSeparator:\.isWhitespace)
                 guard counts.count == 2,let left = Int(counts[0]),let right = Int(counts[1]) else {
-                    throw GitWorkspaceFailure("Git 推送分支计数格式无效。")
+                    throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.right.text"))
                 }
                 ahead = left; behind = right
             }
@@ -341,7 +375,7 @@ final class GitWorkspaceRequest {
                 return nil
             }
         }
-        if exists("rebase-apply/applying") {return .init("应用补丁中")}
+        if exists("rebase-apply/applying") {return .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text"))}
         let progressPaths:(current:String,total:String)
         if exists("rebase-apply") {
             progressPaths = ("rebase-apply/next","rebase-apply/last")
@@ -349,19 +383,19 @@ final class GitWorkspaceRequest {
             progressPaths = ("rebase-merge/msgnum","rebase-merge/end")
         } else {
             let markers:[(path:String, operation:GitWorkspaceStatus.Operation)] = [
-                ("MERGE_HEAD", .init("合并中")),
-                ("CHERRY_PICK_HEAD", .init("拣选中", detailTitle:"拣选提交 (Cherry-pick) 进行中")),
-                ("REVERT_HEAD", .init("还原中", detailTitle:"撤销提交改动 (Revert) 进行中")),
-                ("BISECT_LOG", .init("二分查找中"))
+                ("MERGE_HEAD", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.2"))),
+                ("CHERRY_PICK_HEAD", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.3"), detailTitle:L10n.text(.workspace,"gitWorkspace.rebaseStep.text.4"))),
+                ("REVERT_HEAD", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.5"), detailTitle:L10n.text(.workspace,"gitWorkspace.rebaseStep.text.6"))),
+                ("BISECT_LOG", .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.7")))
             ]
             return markers.first {exists($0.path)}?.operation
         }
         if let current = try rebaseStep(progressPaths.current), let total = try rebaseStep(progressPaths.total),
            current > 0, current <= total {
             let progress = "\(current)/\(total)"
-            return .init("变基中 \(progress)", detailTitle:"变基 (Rebase) \(progress)")
+            return .init(L10n.format(.workspace,"gitWorkspace.rebaseStep.text.8",String(describing:progress)), detailTitle:L10n.format(.workspace,"gitWorkspace.rebaseStep.text.9",String(describing:progress)))
         }
-        return .init("变基中", detailTitle:"变基 (Rebase) 进行中")
+        return .init(L10n.text(.workspace,"gitWorkspace.rebaseStep.text.10"), detailTitle:L10n.text(.workspace,"gitWorkspace.rebaseStep.text.11"))
     }
     func start(directory:String,completion:@escaping (Result<GitWorkspaceStatus?,Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async { [self] in

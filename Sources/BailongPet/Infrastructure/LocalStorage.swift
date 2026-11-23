@@ -22,7 +22,7 @@ enum LocalStorage {
         if own.isSymbolicLink == true {return 0}
         if own.isDirectory != true {return Int64(own.fileSize ?? 0)}
         var failure: Error?, bytes:Int64 = 0
-        guard let files = manager.enumerator(at:url,includingPropertiesForKeys:Array(keys),options:[],errorHandler:{_,error in failure = error; return false}) else {throw PetFailure(message:"无法读取目录："+url.path)}
+        guard let files = manager.enumerator(at:url,includingPropertiesForKeys:Array(keys),options:[],errorHandler:{_,error in failure = error; return false}) else {throw PetFailure(message:L10n.text(.diagnostics,"localStorage.size.message")+url.path)}
         for case let child as URL in files {
             let values = try child.resourceValues(forKeys:keys)
             if values.isSymbolicLink == true {files.skipDescendants(); continue}
@@ -44,7 +44,7 @@ enum LocalStorage {
         let manager = FileManager.default, directory = workspace
         guard manager.fileExists(atPath:directory.path) else {return}
         let values = try directory.resourceValues(forKeys:[.isDirectoryKey,.isSymbolicLinkKey])
-        guard values.isDirectory == true,values.isSymbolicLink != true else {throw PetFailure(message:"内置 Workspace 已被替换，未执行清理。")}
+        guard values.isDirectory == true,values.isSymbolicLink != true else {throw PetFailure(message:L10n.text(.diagnostics,"localStorage.clearBuiltInWorkspace.message"))}
         for child in try manager.contentsOfDirectory(at:directory,includingPropertiesForKeys:nil) {
             try moveToTrash(child)
         }

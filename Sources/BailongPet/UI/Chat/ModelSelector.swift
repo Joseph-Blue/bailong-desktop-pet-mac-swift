@@ -10,18 +10,18 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
         popover.delegate = self
         image = NSImage(systemSymbolName:"chevron.down",accessibilityDescription:nil); imagePosition = .imageTrailing
         target = self; action = #selector(openChoices)
-        setAccessibilityLabel("选择模型与推理强度")
+        setAccessibilityLabel(L10n.text(.conversation,"modelSelector.text"))
         NotificationCenter.default.addObserver(self,selector:#selector(updateTitle),name:ChatModelSettings.changed,object:settings)
         updateTitle()
     }
     required init?(coder:NSCoder) {fatalError()}
     @objc private func updateTitle() {
-        let summary = ModelPresentation.summary(model:settings.currentModelID ?? "未获取模型",displayName:settings.currentModel?.displayName,
+        let summary = ModelPresentation.summary(model:settings.currentModelID ?? L10n.text(.conversation,"modelSelector.summary"),displayName:settings.currentModel?.displayName,
             effort:settings.effortTitle,provider:settings.summaryProvider)
         let fastMode = settings.fastMode
         let changed = setSummary(summary,lightning:fastMode,providerIcon:AppIcons.apiProvider(settings.providerIconID))
-        var details = [summary,settings.providerTitle.map {"供应商："+$0}].compactMap {$0}.joined(separator:"\n")
-        if fastMode {details += "\n速度档位：1.5倍速度"}
+        var details = [summary,settings.providerTitle.map {L10n.text(.conversation,"modelSelector.updateTitle.text")+$0}].compactMap {$0}.joined(separator:"\n")
+        if fastMode {details += L10n.text(.conversation,"modelSelector.updateTitle.text.2")}
         setHoverHelp(details) { [weak self] in
             fastMode || self?.hasTruncatedTitle == true
         }
@@ -56,16 +56,16 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
 final class ModelSelectorContent: NSViewController {
     var onResize: (NSSize) -> Void = {_ in}
     private let settings: ChatModelSettings
-    private let heading = label("模型与推理强度",bold:true)
+    private let heading = label(L10n.text(.conversation,"modelSelector.heading"),bold:true)
     private let picker = AccentPopUpButton(frame:.zero,pullsDown:false)
     private let effort = NSTextField(wrappingLabelWithString:"")
-    private let speedLabel = NSTextField(labelWithString:"1.5倍速度")
+    private let speedLabel = NSTextField(labelWithString:L10n.text(.conversation,"modelSelector.speedLabel"))
     private let speedIcon = NSImageView()
     private let speedSwitch = AccentSwitch(frame:.zero)
     private let explanation = NSTextField(wrappingLabelWithString:"")
     private let slider = NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil)
-    private let sync = ActionButton("与 Codex 同步") {}
-    private let refresh = ActionButton("刷新模型") {}
+    private let sync = ActionButton(L10n.text(.conversation,"modelSelector.sync")) {}
+    private let refresh = ActionButton(L10n.text(.conversation,"modelSelector.refresh")) {}
     private var footerButtons:[ActionButton] {[refresh,sync]}
     private var options = [ChatModel.Effort]()
     private var effortMarks = [NSTextField]()
@@ -86,9 +86,9 @@ final class ModelSelectorContent: NSViewController {
         speedLabel.font = .systemFont(ofSize:12*scale)
         speedIcon.image = NSImage(systemSymbolName:"bolt",accessibilityDescription:nil)
         speedSwitch.controlSize = .small; speedSwitch.target = self; speedSwitch.action = #selector(speedChanged)
-        speedSwitch.setAccessibilityLabel("1.5倍速度")
+        speedSwitch.setAccessibilityLabel(L10n.text(.conversation,"modelSelector.speedLabel"))
         slider.target = self; slider.action = #selector(effortChanged)
-        slider.allowsTickMarkValuesOnly = true; slider.isContinuous = false; slider.setAccessibilityLabel("推理强度")
+        slider.allowsTickMarkValuesOnly = true; slider.isContinuous = false; slider.setAccessibilityLabel(L10n.text(.conversation,"modelSelector.loadView.text"))
         for text in [explanation] {text.font = .systemFont(ofSize:12*scale); text.isSelectable = false}
         explanation.textColor = .secondaryLabelColor
         refresh.callback = { [weak self] in self?.settings.onLoad(true) }
@@ -120,18 +120,18 @@ final class ModelSelectorContent: NSViewController {
             mark.textColor = option.reasoningEffort == settings.currentEffort ? AppAccent.color : .secondaryLabelColor
             body.addSubview(mark); return mark
         }
-        effort.stringValue = "推理强度 · "+settings.effortTitle
+        effort.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text")+settings.effortTitle
         effort.textColor = AppAccent.color
         speedSwitch.state = settings.fastMode ? .on : .off
         speedSwitch.isEnabled = !settings.loading && settings.supportsFastMode
         speedLabel.textColor = speedSwitch.isEnabled ? .labelColor : .disabledControlTextColor
         speedIcon.contentTintColor = speedLabel.textColor
-        let speedHelp = settings.supportsFastMode ? "开启后使用 Codex 官方快速模式（1.5倍速度），会消耗更多额度。" : "当前模型未提供 Codex 官方快速档位。"
+        let speedHelp = settings.supportsFastMode ? L10n.text(.conversation,"modelSelector.speedHelp") : L10n.text(.conversation,"modelSelector.speedHelp.2")
         speedSwitch.hoverHelp = speedHelp
-        if settings.loading {explanation.stringValue = "正在读取可用模型…"}
-        else if let error = settings.error {explanation.stringValue = "模型读取失败："+error}
-        else if settings.providerMismatch {explanation.stringValue = "请在 Codex 切回原供应商并刷新模型，或新建桌宠对话。"}
-        else {explanation.stringValue = options.isEmpty ? "此模型不提供可调整的推理强度。" : settings.effortExplanation}
+        if settings.loading {explanation.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text.2")}
+        else if let error = settings.error {explanation.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text.3")+error}
+        else if settings.providerMismatch {explanation.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text.4")}
+        else {explanation.stringValue = options.isEmpty ? L10n.text(.conversation,"modelSelector.refreshControls.text.5") : settings.effortExplanation}
         explanation.setHoverHelp(settings.error) { [weak explanation] in explanation?.hasTruncatedText == true }
         picker.setHoverHelp(picker.title) { [weak picker] in picker?.hasTruncatedTitle == true }
         refresh.isEnabled = !settings.loading; sync.isEnabled = !settings.loading

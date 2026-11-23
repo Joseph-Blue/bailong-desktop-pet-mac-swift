@@ -161,3 +161,16 @@
 "workspaceFileActions.make.menuItem.2" = "拷贝文件路径";
 "workspaceFileActions.make.menuItem.3" = "拷贝本组文件路径";
 "workspaceFileActions.make.menuItem.4" = "拷贝所有文件路径";
+
+/* 应用接入补充 */
+"gitWorkspace.fields.text" = "Git 推送引用格式无效。";
+"gitWorkspace.right.text" = "Git 推送分支计数格式无效。";
+"finderFileReveal.queue.label" = "白龙桌宠 访达定位";
+"gitStatusText.upstreamIndicators.text" = "落后上游";
+"gitStatusText.upstreamIndicators.text.2" = "领先上游";
+"gitStatusText.pushIndicators.text" = "落后推送目标";
+"gitStatusText.pushIndicators.text.2" = "领先推送目标";
+"gitStatusText.pushTitle.text" = "推送目标 (Push Remote)";
+"gitStatusText.label.text" = " 远端仓库";
+"gitStatusText.rows.text" = "更多远端仓库图标：";
+"gitStatusText.destination.text" = "多个推送地址";

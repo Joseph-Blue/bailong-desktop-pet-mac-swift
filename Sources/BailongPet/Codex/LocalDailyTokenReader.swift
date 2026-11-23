@@ -20,7 +20,7 @@ final class LocalDailyTokenReader {
         var modified:Date
         let source:Source
     }
-    private let queue = DispatchQueue(label:"白龙娘本机每日用量",qos:.utility,autoreleaseFrequency:.workItem)
+    private let queue = DispatchQueue(label:L10n.text(.tasks,"localDailyTokenReader.queue.label"),qos:.utility,autoreleaseFrequency:.workItem)
     private var day:DateInterval?
     private var files = [String:FileState]()
     private var seen = Set<String>()
@@ -45,10 +45,10 @@ final class LocalDailyTokenReader {
                 let rows = try database.rows("SELECT DISTINCT "+columns+" FROM threads WHERE rollout_path<>''"+filter,
                     provider.map {[$0]} ?? [])
                 let sources = try rows.map {row -> Source in
-                    guard let path = row["rollout_path"] else {throw PetFailure(message:"本机会话索引缺少日志路径。")}
+                    guard let path = row["rollout_path"] else {throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.query.message"))}
                     guard provider != nil else {return Source(path:path)}
                     guard let seconds = row["created_at"].flatMap(Double.init) else {
-                        throw PetFailure(message:"本机会话索引缺少创建时间。")
+                        throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.query.message.2"))
                     }
                     let created = row["created_at_ms"].flatMap(Double.init).map {$0/1000} ?? seconds
                     return Source(path:path,provider:row["model_provider"],createdAt:Date(timeIntervalSince1970:created))
@@ -69,7 +69,7 @@ final class LocalDailyTokenReader {
             var unique = [String:Source]()
             for source in sources where provider == nil || source.provider == provider {
                 if let previous = unique[source.path],previous != source {
-                    throw PetFailure(message:"本机日志的供应商或会话来源不一致。")
+                    throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.read.message"))
                 }
                 unique[source.path] = source
             }
@@ -81,7 +81,7 @@ final class LocalDailyTokenReader {
                 catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {continue}
                 guard let modified = attributes[.modificationDate] as? Date,
                       let size = attributes[.size] as? NSNumber,let inode = attributes[.systemFileNumber] as? NSNumber else {
-                    throw PetFailure(message:"无法读取本机用量日志的文件信息。")
+                    throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.read.message.2"))
                 }
                 guard modified >= interval.start || files[path] != nil else {continue}
                 candidates.append((source,inode.uint64Value,size.uint64Value,modified))
@@ -109,7 +109,7 @@ final class LocalDailyTokenReader {
             guard !discarded else {return}
             if pending.count+part.count > Self.chunkSize {
                 if Self.markers.contains(where:{pending.prefix(1024).range(of:$0) != nil}) {
-                    throw PetFailure(message:"本机用量事件超出读取长度。")
+                    throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.append.message"))
                 }
                 discarded = true; pending.removeAll(keepingCapacity:true)
             } else {pending.append(part)}
@@ -141,14 +141,14 @@ final class LocalDailyTokenReader {
         state.previous = cumulative
         guard let stamp = record["timestamp"] as? String,
               let timestamp = fractional.date(from:stamp) ?? seconds.date(from:stamp) else {
-            throw PetFailure(message:"本机用量事件缺少有效时间。")
+            throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.consume.message"))
         }
         guard timestamp >= interval.start && timestamp < interval.end else {return}
         // 分叉保留原事件时间；创建前的继承事件不计入当前供应商。
         if selectedProvider != nil,let created = state.source.createdAt,timestamp < created {return}
-        guard let increment else {throw PetFailure(message:"本机用量事件缺少请求计数。")}
+        guard let increment else {throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.consume.message.2"))}
         guard increment.total > 0 else {return}
-        guard let turn = state.turn else {throw PetFailure(message:"本机用量事件缺少轮次标识。")}
+        guard let turn = state.turn else {throw PetFailure(message:L10n.text(.usage,"localDailyTokenReader.consume.message.3"))}
         // 分叉复制保留原轮次、时间和累计值；独立子任务有自己的轮次身份。
         let identity = turn+"\u{001f}"+stamp+"\u{001f}"+cumulative.signature
         if seen.insert(identity).inserted {total = total.adding(increment)}

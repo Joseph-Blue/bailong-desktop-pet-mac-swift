@@ -23,25 +23,25 @@ final class CodexConnection {
     private var closing = false
     private var generation = 0
     private var expiration: Timer?
-    private let reader = DispatchQueue(label:"白龙娘 Codex 协议")
+    private let reader = DispatchQueue(label:L10n.text(.tasks,"codex.reader.label"))
     private var connectionError: String?
     private var cliVersion: String?
     private(set) var executableURL: URL?
     var isConnected:Bool {ready}
     var connectionGeneration:Int {generation}
     func reportMonitorState(to monitor:TerminalMonitor) {
-        let state = ready ? "已就绪" : process == nil ? "未连接" : "握手中"
+        let state = ready ? L10n.text(.conversation,"codex.state") : process == nil ? L10n.text(.conversation,"codex.state.2") : L10n.text(.conversation,"codex.state.3")
         let pid = process.map {"  ·  PID \($0.processIdentifier)"} ?? ""
-        monitor.write(.server,"连接快照  ·  "+state+pid+"  ·  待回执 \(pending.count)  ·  已加载会话 \(loadedThreads.count)")
+        monitor.write(.server,L10n.text(.tasks,"codex.pid.text")+state+pid+L10n.format(.tasks,"codex.pid.text.2",String(describing:pending.count),String(describing:loadedThreads.count)))
         for (id,call) in pending.sorted(by:{$0.key < $1.key}) {
-            monitor.write(.server,"等待回执  "+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  已等待 "+call.elapsed)
+            monitor.write(.server,L10n.text(.tasks,"codex.pid.text.3")+TerminalMonitor.rpcName(call.method)+L10n.format(.tasks,"codex.pid.text.4",String(describing:id))+call.elapsed)
         }
     }
     var diagnostics: String {
-        let state = ready ? "协议已连接" : process?.isRunning == true ? "正在初始化" : (connectionError.map { "连接失败：" + $0 } ?? "未连接")
-        let pid = process.map { $0.isRunning ? String($0.processIdentifier) : "未运行" } ?? "未运行"
+        let state = ready ? L10n.text(.conversation,"codex.state.4") : process?.isRunning == true ? L10n.text(.conversation,"codex.state.5") : (connectionError.map { L10n.text(.conversation,"codex.reportMonitorState.text") + $0 } ?? L10n.text(.conversation,"codex.state.2"))
+        let pid = process.map { $0.isRunning ? String($0.processIdentifier) : L10n.text(.conversation,"codex.reportMonitorState.text.2") } ?? L10n.text(.conversation,"codex.reportMonitorState.text.2")
         let version = cliVersion ?? installedCLIVersion()
-        return "\(version) · \(state) · 进程 \(executableURL?.lastPathComponent ?? "codex") · PID \(pid) · 待回复 \(pending.count)\n可执行文件：\(executableURL?.path ?? "尚未启动")"
+        return L10n.format(.conversation,"codex.reportMonitorState.text.3",String(describing:version),String(describing:state),String(describing:executableURL?.lastPathComponent ?? "codex"),String(describing:pid),String(describing:pending.count),String(describing:executableURL?.path ?? L10n.text(.conversation,"codex.reportMonitorState.text.4")))
     }
     private static func isDesktopApplication(_ app:NSRunningApplication) -> Bool {
         !app.isTerminated && (app.bundleIdentifier == "com.openai.codex" || ["Codex","ChatGPT"].contains(app.localizedName ?? ""))
@@ -69,15 +69,15 @@ final class CodexConnection {
     }
     static var desktopDiagnostics:String {
         func summary(_ url:URL?,name:String,status:String) -> String {
-            let version = url.flatMap(DesktopVersion.init)?.display ?? "版本不可读"
+            let version = url.flatMap(DesktopVersion.init)?.display ?? L10n.text(.diagnostics,"resources.failure")
             return "\(name) \(version) · \(status)"
         }
         let running = NSWorkspace.shared.runningApplications.filter(isDesktopApplication)
         if !running.isEmpty {
             return running.map { summary($0.bundleURL,name:$0.localizedName ?? "Codex",status:"PID \($0.processIdentifier)") }.joined(separator:"、")
         }
-        guard let url = installedDesktopLocations.first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return "未找到桌面应用"}
-        return summary(url,name:url.deletingPathExtension().lastPathComponent,status:"未运行")
+        guard let url = installedDesktopLocations.first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return L10n.text(.conversation,"codex.summary.text")}
+        return summary(url,name:url.deletingPathExtension().lastPathComponent,status:L10n.text(.conversation,"codex.reportMonitorState.text.2"))
     }
     private static func versionFromUserAgent(_ agent:String?) -> String? {
         guard let product = agent?.components(separatedBy:" (").first,let slash = product.lastIndex(of:"/") else {return nil}
@@ -91,16 +91,16 @@ final class CodexConnection {
             let selected = try (executableURL ?? Self.executable()).resolvingSymlinksInPath()
             guard let app = Self.desktopApplications().first(where:{
                 $0.appendingPathComponent(Self.packagedCLI).resolvingSymlinksInPath() == selected
-            }) else {return ready ? "版本未提供" : "尚未取得握手版本"}
+            }) else {return ready ? L10n.text(.conversation,"codex.package.text") : L10n.text(.conversation,"codex.package.text.2")}
             let manifest = app.appendingPathComponent("Contents/Resources/codex-cli/codex-package.json")
             let package = try JSONDecoder().decode(Package.self,from:Data(contentsOf:manifest))
-            return "安装版本 " + package.version
-        } catch {return "版本读取失败：" + error.localizedDescription}
+            return L10n.text(.conversation,"codex.package.text.3") + package.version
+        } catch {return L10n.text(.conversation,"codex.package.text.4") + error.localizedDescription}
     }
     static func executable() throws -> URL {
         let env = ProcessInfo.processInfo.environment
         if let explicit = env["BAILONG_CODEX_BIN"], !explicit.isEmpty {
-            guard FileManager.default.isExecutableFile(atPath:explicit) else {throw PetFailure(message:"指定的 Codex 程序不可执行："+explicit)}
+            guard FileManager.default.isExecutableFile(atPath:explicit) else {throw PetFailure(message:L10n.text(.conversation,"codex.executable.message")+explicit)}
             return URL(fileURLWithPath:explicit)
         }
         // 优先当前桌面应用内置版本，防止旧 PATH CLI 不支持桌面端当前模型。
@@ -111,7 +111,7 @@ final class CodexConnection {
         let candidates = bundled + (env["PATH"] ?? "").split(separator:":").map {String($0)+"/codex"} +
             [NSHomeDirectory()+"/.local/bin/codex","/opt/homebrew/bin/codex","/usr/local/bin/codex"]
         guard let path = candidates.first(where:{FileManager.default.isExecutableFile(atPath:$0)}) else {
-            throw PetFailure(message:"没有找到可用的 Codex。请安装或更新 Codex 桌面应用并登录，再重试。")
+            throw PetFailure(message:L10n.text(.conversation,"codex.executable.message.2"))
         }
         return URL(fileURLWithPath:path)
     }
@@ -119,7 +119,7 @@ final class CodexConnection {
         guard let app = desktopApplications().first(where:{FileManager.default.fileExists(atPath:$0.path)}) else {return}
         NSWorkspace.shared.open(app)
     }
-    private static let navigationQueue = DispatchQueue(label:"白龙娘 Codex 会话定位",qos:.userInitiated)
+    private static let navigationQueue = DispatchQueue(label:L10n.text(.tasks,"codex.navigationQueue.label"),qos:.userInitiated)
     static func openConversation(_ id:String?) {
         guard let id,let url = threadURL(id) else {openDesktop(); return}
         navigationQueue.async {
@@ -147,13 +147,13 @@ final class CodexConnection {
             DispatchQueue.main.async {
                 guard isCurrent() else {return}
                 do {
-                    guard try lookup.get(),let url = threadURL(id) else {throw PetFailure(message:"原 Codex 会话已不存在。")}
+                    guard try lookup.get(),let url = threadURL(id) else {throw PetFailure(message:L10n.text(.conversation,"codex.openConversationForReply.message"))}
                     let workspace = NSWorkspace.shared
                     let desktopID = "com.openai.codex"
                     let running = NSRunningApplication.runningApplications(withBundleIdentifier:desktopID).first {!$0.isTerminated}
                     guard let app = running?.bundleURL ?? workspace.urlForApplication(withBundleIdentifier:desktopID)
                             ?? installedDesktopLocations.first(where:{Bundle(url:$0)?.bundleIdentifier == desktopID}) else {
-                        throw PetFailure(message:"未找到 Codex 桌面应用。")
+                        throw PetFailure(message:L10n.text(.conversation,"codex.openConversationForReply.message.2"))
                     }
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = true
@@ -191,7 +191,7 @@ final class CodexConnection {
             // 消费 stderr 防止子进程阻塞；不保存原始诊断流或用户对话日志。
             stderr.fileHandleForReading.readabilityHandler = { handle in if handle.availableData.isEmpty { handle.readabilityHandler = nil } }
             try task.run(); process = task; input = stdin.fileHandleForWriting
-            TerminalMonitor.active?.write(.server,"启动子进程  ·  stdio  ·  PID \(task.processIdentifier)  ·  连接#\(token)")
+            TerminalMonitor.active?.write(.server,L10n.format(.tasks,"codex.labels.text",String(describing:task.processIdentifier),String(describing:token)))
             reader.async { [weak self] in
                 var buffer = Data()
                 while true {
@@ -202,13 +202,13 @@ final class CodexConnection {
                         do {
                             let message = try autoreleasepool {try CodexProtocol.delivery(CodexProtocol.object(line))}
                             if let message {DispatchQueue.main.async { if self?.generation == token { self?.receive(message) } }}
-                        } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error,stage:"解析协议帧") } }; return }
+                        } catch { DispatchQueue.main.async { if self?.generation == token { self?.fail(error,stage:L10n.text(.conversation,"codex.connect.text")) } }; return }
                     }
                 }
                 // 先交付最后一条完成/错误消息，再处理 EOF，避免退出回调抢先丢失结果。
                 DispatchQueue.main.async {
                     guard let self, self.generation == token, !self.closing else {return}
-                    self.fail(PetFailure(message:"Codex 连接已结束，任务状态未确认。"),stage:"读取到 EOF")
+                    self.fail(PetFailure(message:L10n.text(.conversation,"codex.connect.message")),stage:L10n.text(.conversation,"codex.connect.error"))
                 }
             }
             expiration?.invalidate()
@@ -217,7 +217,7 @@ final class CodexConnection {
                 let expired = self.pending.filter { $0.value.deadline < Date() }
                 for (id,_) in expired {
                     guard let call = self.pending.removeValue(forKey:id) else {continue}
-                    TerminalMonitor.active?.write(.server,"× 超时  "+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  "+call.elapsed,.error)
+                    TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.call.text")+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  "+call.elapsed,.error)
                     call.reply(.failure(CodexProtocol.Failure.timeout))
                 }
             }
@@ -227,17 +227,17 @@ final class CodexConnection {
                 case .success(let reply):
                     guard self.send(["method":"initialized"]) else {return}; self.ready = true
                     self.cliVersion = Self.versionFromUserAgent(reply["userAgent"] as? String)
-                    TerminalMonitor.active?.write(.server,"→ 通知  initialized  ·  握手完成  ·  连接#\(token)",.success)
+                    TerminalMonitor.active?.write(.server,L10n.format(.tasks,"codex.reply.text",String(describing:token)),.success)
                     let callbacks = self.waiting; self.waiting.removeAll(); callbacks.forEach{$0(nil)}
-                case .failure(let error): self.fail(error,stage:"初始化握手")
+                case .failure(let error): self.fail(error,stage:L10n.text(.conversation,"codex.failure"))
                 }
             }
-        } catch { fail(error,stage:"启动子进程") }
+        } catch { fail(error,stage:L10n.text(.conversation,"codex.connect.text.2")) }
     }
     // 同一服务进程内复用已加载的会话；恢复只用于本次连接尚未加载的历史会话。
     func prepareThread(_ id:String?,params:[String:Any],completion:@escaping (Result<PreparedThread,Error>) -> Void) {
         if let id,let prepared = loadedThreads[id] {
-            TerminalMonitor.active?.write(.server,"复用已加载会话  ·  会话#"+TerminalMonitor.tag(id))
+            TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.prepared.text")+TerminalMonitor.tag(id))
             completion(.success(prepared)); return
         }
         var params = params
@@ -247,7 +247,7 @@ final class CodexConnection {
             case .failure(let error): completion(.failure(error))
             case .success(let value):
                 guard let thread = value["thread"] as? [String:Any],let id = thread["id"] as? String,!id.isEmpty else {
-                    completion(.failure(CodexProtocol.Failure.malformed("缺少会话 ID"))); return
+                    completion(.failure(CodexProtocol.Failure.malformed(L10n.text(.conversation,"codex.prepareThread.text")))); return
                 }
                 let prepared = PreparedThread(id:id,provider:value["modelProvider"] as? String ?? thread["modelProvider"] as? String,
                     model:value["model"] as? String,effort:value["reasoningEffort"] as? String)
@@ -258,21 +258,21 @@ final class CodexConnection {
     }
     func call(_ method: String, _ params: [String:Any], completion: @escaping Reply) {
         guard input != nil else {
-            TerminalMonitor.active?.write(.server,"× 未发送  "+TerminalMonitor.rpcName(method)+"  ·  连接未建立",.warning)
+            TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.call.text.2")+TerminalMonitor.rpcName(method)+L10n.text(.tasks,"codex.call.text.3"),.warning)
             completion(.failure(CodexProtocol.Failure.disconnected)); return
         }
         serial += 1
         pending[serial] = PendingCall(reply:completion,method:method,deadline:Date().addingTimeInterval(30))
         if send(["id":serial,"method":method,"params":params]) {
-            TerminalMonitor.active?.write(.server,"→ 请求  "+TerminalMonitor.rpcName(method)+"  ·  RPC#\(serial)"+TerminalMonitor.rpcFields(params))
+            TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.labels.text.2")+TerminalMonitor.rpcName(method)+"  ·  RPC#\(serial)"+TerminalMonitor.rpcFields(params))
         }
     }
     func reply(_ id: Any, _ result: [String:Any]) {
-        if send(["id":id,"result":result]) {TerminalMonitor.active?.write(.server,"→ 应答  服务请求#"+TerminalMonitor.serverRequestID(id))}
+        if send(["id":id,"result":result]) {TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.reply.text.2")+TerminalMonitor.serverRequestID(id))}
     }
     func unsupported(_ id: Any, _ method: String) {
-        if send(["id":id,"error":["code":-32601,"message":"此客户端未支持 \(method)"]]) {
-            TerminalMonitor.active?.write(.server,"→ 应答  服务请求#"+TerminalMonitor.serverRequestID(id)+"  ·  方法不支持 (-32601)",.warning)
+        if send(["id":id,"error":["code":-32601,"message":L10n.format(.conversation,"codex.unsupported.text",String(describing:method))]]) {
+            TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.reply.text.2")+TerminalMonitor.serverRequestID(id)+L10n.text(.tasks,"codex.unsupported.text"),.warning)
         }
     }
     @discardableResult private func send(_ value:[String:Any]) -> Bool {
@@ -280,24 +280,24 @@ final class CodexConnection {
             guard let input else {throw CodexProtocol.Failure.disconnected}
             var bytes = try JSONSerialization.data(withJSONObject:value); bytes.append(10)
             try input.write(contentsOf:bytes); return true
-        } catch {fail(error,stage:"写入协议帧"); return false}
+        } catch {fail(error,stage:L10n.text(.conversation,"codex.send.text")); return false}
     }
     func abortUnconfirmedTask() {
-        fail(PetFailure(message:"已关闭桌宠任务连接并回收服务进程；任务最终结果未确认，请在 Codex 核对。"))
+        fail(PetFailure(message:L10n.text(.conversation,"codex.abortUnconfirmedTask.message")))
     }
     func reject(_ id:Any,_ message:String) {
         if send(["id":id,"error":["code":-32602,"message":message]]) {
-            TerminalMonitor.active?.write(.server,"→ 应答  服务请求#"+TerminalMonitor.serverRequestID(id)+"  ·  拒绝 (-32602)",.warning)
+            TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.reply.text.2")+TerminalMonitor.serverRequestID(id)+L10n.text(.tasks,"codex.reject.text"),.warning)
         }
     }
     private func receive(_ value: [String:Any]) {
         if let method = value["method"] as? String {
             if let id = value["id"] {
-                TerminalMonitor.active?.write(.server,"← 请求  "+TerminalMonitor.rpcName(method)+"  ·  服务请求#"+TerminalMonitor.serverRequestID(id)
+                TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.id.text")+TerminalMonitor.rpcName(method)+L10n.text(.tasks,"codex.id.text.2")+TerminalMonitor.serverRequestID(id)
                     + TerminalMonitor.rpcFields(value["params"] as? [String:Any] ?? [:]))
             }
             guard let params = (value["params"] ?? [:]) as? [String:Any] else {
-                if let id = value["id"] {reject(id,"请求缺少参数对象。")} else {fail(CodexProtocol.Failure.malformed("事件缺少参数对象"))}
+                if let id = value["id"] {reject(id,L10n.text(.conversation,"codex.receive.text"))} else {fail(CodexProtocol.Failure.malformed(L10n.text(.conversation,"codex.receive.text.2")))}
                 return
             }
             do {try CodexProtocol.validate(method,params)}
@@ -310,11 +310,11 @@ final class CodexConnection {
             else {TerminalMonitor.active?.serverEvent(method,params,connection:generation); event(method,params)}
         } else if let id = value["id"] as? Int {
             guard let call = pending.removeValue(forKey:id) else {
-                TerminalMonitor.active?.write(.server,"← 回执  RPC#\(id)  ·  无对应的待处理请求",.warning)
+                TerminalMonitor.active?.write(.server,L10n.format(.tasks,"codex.call.text.4",String(describing:id)),.warning)
                 return
             }
             func receipt(_ detail:String,_ level:TerminalMonitor.Level) {
-                TerminalMonitor.active?.write(.server,"← 回执  "+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  "+call.elapsed+detail,level)
+                TerminalMonitor.active?.write(.server,L10n.text(.tasks,"codex.receipt.text")+TerminalMonitor.rpcName(call.method)+"  ·  RPC#\(id)  ·  "+call.elapsed+detail,level)
             }
             if let error = value["error"] as? [String:Any] {
                 if TerminalMonitor.active != nil {receipt(TerminalMonitor.rpcError(error),.error)}
@@ -323,19 +323,19 @@ final class CodexConnection {
                 if TerminalMonitor.active != nil {receipt(TerminalMonitor.rpcResult(call.method,result),.success)}
                 call.reply(.success(result))
             } else {
-                receipt("  ·  缺少结果对象",.error)
-                call.reply(.failure(CodexProtocol.Failure.malformed("回复缺少结果对象")))
+                receipt(L10n.text(.conversation,"codex.receipt.text"),.error)
+                call.reply(.failure(CodexProtocol.Failure.malformed(L10n.text(.conversation,"codex.receipt.text.2"))))
             }
         }
     }
-    private func fail(_ error: Error,stage:String = "连接中断") {
-        TerminalMonitor.active?.write(.server,stage+"  ·  连接#\(generation)  ·  待回执 \(pending.count)  ·  "+TerminalMonitor.errorCode(error),.error)
+    private func fail(_ error: Error,stage:String = L10n.text(.conversation,"codex.fail.text")) {
+        TerminalMonitor.active?.write(.server,stage+L10n.format(.tasks,"codex.fail.text",String(describing:generation),String(describing:pending.count))+TerminalMonitor.errorCode(error),.error)
         let callbacks = waiting, calls = pending.values.map(\.reply)
         waiting.removeAll(); pending.removeAll(); close(); connectionError = error.localizedDescription
         callbacks.forEach{$0(error)}; calls.forEach{$0(.failure(error))}; disconnected(error)
     }
     func close() {
-        if let process {TerminalMonitor.active?.write(.server,"关闭连接  ·  PID \(process.processIdentifier)  ·  连接#\(generation)")}
+        if let process {TerminalMonitor.active?.write(.server,L10n.format(.tasks,"codex.process.text",String(describing:process.processIdentifier),String(describing:generation)))}
         closing = true; ready = false; loadedThreads.removeAll(); generation += 1; expiration?.invalidate()
         try? input?.close(); input = nil
         if let process, process.isRunning {

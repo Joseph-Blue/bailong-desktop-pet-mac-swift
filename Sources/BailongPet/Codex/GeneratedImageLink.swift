@@ -5,7 +5,7 @@ enum GeneratedImageLink {
     static func markdown(status:String?,savedPath:String?) -> String? {
         guard status == "completed",let path = savedPath,path.hasPrefix("/") else {return nil}
         let url = URL(fileURLWithPath:path)
-        return "[查看生成图片](<\(url.absoluteString)>)"
+        return L10n.format(.workspace,"generatedImageLink.markdown.text",String(describing:url.absoluteString))
     }
 
     static func appending(_ links:[String],to text:String) -> String {

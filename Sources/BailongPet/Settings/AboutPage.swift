@@ -3,9 +3,8 @@ import AppKit
 // 设置“关于”页保留原有图标、版本、原生分页和富文本链接；架构取编译目标。
 final class AboutPageController: NSViewController {
     enum Tab: String, CaseIterable {
-        case about = "关于"
-        case credits = "来源与致谢"
-        case thirdPartyNotices = "第三方许可"
+        case about, credits, thirdPartyNotices
+        var title:String {L10n.text(.about,"aboutPage."+rawValue)}
     }
 
     private static let repositoryURL = URL(string:"https://github.com/Joseph-Blue/bailong-desktop-pet-mac-swift")!
@@ -21,7 +20,7 @@ final class AboutPageController: NSViewController {
         #elseif arch(x86_64)
         return "Intel（x86_64）"
         #else
-        return "其他架构"
+        return L10n.text(.about,"aboutPage.tab.text")
         #endif
     }
 
@@ -45,7 +44,7 @@ final class AboutPageController: NSViewController {
         title.maximumNumberOfLines = 0; title.lineBreakMode = .byWordWrapping
         title.font = .systemFont(ofSize:23,weight:.semibold)
         title.alignment = .center
-        let version = NSTextField(labelWithString:"版本 \(Paths.version) · \(Self.architecture)")
+        let version = NSTextField(labelWithString:L10n.format(.about,"aboutPage.version",String(describing:Paths.version),String(describing:Self.architecture)))
         version.font = .systemFont(ofSize:16)
         version.textColor = .labelColor
         version.alignment = .center
@@ -54,14 +53,14 @@ final class AboutPageController: NSViewController {
         versionDetails.alignment = .centerX
         versionDetails.spacing = 4
         let buildCommit = Paths.isReleaseBuild ? nil : Paths.localBuildCommit
-        let buildType = Paths.isReleaseBuild ? "正式版 Release" : "本地构建"
+        let buildType = Paths.isReleaseBuild ? L10n.text(.about,"aboutPage.buildType") : L10n.text(.about,"aboutPage.buildType.2")
         let buildLabel = NSTextField(labelWithString:buildCommit.map {"\(buildType) \($0.prefix(8))"} ?? buildType)
         buildLabel.font = .systemFont(ofSize:12)
         buildLabel.textColor = .secondaryLabelColor
         if let commit = buildCommit {
-            let copy = HoverIconButton(symbol:"doc.on.doc",label:"拷贝提交号")
+            let copy = HoverIconButton(symbol:"doc.on.doc",label:L10n.text(.about,"aboutPage.copy"))
             copy.bezelStyle = .inline
-            copy.hoverHelp = "拷贝完整提交号哈希"
+            copy.hoverHelp = L10n.text(.about,"aboutPage.buildContent.text")
             copy.widthAnchor.constraint(equalToConstant:20).isActive = true
             copy.heightAnchor.constraint(equalToConstant:20).isActive = true
             CopyFeedback.attach(to:copy) {commit}
@@ -77,7 +76,7 @@ final class AboutPageController: NSViewController {
         tabs.font = .systemFont(ofSize:13)
         for tab in Tab.allCases {
             let item = NSTabViewItem(identifier:tab.rawValue)
-            item.label = tab.rawValue
+            item.label = tab.title
             switch tab {
             case .about: item.view = readingView(aboutText())
             case .credits: item.view = readingView(creditsText())
@@ -116,7 +115,7 @@ final class AboutPageController: NSViewController {
             return MarkdownText.render(source,font:.systemFont(ofSize:13))
         } catch {
             let text = NSMutableAttributedString()
-            paragraph("无法读取第三方许可。\n\(error.localizedDescription)",to:text)
+            paragraph(L10n.format(.about,"aboutPage.thirdPartyNoticesText.paragraph",String(describing:error.localizedDescription)),to:text)
             return text
         }
     }
@@ -151,13 +150,13 @@ final class AboutPageController: NSViewController {
     @objc func updateIdentity() {
         let name = PetPreferences.shared.appName
         titleLabel.stringValue = name; titleLabel.hoverHelp = titleLabel.stringValue
-        appIcon.setAccessibilityLabel(name+"应用图标")
+        appIcon.setAccessibilityLabel(name+L10n.text(.about,"aboutPage.updateIdentity.text"))
     }
 
     @objc private func openTextLink(_ gesture: NSClickGestureRecognizer) {
         guard let text = gesture.view as? NSTextView,
               let url = LinkAppearance.link(at:gesture.location(in:text),in:text)?.value as? URL else {return}
-        if !NSWorkspace.shared.open(url) {showError("无法打开链接",PetFailure(message:url.absoluteString))}
+        if !NSWorkspace.shared.open(url) {showError(L10n.text(.about,"aboutPage.openTextLink.error"),PetFailure(message:url.absoluteString))}
     }
 
     @objc private func updateAccent() {
@@ -169,66 +168,66 @@ final class AboutPageController: NSViewController {
 
     private func aboutText() -> NSAttributedString {
         let text = NSMutableAttributedString(string:"")
-        paragraph("让白龙娘住进你的 Mac 桌面，陪你聊天、工作。她会播放动作、显示 Codex 任务进展，也能提醒你回答问题或确认操作。",to:text)
-        paragraph("你可以给她起名字、修改台词，调整大小和气泡外观，在历史会话中查看之前的对话。聊天和任务功能需要本机安装 Codex。",to:text)
-        paragraph("作者：Joseph Blue（约瑟Blue）。本项目在《GPT白龙娘动态桌宠》的基础上，为 Mac 重新开发，由本项目作者独立维护。感谢原作者 jingh12312-rgb（風-隐）带来的白龙娘。",to:text)
-        link("项目主页与问题反馈",url:Self.repositoryURL.absoluteString,to:text)
-        paragraph("想更新应用，可以打开设置中的“更新”，或前往下面的发布页下载。",to:text)
-        link("下载与更新说明",url:UpdateChecker.releases.absoluteString,to:text)
-        link("原作：GPT白龙娘动态桌宠 · jingh12312-rgb（風-隐）",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
+        paragraph(L10n.text(.about,"aboutPage.aboutText.paragraph"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.aboutText.paragraph.2"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.aboutText.paragraph.3"),to:text)
+        link(L10n.text(.about,"aboutPage.aboutText.text"),url:Self.repositoryURL.absoluteString,to:text)
+        paragraph(L10n.text(.about,"aboutPage.aboutText.paragraph.4"),to:text)
+        link(L10n.text(.about,"aboutPage.aboutText.text.2"),url:UpdateChecker.releases.absoluteString,to:text)
+        link(L10n.text(.about,"aboutPage.aboutText.text.3"),url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
         return text
     }
 
     private func creditsText() -> NSAttributedString {
         let text = NSMutableAttributedString(string:"")
-        paragraph("感谢原作者，以及帮助这个 Mac 版本完成的项目和工具。",to:text,color:.secondaryLabelColor)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph"),to:text,color:.secondaryLabelColor)
 
-        heading("原作 · GPT白龙娘动态桌宠",to:text)
-        paragraph("作者：jingh12312-rgb（風-隐）。桌宠的互动方式和台词参考原作 v0.5.1；原作的使用说明与许可信息见仓库 README。",to:text)
-        link("原作仓库与说明",url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.2"),to:text)
+        link(L10n.text(.about,"aboutPage.creditsText.text"),url:"https://github.com/jingh12312-rgb/bailong-desktop-pet",to:text)
 
-        heading("构建兼容性参考 · ruyeli",to:text)
-        paragraph("感谢 ruyeli 在本仓库的英文版本地化分支中分享的 macOS SDK 兼容处理，为本项目改进构建脚本提供了参考。",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.2"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.3"),to:text)
         link("bailong-desktop-pet-english · GitHub",url:"https://github.com/ruyeli/bailong-desktop-pet-english",to:text)
 
-        heading("动画优化参考 · moon135246",to:text)
-        paragraph("感谢 moon135246 基于我的白龙桌宠优化分支（原项目 Python + QT 技术栈，非本项目）继续改进，为本项目的动作缓存与性能优化提供了参考。",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.3"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.4"),to:text)
         link("bailong-desktop-pet-optimization · GitHub",url:"https://github.com/moon135246/bailong-desktop-pet-optimization",to:text)
 
-        heading("角色动画与应用图标",to:text)
-        paragraph("角色动画来自原作 v0.5.1 发布包，应用图标取自角色画面。",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.4"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.5"),to:text)
 
-        heading("动画播放",to:text)
-        paragraph("使用 macOS 自带的动画播放与图像处理功能，让角色周围保持透明。动画文件采用 Apple 的透明 HEVC 格式。",to:text)
-        link("Apple 透明 HEVC 说明",url:"https://developer.apple.com/videos/play/wwdc2019/506/",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.5"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.6"),to:text)
+        link(L10n.text(.about,"aboutPage.creditsText.text.2"),url:"https://developer.apple.com/videos/play/wwdc2019/506/",to:text)
 
-        heading("SQLite · 对话记录",to:text)
-        paragraph("使用 macOS 自带的 SQLite 保存本机对话记录、读取 Codex 任务信息。SQLite 的代码和文档属于公有领域。",to:text)
-        link("SQLite 官方版权说明",url:"https://www.sqlite.org/copyright.html",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.6"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.7"),to:text)
+        link(L10n.text(.about,"aboutPage.creditsText.text.3"),url:"https://www.sqlite.org/copyright.html",to:text)
 
-        heading("macOS 界面设计参考 · macos-golden-gate-design",to:text)
-        paragraph("界面设计参考 gambadio 的 macos-golden-gate-design，让设置和窗口更贴近 Mac 的使用习惯。该设计指南采用 MIT 许可证。",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.7"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.8"),to:text)
         link("macos-golden-gate-design · GitHub",url:"https://github.com/gambadio/macos-golden-gate-design",to:text)
 
-        paragraph("Git 状态符号参考 bash-git-prompt 与 Powerlevel10k。",to:text,links:[
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.9"),to:text,links:[
             ("bash-git-prompt","https://github.com/magicmonty/bash-git-prompt"),
             ("Powerlevel10k","https://github.com/romkatv/powerlevel10k"),
         ])
 
-        heading("Mac 与 Codex",to:text)
-        paragraph("应用用 Swift 和 AppKit 开发，窗口、菜单和设置使用 Mac 原生控件。聊天和任务由本机安装的 Codex 处理。",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.8"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.10"),to:text)
 
-        heading("图标与标识",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.9"),to:text)
         link("SF Symbols · Apple",url:"https://developer.apple.com/sf-symbols/",to:text)
-        link("Git 分支图标 · Lucide（ISC）",url:"https://lucide.dev/icons/git-branch",to:text)
+        link(L10n.text(.about,"aboutPage.creditsText.text.6"),url:"https://lucide.dev/icons/git-branch",to:text)
         link("GitHub、GitLab · Lucide Brands（ISC）",url:"https://github.com/azirali/lucide-brands",to:text)
         link("Gitee · Remix Icon（Remix Icon License v1.0）",url:"https://github.com/Remix-Design/RemixIcon/blob/master/icons/Logos/gitee-line.svg",to:text)
         link("Gitea、Hugging Face · Icon Monks（MIT）",url:"https://github.com/designmonks-llc/icon-monks",to:text)
-        link("Forgejo · Caesar Schinas，经 Simple Icons 收录（CC BY-SA 4.0）",url:"https://github.com/simple-icons/simple-icons/blob/develop/icons/forgejo.svg",to:text)
-        link("Codex／OpenAI 标识 · OpenAI",url:"https://openai.com/brand/",to:text)
+        link(L10n.text(.about,"aboutPage.labels.text"),url:"https://github.com/simple-icons/simple-icons/blob/develop/icons/forgejo.svg",to:text)
+        link(L10n.text(.about,"aboutPage.creditsText.text.8"),url:"https://openai.com/brand/",to:text)
 
-        heading("攻坚致谢 · AntiGravity agent（Gemini 4 Carbon 模型）",to:text)
-        paragraph("感谢 AntiGravity agent（Gemini 4 Carbon 模型），在 Codex 冷启动首次发送延迟，以及窗口激活异常与持续掉帧的两轮攻坚中提供关键定位与修复。",to:text)
+        heading(L10n.text(.about,"aboutPage.creditsText.heading.10"),to:text)
+        paragraph(L10n.text(.about,"aboutPage.creditsText.paragraph.11"),to:text)
         return text
     }
 

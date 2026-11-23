@@ -17,12 +17,12 @@ final class GitWorkspaceObservation {
             guard let info else {return}
             Unmanaged<GitWorkspaceObservation>.fromOpaque(info).takeUnretainedValue().onChange()
         },&context,next as CFArray,FSEventStreamEventId(kFSEventStreamEventIdSinceNow),0.4,FSEventStreamCreateFlags(kFSEventStreamCreateFlagWatchRoot)) else {
-            throw GitWorkspaceFailure("无法监听工作区变更，请使用刷新按钮。")
+            throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspaceObservation.update.error"))
         }
         FSEventStreamSetDispatchQueue(stream,DispatchQueue.main)
         guard FSEventStreamStart(stream) else {
             FSEventStreamInvalidate(stream); FSEventStreamRelease(stream)
-            throw GitWorkspaceFailure("无法启动工作区变更监听，请使用刷新按钮。")
+            throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspaceObservation.update.error.2"))
         }
         self.stream = stream; self.paths = next
     }

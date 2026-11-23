@@ -17,12 +17,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         onPreview:{ [weak self] clip in self?.onPreview(clip) })
     private let aboutPage = AboutPageController()
     private lazy var workspacePage = WorkspaceSettingsPage(form:form,window:window,reload:{ [weak self] in self?.render() },clear:{ [weak self] completion in
-        guard let action = self?.onClearDefaultWorkspace else {completion(.failure(PetFailure(message:"会话管理尚未就绪，无法清理工作区。"))); return}
+        guard let action = self?.onClearDefaultWorkspace else {completion(.failure(PetFailure(message:L10n.text(.settings,"settingsWindow.settingsPanel.message")))); return}
         action(completion)
     })
     private let splitController = NSSplitViewController()
     private let sidebar = NSTableView(), scroll = NSScrollView(), content = NSStackView()
-    private let resetButton = SettingsFooterButton(title:"恢复本页设置为默认值",target:nil,action:nil)
+    private let resetButton = SettingsFooterButton(title:L10n.text(.settings,"settingsWindow.resetButton"),target:nil,action:nil)
     private weak var updateStatusLabel: NSTextField?
     private weak var updateTimeLabel: NSTextField?
     private weak var displayMenu: NSPopUpButton?
@@ -56,7 +56,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         self.preferences = preferences; self.catalog = catalog
         super.init()
         NotificationCenter.default.addObserver(self,selector:#selector(startupRegistrationChanged),name:FollowLauncher.didChange,object:nil)
-        window.title = "设置"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.title = L10n.text(.settings,"settingsWindow.title"); window.isReleasedWhenClosed = false; window.delegate = self
         window.styleMask.insert(.fullSizeContentView)
         window.collectionBehavior.insert(.fullScreenNone)
         window.minSize = NSSize(width:800,height:540)
@@ -78,7 +78,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         column.minWidth = 0; column.resizingMask = .autoresizingMask
         sideScroll.hasHorizontalScroller = false; sideScroll.horizontalScrollElasticity = .none
         sidebar.dataSource = self; sidebar.delegate = self; sidebar.allowsEmptySelection = false
-        sidebar.setAccessibilityLabel("设置分类"); sideScroll.documentView = sidebar
+        sidebar.setAccessibilityLabel(L10n.text(.settings,"settingsWindow.text")); sideScroll.documentView = sidebar
         side.addSubview(sideScroll)
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
         scroll.verticalScrollElasticity = .allowed
@@ -100,12 +100,12 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         content.orientation = .vertical; content.alignment = .leading; content.spacing = 24
         document.addSubview(content)
         resetButton.target = self; resetButton.action = #selector(restorePage); resetButton.focusRingType = .exterior
-        let resetAll = SettingsFooterButton(title:"恢复全部设置为默认值",target:self,action:#selector(restoreAll))
+        let resetAll = SettingsFooterButton(title:L10n.text(.settings,"settingsWindow.resetAll"),target:self,action:#selector(restoreAll))
         resetAll.bezelStyle = .rounded; resetAll.hasDestructiveAction = true
         resetAll.focusRingType = .exterior
-        let closeButton = SettingsFooterButton(title:"关闭",target:window,action:#selector(NSWindow.performClose(_:)))
+        let closeButton = SettingsFooterButton(title:L10n.text(.settings,"settingsWindow.closeButton"),target:window,action:#selector(NSWindow.performClose(_:)))
         closeButton.focusRingType = .exterior
-        closeButton.setAccessibilityLabel("关闭设置窗口")
+        closeButton.setAccessibilityLabel(L10n.text(.settings,"settingsWindow.text.2"))
         let footerLine = NSBox(); footerLine.boxType = .separator
         let sidebarFooter = NSStackView(views:[footerLine,resetButton,resetAll,closeButton])
         sidebarFooter.orientation = .vertical; sidebarFooter.spacing = 8; sidebarFooter.alignment = .leading
@@ -227,16 +227,16 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     func toolbar(_ toolbar: NSToolbar,itemForItemIdentifier id: NSToolbarItem.Identifier,willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
         if id.rawValue == "settings-search" {
             let item = NSSearchToolbarItem(itemIdentifier:id)
-            searchField.placeholderString = "搜索设置"; searchField.setAccessibilityLabel("搜索具体设置项")
+            searchField.placeholderString = L10n.text(.settings,"settingsWindow.toolbar.text"); searchField.setAccessibilityLabel(L10n.text(.settings,"settingsWindow.toolbar.text.2"))
             searchField.sendsSearchStringImmediately = true; searchField.delegate = self
             searchField.target = self; searchField.action = #selector(searchSettings)
-            item.searchField = searchField; item.label = "搜索设置"; item.preferredWidthForSearchField = 240
+            item.searchField = searchField; item.label = L10n.text(.settings,"settingsWindow.toolbar.text"); item.preferredWidthForSearchField = 240
             searchItem = item
             return item
         }
         if id.rawValue == "settings-divider" {return NSTrackingSeparatorToolbarItem(identifier:id,splitView:splitController.splitView,dividerIndex:0)}
         guard id.rawValue == "settings-sidebar" else {return nil}
-        let item = NSToolbarItem(itemIdentifier:id); item.label = "显示或隐藏侧栏"
+        let item = NSToolbarItem(itemIdentifier:id); item.label = L10n.text(.settings,"settingsWindow.toolbar.label")
         item.image = NSImage(systemSymbolName:"sidebar.left",accessibilityDescription:item.label)
         item.target = splitController; item.action = #selector(NSSplitViewController.toggleSidebar(_:)); item.isBordered = true; item.installHoverHelp()
         return item
@@ -257,7 +257,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         itemList?.isHidden = searching
         aboutPage.view.isHidden = searching || selected != .about
         resetButton.isEnabled = !searching && !selected.keys.isEmpty
-        window.title = searching ? "搜索设置" : detailPage?.title ?? selected.title
+        window.title = searching ? L10n.text(.settings,"settingsWindow.toolbar.text") : detailPage?.title ?? selected.title
     }
     private func clearSearch() {
         searchField.stringValue = ""; searchResults.show([]); updateSearchPresentation()
@@ -284,7 +284,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             return
         }
         if entry.section == .about {
-            if let tab = AboutPageController.Tab(rawValue:entry.title) {aboutPage.selectTab(tab)}
+            if let tab = entry.aboutTab {aboutPage.selectTab(tab)}
             return
         }
         guard var target = form.searchAnchors[entry.anchor] ?? form.searchAnchors[entry.group] else {return}
@@ -357,20 +357,20 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         case .updates: updates()
         case .about: break
         case .developer:
-            form.group("动画", [form.choice("画质", "animationQuality", [("auto", "自动\t跟随显示尺寸"), ("720", "原画\t720×720"), ("512", "较高\t512×512"), ("384", "中\t384×384"), ("256", "低\t256×256")],width:250),
-                form.choice("素材帧率上限", "animationFPSLimit", [("full", "满帧"), ("20", "20 FPS"), ("15", "15 FPS")]),
-                form.toggle("整段动画预加载", "preloadWholeAnimation", detail: "播放前加载整段动画，会占用更多运行内存 (RAM)。"),
+            form.group(L10n.text(.settings,"search.add.text.48"), [form.choice(L10n.text(.settings,"search.add.text.86"), "animationQuality", [("auto", L10n.text(.settings,"settingsWindow.animationQuality.option.auto")), ("720", L10n.text(.settings,"settingsWindow.animationQuality.title.2")), ("512", L10n.text(.settings,"settingsWindow.animationQuality.title.3")), ("384", L10n.text(.settings,"settingsWindow.animationQuality.title.4")), ("256", L10n.text(.settings,"settingsWindow.animationQuality.title.5"))],width:250),
+                form.choice(L10n.text(.settings,"search.add.text.87"), "animationFPSLimit", [("full", L10n.text(.settings,"settingsWindow.animationFPSLimit.option.full")), ("20", "20 FPS"), ("15", "15 FPS")]),
+                form.toggle(L10n.text(.settings,"search.add.text.90"), "preloadWholeAnimation", detail: L10n.text(.settings,"settingsWindow.preloadWholeAnimation.detail")),
                 form.bufferFrames(),
-                form.toggle("常用动作开头缓存", "animationOpeningCache", detail: "保留播放过的常用动作开头，运行内存（RAM）缓存上限 24 MiB。", unless:["preloadWholeAnimation"])],symbol:"film")
-            form.group("动画效果改善", [
-                form.toggle("动态效果", "bubbleMotion", detail:"控制气泡、内容展开、选择弹窗、桌宠显隐及动作平滑过渡。"),
-                form.toggle("动作平滑过渡", "animationSmoothTransition", detail:"轮廓相近的动作交接时短暂淡化。", requires:["bubbleMotion"]),
-                form.toggle("孤立杂点清理", "animationEdgeCleanup", detail:"清除与主体断开的微小低透明度杂点。"),
-                form.toggle("轮廓阴影", "petShadow")],symbol:"sparkles")
-            let quotaRows = [form.toggle("额度查询缓存", "quotaCacheEnabled", detail:"有效期内复用额度与供应商本机用量结果，可点击“立即刷新”获取最新数据。"),
-                form.conditional(form.slider("缓存时长", "quotaCacheSeconds", range:PetPreferences.ranges["quotaCacheSeconds"]!, suffix:"秒"),when:{$0.bool("quotaCacheEnabled")})]
-            form.group("额度查询",quotaRows,symbol:AppIcons.quotaSymbol)
-            form.group("应用统计", [form.toggle("开启应用性能信息统计浮窗", "showDiagnostics")],symbol:"chart.xyaxis.line")
+                form.toggle(L10n.text(.settings,"search.add.text.89"), "animationOpeningCache", detail: L10n.text(.settings,"settingsWindow.animationOpeningCache.detail"), unless:["preloadWholeAnimation"])],symbol:"film")
+            form.group(L10n.text(.settings,"search.add.text.92"), [
+                form.toggle(L10n.text(.settings,"search.add.text.93"), "bubbleMotion", detail:L10n.text(.settings,"settingsWindow.bubbleMotion.detail")),
+                form.toggle(L10n.text(.settings,"search.add.text.95"), "animationSmoothTransition", detail:L10n.text(.settings,"settingsWindow.animationSmoothTransition.detail"), requires:["bubbleMotion"]),
+                form.toggle(L10n.text(.settings,"search.add.text.96"), "animationEdgeCleanup", detail:L10n.text(.settings,"settingsWindow.animationEdgeCleanup.detail")),
+                form.toggle(L10n.text(.settings,"search.add.text.98"), "petShadow")],symbol:"sparkles")
+            let quotaRows = [form.toggle(L10n.text(.settings,"search.add.text.101"), "quotaCacheEnabled", detail:L10n.text(.settings,"settingsWindow.quotaCacheEnabled.detail")),
+                form.conditional(form.slider(L10n.text(.settings,"search.add.text.102"), "quotaCacheSeconds", range:PetPreferences.ranges["quotaCacheSeconds"]!, suffix:L10n.text(.settings,"activity.leisureInterval.suffix")),when:{$0.bool("quotaCacheEnabled")})]
+            form.group(L10n.text(.settings,"search.add.text.100"),quotaRows,symbol:AppIcons.quotaSymbol)
+            form.group(L10n.text(.settings,"search.add.text.104"), [form.toggle(L10n.text(.settings,"search.add.text.105"), "showDiagnostics")],symbol:"chart.xyaxis.line")
         }
         scroll.contentView.scroll(to:.zero)
         updateSearchPresentation()
@@ -400,30 +400,30 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     }
     private func general() {
         if let notice = preferences.compatibilityNotice ?? SettingsStorage.compatibilityNotice {
-            form.group("配置兼容",[form.row("兼容备份",control:ActionButton("导出…") { [weak self] in self?.exportCompatibilitySettings() })],symbol:"gearshape.2",detail:notice)
+            form.group(L10n.text(.settings,"settingsWindow.general.text"),[form.row(L10n.text(.settings,"settingsWindow.general.text.2"),control:ActionButton(L10n.text(.settings,"settingsWindow.general.button")) { [weak self] in self?.exportCompatibilitySettings() })],symbol:"gearshape.2",detail:notice)
         }
         let login = SMAppService.mainApp.status
         let loginText = LoginLauncher.statusText
-        form.group("启动",[
-            form.row("登录时启动",detail:loginText,control:ActionButton(login == .enabled ? "停用…" : login == .requiresApproval ? "打开登录项…" : "启用…") { [weak self] in self?.configureLogin() }),
-            form.row("随 Codex 启动",detail:FollowLauncher.statusText,control:ActionButton("配置…") { [weak self] in FollowLauncher.configure(); self?.render() }),
-            form.toggle("记住上次位置","rememberPosition")],symbol:"power")
-        form.group("权限与系统设置",[
-            form.row("访达自动化",detail:"点击文件链接时，在访达中选中文件；对应窗口已最小化时会恢复显示。",control:FinderPermissionControl(frame:.zero)),
-            form.row("文件与文件夹",detail:"首次访问文稿、桌面或下载等目录时，系统会询问是否允许。可在系统设置中按目录调整。",control:ActionButton("系统设置…") {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
-            form.row("登录项与后台运行",detail:"管理登录时启动和随 Codex 启动。",control:ActionButton("打开登录项…") {SMAppService.openSystemSettingsLoginItems()})],symbol:"lock.shield")
+        form.group(L10n.text(.settings,"search.add.text"),[
+            form.row(L10n.text(.settings,"search.add.text.2"),detail:loginText,control:ActionButton(login == .enabled ? L10n.text(.settings,"settingsWindow.general.button.2") : login == .requiresApproval ? L10n.text(.settings,"settingsWindow.general.button.3") : L10n.text(.settings,"settingsWindow.general.button.4")) { [weak self] in self?.configureLogin() }),
+            form.row(L10n.text(.settings,"autostart.configure.messageText"),detail:FollowLauncher.statusText,control:ActionButton(L10n.text(.settings,"settingsWindow.general.button.5")) { [weak self] in FollowLauncher.configure(); self?.render() }),
+            form.toggle(L10n.text(.settings,"search.add.text.4"),"rememberPosition")],symbol:"power")
+        form.group(L10n.text(.settings,"search.add.text.6"),[
+            form.row(L10n.text(.settings,"search.add.text.7"),detail:L10n.text(.settings,"settingsWindow.general.text.8"),control:FinderPermissionControl(frame:.zero)),
+            form.row(L10n.text(.settings,"search.add.text.9"),detail:L10n.text(.settings,"settingsWindow.general.text.10"),control:ActionButton(L10n.text(.settings,"settingsWindow.general.button.6")) {SystemPermissionSettings.open("Privacy_FilesAndFolders")}),
+            form.row(L10n.text(.settings,"search.add.text.11"),detail:L10n.text(.settings,"settingsWindow.general.text.12"),control:ActionButton(L10n.text(.settings,"settingsWindow.general.button.3")) {SMAppService.openSystemSettingsLoginItems()})],symbol:"lock.shield")
         let menu = AccentPopUpButton(); displayMenu = menu
-        menu.identifier = .init("preferredDisplay"); menu.setAccessibilityLabel("所在显示器")
+        menu.identifier = .init("preferredDisplay"); menu.setAccessibilityLabel(L10n.text(.settings,"search.add.text.16"))
         menu.widthAnchor.constraint(equalToConstant:190).isActive = true
         form.attach(menu) { [weak self] sender in
             guard let value = (sender as? NSPopUpButton)?.selectedItem?.representedObject as? String else {return}
             self?.preferences.set(value,for:"preferredDisplay")
         }
         refreshDisplays()
-        form.group("桌面",[form.toggle("全屏时自动隐藏","autoFullscreen"),
-            form.row("所在显示器",detail:"选择显示器后，桌宠固定在该屏幕内活动和拖动。",control:menu)],symbol:"display")
+        form.group(L10n.text(.settings,"search.add.text.13"),[form.toggle(L10n.text(.settings,"search.add.text.14"),"autoFullscreen"),
+            form.row(L10n.text(.settings,"search.add.text.16"),detail:L10n.text(.settings,"settingsWindow.general.text.15"),control:menu)],symbol:"display")
         form.group(BrowserSearchEngine.group,[form.choice(BrowserSearchEngine.settingTitle,BrowserSearchEngine.key,BrowserSearchEngine.options,
-            detail:"在默认浏览器中用所选引擎搜索选中的文字。")],symbol:"magnifyingglass")
+            detail:L10n.text(.settings,"settingsWindow.general.text.16"))],symbol:"magnifyingglass")
         let version = form.note("")
         form.observeValues { [weak version] preferences in
             version?.stringValue = preferences.projectChannelHint
@@ -434,8 +434,8 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     @objc private func refreshDisplays() {
         guard selected == .general,let menu = displayMenu else {return}
         let saved = preferences.string("preferredDisplay")
-        var displays = [("","随拖动切换屏幕")] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
-        if !displays.contains(where:{$0.0 == saved}) {displays.append((saved,"已断开的显示器（暂用当前屏幕）"))}
+        var displays = [("",L10n.text(.settings,"settingsWindow.displays"))] + NSScreen.screens.map {(PetPreferences.displayID($0),$0.localizedName)}
+        if !displays.contains(where:{$0.0 == saved}) {displays.append((saved,L10n.text(.settings,"settingsWindow.refreshDisplays.text")))}
         menu.removeAllItems()
         for (id,title) in displays {
             let item = NSMenuItem(title:title,action:nil,keyEquivalent:"")
@@ -444,7 +444,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
         menu.selectItem(at:displays.firstIndex {$0.0 == saved} ?? 0)
     }
     private func configureLogin() {
-        guard Bundle.main.bundleURL.pathExtension == "app" else {showError("请使用构建后的应用设置登录启动",PetFailure(message:"请打开构建后的 .app，再启用登录时启动。")); return}
+        guard Bundle.main.bundleURL.pathExtension == "app" else {showError(L10n.text(.settings,"settingsWindow.configureLogin.error"),PetFailure(message:L10n.text(.settings,"settingsWindow.configureLogin.message"))); return}
         do {
             switch SMAppService.mainApp.status {
             case .enabled: try LoginLauncher.setEnabled(false)
@@ -452,49 +452,49 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
             default: try LoginLauncher.setEnabled(true)
             }
             render()
-        } catch {showError("登录启动设置失败",error)}
+        } catch {showError(L10n.text(.settings,"settingsWindow.configureLogin.error.2"),error)}
     }
     @objc private func refreshUpdateStatus() {
         updateStatusLabel?.stringValue = UpdateChecker.shared.recordText
         updateTimeLabel?.stringValue = UpdateChecker.shared.lastCheckText
     }
     private func updates() {
-        let checkUpdate = ActionButton("检查更新…") {UpdateWindow.show()}; checkUpdate.emphasize()
-        form.group("版本",[form.row("当前版本",control:label(Paths.version)),
-            form.row("检查正式版本",control:checkUpdate),
-            form.row("公开仓库",control:ActionButton("GitHub 发布页") {
-                if !NSWorkspace.shared.open(UpdateChecker.releases) {showError("无法打开发布页",PetFailure(message:UpdateChecker.releases.absoluteString))}
+        let checkUpdate = ActionButton(L10n.text(.settings,"settingsWindow.checkUpdate")) {UpdateWindow.show()}; checkUpdate.emphasize()
+        form.group(L10n.text(.settings,"search.add.text.107"),[form.row(L10n.text(.settings,"search.add.text.108"),control:label(Paths.version)),
+            form.row(L10n.text(.settings,"search.add.text.109"),control:checkUpdate),
+            form.row(L10n.text(.settings,"search.add.text.110"),control:ActionButton(L10n.text(.settings,"settingsWindow.updates.button")) {
+                if !NSWorkspace.shared.open(UpdateChecker.releases) {showError(L10n.text(.settings,"settingsWindow.updates.error"),PetFailure(message:UpdateChecker.releases.absoluteString))}
             })],symbol:"info.circle")
-        form.group("自动检查",[form.toggle("启动时检查更新","automaticallyCheckUpdates",detail:"每 24 小时最多自动检查一次。发现新版时提醒，检查失败仅记录在本页。")],symbol:"arrow.triangle.2.circlepath")
+        form.group(L10n.text(.settings,"search.add.text.112"),[form.toggle(L10n.text(.settings,"search.add.text.113"),"automaticallyCheckUpdates",detail:L10n.text(.settings,"settingsWindow.automaticallyCheckUpdates.detail"))],symbol:"arrow.triangle.2.circlepath")
         let status = form.note(UpdateChecker.shared.recordText), time = label(UpdateChecker.shared.lastCheckText)
         updateStatusLabel = status; updateTimeLabel = time
-        form.group("检查记录",[form.row("上次检查时间",control:time),status],symbol:"clock.arrow.circlepath")
+        form.group(L10n.text(.settings,"search.add.text.115"),[form.row(L10n.text(.settings,"search.add.text.116"),control:time),status],symbol:"clock.arrow.circlepath")
     }
     private func advanced() {
         workspacePage.render()
         if let reason = historyRecoveryReason() {
-            form.group("历史恢复",[
-                form.row("导出历史原文件",control:ActionButton("导出…") { [weak self] in self?.exportOriginalHistory() }),
-                form.row("重新读取历史",control:ActionButton("重新读取") { [weak self] in
+            form.group(L10n.text(.settings,"settingsWindow.advanced.text"),[
+                form.row(L10n.text(.settings,"settingsWindow.advanced.text.2"),control:ActionButton(L10n.text(.settings,"settingsWindow.general.button")) { [weak self] in self?.exportOriginalHistory() }),
+                form.row(L10n.text(.settings,"settingsWindow.advanced.text.3"),control:ActionButton(L10n.text(.settings,"settingsWindow.advanced.button")) { [weak self] in
                     guard let self else {return}
-                    do {try self.onReloadHistory?(); self.render()} catch {showError("历史仍为只读",error)}
+                    do {try self.onReloadHistory?(); self.render()} catch {showError(L10n.text(.settings,"settingsWindow.advanced.error"),error)}
                 })],symbol:"arrow.counterclockwise",detail:reason)
         }
-        form.group("设置文件",[form.row("导出设置",detail:"导出应用设置，不含聊天记录和模型配置。",control:ActionButton("导出…") { [weak self] in self?.exportSettings() }),form.row("导入设置",detail:"导入应用设置，不改变系统登录项。",control:ActionButton("导入…") { [weak self] in self?.importSettings() })],symbol:"doc.badge.gearshape")
-        let data = label("正在统计…"), work = label("正在统计…"), cache = label("正在统计…")
-        let total = label("正在统计本应用磁盘存储…")
+        form.group(L10n.text(.settings,"search.add.text.69"),[form.row(L10n.text(.settings,"search.add.text.70"),detail:L10n.text(.settings,"settingsWindow.advanced.text.6"),control:ActionButton(L10n.text(.settings,"settingsWindow.general.button")) { [weak self] in self?.exportSettings() }),form.row(L10n.text(.settings,"search.add.text.71"),detail:L10n.text(.settings,"settingsWindow.advanced.button.3"),control:ActionButton(L10n.text(.settings,"settingsWindow.advanced.button.4")) { [weak self] in self?.importSettings() })],symbol:"doc.badge.gearshape")
+        let data = label(L10n.text(.settings,"settingsWindow.data")), work = label(L10n.text(.settings,"settingsWindow.data")), cache = label(L10n.text(.settings,"settingsWindow.data"))
+        let total = label(L10n.text(.settings,"settingsWindow.total"))
         total.font = .systemFont(ofSize:11); total.textColor = .secondaryLabelColor
         total.identifier = .init("settings-explanation")
-        let dataButton = SettingsFooterButton(title:"清空本应用的本机数据…",target:self,action:#selector(clearLocalData))
-        let cacheButton = SettingsFooterButton(title:"清空缓存…",target:self,action:#selector(clearLocalCache))
+        let dataButton = SettingsFooterButton(title:L10n.text(.settings,"settingsWindow.dataButton"),target:self,action:#selector(clearLocalData))
+        let cacheButton = SettingsFooterButton(title:L10n.text(.settings,"settingsWindow.cacheButton"),target:self,action:#selector(clearLocalCache))
         for button in [dataButton,cacheButton] {button.bezelStyle = .rounded; button.hasDestructiveAction = true}
-        form.group("本应用所占本机存储",[total,
-            form.row("本应用所占本机数据",detail:"聊天记录、同步副本和应用设置",control:data),
-            form.row("内置任务文件夹",control:work),
-            form.row("磁盘缓存",control:cache),
-            form.row("清空本应用的本机数据",control:dataButton),form.row("清空磁盘缓存",control:cacheButton),
-            form.row("数据目录",detail:Paths.data.path,control:ActionButton("在访达中显示") {if !NSWorkspace.shared.open(Paths.data) {showError("无法打开数据目录",PetFailure(message:Paths.data.path))}})],
-            symbol:"internaldrive",action:ActionButton("刷新") { [weak self] in self?.render() })
+        form.group(L10n.text(.settings,"search.add.text.78"),[total,
+            form.row(L10n.text(.settings,"search.add.text.79"),detail:L10n.text(.settings,"settingsWindow.advanced.text.9"),control:data),
+            form.row(L10n.text(.settings,"search.add.text.80"),control:work),
+            form.row(L10n.text(.settings,"search.add.text.81"),control:cache),
+            form.row(L10n.text(.settings,"search.add.text.82"),control:dataButton),form.row(L10n.text(.settings,"search.add.text.83"),control:cacheButton),
+            form.row(L10n.text(.settings,"search.add.text.84"),detail:Paths.data.path,control:ActionButton(L10n.text(.settings,"settingsWindow.advanced.button.5")) {if !NSWorkspace.shared.open(Paths.data) {showError(L10n.text(.settings,"settingsWindow.advanced.button.6"),PetFailure(message:Paths.data.path))}})],
+            symbol:"internaldrive",action:ActionButton(L10n.text(.settings,"settingsWindow.advanced.button.7")) { [weak self] in self?.render() })
         storageGeneration += 1; let generation = storageGeneration
         DispatchQueue.global(qos:.utility).async { [weak self] in
             let result = Result {try LocalStorage.usage()}
@@ -502,41 +502,41 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 guard let self, self.storageGeneration == generation, self.selected == .advanced else {return}
                 switch result {
                 case .success(let usage):
-                    total.stringValue = "合计 "+ByteCountFormatter.string(fromByteCount:usage.total,countStyle:.file)+" · 占比按以下三项合计计算"
+                    total.stringValue = L10n.text(.settings,"settingsWindow.advanced.text.15")+ByteCountFormatter.string(fromByteCount:usage.total,countStyle:.file)+L10n.text(.settings,"settingsWindow.advanced.text.16")
                     data.stringValue = usage.description(usage.data); work.stringValue = usage.description(usage.workspace); cache.stringValue = usage.description(usage.cache)
                 case .failure(let error):
-                    total.stringValue = "统计失败："+error.localizedDescription
-                    for field in [data,work,cache] {field.stringValue = "未获取"}
+                    total.stringValue = L10n.text(.settings,"settingsWindow.advanced.text.17")+error.localizedDescription
+                    for field in [data,work,cache] {field.stringValue = L10n.text(.settings,"settingsWindow.advanced.text.18")}
                 }
             }
         }
     }
     @objc private func clearLocalData() {
-        confirmStorage(title:"清空本应用的本机数据？",body:"删除本应用的聊天记录和 Codex 同步副本，并恢复本应用设置。默认任务文件夹、其他工作目录、Codex 原始记录和登录信息保留。",button:"清空本应用的本机数据") { [weak self] in
-            guard let action = self?.onClearLocalData else {throw PetFailure(message:"数据管理尚未就绪。")}
+        confirmStorage(title:L10n.text(.settings,"settingsWindow.clearLocalData.title"),body:L10n.text(.settings,"settingsWindow.clearLocalData.text"),button:L10n.text(.settings,"search.add.text.82")) { [weak self] in
+            guard let action = self?.onClearLocalData else {throw PetFailure(message:L10n.text(.settings,"settingsWindow.clearLocalData.message"))}
             try action()
         }
     }
     @objc private func clearLocalCache() {
-        confirmStorage(title:"清空磁盘缓存？",body:"删除本应用的磁盘缓存；后续使用时重新生成。聊天记录、设置和动画素材保留。",button:"清空缓存") {try LocalStorage.clearCache()}
+        confirmStorage(title:L10n.text(.settings,"settingsWindow.clearLocalCache.title"),body:L10n.text(.settings,"settingsWindow.clearLocalCache.text"),button:L10n.text(.settings,"settingsWindow.clearLocalCache.text.2")) {try LocalStorage.clearCache()}
     }
     private func confirmStorage(title:String,body:String,button:String,action:@escaping () throws -> Void) {
         window.makeFirstResponder(nil)
         let alert = NSAlert(); alert.alertStyle = .warning; alert.messageText = title; alert.informativeText = body
-        alert.addButton(withTitle:"取消"); alert.addButton(withTitle:button).hasDestructiveAction = true
+        alert.addButton(withTitle:L10n.text(.settings,"autostart.configure.button")); alert.addButton(withTitle:button).hasDestructiveAction = true
         alert.beginDangerousSheet(for:window) { [weak self] response in
             guard response == .alertSecondButtonReturn else {return}
-            do {try action(); self?.render()} catch {showError("清理未完成",error)}
+            do {try action(); self?.render()} catch {showError(L10n.text(.settings,"settingsWindow.confirmStorage.error"),error)}
         }
     }
     @objc private func restorePage() {window.makeFirstResponder(nil); preferences.reset(selected.keys); render(); if selected == .appearance {appearancePage.showPreview()} else if selected == .identity {onMessagePreview(.preview)}}
     @objc private func restoreAll() {
         window.makeFirstResponder(nil); appearancePage.dismissPreview()
         let alert = NSAlert(); alert.alertStyle = .warning
-        alert.messageText = "恢复全部设置为默认值？"
-        alert.informativeText = "全部应用设置将恢复默认。聊天记录、动画素材和系统登录启动项保持不变。"
-        alert.addButton(withTitle:"取消")
-        let confirm = alert.addButton(withTitle:"恢复全部设置")
+        alert.messageText = L10n.text(.settings,"settingsWindow.restoreAll.messageText")
+        alert.informativeText = L10n.text(.settings,"settingsWindow.restoreAll.informativeText")
+        alert.addButton(withTitle:L10n.text(.settings,"autostart.configure.button"))
+        let confirm = alert.addButton(withTitle:L10n.text(.settings,"settingsWindow.confirm"))
         confirm.hasDestructiveAction = true
         alert.buttons[0].keyEquivalent = "\u{1b}"; confirm.keyEquivalent = ""
         alert.beginDangerousSheet(for:window) { [weak self] response in guard response == .alertSecondButtonReturn, let self else {return}; self.preferences.reset(Array(PetPreferences.defaults.keys)); self.render() }
@@ -552,28 +552,28 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
                 let original = self.preferences.defaults.dictionary(forKey:"compatibilityRecoveredValues") ?? [:]
                 values.merge(original) {_,old in old}
                 try JSONSerialization.data(withJSONObject:["settings":values,"schemaVersion":source.integer(forKey:SettingsStorage.schemaKey)],options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)
-            } catch {showError("导出兼容备份失败",error)}
+            } catch {showError(L10n.text(.settings,"settingsWindow.exportCompatibilitySettings.error"),error)}
         }
     }
     private func exportOriginalHistory() {
         let ext = historyExportExtension()
-        let panel = NSSavePanel(); panel.allowedContentTypes = [UTType(filenameExtension:ext) ?? .data]; panel.nameFieldStringValue = "白龙桌宠Swift-历史原文件."+ext
+        let panel = NSSavePanel(); panel.allowedContentTypes = [UTType(filenameExtension:ext) ?? .data]; panel.nameFieldStringValue = L10n.text(.settings,"settingsWindow.exportOriginalHistory.text")+ext
         PanelPresentation.present(panel,relativeTo:window) { [weak self] response in
             guard response == .OK,let url = panel.url,let self else {return}
-            do {try self.onExportHistory?(url)} catch {showError("导出历史原文件失败",error)}
+            do {try self.onExportHistory?(url)} catch {showError(L10n.text(.settings,"settingsWindow.exportOriginalHistory.error"),error)}
         }
     }
     private func exportSettings() {
         window.makeFirstResponder(nil)
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = PetPreferences.productName+"设置.json"
-        PanelPresentation.present(panel,relativeTo:window) { [weak self] response in guard response == .OK, let url = panel.url, let self else {return}; do {try self.preferences.exportData().write(to:url,options:.atomic)} catch {showError("导出设置失败",error)} }
+        PanelPresentation.present(panel,relativeTo:window) { [weak self] response in guard response == .OK, let url = panel.url, let self else {return}; do {try self.preferences.exportData().write(to:url,options:.atomic)} catch {showError(L10n.text(.settings,"settingsWindow.exportSettings.error"),error)} }
     }
     private func importSettings() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         PanelPresentation.present(panel,relativeTo:window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else {return}
             do {try self.preferences.importData(Data(contentsOf:url),clipIDs:Set(self.catalog?.all.map(\.id) ?? [])); self.render()}
-            catch {showError("导入设置失败",error)}
+            catch {showError(L10n.text(.settings,"settingsWindow.importSettings.error"),error)}
         }
     }
 }

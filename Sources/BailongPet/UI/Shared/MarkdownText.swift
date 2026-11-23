@@ -76,8 +76,8 @@ enum MarkdownText {
                 // 保留图片入口，不再丢弃 Markdown 图片地址；不把远程图片下载到本机。
                 attributes.merge(LinkAppearance.attributes(for:image)) {_,link in link}
                 let description = value.replacingOccurrences(of:"\u{FFFC}",with:"").trimmingCharacters(in:.whitespacesAndNewlines)
-                let name = image.lastPathComponent.isEmpty ? "查看图片" : image.lastPathComponent
-                value = "图片：" + (description.isEmpty ? name : description)
+                let name = image.lastPathComponent.isEmpty ? L10n.text(.tasks,"taskActivity.imageView") : image.lastPathComponent
+                value = L10n.text(.conversation,"markdownText.render.text.2") + (description.isEmpty ? name : description)
             }
             let text = NSMutableAttributedString(string:prefix+value,attributes:attributes)
             if !prefix.isEmpty {text.removeAttribute(.inlineCode,range:NSRange(location:0,length:(prefix as NSString).length))}

@@ -10,7 +10,7 @@ final class CodeBlockContent:NSObject {
     var headerHeight:CGFloat {CodeBlockHeaderLayout.height(for:font)}
     init(code:String,language:String,font:NSFont) {self.code = code; self.language = language; self.font = font}
     var label:String {
-        ["swift":"Swift","python":"Python","py":"Python","js":"JavaScript","javascript":"JavaScript","ts":"TypeScript","typescript":"TypeScript","json":"JSON","html":"HTML","css":"CSS","sql":"SQL" ][language.lowercased()] ?? (language.isEmpty ? "代码" : language)
+        ["swift":"Swift","python":"Python","py":"Python","js":"JavaScript","javascript":"JavaScript","ts":"TypeScript","typescript":"TypeScript","json":"JSON","html":"HTML","css":"CSS","sql":"SQL" ][language.lowercased()] ?? (language.isEmpty ? L10n.text(.conversation,"codeBlockRendering.text") : language)
     }
     override func isEqual(_ object:Any?) -> Bool {
         guard let other = object as? CodeBlockContent else {return false}
@@ -88,11 +88,11 @@ final class CodeBlockToolbar:NSView {
     private let copyButton:NSButton
     init(_ content:CodeBlockContent) {
         self.content = content
-        copyButton = HoverIconButton(symbol:"doc.on.doc",label:"拷贝代码")
+        copyButton = HoverIconButton(symbol:"doc.on.doc",label:L10n.text(.conversation,"codeBlockRendering.label"))
         super.init(frame:NSRect(x:0,y:0,width:30,height:26))
         copyButton.isBordered = false; copyButton.bezelStyle = .inline; copyButton.target = self
         copyButton.frame = bounds; copyButton.autoresizingMask = [.width,.height]; addSubview(copyButton)
-        copyButton.hoverHelp = "拷贝"
+        copyButton.hoverHelp = L10n.text(.app,"application.installMenuBar.text.4")
         CopyFeedback.attach(to:copyButton) { [weak self] in self?.content.code }
     }
     required init?(coder:NSCoder) {fatalError()}

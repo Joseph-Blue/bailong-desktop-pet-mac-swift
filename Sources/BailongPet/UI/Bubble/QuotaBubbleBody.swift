@@ -52,7 +52,7 @@ final class QuotaBubbleBody: NSView {
             addText(overview.subscriptionHeading,font:.systemFont(ofSize:13*fontScale,weight:.semibold))
         }
         if let cachedAt {
-            addText("缓存 · 更新于 "+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale))
+            addText(L10n.text(.usage,"quotaBubbleBody.arrange.text")+cachedAt.formatted(date:.omitted,time:.standard),font:.systemFont(ofSize:11*fontScale))
         }
         y += 12*scale
         let rows = overview.displayRows(at:now)
@@ -157,7 +157,7 @@ final class QuotaBubbleBody: NSView {
         let quotaColor: NSColor? = row.remaining.flatMap {$0 <= 5 ? .systemRed : $0 <= 10 ? .systemOrange : nil}
         amount.textColor = row.tone == .positive ? StatusTextColor.green : row.tone == .negative ? StatusTextColor.red
             : row.remaining.map {$0 <= 5 ? StatusTextColor.red : $0 <= 10 ? StatusTextColor.orange : .labelColor} ?? .labelColor
-        if row.loading {loadingAmount = amount; renderLoading(); amount.setAccessibilityLabel("本机今日用量加载中")}
+        if row.loading {loadingAmount = amount; renderLoading(); amount.setAccessibilityLabel(L10n.text(.usage,"quotaBubbleBody.addQuotaRow.text"))}
         for field in [heading,amount] where field !== heading || row.subtitle == nil {
             field.maximumNumberOfLines = 1; field.usesSingleLineMode = true
             field.lineBreakMode = .byTruncatingTail
@@ -205,7 +205,7 @@ final class QuotaBubbleBody: NSView {
             addText(footnote,font:.systemFont(ofSize:11*fontScale))
         }
         if row.retry,let retry {
-            let button = ActionButton("重试",retry); button.bezelStyle = .inline
+            let button = ActionButton(L10n.text(.usage,"quotaBubbleBody.addQuotaRow.button"),retry); button.bezelStyle = .inline
             button.font = .systemFont(ofSize:12*fontScale)
             button.frame = NSRect(x:0,y:y,width:60*scale,height:26*scale)
             addSubview(button); y += button.frame.height
@@ -221,15 +221,15 @@ final class QuotaBubbleBody: NSView {
         management?.symbolConfiguration = actionSymbol
         let providerPage:ActionButton? = overview.apiProvider.flatMap {provider in
             guard let address = provider.pageURL,let url = URL(string:address) else {return nil}
-            let button = ActionButton("打开供应商开放平台") {NSWorkspace.shared.open(url)}
+            let button = ActionButton(L10n.text(.usage,"quotaBubbleBody.addActions.button")) {NSWorkspace.shared.open(url)}
             button.font = actionFont
             button.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil)?
                 .withSymbolConfiguration(actionSymbol)
             button.imagePosition = .imageLeading
-            button.setAccessibilityLabel("打开供应商开放平台")
+            button.setAccessibilityLabel(L10n.text(.usage,"quotaBubbleBody.addActions.button"))
             return button
         }
-        let refresh = retry.map {ActionButton(failed ? "重试" : "立即刷新",$0)}
+        let refresh = retry.map {ActionButton(failed ? L10n.text(.usage,"quotaBubbleBody.addQuotaRow.button") : L10n.text(.usage,"quotaBubbleBody.addActions.button.2"),$0)}
         if let refresh {
             refresh.font = actionFont
             refresh.image = NSImage(systemSymbolName:"arrow.clockwise",accessibilityDescription:nil)?
@@ -261,7 +261,7 @@ final class QuotaBubbleBody: NSView {
         guard let field = loadingAmount else {return}
         let font = field.font ?? .systemFont(ofSize:13)
         let value = NSMutableAttributedString(attributedString:InlineStatusLayout.braille(InlineStatusLayout.brailleFrames[loadingPhase],font:font,color:AppAccent.foregroundColor))
-        value.append(NSAttributedString(string:" 加载中",attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
+        value.append(NSAttributedString(string:L10n.text(.usage,"quotaBubbleBody.renderLoading.text"),attributes:[.font:font,.foregroundColor:NSColor.labelColor]))
         let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .right
         value.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:value.length))
         field.attributedStringValue = value

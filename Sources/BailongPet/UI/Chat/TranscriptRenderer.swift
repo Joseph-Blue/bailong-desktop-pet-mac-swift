@@ -26,8 +26,8 @@ final class TranscriptRenderer {
         }
         if turns.isEmpty {
             invalidate()
-            append("与"+PetPreferences.shared.petName+"聊聊",font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.foregroundColor)
-            append(conversation.external ? "在下方输入想做的事。" : PetPreferences.shared.statusLine("conversationEmptyTemplate"),color:.secondaryLabelColor)
+            append(L10n.text(.conversation,"transcriptRenderer.appendMarkdown.text")+PetPreferences.shared.petName+L10n.text(.conversation,"transcriptRenderer.appendMarkdown.text.2"),font:.systemFont(ofSize:18,weight:.semibold),color:AppAccent.foregroundColor)
+            append(conversation.external ? L10n.text(.conversation,"transcriptRenderer.appendMarkdown.text.3") : PetPreferences.shared.statusLine("conversationEmptyTemplate"),color:.secondaryLabelColor)
             return result
         }
         let style = style(conversation)
@@ -43,7 +43,7 @@ final class TranscriptRenderer {
             let bodyFont = NSFont.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))
             let headingFont = NSFont.systemFont(ofSize:bodyFont.pointSize+2,weight:.semibold)
             if !body.input.isEmpty {
-                result.append(TranscriptIcon.render(NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:"用户"),font:headingFont,description:"用户"))
+                result.append(TranscriptIcon.render(NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:L10n.text(.conversation,"transcriptRenderer.appendMarkdown.accessibilityDescription")),font:headingFont,description:L10n.text(.conversation,"transcriptRenderer.appendMarkdown.accessibilityDescription")))
                 append(PetPreferences.shared.address+" · "+turn.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits)),font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize")+2,weight:.semibold),color:AppAccent.foregroundColor,after:6)
                 result.append(MarkdownText.renderUserInput(body.input,font:.systemFont(ofSize:PetPreferences.shared.number("messageFontSize"))))
                 // 消息之间保留空行；分隔符使用正文样式，不继承末尾链接或行内代码属性。
@@ -57,9 +57,9 @@ final class TranscriptRenderer {
             append(turn.status == "completed" ? PetPreferences.shared.petName+" · 「"+PetPreferences.shared.taskResultLine("completed")+"」" : PetPreferences.shared.petName+" · "+turnStatus(turn.status),font:headingFont,color:AppAccent.foregroundColor,after:6)
             // 只隐藏旧版外部观察器合成的步骤报错，不删历史字段或原始对话内容。
             let steps = conversation.external && body.steps.hasPrefix("这一步执行遇到问题，任务尚未报告完成。") ? "" : body.steps
-            for (heading,text) in [("公开思考摘要",body.summary),("执行记录",steps)] where !text.isEmpty {
+            for (heading,text,isSummary) in [(L10n.text(.conversation,"transcriptRenderer.appendMarkdown.text.4"),body.summary,true),(L10n.text(.conversation,"transcriptRenderer.appendMarkdown.text.5"),steps,false)] where !text.isEmpty {
                 append(heading,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1),weight:.medium),color:.secondaryLabelColor,after:4)
-                if heading == "公开思考摘要" {appendMarkdown(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
+                if isSummary {appendMarkdown(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
                 else {append(text,font:.systemFont(ofSize:max(11,PetPreferences.shared.number("messageFontSize")-1)),color:.secondaryLabelColor)}
             }
             if let notice = body.sensitiveQuestionNotice {append(notice,color:.secondaryLabelColor)}
@@ -83,6 +83,6 @@ final class TranscriptRenderer {
         return result
     }
     private func turnStatus(_ value: String) -> String {
-        ["pending":"准备中","running":"处理中","inProgress":"处理中","completed":"已完成","failed":"未完成","interrupted":"已中断","cancelled":"已停止","canceled":"已停止","waitingForApproval":"等待批准","waitingForInput":"等待补充","unknown":"状态待确认"][value] ?? "状态待确认"
+        ["pending":L10n.text(.conversation,"transcriptRenderer.turnStatus.text"),"running":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.2"),"inProgress":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.2"),"completed":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.3"),"failed":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.4"),"interrupted":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.5"),"cancelled":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.6"),"canceled":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.6"),"waitingForApproval":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.7"),"waitingForInput":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.8"),"unknown":L10n.text(.conversation,"transcriptRenderer.turnStatus.text.9")][value] ?? L10n.text(.conversation,"transcriptRenderer.turnStatus.text.9")
     }
 }

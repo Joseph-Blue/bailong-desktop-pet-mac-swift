@@ -17,13 +17,13 @@ enum Paths {
     static func readVersion() throws -> String {
         let url = Bundle.main.bundleURL.pathExtension == "app" ? resources.appendingPathComponent("VERSION") : project.appendingPathComponent("VERSION")
         let version = try String(contentsOf:url,encoding:.utf8).trimmingCharacters(in:.whitespacesAndNewlines)
-        guard SemanticVersion(version) != nil else {throw PetFailure(message:"VERSION 中的版本号无法识别。")}
+        guard SemanticVersion(version) != nil else {throw PetFailure(message:L10n.text(.diagnostics,"resources.readVersion.message"))}
         return version
     }
     static var version:String {
         switch Result(catching:readVersion) {
         case .success(let value): return value
-        case .failure: return "版本不可读"
+        case .failure: return L10n.text(.diagnostics,"resources.failure")
         }
     }
 }
@@ -44,9 +44,9 @@ struct Clip: Decodable {
     let moveStartMs: Double?
     let moveStopMs: Double?
     var title: String {
-        if id == "idle2" {return "待机动作 02"}
-        return name ?? ["idle": "默认待机", "drag": "拖拽", "landing": "落地", "quota": "查询额度"][id] ?? id
+        L10n.assetText(.animations,"animation.\(id).title") ?? name ?? id
     }
+    var localizedLine: String? {L10n.assetText(.dialogue,"animation.\(id).line") ?? line}
 }
 struct Catalog: Decodable {
     let idle: Clip
@@ -218,11 +218,11 @@ final class Decoder: @unchecked Sendable {
             do {
                 let asset = AVURLAsset(url: Paths.assets.appendingPathComponent(file))
                 guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-                    throw PetFailure(message: "「\(clip.title)」没有视频轨道。")
+                    throw PetFailure(message: L10n.format(.diagnostics,"resources.load.message",String(describing:clip.title)))
                 }
                 guard current(token) else { return }
                 let rate = try await track.load(.nominalFrameRate)
-                guard rate.isFinite && rate > 0 else {throw PetFailure(message:"「\(clip.title)」缺少有效的素材帧率。")}
+                guard rate.isFinite && rate > 0 else {throw PetFailure(message:L10n.format(.diagnostics,"resources.load.message.2",String(describing:clip.title)))}
                 let range = try await track.load(.timeRange)
                 guard current(token) else { return }
                 let streaming = StreamingAnimation(asset: asset, track: track, capacity: capacity, resolution: resolution,
@@ -242,7 +242,7 @@ final class Decoder: @unchecked Sendable {
                     guard let frames = try streaming.preload(isCurrent: { self.current(token) }, progress: { count in
                         self.lock.withLock { if self.generation == token { self.preloadProgress = (clip.id, count, streaming.frameCount) } }
                     }), current(token) else { return }
-                    guard !frames.isEmpty else { throw PetFailure(message: "「\(clip.title)」没有可播放的帧。") }
+                    guard !frames.isEmpty else { throw PetFailure(message: L10n.format(.diagnostics,"resources.load.message.3",String(describing:clip.title))) }
                     let readyAt = ProcessInfo.processInfo.systemUptime
                     let timing = AnimationLoadTiming(requestedAt:requestedAt,firstFrameAt:streaming.firstFramePreparedAt!,readyAt:readyAt)
                     let animation = Animation(frames,fps:Double(rate),loadTiming:timing)

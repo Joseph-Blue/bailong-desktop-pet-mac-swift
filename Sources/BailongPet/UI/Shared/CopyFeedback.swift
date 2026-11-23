@@ -35,14 +35,14 @@ final class CopyFeedback:NSObject {
             NSPasteboard.general.clearContents()
             success = NSPasteboard.general.setString(text,forType:.string)
         } else {success = false}
-        let status = success ? "已拷贝" : "拷贝失败"
+        let status = success ? L10n.text(.app,"copyFeedback.copyValue.text") : L10n.text(.app,"copyFeedback.copyValue.text.2")
         if originalPosition != .imageOnly {button.title = status}
         if originalImage != nil {
             button.image = NSImage(systemSymbolName:success ? "checkmark" : "exclamationmark.triangle",accessibilityDescription:status)
             button.contentTintColor = success ? .systemGreen : .systemOrange
         }
         button.imagePosition = originalPosition
-        button.hoverHelp = success ? (originalPosition == .imageOnly ? status : nil) : "拷贝失败，请重试"
+        button.hoverHelp = success ? (originalPosition == .imageOnly ? status : nil) : L10n.text(.app,"copyFeedback.copyValue.text.3")
         button.setAccessibilityLabel(status)
         button.needsDisplay = true
         let timer = Timer(timeInterval:1.5,repeats:false) { [weak self] _ in self?.restore() }
@@ -53,7 +53,7 @@ final class CopyFeedback:NSObject {
         guard let button else {return}
         button.title = originalTitle; button.image = originalImage; button.imagePosition = originalPosition; button.contentTintColor = originalTint
         button.hoverHelp = originalHelp
-        button.setAccessibilityLabel(originalTitle.isEmpty ? (originalHelp ?? "拷贝") : originalTitle)
+        button.setAccessibilityLabel(originalTitle.isEmpty ? (originalHelp ?? L10n.text(.app,"copyFeedback.restore.text")) : originalTitle)
         button.needsDisplay = true; timer = nil
     }
     deinit {timer?.invalidate()}

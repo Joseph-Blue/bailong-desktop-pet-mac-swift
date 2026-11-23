@@ -27,7 +27,7 @@ extension ChatController {
         guard pet.preferences.bool("taskReminderEnabled"),pet.preferences.allows(.progress),
               !pet.hidden,!pet.quotaActive,!pet.bubble.kind.hasPrefix("quota"),
               pet.bubble.purpose != .attention,!ui.composerVisible else {return false}
-        pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:"已经有一会儿没有新进度，任务尚未报告完成。",kind:"task",thread:conversation.key,
+        pet.say(pet.preferences.statusLine("taskProgressTemplate"),body:L10n.text(.tasks,"taskReminder.showTaskReminder.text"),kind:"task",thread:conversation.key,
                 purpose:.progress,personalizeTitle:false,animateHeading:true,timing:.init(start:start,key:key,activityKey:activityKey),messageID:"progress-reminder")
         return true
     }

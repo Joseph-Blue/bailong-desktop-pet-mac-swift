@@ -4,10 +4,10 @@ import ServiceManagement
 enum StartupLocation {
     static func validate() throws {
         guard Bundle.main.bundleURL.pathExtension == "app" else {
-            throw PetFailure(message:"请从构建完整的 .app 设置启动项。")
+            throw PetFailure(message:L10n.text(.settings,"autostart.validate.message"))
         }
         guard !Bundle.main.bundleURL.path.contains("/AppTranslocation/") else {
-            throw PetFailure(message:"当前应用位于系统临时运行位置。请在访达中移到你选择的固定目录，从那里打开后设置启动项。")
+            throw PetFailure(message:L10n.text(.settings,"autostart.validate.message.2"))
         }
     }
     static func isOlder(than recorded:String?) -> Bool {
@@ -24,11 +24,11 @@ enum LoginLauncher {
     private static var defaults:UserDefaults {PetPreferences.shared.defaults}
     private(set) static var lastError:String?
     static var statusText:String {
-        if let lastError {return "启动项更新失败："+lastError}
+        if let lastError {return L10n.text(.settings,"autostart.loginLauncher.text")+lastError}
         switch SMAppService.mainApp.status {
-        case .enabled: return "已启用，打开新版时自动更新启动项"
-        case .requiresApproval: return "等待系统批准"
-        default: return "未启用"
+        case .enabled: return L10n.text(.settings,"autostart.enabled")
+        case .requiresApproval: return L10n.text(.settings,"autostart.requiresApproval")
+        default: return L10n.text(.settings,"autostart.loginLauncher.text.2")
         }
     }
     private static func rememberRegistration() {
@@ -68,11 +68,11 @@ enum LoginLauncher {
 final class FollowLauncher {
     private(set) static var lastUpdateError:String?
     static let didChange = Notification.Name("BailongFollowRegistrationDidChange")
-    private static let updateQueue = DispatchQueue(label:"白龙桌宠跟随启动维护")
+    private static let updateQueue = DispatchQueue(label:L10n.text(.diagnostics,"autostart.updateQueue.label"))
     private static var updating = false
     private struct CommandFailure:LocalizedError {
         let operation:String, status:Int32, output:String
-        var errorDescription:String? {"launchctl \(operation) 执行失败（\(status)）\n\(output)"}
+        var errorDescription:String? {L10n.format(.settings,"autostart.commandFailure.text",String(describing:operation),String(describing:status),String(describing:output))}
     }
     static let label = "com.bailongpet.appkit.follow"
     static let plist = URL(fileURLWithPath: NSHomeDirectory()+"/Library/LaunchAgents/"+label+".plist")
@@ -97,18 +97,18 @@ final class FollowLauncher {
         }
     }
     static var statusText: String {
-        if updating {return "正在更新跟随启动项…"}
-        if let lastUpdateError {return "启动项更新失败："+lastUpdateError}
-        guard FileManager.default.fileExists(atPath: plist.path) else { return "打开 Codex 或 ChatGPT 时启动桌宠" }
+        if updating {return L10n.text(.settings,"autostart.command.text")}
+        if let lastUpdateError {return L10n.text(.settings,"autostart.loginLauncher.text")+lastUpdateError}
+        guard FileManager.default.fileExists(atPath: plist.path) else { return L10n.text(.settings,"autostart.command.text.2") }
         do {
-            if SMAppService.statusForLegacyPlist(at:plist) == .requiresApproval {return "请在系统登录项中允许跟随启动"}
+            if SMAppService.statusForLegacyPlist(at:plist) == .requiresApproval {return L10n.text(.settings,"autostart.command.text.3")}
             let config = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as? [String: Any]
             let arguments = config?["ProgramArguments"] as? [String] ?? []
-            if arguments.contains(where: { $0.contains("/AppTranslocation/") }) { return "需要修复：旧配置指向临时运行位置" }
-            if arguments != expectedArguments { return "需要更新：启动项指向旧版本或其他位置" }
+            if arguments.contains(where: { $0.contains("/AppTranslocation/") }) { return L10n.text(.settings,"autostart.command.text.4") }
+            if arguments != expectedArguments { return L10n.text(.settings,"autostart.command.text.5") }
             let result = try launchctl(["print", service])
-            return result.status == 0 ? "已启用跟随启动" : "需要修复：监测器未加载（\(result.status)）"
-        } catch { return "无法读取启动状态：\(error.localizedDescription)" }
+            return result.status == 0 ? L10n.text(.settings,"autostart.command.text.6") : L10n.format(.settings,"autostart.command.text.7",String(describing:result.status))
+        } catch { return L10n.format(.settings,"autostart.command.text.8",String(describing:error.localizedDescription)) }
     }
     static func refreshExistingRegistration() {
         guard Bundle.main.bundleURL.pathExtension == "app",FileManager.default.fileExists(atPath:plist.path) else {return}
@@ -117,7 +117,7 @@ final class FollowLauncher {
         do {
             guard let config = try PropertyListSerialization.propertyList(from:Data(contentsOf:plist),format:nil) as? [String:Any],
                   config["Label"] as? String == label,let arguments = config["ProgramArguments"] as? [String] else {
-                throw PetFailure(message:"跟随启动配置格式错误。请在通用设置中修复。")
+                throw PetFailure(message:L10n.text(.settings,"autostart.refreshExistingRegistration.message"))
             }
             guard config["Disabled"] as? Bool != true else {return}
             let version = config["BailongVersion"] as? String
@@ -128,13 +128,13 @@ final class FollowLauncher {
     static func configure() {
         guard !updating else {return}
         let exists = FileManager.default.fileExists(atPath: plist.path)
-        let alert = NSAlert(); alert.messageText = "随 Codex 启动"
+        let alert = NSAlert(); alert.messageText = L10n.text(.settings,"autostart.configure.messageText")
         alert.informativeText = exists
-            ? statusText+"。修复／更新会将启动项重新绑定到当前版本；停用后不再自动启动桌宠。"
-            : "启用后会在登录时运行用户级监测器，打开 Codex 或 ChatGPT 时启动桌宠。手动退出后，同一次应用运行期间不会反复启动。"
-        alert.addButton(withTitle: "取消")
-        alert.addButton(withTitle: exists ? "修复／更新" : "启用")
-        if exists { alert.addButton(withTitle: "停用") }
+            ? statusText+L10n.text(.settings,"autostart.configure.text")
+            : L10n.text(.settings,"autostart.configure.text.2")
+        alert.addButton(withTitle: L10n.text(.conversation,"chatWindow.renameConversation.button.2"))
+        alert.addButton(withTitle: exists ? L10n.text(.settings,"autostart.configure.button.2") : L10n.text(.settings,"autostart.configure.button.3"))
+        if exists { alert.addButton(withTitle: L10n.text(.settings,"autostart.configure.button.4")) }
         alert.applyAccent(primary:1,keyboardDefault:1)
         let response = alert.runModal()
         guard response != .alertFirstButtonReturn else { return }
@@ -150,7 +150,7 @@ final class FollowLauncher {
                 do {try install()}
                 catch let failure as CommandFailure where failure.operation == "bootstrap" && failure.status == 5 {
                     // 用户已观察到第二次配置可成功；仅对这项加载错误补一次延后更新。
-                    NSLog("跟随启动首次加载失败，稍后重试一次：%@",failure.localizedDescription)
+                    NSLog(L10n.text(.diagnostics,"autostart.failure.text"),failure.localizedDescription)
                     Thread.sleep(forTimeInterval:1)
                     guard SMAppService.statusForLegacyPlist(at:plist) != .requiresApproval else {throw failure}
                     try install()
@@ -160,7 +160,7 @@ final class FollowLauncher {
                 updating = false
                 if case .failure(let error) = result {
                     lastUpdateError = error.localizedDescription
-                    if !automatic {showError("跟随启动设置失败",error)}
+                    if !automatic {showError(L10n.text(.settings,"autostart.beginUpdate.error"),error)}
                 }
                 NotificationCenter.default.post(name:didChange,object:nil)
             }
@@ -172,9 +172,9 @@ final class FollowLauncher {
         while true {
             let result = try launchctl(["print",service])
             if result.status == 113 {return} // launchd：服务已不存在。
-            if result.status != 0 {throw CommandFailure(operation:"确认旧监测器退出",status:result.status,output:result.output)}
+            if result.status != 0 {throw CommandFailure(operation:L10n.text(.settings,"autostart.removeLoadedService.error"),status:result.status,output:result.output)}
             guard ProcessInfo.processInfo.systemUptime < deadline else {
-                throw PetFailure(message:"旧监测器尚未退出，跟随启动项未更新。")
+                throw PetFailure(message:L10n.text(.settings,"autostart.removeLoadedService.message"))
             }
             Thread.sleep(forTimeInterval:0.1)
         }
@@ -186,7 +186,7 @@ final class FollowLauncher {
     private static func install() throws {
         try StartupLocation.validate()
         guard FileManager.default.isExecutableFile(atPath: helper.path) else {
-            throw PetFailure(message: "请从构建完整的 .app 设置跟随启动。")
+            throw PetFailure(message: L10n.text(.settings,"autostart.install.message"))
         }
         let manager = FileManager.default
         let oldData = manager.fileExists(atPath: plist.path) ? try Data(contentsOf: plist) : nil
@@ -208,7 +208,7 @@ final class FollowLauncher {
                     if loaded { try command(["bootstrap", "gui/\(getuid())", plist.path]) }
                 } else if manager.fileExists(atPath: plist.path) { try manager.removeItem(at: plist) }
             } catch {
-                throw PetFailure(message: "\(failure.localizedDescription)\n还原旧启动项也失败：\(error.localizedDescription)")
+                throw PetFailure(message: L10n.format(.settings,"autostart.install.message.2",String(describing:failure.localizedDescription),String(describing:error.localizedDescription)))
             }
             throw failure
         }

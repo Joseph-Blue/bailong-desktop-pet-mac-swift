@@ -13,7 +13,7 @@ enum GitIcons {
         case .remote:return remote
         }
     }
-    private static let remote = NSImage(systemSymbolName:"network",accessibilityDescription:"其他远端仓库")!
+    private static let remote = NSImage(systemSymbolName:"network",accessibilityDescription:L10n.text(.workspace,"gitStatusText.remote"))!
 
     // Lucide git-branch: https://lucide.dev/icons/git-branch (ISC).
     // Copyright (c) 2026 Lucide Icons and Contributors.

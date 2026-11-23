@@ -23,7 +23,7 @@ enum TurnTokenReader {
             if !matched {
                 guard let raw = try JSONSerialization.jsonObject(with:line) as? [String:Any],
                       let payload = raw["payload"] as? [String:Any],payload["turn_id"] as? String == turn else {
-                    throw PetFailure(message:"Token 记录与目标轮次不一致。")
+                    throw PetFailure(message:L10n.text(.usage,"turnTokenReader.read.message"))
                 }
                 matched = true
             }
@@ -82,7 +82,7 @@ enum TurnTokenReader {
                     pending.removeAll(keepingCapacity:true); oversized = false
                 }
                 if pending.count+part.element.count > limit {
-                    if pending.range(of:tokenMarker) != nil {throw PetFailure(message:"Token 用量事件超出读取长度。")}
+                    if pending.range(of:tokenMarker) != nil {throw PetFailure(message:L10n.text(.usage,"turnTokenReader.lines.message"))}
                     oversized = true; pending.removeAll(keepingCapacity:true)
                 }
                 if !oversized {pending.append(contentsOf:part.element)}

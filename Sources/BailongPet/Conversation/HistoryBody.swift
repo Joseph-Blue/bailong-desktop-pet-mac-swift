@@ -20,11 +20,11 @@ final class HistoryBodyReference: @unchecked Sendable {
     func value() -> HistoryBody {
         let (memory,disk) = lock.withLock {(self.memory,self.disk)}
         if let memory {return memory}
-        guard let disk else {preconditionFailure("历史正文缺少存储来源")}
+        guard let disk else {preconditionFailure(L10n.text(.conversation,"historyBody.value.error"))}
         do {return try disk.body(id)}
         catch {
             disk.reportReadFailure(error)
-            return HistoryBody(error:"历史正文读取失败："+error.localizedDescription)
+            return HistoryBody(error:L10n.text(.conversation,"historyBody.value.text")+error.localizedDescription)
         }
     }
     func persist(in target:HistoryDatabase,turnKey:String) throws {
@@ -33,7 +33,7 @@ final class HistoryBodyReference: @unchecked Sendable {
         let value:HistoryBody
         if let memory {value = memory}
         else if let disk {value = try disk.body(id)}
-        else {preconditionFailure("历史正文缺少存储来源")}
+        else {preconditionFailure(L10n.text(.conversation,"historyBody.value.error"))}
         try target.insert(id,value,turnKey:turnKey)
         // 事务提交后才卸载；失败时仍可显式重试原正文。
     }
@@ -73,7 +73,7 @@ final class HistoryDatabase: @unchecked Sendable {
         sqlite3_busy_timeout(db,1000)
         try execute("PRAGMA cache_size=-1024")
         let version = try scalar("PRAGMA user_version")
-        guard version == "0" || version == "3" else {throw PetFailure(message:"历史数据库格式不支持："+(version ?? "未提供"))}
+        guard version == "0" || version == "3" else {throw PetFailure(message:L10n.text(.conversation,"historyBody.message")+(version ?? L10n.text(.conversation,"historyBody.error")))}
         if version == "0" {
             try execute("BEGIN IMMEDIATE")
             do {
@@ -83,14 +83,14 @@ final class HistoryDatabase: @unchecked Sendable {
                 try execute("COMMIT")
             } catch {
                 let original = error
-                do {try execute("ROLLBACK")} catch {throw PetFailure(message:original.localizedDescription+"；建库回滚失败："+error.localizedDescription)}
+                do {try execute("ROLLBACK")} catch {throw PetFailure(message:original.localizedDescription+L10n.text(.conversation,"historyBody.error.2")+error.localizedDescription)}
                 throw original
             }
         }
         ready = true
     }
     deinit {if let db {sqlite3_close(db)}}
-    private func sqlError() -> Error {PetFailure(message:db.map {String(cString:sqlite3_errmsg($0))} ?? "无法打开历史数据库")}
+    private func sqlError() -> Error {PetFailure(message:db.map {String(cString:sqlite3_errmsg($0))} ?? L10n.text(.conversation,"historyBody.sqlError.error"))}
     private func statement(_ sql:String,_ values:[String] = []) throws -> OpaquePointer {
         var result:OpaquePointer?
         guard sqlite3_prepare_v2(db,sql,-1,&result,nil) == SQLITE_OK,let result else {throw sqlError()}
@@ -114,13 +114,13 @@ final class HistoryDatabase: @unchecked Sendable {
     }
     func register(_ body:HistoryBodyReference) {lock.withLock {references[body.id] = WeakBody(body)}}
     func reportReadFailure(_ error:Error) {
-        let first = lock.withLock {() -> Bool in guard failure == nil else {return false}; failure = "历史正文读取失败，已停止写入："+error.localizedDescription; return true}
+        let first = lock.withLock {() -> Bool in guard failure == nil else {return false}; failure = L10n.text(.conversation,"historyBody.reportReadFailure.text")+error.localizedDescription; return true}
         if first {DispatchQueue.main.async { [weak self] in self?.onReadFailure?(error) }}
     }
     func body(_ id:String) throws -> HistoryBody {
         try lock.withLock {
             if let cached = cache[id] {order.removeAll {$0 == id}; order.append(id); return cached.0}
-            guard let json = try scalar("SELECT body FROM history_bodies WHERE id=?",[id]) else {throw PetFailure(message:"历史正文缺失："+id)}
+            guard let json = try scalar("SELECT body FROM history_bodies WHERE id=?",[id]) else {throw PetFailure(message:L10n.text(.conversation,"historyBody.body.message")+id)}
             let value = try JSONDecoder().decode(HistoryBody.self,from:Data(json.utf8))
             let cost = max(json.utf8.count,value.cost)
             if cost <= cacheLimit {
@@ -138,7 +138,7 @@ final class HistoryDatabase: @unchecked Sendable {
             guard let json = try scalar("SELECT document FROM history_index WHERE id=1") else {return nil}
             let decoder = JSONDecoder(); decoder.userInfo[.historyDatabase] = self
             let document = try decoder.decode(HistoryDocument.self,from:Data(json.utf8))
-            guard document.schemaVersion == 3 else {throw PetFailure(message:"历史索引格式不支持")}
+            guard document.schemaVersion == 3 else {throw PetFailure(message:L10n.text(.conversation,"historyBody.load.message"))}
             try document.validateIdentity()
             return document
         }
@@ -164,12 +164,12 @@ final class HistoryDatabase: @unchecked Sendable {
                 let ids = String(decoding:try JSONEncoder().encode(Array(retained)),as:UTF8.self)
                 let manifestIDs = String(decoding:try JSONEncoder().encode(bodies.map(\.id)),as:UTF8.self)
                 let turnKeys = String(decoding:try JSONEncoder().encode(turns.map(\.key)),as:UTF8.self)
-                if try scalar("SELECT value FROM json_each(?) WHERE value NOT IN (SELECT id FROM history_bodies) LIMIT 1",[manifestIDs]) != nil {throw PetFailure(message:"历史正文缺失，事务未保存")}
+                if try scalar("SELECT value FROM json_each(?) WHERE value NOT IN (SELECT id FROM history_bodies) LIMIT 1",[manifestIDs]) != nil {throw PetFailure(message:L10n.text(.conversation,"historyBody.write.message"))}
                 try execute("DELETE FROM history_bodies WHERE id NOT IN (SELECT value FROM json_each(?)) AND (id NOT IN (SELECT value FROM json_each(?)) OR turn_key NOT IN (SELECT value FROM json_each(?)))",[manifestIDs,ids,turnKeys])
                 try execute("COMMIT")
             } catch {
                 let original = error
-                do {try execute("ROLLBACK")} catch {throw PetFailure(message:original.localizedDescription+"；事务回滚失败："+error.localizedDescription)}
+                do {try execute("ROLLBACK")} catch {throw PetFailure(message:original.localizedDescription+L10n.text(.conversation,"historyBody.write.error")+error.localizedDescription)}
                 throw original
             }
             for body in bodies {body.committed(to:self)}
@@ -178,7 +178,7 @@ final class HistoryDatabase: @unchecked Sendable {
     func export(to destination:URL) throws {
         try lock.withLock {
             var output:OpaquePointer?
-            guard sqlite3_open(destination.path,&output) == SQLITE_OK,let output else {if let output {sqlite3_close(output)}; throw PetFailure(message:"无法创建历史导出文件")}
+            guard sqlite3_open(destination.path,&output) == SQLITE_OK,let output else {if let output {sqlite3_close(output)}; throw PetFailure(message:L10n.text(.conversation,"historyBody.export.message"))}
             defer {sqlite3_close(output)}
             guard let backup = sqlite3_backup_init(output,"main",db,"main") else {throw PetFailure(message:String(cString:sqlite3_errmsg(output)))}
             let status = sqlite3_backup_step(backup,-1)

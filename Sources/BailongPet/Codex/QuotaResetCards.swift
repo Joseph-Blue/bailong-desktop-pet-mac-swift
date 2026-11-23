@@ -22,10 +22,10 @@ struct QuotaResetCards {
         guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.doubleValue.isFinite else {return nil}
         return n.doubleValue
     }
-    var amount: String {availableCount.map {"剩余 \($0) 张"} ?? "暂未提供"}
+    var amount: String {availableCount.map {L10n.format(.usage,"quotaResetCards.number.text",String(describing:$0))} ?? L10n.text(.usage,"quotaResetCards.number.text.2")}
     var detail: String? {
         if availableCount == 0 {return nil}
-        if expirations.isEmpty {return "过期时间暂未提供"}
+        if expirations.isEmpty {return L10n.text(.usage,"quotaResetCards.number.text.3")}
         let groups = Dictionary(grouping:expirations,by:{$0})
         let order = groups.keys.sorted { a,b in
             func rank(_ value: Expiration) -> Double {
@@ -36,13 +36,13 @@ struct QuotaResetCards {
         var lines = order.map { expiration -> String in
             let count = groups[expiration]!.count
             switch expiration {
-            case .date(let date):return "\(count) 张 · \(date.formatted(date:.abbreviated,time:.shortened)) 到期"
-            case .unlimited:return "\(count) 张 · 不限期"
-            case .unavailable:return "\(count) 张 · 过期时间暂未提供"
+            case .date(let date):return L10n.format(.usage,"quotaResetCards.date",String(describing:count),String(describing:date.formatted(date:.abbreviated,time:.shortened)))
+            case .unlimited:return L10n.format(.usage,"quotaResetCards.unlimited",String(describing:count))
+            case .unavailable:return L10n.format(.usage,"quotaResetCards.unavailable",String(describing:count))
             }
         }
         if let availableCount, availableCount > expirations.count {
-            lines.append("其余 \(availableCount-expirations.count) 张 · 过期时间暂未提供")
+            lines.append(L10n.format(.usage,"quotaResetCards.rank.text",String(describing:availableCount-expirations.count)))
         }
         return lines.joined(separator:"\n")
     }

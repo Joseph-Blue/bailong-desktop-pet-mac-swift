@@ -1,9 +1,9 @@
 import AppKit
 
 enum IdentitySettingsPage {
-    static let editWorkingLineTitle = "编辑工作中台词"
+    static let editWorkingLineTitle = L10n.text(.settings,"identity.editWorkingLineTitle")
     static func workingLineEditTarget(_ prefs:PetPreferences) -> (group:String,key:String) {
-        prefs.bool("randomWorkingLines") ? ("工作中台词",ConversationLines.working[0].key) : ("任务状态台词","taskProgressTemplate")
+        prefs.bool("randomWorkingLines") ? (L10n.text(.settings,"identity.workingLineEditTarget.text"),ConversationLines.working[0].key) : (L10n.text(.settings,"identity.workingLineEditTarget.text.2"),"taskProgressTemplate")
     }
     static func render(form:SettingsForm,catalog:Catalog?,window:NSWindow,onLinePreview:@escaping (Clip,String) -> Void,
                        play:@escaping (SettingsListItem) -> Void,reload:@escaping () -> Void) -> SettingsRowViewport? {
@@ -16,11 +16,11 @@ enum IdentitySettingsPage {
             button.isEnabled = clip != nil
             return button
         }
-        form.fill(form.note("{用户名} 是你的名字，{桌宠名} 是桌宠的名字；{特定称呼} 使用下面填写的内容，留空沿用你的名字。右键点击台词或特定称呼输入框，可插入这些变量。"),in:form.content)
-        let names = [form.text("你的名字","ownerName",placeholder:"默认为“主人”"),form.text("桌宠的名字","petName",placeholder:"白龙娘"),form.text("特定称呼","customAddress",placeholder:"留空沿用你的名字，可以插入变量")]
-        form.group("我们怎么称呼彼此",names,symbol:"person.2")
-        let greetingPreview = templatePreview("问候语",key:"greetingTemplate",clip:catalog?.variants.first(where:{$0.id == "01"}))
-        form.group("见面时说",[form.text("问候语","greetingTemplate",limit:120,action:greetingPreview)],symbol:"hand.wave")
+        form.fill(form.note(L10n.text(.settings,"identity.templatePreview.paragraph")),in:form.content)
+        let names = [form.text(L10n.text(.settings,"identity.names"),"ownerName",placeholder:L10n.text(.settings,"identity.names.2")),form.text(L10n.text(.settings,"identity.names.3"),"petName",placeholder:L10n.text(.settings,"identity.names.4")),form.text(L10n.text(.settings,"identity.names.5"),"customAddress",placeholder:L10n.text(.settings,"identity.names.6"))]
+        form.group(L10n.text(.settings,"identity.templatePreview.text"),names,symbol:"person.2")
+        let greetingPreview = templatePreview(L10n.text(.settings,"identity.greetingPreview"),key:"greetingTemplate",clip:catalog?.variants.first(where:{$0.id == "01"}))
+        form.group(L10n.text(.settings,"identity.templatePreview.text.2"),[form.text(L10n.text(.settings,"identity.greetingPreview"),"greetingTemplate",limit:120,action:greetingPreview)],symbol:"hand.wave")
         let grouped = Dictionary(grouping:items(catalog:catalog),by:\.group)
         let previewHeight = greetingPreview.fittingSize.height
         var lineRows = [IdentityLineRow]()
@@ -32,22 +32,22 @@ enum IdentitySettingsPage {
             }
         }
         func restore(_ group:SettingsLineResetGroup) -> NSButton {
-            let button = ActionButton("恢复默认") { [weak window] in
+            let button = ActionButton(L10n.text(.settings,"identity.restore.button")) { [weak window] in
                 guard window?.makeFirstResponder(nil) == true else {return}
                 group.restore(in:preferences); reload()
             }
             button.controlSize = .small; button.font = .systemFont(ofSize:11)
-            button.setAccessibilityLabel("恢复"+group.rawValue+"为默认值")
+            button.setAccessibilityLabel(L10n.text(.settings,"identity.restore.text")+group.title+L10n.text(.settings,"identity.restore.text.2"))
             return button
         }
-        form.group("工作中台词",[
-            form.toggle("随机工作中台词抽取","randomWorkingLines",detail:"有执行中任务时，每次打开任务概览随机抽取一句。关闭后使用“执行任务中”台词。")
-        ] + rows("工作中台词"),symbol:"briefcase",action:restore(.working))
-        form.group("任务状态台词",rows("任务状态台词"),symbol:"checklist")
-        form.group("聊天窗口台词",rows("聊天窗口台词"),symbol:"bubble.left.and.bubble.right")
-        form.group("额度查询台词",rows("额度查询台词"),symbol:AppIcons.quotaSymbol)
-        if grouped["互动台词"] != nil {
-            form.group("互动台词",rows("互动台词"),symbol:"figure.play",action:restore(.interaction))
+        form.group(L10n.text(.settings,"identity.workingLineEditTarget.text"),[
+            form.toggle(L10n.text(.settings,"identity.randomWorkingLines.title"),"randomWorkingLines",detail:L10n.text(.settings,"identity.randomWorkingLines.detail"))
+        ] + rows(L10n.text(.settings,"identity.workingLineEditTarget.text")),symbol:"briefcase",action:restore(.working))
+        form.group(L10n.text(.settings,"identity.workingLineEditTarget.text.2"),rows(L10n.text(.settings,"identity.workingLineEditTarget.text.2")),symbol:"checklist")
+        form.group(L10n.text(.settings,"identity.restore.text.3"),rows(L10n.text(.settings,"identity.restore.text.3")),symbol:"bubble.left.and.bubble.right")
+        form.group(L10n.text(.settings,"identity.restore.text.4"),rows(L10n.text(.settings,"identity.restore.text.4")),symbol:AppIcons.quotaSymbol)
+        if grouped[L10n.text(.settings,"identity.restore.text.5")] != nil {
+            form.group(L10n.text(.settings,"identity.restore.text.5"),rows(L10n.text(.settings,"identity.restore.text.5")),symbol:"figure.play",action:restore(.interaction))
         }
         guard let scroll = form.content.enclosingScrollView else {return nil}
         return SettingsRowViewport(rows:lineRows,scroll:scroll)
@@ -55,21 +55,21 @@ enum IdentitySettingsPage {
 
     static func items(catalog:Catalog?) -> [SettingsListItem] {
         func templates(_ group:String,_ entries:[ConversationLines.Entry]) -> [SettingsListItem] {
-            entries.map {.init(group:group,title:$0.title,kind:.template($0.key,preview:nil),keywords:"台词 模板 "+$0.text)}
+            entries.map {.init(group:group,title:$0.title,kind:.template($0.key,preview:nil),keywords:L10n.text(.settings,"identity.templates.keywords")+$0.text)}
         }
-        var result = templates("工作中台词",ConversationLines.working) + templates("任务状态台词",ConversationLines.task)
+        var result = templates(L10n.text(.settings,"identity.workingLineEditTarget.text"),ConversationLines.working) + templates(L10n.text(.settings,"identity.workingLineEditTarget.text.2"),ConversationLines.task)
         for (title,key,keywords) in [
-            ("执行任务中","taskProgressTemplate","我还在留意进展"),("有新进展","taskUpdateTemplate","进度 任务计划 阶段性进展 Codex 项目任务 我忙到这一步啦"),
-            ("等待回答","taskAnswerTemplate","审批"),("等待批准","taskApprovalTemplate","审批"),
-            ("任务成功","taskSuccessTemplate",""),("任务失败","taskFailureTemplate",""),("任务中断或取消","taskInterruptedTemplate","")
+            (L10n.text(.settings,"identity.templates.text"),"taskProgressTemplate",L10n.text(.settings,"identity.templates.text.2")),(L10n.text(.settings,"identity.templates.text.3"),"taskUpdateTemplate",L10n.text(.settings,"identity.templates.text.4")),
+            (L10n.text(.settings,"identity.templates.text.5"),"taskAnswerTemplate",L10n.text(.settings,"identity.templates.text.6")),(L10n.text(.settings,"identity.templates.text.7"),"taskApprovalTemplate",L10n.text(.settings,"identity.templates.text.6")),
+            (L10n.text(.settings,"identity.templates.text.8"),"taskSuccessTemplate",""),(L10n.text(.settings,"identity.templates.text.9"),"taskFailureTemplate",""),(L10n.text(.settings,"identity.templates.text.10"),"taskInterruptedTemplate","")
         ] {
-            result.append(.init(group:"任务状态台词",title:title,kind:.template(key,preview:nil),keywords:"台词 模板 "+keywords))
+            result.append(.init(group:L10n.text(.settings,"identity.workingLineEditTarget.text.2"),title:title,kind:.template(key,preview:nil),keywords:L10n.text(.settings,"identity.templates.keywords")+keywords))
         }
-        result += templates("聊天窗口台词",ConversationLines.interface)
-        result.append(.init(group:"额度查询台词",title:"正在查询",kind:.template("quotaLoadingTemplate",preview:catalog?.quotaAnimation),keywords:"额度 ChatGPT 订阅 台词 动作 播放 预览"))
+        result += templates(L10n.text(.settings,"identity.restore.text.3"),ConversationLines.interface)
+        result.append(.init(group:L10n.text(.settings,"identity.restore.text.4"),title:L10n.text(.settings,"identity.templates.title"),kind:.template("quotaLoadingTemplate",preview:catalog?.quotaAnimation),keywords:L10n.text(.settings,"identity.templates.keywords.2")))
         if let catalog {
-            result += (catalog.variants+catalog.work).filter {$0.line != nil}.map {
-                .init(group:"互动台词",title:$0.title,kind:.interaction($0),keywords:"台词 模板 动作 播放 预览")
+            result += (catalog.variants+catalog.work).filter {$0.localizedLine != nil}.map {
+                .init(group:L10n.text(.settings,"identity.restore.text.5"),title:$0.title,kind:.interaction($0),keywords:L10n.text(.settings,"identity.templates.keywords.3"))
             }
         }
         return result

@@ -5,32 +5,27 @@ struct PetGestureSetting {
     let keywords: String
     var help: String? = nil
 
-    static let group = "鼠标与触控板互动"
-    static let actions = [("none","无动作"),("chat","临时聊天面板"),("quota","查看额度"),("history","查看历史消息"),
-                              ("workspace","显示或隐藏工作区状态条"),("random","显示任务进度、播放随机动画"),("randomAnimation","播放随机动画")]
+    static let group = L10n.text(.settings,"petGestureSetting.group")
+    static let actions = [("none",L10n.text(.settings,"petGestureSetting.actions")),("chat",L10n.text(.settings,"petGestureSetting.actions.2")),("quota",L10n.text(.settings,"petGestureSetting.actions.3")),("history",L10n.text(.settings,"petGestureSetting.actions.4")),
+                              ("workspace",L10n.text(.settings,"petGestureSetting.text")),("random",L10n.text(.settings,"petGestureSetting.text.2")),("randomAnimation",L10n.text(.settings,"petGestureSetting.text.3"))]
 
     static let all = PetGesture.allCases.map(\.setting)
 }
 
 extension PetGesture {
-    private static let clickKeywords = "点击 点按 单句台词 Control ⌃ ^ 右键"
+    private static let clickKeywords = L10n.text(.settings,"petGestureSetting.clickKeywords")
 
     var setting: PetGestureSetting {
         switch self {
         case .singleClick:
-            return .init(key:"singleClickAction", title:"单击桌宠", defaultAction:"random", keywords:Self.clickKeywords)
+            return .init(key:"singleClickAction", title:L10n.text(.settings,"petGestureSetting.singleClickAction.title"), defaultAction:"random", keywords:Self.clickKeywords)
         case .doubleClick:
-            return .init(key:"doubleClickAction", title:"双击桌宠", defaultAction:"quota", keywords:Self.clickKeywords)
+            return .init(key:"doubleClickAction", title:L10n.text(.settings,"petGestureSetting.doubleClickAction.title"), defaultAction:"quota", keywords:Self.clickKeywords)
         case .rightDoubleClick:
-            return .init(key:"rightDoubleClickAction", title:"右键双击桌宠", defaultAction:"chat", keywords:Self.clickKeywords, help:"""
-                如使用触控板：
-
-                1. 按住 ⌃ Control 点按或双击点按（一段下压）桌宠，等同于鼠标右键点击或双击。
-                2. 无论 macOS 系统设置中，触控板的辅助点按触发方式如何设置，只有点按（一段下压）才可正确触发双击鼠标右键效果
-                """)
+            return .init(key:"rightDoubleClickAction", title:L10n.text(.settings,"petGestureSetting.rightDoubleClickAction.title"), defaultAction:"chat", keywords:Self.clickKeywords, help:L10n.text(.settings,"petGestureSetting.rightDoubleClickAction.help"))
         case .forceClick:
-            return .init(key:"forceClickAction", title:"触控板用力点按（两段下压）", defaultAction:"chat",
-                         keywords:"触控板重按 第二段下压 压感 Force Touch Force Click")
+            return .init(key:"forceClickAction", title:L10n.text(.settings,"petGestureSetting.forceClickAction.title"), defaultAction:"chat",
+                         keywords:L10n.text(.settings,"petGestureSetting.petGesture.keywords"))
         }
     }
 }

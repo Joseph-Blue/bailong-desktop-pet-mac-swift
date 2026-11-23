@@ -19,7 +19,7 @@ final class MessageEditor: AccentTextView {
     }
     var send: () -> Void = {}
     var onTextChange: () -> Void = {}
-    var placeholder = PetPreferences.shared.fixedText("主人，把想做的事告诉我吧…") {didSet {if placeholder != oldValue {needsDisplay = true}}}
+    var placeholder = PetPreferences.shared.fixedText(L10n.text(.dialogue,"dialogue.composerPlaceholder")) {didSet {if placeholder != oldValue {needsDisplay = true}}}
     override func didChangeText() {super.didChangeText(); needsDisplay = true; onTextChange()}
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)

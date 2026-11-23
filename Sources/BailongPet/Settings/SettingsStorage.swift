@@ -18,7 +18,7 @@ enum SettingsStorage {
             result.setPersistentDomain(values,forName:domain)
         }
         if result.integer(forKey:schemaKey) > schemaVersion {
-            compatibilityNotice = "这份设置来自更高版本，当前版本无法读取。原设置已保留，暂时使用另一份设置。"
+            compatibilityNotice = L10n.text(.settings,"settingsStorage.text")
             let recovery = UserDefaults(suiteName:domain+".recovery")!
             return recovery
         }

@@ -9,7 +9,7 @@ final class CPUFrameConverter {
         private var capacity = 0
         func reserve(_ size: Int) throws -> UnsafeMutableRawPointer? {
             if size > capacity {
-                guard let next = malloc(size) else { throw PetFailure(message: "无法分配动画处理缓冲。") }
+                guard let next = malloc(size) else { throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.reserve.message")) }
                 free(pointer); pointer = next; capacity = size
             }
             return pointer
@@ -39,18 +39,18 @@ final class CPUFrameConverter {
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
               let colorSpace = CVImageBufferGetColorSpace(buffer)?.takeUnretainedValue(),
               let alphaMode = CVBufferCopyAttachment(buffer, kCVImageBufferAlphaChannelModeKey, nil) else {
-            throw PetFailure(message: "动画帧缺少 BGRA 颜色或透明度信息。")
+            throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.frame.message"))
         }
         let premultiplied = CFEqual(alphaMode, kCVImageBufferAlphaChannelMode_PremultipliedAlpha)
         guard premultiplied || CFEqual(alphaMode, kCVImageBufferAlphaChannelMode_StraightAlpha) else {
-            throw PetFailure(message: "动画帧的透明度格式不受支持。")
+            throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.frame.message.2"))
         }
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let resizing = width != resolution || height != resolution
         try prepareConverter(colorSpace, premultiplied: premultiplied, resizing: resizing)
-        try check(CVPixelBufferLockBaseAddress(buffer, .readOnly), "读取动画像素")
+        try check(CVPixelBufferLockBaseAddress(buffer, .readOnly), L10n.text(.diagnostics,"cpuFrameConverter.frame.text"))
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { throw PetFailure(message: "动画帧没有像素数据。") }
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.frame.message.3")) }
         var input = vImage_Buffer(data: base, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: CVPixelBufferGetBytesPerRow(buffer))
         let rowBytes = resolution * 4, byteCount = rowBytes * resolution
         if resizing {
@@ -61,8 +61,8 @@ final class CPUFrameConverter {
             var destination = vImage_Buffer(data: try scaled.reserve(resolution * resolution * 16), height: vImagePixelCount(resolution), width: vImagePixelCount(resolution), rowBytes: resolution * 16)
             let scalingFlags = flags | vImage_Flags(kvImageHighQualityResampling)
             let size = vImageScale_ARGBFFFF(&source, &destination, nil, scalingFlags | vImage_Flags(kvImageGetTempBufferSize))
-            guard size >= 0 else { throw failure("准备动画缩放", size) }
-            try check(vImageScale_ARGBFFFF(&source, &destination, try scaleWork.reserve(size), scalingFlags), "缩放动画")
+            guard size >= 0 else { throw failure(L10n.text(.diagnostics,"cpuFrameConverter.frame.text.2"), size) }
+            try check(vImageScale_ARGBFFFF(&source, &destination, try scaleWork.reserve(size), scalingFlags), L10n.text(.diagnostics,"cpuFrameConverter.frame.text.3"))
             // Lanczos 在边缘会过冲；恢复合法预乘范围再交给颜色转换。
             let samples = destination.data.assumingMemoryBound(to: Float.self)
             for i in stride(from: 0, to: resolution * resolution * 4, by: 4) {
@@ -71,11 +71,11 @@ final class CPUFrameConverter {
             }
             input = destination
         }
-        guard let pixels = malloc(byteCount) else { throw PetFailure(message: "无法分配动画画面。") }
+        guard let pixels = malloc(byteCount) else { throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.frame.message.4")) }
         // Provider 接管内存后仅在最后一个 CGImage 引用释放时回收，不复用正在显示的帧。
         guard let provider = CGDataProvider(dataInfo: nil, data: pixels, size: byteCount, releaseData: { _, data, _ in
             free(UnsafeMutableRawPointer(mutating: data))
-        }) else { free(pixels); throw PetFailure(message: "无法创建动画像素源。") }
+        }) else { free(pixels); throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.frame.message.5")) }
         var output = vImage_Buffer(data: pixels, height: vImagePixelCount(resolution), width: vImagePixelCount(resolution), rowBytes: rowBytes)
         try convert(resizing ? fromLinear! : converter!, input: &input, output: &output)
         if cleanIsolatedPixels {
@@ -85,7 +85,7 @@ final class CPUFrameConverter {
         guard let image = CGImage(width: resolution, height: resolution, bitsPerComponent: 8, bitsPerPixel: 32,
                                   bytesPerRow: rowBytes, space: outputSpace, bitmapInfo: outputInfo,
                                   provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {
-            throw PetFailure(message: "无法创建动画画面。")
+            throw PetFailure(message: L10n.text(.diagnostics,"cpuFrameConverter.frame.message.6"))
         }
         // 从刚写好的 CPU 像素提取命中遮罩，不再经 CGDataProviderCopyData 复制整张 RGBA。
         var alpha = Data(count: resolution * resolution)
@@ -120,19 +120,19 @@ final class CPUFrameConverter {
     private func makeConverter(_ input: inout vImage_CGImageFormat, _ output: inout vImage_CGImageFormat) throws -> vImageConverter {
         var error: vImage_Error = 0
         guard let next = vImageConverter_CreateWithCGImageFormat(&input, &output, nil, flags, &error)?.takeRetainedValue() else {
-            throw failure("创建动画颜色转换", error)
+            throw failure(L10n.text(.diagnostics,"cpuFrameConverter.makeConverter.text"), error)
         }
         return next
     }
     private func convert(_ converter: vImageConverter, input: inout vImage_Buffer, output: inout vImage_Buffer) throws {
         let size = vImageConvert_AnyToAny(converter, &input, &output, nil, flags | vImage_Flags(kvImageGetTempBufferSize))
-        guard size >= 0 else { throw failure("准备动画颜色转换", size) }
-        try check(vImageConvert_AnyToAny(converter, &input, &output, try conversionWork.reserve(size), flags), "转换动画颜色")
+        guard size >= 0 else { throw failure(L10n.text(.diagnostics,"cpuFrameConverter.convert.text"), size) }
+        try check(vImageConvert_AnyToAny(converter, &input, &output, try conversionWork.reserve(size), flags), L10n.text(.diagnostics,"cpuFrameConverter.convert.text.2"))
     }
     private func check<T: BinaryInteger>(_ error: T, _ operation: String) throws {
         if error != 0 { throw failure(operation, error) }
     }
     private func failure<T: BinaryInteger>(_ operation: String, _ error: T) -> PetFailure {
-        PetFailure(message: "\(operation)失败（\(error)）。")
+        PetFailure(message: L10n.format(.diagnostics,"cpuFrameConverter.failure.message",String(describing:operation),String(describing:error)))
     }
 }

@@ -7,7 +7,7 @@ struct GitHubRelease: Decodable {
     let prerelease: Bool
 
     var displayTag: String {
-        for prefix in ["白龙桌宠Swift","白龙娘桌宠"] where tag_name.hasPrefix(prefix + "v") {
+        for prefix in [L10n.text(.about,"updates.gitHubRelease.text"),L10n.text(.about,"updates.gitHubRelease.text.2")] where tag_name.hasPrefix(prefix + "v") {
             return "\(prefix) \(tag_name.dropFirst(prefix.count))"
         }
         return tag_name
@@ -22,29 +22,29 @@ struct UpdateFailure: Error {
 
     static func network(_ error: Error) -> Self {
         let error = error as NSError
-        let detail = "错误域：\(error.domain)\n错误码：\(error.code)\n原始错误：\(error.localizedDescription)"
+        let detail = L10n.format(.about,"updates.network.text",String(describing:error.domain),String(describing:error.code),String(describing:error.localizedDescription))
         guard error.domain == NSURLErrorDomain else {
-            return Self(title:"更新检查未完成",message:"请重新检查，或前往 GitHub 发布页查看。",detail:detail)
+            return Self(title:L10n.text(.about,"updates.network.title"),message:L10n.text(.about,"updates.network.message"),detail:detail)
         }
         let text: (String,String)
         switch URLError.Code(rawValue:error.code) {
         case .notConnectedToInternet:
-            text = ("当前未连接互联网","请连接网络后重新检查。")
+            text = (L10n.text(.about,"updates.network.text.2"),L10n.text(.about,"updates.network.text.3"))
         case .timedOut:
-            text = ("GitHub 更新检查超时","本次未能在规定时间内完成，请重试或打开发布页查看。")
+            text = (L10n.text(.about,"updates.network.text.4"),L10n.text(.about,"updates.network.text.5"))
         case .networkConnectionLost:
-            text = ("更新信息接收中断","本次检查未完成，请重试。")
+            text = (L10n.text(.about,"updates.network.text.6"),L10n.text(.about,"updates.network.text.7"))
         case .cannotFindHost, .dnsLookupFailed:
-            text = ("无法找到更新服务器","无法解析 GitHub 地址，请检查网络或代理设置。")
+            text = (L10n.text(.about,"updates.network.text.8"),L10n.text(.about,"updates.network.text.9"))
         case .cannotConnectToHost:
-            text = ("无法连接 GitHub","本次未能连接更新服务。可重试或在浏览器中打开发布页。")
+            text = (L10n.text(.about,"updates.network.text.10"),L10n.text(.about,"updates.network.text.11"))
         case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
              .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid, .clientCertificateRejected, .clientCertificateRequired:
-            text = ("无法建立安全连接","无法通过更新服务器的安全连接验证。")
+            text = (L10n.text(.about,"updates.network.text.12"),L10n.text(.about,"updates.network.text.13"))
         case .cannotDecodeRawData, .cannotDecodeContentData, .cannotParseResponse, .badServerResponse:
-            text = ("未能读取更新信息","收到的发布信息不完整或格式不正确。")
+            text = (L10n.text(.about,"updates.network.text.14"),L10n.text(.about,"updates.network.text.15"))
         default:
-            text = ("更新检查未完成","请重新检查，或前往 GitHub 发布页查看。")
+            text = (L10n.text(.about,"updates.network.title"),L10n.text(.about,"updates.network.message"))
         }
         return Self(title:text.0,message:text.1,detail:detail)
     }
@@ -53,7 +53,7 @@ struct UpdateFailure: Error {
         let retry = response.value(forHTTPHeaderField:"Retry-After")
         let remaining = response.value(forHTTPHeaderField:"X-RateLimit-Remaining")
         let reset = response.value(forHTTPHeaderField:"X-RateLimit-Reset")
-        var detail = "HTTP 状态：\(code)"
+        var detail = L10n.format(.about,"updates.http.text",String(describing:code))
         for key in ["Retry-After","X-RateLimit-Remaining","X-RateLimit-Reset","X-GitHub-Request-Id"] {
             if let value = response.value(forHTTPHeaderField:key) {detail += "\n\(key)：\(value)"}
         }
@@ -78,19 +78,19 @@ struct UpdateFailure: Error {
             return rateLimited(until:resume,detail:detail)
         }
         switch code {
-        case 401,403: return Self(title:"更新请求被拒绝",message:"GitHub 未接受这次请求，请稍后重试。",detail:detail)
-        case 404: return Self(title:"未找到正式发布",message:"可打开 GitHub 发布页查看版本。",detail:detail)
-        case 407: return Self(title:"代理需要认证",message:"请完成代理认证后重新检查。",detail:detail)
-        case 500...599: return Self(title:"更新服务响应异常",message:"请稍后重试，或直接查看 GitHub 发布页。",detail:detail)
-        default: return Self(title:"更新检查未完成",message:"请重新检查，或前往 GitHub 发布页查看。",detail:detail)
+        case 401,403: return Self(title:L10n.text(.about,"updates.http.title"),message:L10n.text(.about,"updates.http.message"),detail:detail)
+        case 404: return Self(title:L10n.text(.about,"updates.http.title.2"),message:L10n.text(.about,"updates.http.message.2"),detail:detail)
+        case 407: return Self(title:L10n.text(.about,"updates.http.title.3"),message:L10n.text(.about,"updates.http.message.3"),detail:detail)
+        case 500...599: return Self(title:L10n.text(.about,"updates.http.title.4"),message:L10n.text(.about,"updates.http.message.4"),detail:detail)
+        default: return Self(title:L10n.text(.about,"updates.network.title"),message:L10n.text(.about,"updates.network.message"),detail:detail)
         }
     }
     static func rateLimited(until date:Date,detail:String? = nil) -> Self {
         let time = DateFormatter.localizedString(from:date,dateStyle:.short,timeStyle:.medium)
-        return Self(title:"检查次数已达上限",message:"可在 \(time) 后重新检查。",detail:detail ?? "GitHub 限流恢复时间：\(time)",retryAt:date)
+        return Self(title:L10n.text(.about,"updates.rateLimited.title"),message:L10n.format(.about,"updates.rateLimited.message",String(describing:time)),detail:detail ?? L10n.format(.about,"updates.rateLimited.text",String(describing:time)),retryAt:date)
     }
     static func unreadable(_ detail: String) -> Self {
-        Self(title:"未能读取更新信息",message:"收到的发布信息不完整或格式不正确。",detail:detail)
+        Self(title:L10n.text(.about,"updates.network.text.14"),message:L10n.text(.about,"updates.network.text.15"),detail:detail)
     }
 }
 
@@ -114,23 +114,23 @@ final class UpdateChecker: NSObject {
     private(set) var release: GitHubRelease?
     private(set) var releaseURL: URL?
     private(set) var status: String
-    var headline: String {checking && slow ? "连接 GitHub 较慢" : status}
+    var headline: String {checking && slow ? L10n.text(.about,"updates.updateChecker.text") : status}
     var explanation: String {
-        if checking && slow {return "仍在等待更新信息，你可以继续等待或取消检查。"}
+        if checking && slow {return L10n.text(.about,"updates.updateChecker.text.2")}
         return failure?.message ?? ""
     }
-    var recordText: String {failure == nil ? status : "检查未完成 · " + status}
+    var recordText: String {failure == nil ? status : L10n.text(.about,"updates.updateChecker.text.3") + status}
     var technicalDetails: String {
         guard let failure else {return ""}
-        return "当前版本：\(Paths.version)\n检查地址：https://api.github.com/repos/Joseph-Blue/bailong-desktop-pet-mac-swift/releases/latest\n检查时间：\(lastCheckText)\n\(failure.detail)"
+        return L10n.format(.about,"updates.updateChecker.text.4",String(describing:Paths.version),String(describing:lastCheckText),String(describing:failure.detail))
     }
     var lastCheck: Date? {UserDefaults.standard.object(forKey:"updateLastCheck") as? Date}
     var lastCheckText: String {
-        guard let date = lastCheck else {return "尚未检查"}
+        guard let date = lastCheck else {return L10n.text(.about,"updates.updateChecker.text.5")}
         return DateFormatter.localizedString(from:date,dateStyle:.medium,timeStyle:.medium)
     }
     override private init() {
-        status = UserDefaults.standard.string(forKey:"updateLastResult") ?? "尚未检查"
+        status = UserDefaults.standard.string(forKey:"updateLastResult") ?? L10n.text(.about,"updates.updateChecker.text.5")
         super.init()
         NotificationCenter.default.addObserver(self,selector:#selector(preferencesChanged),name:PetPreferences.didChange,object:nil)
     }
@@ -161,7 +161,7 @@ final class UpdateChecker: NSObject {
         generation += 1; let requestGeneration = generation
         automatic = automatically; checking = true; release = nil; releaseURL = nil
         failure = nil; slow = false
-        status = "正在检查更新…"; notify()
+        status = L10n.text(.about,"updates.check.text"); notify()
         let timer = Timer(timeInterval:8,repeats:false) { [weak self] _ in
             guard let self, self.checking, self.generation == requestGeneration else {return}
             self.slow = true; self.slowTimer = nil; self.notify()
@@ -180,15 +180,15 @@ final class UpdateChecker: NSObject {
         task = session.dataTask(with:request) { [weak self] data,response,error in
             let result: Result<GitHubRelease,Error> = Result {
                 if let error {throw error}
-                guard let response = response as? HTTPURLResponse else {throw UpdateFailure.unreadable("未收到 HTTP 响应。")}
+                guard let response = response as? HTTPURLResponse else {throw UpdateFailure.unreadable(L10n.text(.about,"updates.check.text.2"))}
                 guard response.statusCode == 200 else {throw UpdateFailure.http(response,body:data)}
-                guard let data, !data.isEmpty else {throw UpdateFailure.unreadable("HTTP 200，响应正文为空。")}
+                guard let data, !data.isEmpty else {throw UpdateFailure.unreadable(L10n.text(.about,"updates.check.text.3"))}
                 let release: GitHubRelease
                 do {release = try JSONDecoder().decode(GitHubRelease.self,from:data)}
-                catch {throw UpdateFailure.unreadable("HTTP 200，JSON 解析失败：\(error.localizedDescription)")}
-                guard !release.draft, !release.prerelease else {throw UpdateFailure(title:"未获取到正式版本",message:"本应用只检查正式发布，可前往 GitHub 查看其他版本。",detail:"发布标签：\(release.tag_name)\ndraft：\(release.draft)，prerelease：\(release.prerelease)")}
+                catch {throw UpdateFailure.unreadable(L10n.format(.about,"updates.check.text.4",String(describing:error.localizedDescription)))}
+                guard !release.draft, !release.prerelease else {throw UpdateFailure(title:L10n.text(.about,"updates.check.title"),message:L10n.text(.about,"updates.check.message"),detail:L10n.format(.about,"updates.check.error",String(describing:release.tag_name),String(describing:release.draft),String(describing:release.prerelease)))}
                 guard let version = SemanticVersion.releaseTag(release.tag_name), version.prerelease.isEmpty else {
-                    throw UpdateFailure(title:"无法识别新版本号",message:"请前往 GitHub 发布页查看版本说明。",detail:"发布标签：\(release.tag_name)")
+                    throw UpdateFailure(title:L10n.text(.about,"updates.check.title.2"),message:L10n.text(.about,"updates.check.message.2"),detail:L10n.format(.about,"updates.check.error.2",String(describing:release.tag_name)))
                 }
                 return release
             }
@@ -204,7 +204,7 @@ final class UpdateChecker: NSObject {
         task = nil; session?.finishTasksAndInvalidate(); session = nil
         if case .failure(let error) = result, (error as NSError).domain == NSURLErrorDomain,
            (error as NSError).code == URLError.cancelled.rawValue {
-            automatic = false; status = "已取消检查"; notify(); return
+            automatic = false; status = L10n.text(.about,"updates.complete.text"); notify(); return
         }
         var newer = false
         switch result {
@@ -213,9 +213,9 @@ final class UpdateChecker: NSObject {
             releaseURL = Self.repository.appendingPathComponent("releases/tag").appendingPathComponent(release.tag_name)
             if let local = SemanticVersion(Paths.version), let remote = SemanticVersion.releaseTag(release.tag_name) {
                 newer = local < remote
-                status = newer ? "发现新版本：\(release.displayTag)" : local == remote ? "已是最新正式版本" : "本地版本领先于最新正式发布"
+                status = newer ? L10n.format(.about,"updates.complete.text.2",String(describing:release.displayTag)) : local == remote ? L10n.text(.about,"updates.complete.text.3") : L10n.text(.about,"updates.complete.text.4")
             } else {
-                failure = UpdateFailure(title:"无法比较版本",message:"当前应用的版本号无法识别，请手动查看发布页。",detail:"当前版本：\(Paths.version)")
+                failure = UpdateFailure(title:L10n.text(.about,"updates.complete.title"),message:L10n.text(.about,"updates.complete.message"),detail:L10n.format(.about,"updates.complete.error",String(describing:Paths.version)))
                 self.release = nil
                 status = failure!.title
             }
@@ -235,7 +235,7 @@ final class UpdateChecker: NSObject {
         guard checking else {return}
         generation += 1; task?.cancel(); task = nil; session?.invalidateAndCancel(); session = nil
         checking = false; automatic = false; slow = false; slowTimer?.invalidate(); slowTimer = nil
-        status = "已取消检查"; notify()
+        status = L10n.text(.about,"updates.complete.text"); notify()
     }
 }
 
@@ -256,13 +256,13 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
     private let detailsScroll = GutterScrollView()
     private let detailsSection = NSStackView()
     private let disclosure = NSButton()
-    private let copyDetails = ActionButton("拷贝详情") {}
+    private let copyDetails = ActionButton(L10n.text(.about,"updates.copyDetails")) {}
     private var detailsExpanded = false
     private var displayedFailure:String?
-    private let retry = ActionButton("重新检查") {UpdateChecker.shared.check()}
-    private let download = ActionButton("查看发布页") {}
-    private let close = ActionButton("关闭") {}
-    private let disableAutomatic = ActionButton("禁用自动更新检查") {}
+    private let retry = ActionButton(L10n.text(.about,"updates.retry")) {UpdateChecker.shared.check()}
+    private let download = ActionButton(L10n.text(.about,"updates.download")) {}
+    private let close = ActionButton(L10n.text(.about,"updates.close")) {}
+    private let disableAutomatic = ActionButton(L10n.text(.about,"updates.disableAutomatic")) {}
     private let buttons = NSStackView()
     private let spacer = NSView()
     private var automaticPresentation = false
@@ -283,7 +283,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
     }
     override private init() {
         super.init()
-        window.title = "检查更新"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.title = L10n.text(.about,"updates.title"); window.isReleasedWhenClosed = false; window.delegate = self
         window.collectionBehavior = [.fullScreenNone]
         let root = NSView(); window.contentView = root
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16; stack.distribution = .fill; stack.detachesHiddenViews = true
@@ -294,7 +294,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
         spinner.widthAnchor.constraint(equalToConstant:16).isActive = true
         spinner.heightAnchor.constraint(equalToConstant:16).isActive = true
-        spinner.setAccessibilityLabel("正在检查更新")
+        spinner.setAccessibilityLabel(L10n.text(.about,"updates.text"))
         heading.alignment = .centerY; heading.spacing = 8; heading.distribution = .fill; heading.detachesHiddenViews = true
         heading.addArrangedSubview(spinner); heading.addArrangedSubview(status)
         let metadata = NSStackView(views:[versions,timestamp])
@@ -311,14 +311,14 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         notesScroll.heightAnchor.constraint(equalToConstant:220).isActive = true
         detailsScroll.heightAnchor.constraint(equalToConstant:110).isActive = true
         details.font = .monospacedSystemFont(ofSize:11,weight:.regular)
-        let notesTitle = NSTextField(labelWithString:"更新说明"); notesTitle.font = .systemFont(ofSize:13,weight:.semibold)
+        let notesTitle = NSTextField(labelWithString:L10n.text(.about,"updates.notesTitle")); notesTitle.font = .systemFont(ofSize:13,weight:.semibold)
         notesSection.orientation = .vertical; notesSection.distribution = .fill; notesSection.alignment = .leading; notesSection.spacing = 8
         notesSection.addArrangedSubview(notesTitle); notesSection.addArrangedSubview(notesScroll)
         notesScroll.widthAnchor.constraint(equalTo:notesSection.widthAnchor).isActive = true
         disclosure.setButtonType(.pushOnPushOff); disclosure.bezelStyle = .disclosure
         disclosure.title = ""; disclosure.target = self; disclosure.action = #selector(toggleDetails)
-        disclosure.setAccessibilityLabel("显示技术详情")
-        let detailTitle = NSTextField(labelWithString:"技术详情"); detailTitle.font = .systemFont(ofSize:12)
+        disclosure.setAccessibilityLabel(L10n.text(.about,"updates.text.2"))
+        let detailTitle = NSTextField(labelWithString:L10n.text(.about,"updates.detailTitle")); detailTitle.font = .systemFont(ofSize:12)
         let detailsRow = NSStackView(views:[disclosure,detailTitle,NSView(),copyDetails])
         detailsRow.alignment = .centerY; detailsRow.distribution = .fill; detailsRow.spacing = 6; detailsRow.detachesHiddenViews = true
         detailsSection.orientation = .vertical; detailsSection.distribution = .fill; detailsSection.alignment = .leading; detailsSection.spacing = 8; detailsSection.detachesHiddenViews = true
@@ -329,7 +329,7 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         close.keyEquivalent = "\u{1b}"
         download.callback = {
             let url = UpdateChecker.shared.releaseURL ?? UpdateChecker.releases
-            if !NSWorkspace.shared.open(url) {showError("无法打开发布页",PetFailure(message:url.absoluteString))}
+            if !NSWorkspace.shared.open(url) {showError(L10n.text(.about,"updates.error"),PetFailure(message:url.absoluteString))}
         }
         disableAutomatic.callback = { [weak self] in
             PetPreferences.shared.set(false,for:"automaticallyCheckUpdates")
@@ -361,20 +361,20 @@ final class UpdateWindow: NSObject, NSWindowDelegate {
         notesSection.isHidden = !hasNotes; detailsSection.isHidden = !failed
         detailsScroll.isHidden = !detailsExpanded; copyDetails.isHidden = !detailsExpanded
         disclosure.state = detailsExpanded ? .on : .off
-        disclosure.setAccessibilityLabel(detailsExpanded ? "收起技术详情" : "显示技术详情")
+        disclosure.setAccessibilityLabel(detailsExpanded ? L10n.text(.about,"updates.refresh.text") : L10n.text(.about,"updates.text.2"))
         details.string = checker.technicalDetails
-        versions.stringValue = "当前版本：\(Paths.version)" + (hasNotes ? "    最新正式版：\(checker.release!.displayTag)" : "")
-        timestamp.stringValue = "上次检查："+checker.lastCheckText
+        versions.stringValue = L10n.format(.about,"updates.complete.error",String(describing:Paths.version)) + (hasNotes ? L10n.format(.about,"updates.refresh.text.2",String(describing:checker.release!.displayTag)) : "")
+        timestamp.stringValue = L10n.text(.about,"updates.refresh.text.3")+checker.lastCheckText
         retry.keyEquivalent = failed ? "\r" : ""; download.keyEquivalent = !failed && !checker.checking ? "\r" : ""
-        retry.title = failed ? "重试" : "重新检查"; retry.isEnabled = !checker.checking; retry.emphasize(failed)
+        retry.title = failed ? L10n.text(.about,"updates.refresh.heading") : L10n.text(.about,"updates.retry"); retry.isEnabled = !checker.checking; retry.emphasize(failed)
         download.emphasize(!failed && !checker.checking)
-        close.title = checker.checking ? "取消检查" : "关闭"
+        close.title = checker.checking ? L10n.text(.about,"updates.refresh.heading.2") : L10n.text(.about,"updates.close")
         disableAutomatic.isHidden = !automaticPresentation; refreshAutomaticOption()
         for view in buttons.arrangedSubviews {buttons.removeArrangedSubview(view); view.removeFromSuperview()}
         let actions = failed ? [disableAutomatic,spacer,download,close,retry] : [disableAutomatic,spacer,retry,close,download]
         for view in actions {buttons.addArrangedSubview(view)}
         let body = checker.release?.body?.trimmingCharacters(in:.whitespacesAndNewlines)
-        notes.textStorage?.setAttributedString(MarkdownText.render(body?.isEmpty == false ? body! : "此版本未提供更新说明。",font:.systemFont(ofSize:13)))
+        notes.textStorage?.setAttributedString(MarkdownText.render(body?.isEmpty == false ? body! : L10n.text(.about,"updates.refresh.text.4"),font:.systemFont(ofSize:13)))
         let width = window.contentView!.bounds.width-48
         status.preferredMaxLayoutWidth = width-(checker.checking ? 24 : 0)
         explanation.preferredMaxLayoutWidth = width; versions.preferredMaxLayoutWidth = width

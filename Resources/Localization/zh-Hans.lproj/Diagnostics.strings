@@ -224,3 +224,36 @@
 "streamingAnimation.openReader.message" = "无法开始流式解码。";
 "streamingAnimation.readFrame.message" = "流式视频读取中断。";
 "streamingAnimation.readFrame.message.2" = "流式视频帧缺少像素数据。";
+
+/* 应用接入补充 */
+"rosettaNotice.code.text" = "Rosetta 运行状态检测失败：%@";
+"autostart.updateQueue.label" = "白龙桌宠跟随启动维护";
+"autostart.failure.text" = "跟随启动首次加载失败，稍后重试一次：%@";
+"terminalMonitor.monitor.text" = "终端监视已关闭";
+"terminalMonitor.monitor.text.2" = "动画明细已开启";
+"terminalMonitor.monitor.text.3" = "动画明细已关闭";
+"terminalMonitor.title.text" = "应用";
+"terminalMonitor.title.text.2" = "内置";
+"terminalMonitor.title.text.3" = "桌面观察";
+"terminalMonitor.title.text.4" = "桌面 IPC";
+"terminalMonitor.title.text.5" = "桌面队列";
+"terminalMonitor.title.text.6" = "气泡";
+"terminalMonitor.labels.text" = "历史";
+"terminalMonitor.title.text.7" = "信息";
+"terminalMonitor.title.text.8" = "确认";
+"terminalMonitor.title.text.9" = "警告";
+"terminalMonitor.title.text.10" = "错误";
+"terminalMonitor.heading.text" = "时间";
+"terminalMonitor.heading.text.2" = "级别";
+"terminalMonitor.heading.text.3" = "来源";
+"terminalMonitor.heading.text.4" = "事件";
+"terminalMonitor.heading.text.5" = "开发监视已开启  ·  %1$@  ·  %2$@  ·  PID %3$@";
+"terminalMonitor.output.text" = "终端监视输出已停止  ·  ";
+"terminalMonitor.context.text" = "会话#";
+"terminalMonitor.context.text.2" = " 轮次#";
+"terminalMonitor.valid.text" = "动作#";
+"terminalMonitor.domains.text" = "错误码 ";
+"terminalMonitor.labels.text.2" = "状态未确认";
+"terminalMonitor.timing.text" = "本段 ";
+"terminalMonitor.timing.text.2" = "  ·  累计 ";
+"resources.title.text" = "默认待机";

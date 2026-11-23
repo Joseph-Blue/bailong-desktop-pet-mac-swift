@@ -117,7 +117,7 @@ enum DesktopHistoryReader {
         let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
         let state = try ReadDatabase(root+"/state_5.sqlite")
         guard let row = try state.rows("SELECT id,rollout_path FROM threads WHERE id=? AND archived=0",[thread]).first else {
-            throw PetFailure(message:"原会话已归档或不存在，请在 Codex 中处理。")
+            throw PetFailure(message:L10n.text(.conversation,"desktopHistoryReader.requireReplyConversation.message"))
         }
         let path = row["rollout_path"] ?? ""
         let pattern = try NSRegularExpression(pattern:"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
@@ -127,7 +127,7 @@ enum DesktopHistoryReader {
         let turns = try history.rows("SELECT turn_id,status FROM thread_turns WHERE thread_id=? ORDER BY started_at DESC LIMIT 1",[actual])
         guard let latest = turns.first,latest["turn_id"] == previousTurn,
               DesktopReply.mode(for:latest["status"] ?? "") == (steering ? .steer : .start) else {
-            throw PetFailure(message:"原会话状态已变化。请查看 Codex 当前对话后再发送。")
+            throw PetFailure(message:L10n.text(.conversation,"desktopHistoryReader.requireReplyConversation.message.2"))
         }
     }
     static func readTitles(_ ids:[String]) throws -> [String:String] {
@@ -248,7 +248,7 @@ enum DesktopHistoryReader {
                     } else if ["waitingForApproval","requiresApproval"].contains(item["status"] ?? "") {
                         approval = .approval(fileChange:item["item_type"] == "fileChange",reason:item["reason"])
                     } else if item["status"] == "waitingForInput", questions.isEmpty {
-                        questions.append(["title":"需要补充信息，请回到 Codex 处理。"])
+                        questions.append(["title":L10n.text(.conversation,"desktopHistoryReader.read.text")])
                     }
                 }
                 var attention:TaskAttention?
@@ -256,12 +256,12 @@ enum DesktopHistoryReader {
                 else if let secret = questions.first(where:{$0["isSecret"] as? Bool == true}) {attention = .question(secret)}
                 else if !questions.isEmpty {attention = TaskAttention(kind:.answer,body:questions.map {TaskAttention.question($0).body}.joined(separator:"\n\n"),questions:questions.flatMap {TaskAttention.question($0).questions})}
                 else if turn["status"] == "waitingForApproval" {attention = .approval(fileChange:false,reason:nil)}
-                else if turn["status"] == "waitingForInput" {attention = TaskAttention(kind:.answer,body:"需要补充信息，请回到 Codex 处理。")}
+                else if turn["status"] == "waitingForInput" {attention = TaskAttention(kind:.answer,body:L10n.text(.conversation,"desktopHistoryReader.read.text"))}
                 activity = TaskActivity.current(items:activityItems)
                 if !activeStatuses.contains(turn["status"] ?? "") {attention = nil; activity = nil}
                 let step = activity?.text ?? ""
                 alert = attention?.body ?? ""
-                result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? "Codex 任务",cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion,modelProvider:thread["model_provider"]))
+                result.append(PublicSnapshot(logical:logical,actual:actual,turn:turn["turn_id"]!,title:thread["title"] ?? L10n.text(.conversation,"desktopHistoryReader.read.text.2"),cwd:thread["cwd"] ?? NSHomeDirectory(),historyMode:thread["history_mode"] ?? "legacy",status:attention?.kind.status ?? turn["status"]!,started:Double(turn["started_at"] ?? "0") ?? 0,messages:messages.joined(separator:"\n\n"),final:final,alert:alert,step:step,error:turn["error_json"] ?? "",completed:Double(turn["completed_at"] ?? ""),attention:attention,hasSensitiveInput:hasSensitiveInput,hasSensitiveQuestion:hasSensitiveQuestion,modelProvider:thread["model_provider"]))
                 result[result.count-1].agentMessages = agentMessages
                 result[result.count-1].createdWithChatGPT = thread["chatgpt_origin"] == "1"
                 if !activeStatuses.contains(turn["status"] ?? "") {

@@ -17,10 +17,10 @@ final class TranscriptActions:NSObject {
         side = max(28,font.pointSize+12)
         self.showsActions = showsActions
     }
-    var ended:String? {["completed":"完成","failed":"失败","interrupted":"中断","cancelled":"停止","canceled":"停止"][result.status]}
+    var ended:String? {["completed":L10n.text(.conversation,"transcriptPresentation.text"),"failed":L10n.text(.tasks,"overview.state.3"),"interrupted":L10n.text(.conversation,"transcriptPresentation.text.3"),"cancelled":L10n.text(.conversation,"transcriptPresentation.text.4"),"canceled":L10n.text(.conversation,"transcriptPresentation.text.4")][result.status]}
     var completion:String {
         guard let ended else {return ""}
-        let time = result.completedAt.map {$0.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))} ?? "时间未提供"
+        let time = result.completedAt.map {$0.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits))} ?? L10n.text(.conversation,"transcriptPresentation.text.5")
         return ended+" · "+time
     }
     override func isEqual(_ object:Any?) -> Bool {
@@ -43,8 +43,8 @@ final class TranscriptActionBar:NSView {
     var expanded = false {didSet {configure()}}
     var countFormat:TokenCountFormat = .full {didSet {configure()}}
     var onToggle:(() -> Void)?
-    private let copyButton = HoverIconButton(symbol:"doc.on.doc",label:"拷贝")
-    private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:"转到 Codex")
+    private let copyButton = HoverIconButton(symbol:"doc.on.doc",label:L10n.text(.diagnostics,"diagnostics.accessibilityDescription"))
+    private let codexButton = HoverIconButton(symbol:"arrow.up.forward",label:L10n.text(.tasks,"bubble.button.7"))
     private let completion = NSTextField(wrappingLabelWithString:"")
     private let tokenDisclosure = DisclosureControl(frame:.zero)
     private let detail = SelectableRichText(frame:.zero)
@@ -56,9 +56,9 @@ final class TranscriptActionBar:NSView {
             button.isBordered = false; button.bezelStyle = .inline
             button.contentTintColor = .secondaryLabelColor; addSubview(button)
         }
-        copyButton.hoverHelp = "拷贝"
+        copyButton.hoverHelp = L10n.text(.diagnostics,"diagnostics.accessibilityDescription")
         CopyFeedback.attach(to:copyButton) { [weak self] in self?.content.text }
-        codexButton.image = AppIcons.openAI; codexButton.hoverHelp = "转到 Codex"
+        codexButton.image = AppIcons.openAI; codexButton.hoverHelp = L10n.text(.tasks,"bubble.button.7")
         codexButton.target = self; codexButton.action = #selector(openCodex)
         tokenDisclosure.onToggle = { [weak self] in self?.toggle() }
         for view in [completion,tokenDisclosure,detail] {addSubview(view)}
@@ -75,11 +75,11 @@ final class TranscriptActionBar:NSView {
         completion.attributedStringValue = text; completion.isHidden = content.ended == nil
         let font = NSFont.monospacedDigitSystemFont(ofSize:content.font.pointSize,weight:.regular)
         // 汇总是一句话；只有展开后的明细使用制表位，不让“缓存命中”的列宽撑开汇总。
-        let heading = "本轮  "+(content.result.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}",format:countFormat)} ?? (content.result.usageError == nil ? "Tokens 未提供" : "Tokens 读取失败"))
+        let heading = L10n.text(.conversation,"transcriptPresentation.heading")+(content.result.usage.map {TokenUsage.amount($0.total,separator:"\u{00A0}",format:countFormat)} ?? (content.result.usageError == nil ? L10n.text(.conversation,"transcriptPresentation.configure.text") : L10n.text(.conversation,"transcriptPresentation.configure.text.2")))
         let canExpand = content.result.usage != nil || content.result.usageError != nil
         tokenDisclosure.expandable = canExpand
         tokenDisclosure.expanded = expanded
-        tokenDisclosure.accessibilityTitle = "用量明细"
+        tokenDisclosure.accessibilityTitle = L10n.text(.conversation,"transcriptPresentation.configure.text.3")
         tokenDisclosure.setInlineTitle(heading,font:font)
         tokenDisclosure.isHidden = content.ended == nil
         if let usage = content.result.usage {

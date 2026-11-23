@@ -32,7 +32,7 @@ extension NSView {
 
 extension NSTextField {
     func withHoverHelpIcon(_ message:String) -> NSStackView {
-        let description = stringValue+"说明"
+        let description = stringValue+L10n.text(.app,"hoverHelp.description")
         let icon = NSImageView()
         icon.image = NSImage(systemSymbolName:"questionmark.circle",accessibilityDescription:description)
         icon.contentTintColor = .secondaryLabelColor

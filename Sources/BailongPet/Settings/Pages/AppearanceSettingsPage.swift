@@ -23,12 +23,12 @@ final class AppearanceSettingsPage {
     }
     func render() {
         var sizeRows = [
-            form.slider("桌宠大小","petPercent",range:50...200,suffix:"%"),
-            form.slider("气泡大小","bubblePercent",range:50...150,suffix:"%"),
-            form.toggle("气泡自定义宽高比","bubbleAspectEnabled")]
-        sizeRows.append(form.conditional(form.slider("宽 : 高","bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1"),when:{$0.bool("bubbleAspectEnabled")}))
-        sizeRows.append(form.slider("消息文字大小","messageFontSize",range:11...20,suffix:"pt"))
-        form.group("大小",sizeRows,symbol:"arrow.up.left.and.arrow.down.right")
+            form.slider(L10n.text(.settings,"appearance.petPercent.title"),"petPercent",range:50...200,suffix:"%"),
+            form.slider(L10n.text(.settings,"appearance.bubblePercent.title"),"bubblePercent",range:50...150,suffix:"%"),
+            form.toggle(L10n.text(.settings,"appearance.bubbleAspectEnabled.title"),"bubbleAspectEnabled")]
+        sizeRows.append(form.conditional(form.slider(L10n.text(.settings,"appearance.bubbleAspectRatio.title"),"bubbleAspectRatio",range:0.6...3,step:0.1,suffix:": 1"),when:{$0.bool("bubbleAspectEnabled")}))
+        sizeRows.append(form.slider(L10n.text(.settings,"appearance.messageFontSize.title"),"messageFontSize",range:11...20,suffix:"pt"))
+        form.group(L10n.text(.settings,"appearance.render.text"),sizeRows,symbol:"arrow.up.left.and.arrow.down.right")
         let palette = NSStackView(); palette.spacing = 3; palette.alignment = .top
         for (key,name) in AppAccent.choices {
             let dot = AccentSwatch(key:key,name:name)
@@ -46,37 +46,37 @@ final class AppearanceSettingsPage {
             caption.widthAnchor.constraint(equalTo:column.widthAnchor).isActive = true
             palette.addArrangedSubview(column); accentButtons.append(dot); accentNames.append(caption)
         }
-        var themeRows = [form.segmented("外观模式","appearanceMode",AppAppearance.choices,symbols:["system":"circle.lefthalf.filled","light":"sun.max","dark":"moon"]),form.row("强调色",control:palette)]
+        var themeRows = [form.segmented(L10n.text(.settings,"appearance.appearanceMode.title"),"appearanceMode",AppAppearance.choices,symbols:["system":"circle.lefthalf.filled","light":"sun.max","dark":"moon"]),form.row(L10n.text(.settings,"appearance.appearanceMode.title.2"),control:palette)]
         do {
             let well = CenteredColorWell(); well.color = AppAccent.color; well.widthAnchor.constraint(equalToConstant:70).isActive = true
             form.attach(well) { [weak self] sender in guard let rgb = (sender as! NSColorWell).color.usingColorSpace(.sRGB) else {return}; self?.preferences.set([rgb.redComponent,rgb.greenComponent,rgb.blueComponent],for:"accentRGB") }
-            themeRows.append(form.conditional(form.row("自定义",control:well),when:{$0.string("accentStyle") == "custom"}))
+            themeRows.append(form.conditional(form.row(L10n.text(.settings,"appearance.render.text.2"),control:well),when:{$0.string("accentStyle") == "custom"}))
         }
-        form.group("主题",themeRows,symbol:"paintpalette")
+        form.group(L10n.text(.settings,"appearance.render.text.3"),themeRows,symbol:"paintpalette")
         var materialImages = [String:NSImage]()
         if let image = glassSymbolImage(filled:false) {
             image.size = NSSize(width:18,height:18); materialImages["glass"] = image
         }
-        let material = form.segmented("消息窗口材质","bubbleMaterial",[("glass","液态玻璃"),("plain","普通材质")],symbols:["plain":"rectangle.fill"],images:materialImages,value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:PetPreferences.glassAvailabilityDescription) { [weak self] in self?.showPreview() }
+        let material = form.segmented(L10n.text(.settings,"appearance.bubbleMaterial.title"),"bubbleMaterial",[("glass",L10n.text(.settings,"appearance.bubbleMaterial.option.glass")),("plain",L10n.text(.settings,"appearance.bubbleMaterial.option.plain"))],symbols:["plain":"rectangle.fill"],images:materialImages,value:preferences.usesGlass ? "glass" : "plain",enabled:PetPreferences.glassAvailable,detail:PetPreferences.glassAvailabilityDescription) { [weak self] in self?.showPreview() }
         var materialRows = [material]
         do {
-            let follow = form.toggle("液态玻璃跟随系统设定","glassFollowsSystem") { [weak self] in self?.showPreview() }
+            let follow = form.toggle(L10n.text(.settings,"appearance.glassFollowsSystem.title"),"glassFollowsSystem") { [weak self] in self?.showPreview() }
             materialRows.append(form.conditional(follow,when:{$0.usesGlass}))
             let slider = GlassOpacitySlider(); slider.minValue = 0; slider.maxValue = 1; slider.doubleValue = preferences.number("glassOpacity")
             slider.numberOfTickMarks = 5; slider.allowsTickMarkValuesOnly = false; slider.isContinuous = true
             slider.trackFillColor = AppAccent.color; slider.widthAnchor.constraint(equalToConstant:180).isActive = true
-            slider.setAccessibilityLabel("玻璃不透明度"); glassSlider = slider
+            slider.setAccessibilityLabel(L10n.text(.settings,"appearance.render.text.4")); glassSlider = slider
             form.attach(slider) { [weak self] sender in self?.preferences.set((sender as! NSSlider).doubleValue,for:"glassOpacity"); self?.showPreview() }
             slider.ended = { [weak self] in self?.schedulePreviewDismissal() }
             let left = glassSymbol(filled:false), right = glassSymbol(filled:true)
             let controls = NSStackView(views:[left,slider,right]); controls.spacing = 8; controls.alignment = .centerY
             controls.widthAnchor.constraint(equalToConstant:244).isActive = true
-            materialRows.append(form.conditional(form.row("玻璃不透明度",control:controls),when:{$0.usesGlass && !$0.bool("glassFollowsSystem")}))
+            materialRows.append(form.conditional(form.row(L10n.text(.settings,"appearance.render.text.4"),control:controls),when:{$0.usesGlass && !$0.bool("glassFollowsSystem")}))
         }
         materialRows.append(form.choice(BubbleCloseButtonPosition.title,BubbleCloseButtonPosition.key,
                                         BubbleCloseButtonPosition.options,help:BubbleCloseButtonPosition.help))
-        materialRows.append(form.row("气泡效果",control:ActionButton("预览气泡") { [weak self] in self?.showPreview() }))
-        form.group("消息窗口",materialRows,symbol:"macwindow")
+        materialRows.append(form.row(L10n.text(.settings,"appearance.render.text.5"),control:ActionButton(L10n.text(.settings,"appearance.render.button")) { [weak self] in self?.showPreview() }))
+        form.group(L10n.text(.settings,"appearance.render.text.6"),materialRows,symbol:"macwindow")
     }
     private func glassSymbolImage(filled:Bool) -> NSImage? {
         let name = "capsule.on.rectangle.liquid.glass" + (filled ? ".fill" : "")
@@ -87,7 +87,7 @@ final class AppearanceSettingsPage {
     private func glassSymbol(filled:Bool) -> NSImageView {
         let image = glassSymbolImage(filled:filled)
         let view = NSImageView(); view.image = image; view.contentTintColor = .secondaryLabelColor
-        view.setAccessibilityLabel(filled ? "更不透明" : "更通透")
+        view.setAccessibilityLabel(filled ? L10n.text(.settings,"appearance.glassSymbol.text") : L10n.text(.settings,"appearance.glassSymbol.text.2"))
         view.widthAnchor.constraint(equalToConstant:24).isActive = true; view.heightAnchor.constraint(equalToConstant:24).isActive = true
         return view
     }

@@ -96,7 +96,7 @@ final class StreamingAnimation: @unchecked Sendable {
     // 在后台 load 任务中预备首帧，之后所有 reader 操作转交串行队列。
     func prime() throws -> Frame {
         try openReader()
-        guard let first = try readFrame() else { throw PetFailure(message: "流式动画没有可播放的帧。") }
+        guard let first = try readFrame() else { throw PetFailure(message: L10n.text(.diagnostics,"streamingAnimation.prime.message")) }
         firstFramePreparedAt = ProcessInfo.processInfo.systemUptime
         lock.withLock { displayed = first }
         return first.frame
@@ -197,7 +197,7 @@ final class StreamingAnimation: @unchecked Sendable {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         output.alwaysCopiesSampleData = false; reader.add(output)
-        guard reader.startReading() else { throw reader.error ?? PetFailure(message: "无法开始流式解码。") }
+        guard reader.startReading() else { throw reader.error ?? PetFailure(message: L10n.text(.diagnostics,"streamingAnimation.openReader.message")) }
         self.reader = reader; self.output = output; nextIndex = 0; sampler = AnimationFrameSampler()
     }
     private func pump() {
@@ -243,7 +243,7 @@ final class StreamingAnimation: @unchecked Sendable {
             var reachedEnd = false
             let entry: Entry? = try autoreleasepool {
                 guard let sample = output?.copyNextSampleBuffer() else {
-                    guard reader?.status == .completed else { throw reader?.error ?? PetFailure(message: "流式视频读取中断。") }
+                    guard reader?.status == .completed else { throw reader?.error ?? PetFailure(message: L10n.text(.diagnostics,"streamingAnimation.readFrame.message")) }
                     reachedEnd = true
                     return nil
                 }
@@ -261,7 +261,7 @@ final class StreamingAnimation: @unchecked Sendable {
                                                           limit: filterFrames ? limit : nil) else {
                     lock.withLock { skippedSamples += 1 }; return nil
                 }
-                guard let buffer = CMSampleBufferGetImageBuffer(sample) else { throw PetFailure(message: "流式视频帧缺少像素数据。") }
+                guard let buffer = CMSampleBufferGetImageBuffer(sample) else { throw PetFailure(message: L10n.text(.diagnostics,"streamingAnimation.readFrame.message.2")) }
                 let frame = try converter.frame(from: buffer, bounds: index == 0 ? nil : referenceBounds)
                 if index == 0 { referenceBounds = frame.bounds }
                 lock.withLock { convertedFrames += 1 }

@@ -16,22 +16,22 @@ enum MessageFileLink {
         guard scheme == nil || scheme == "file" || scheme == "sandbox" else {return false}
         if scheme == nil && url.path.isEmpty {return false}
         if scheme == "sandbox" {
-            showError("此文件不在本机",PetFailure(message:"请在 Codex 中下载文件后，再到访达查看。"))
+            showError(L10n.text(.workspace,"messageFileLink.reveal.error"),PetFailure(message:L10n.text(.workspace,"messageFileLink.reveal.message")))
             return true
         }
         guard url.host == nil || url.host == "" || url.host == "localhost" else {
-            showError("无法定位文件",PetFailure(message:"此链接不是本机文件地址。")); return true
+            showError(L10n.text(.workspace,"messageFileLink.reveal.error.2"),PetFailure(message:L10n.text(.workspace,"messageFileLink.reveal.message.2"))); return true
         }
         let path = (url.path as NSString).expandingTildeInPath
         let file: URL
         if path.hasPrefix("/") {file = URL(fileURLWithPath:path)}
         else if let directory {file = directory.appendingPathComponent(path)}
         else {
-            showError("无法定位文件",PetFailure(message:"此链接使用相对路径，但这条消息没有任务文件夹信息。")); return true
+            showError(L10n.text(.workspace,"messageFileLink.reveal.error.2"),PetFailure(message:L10n.text(.workspace,"messageFileLink.reveal.message.3"))); return true
         }
         let target = existingFile(file.standardizedFileURL)
         guard let target else {
-            showError("文件不存在",PetFailure(message:file.path)); return true
+            showError(L10n.text(.workspace,"messageFileLink.reveal.error.3"),PetFailure(message:file.path)); return true
         }
         FinderFileReveal.reveal(target)
         return true

@@ -126,3 +126,9 @@
 "textInteraction.contentItems.title.4" = "停止朗读";
 "textInteraction.openSearch.error" = "无法打开浏览器";
 "textInteraction.openSearch.message" = "系统未能打开搜索网址。";
+
+/* 应用接入补充 */
+"appIcons.sourceImage.text" = "无法读取桌宠模板图：%@";
+"appIcons.raster.text" = "无法绘制桌宠模板图：%@";
+"followMonitor.error.text" = "白龙桌宠Swift跟随启动失败：%@";
+"pet.error.text" = "  加载失败  ·  ";

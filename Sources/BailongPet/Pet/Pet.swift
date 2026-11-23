@@ -37,8 +37,8 @@ final class PetController: NSObject, NSMenuDelegate {
     private var toastActivities = [String:ToastSnapshot]()
     private var progressToastKey:String?
     var diagnostics: DiagnosticsPanel?
-    var syncDiagnostics: () -> String = { "等待初始化" }
-    var cliDiagnostics: () -> String = { "尚未初始化" }
+    var syncDiagnostics: () -> String = { L10n.text(.diagnostics,"pet.toastSnapshot.text") }
+    var cliDiagnostics: () -> String = { L10n.text(.diagnostics,"pet.toastSnapshot.text.2") }
     let settings: SettingsPanel
     let preferences: PetPreferences
     let defaults: UserDefaults
@@ -63,7 +63,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var onVisibility: (Bool) -> Void = { _ in }
     var onGeometry: () -> Void = {}
     var onPreferencesChanged: () -> Void = {}
-    var syncStatus: () -> String = { "正在准备读取本机 Codex 的任务记录。" }
+    var syncStatus: () -> String = { L10n.text(.diagnostics,"pet.refreshWorkspaceBars.text") }
     var current: Clip
     var animation: Animation?
     var frameIndex = 0
@@ -217,7 +217,7 @@ final class PetController: NSObject, NSMenuDelegate {
         observationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.keepOnScreen() })
         let startup = NSPanel(contentRect:NSRect(x:0,y:0,width:440,height:108),styleMask:[.titled],backing:.buffered,defer:false)
         startup.title = preferences.appName; startup.isReleasedWhenClosed = false; startup.hidesOnDeactivate = false
-        let heading = label(preferences.fixedText("主人，等我整理好裙摆和小翅膀，马上就来…")); heading.frame = NSRect(x:24,y:60,width:392,height:24)
+        let heading = label(preferences.fixedText(L10n.text(.dialogue,"dialogue.loadingPet"))); heading.frame = NSRect(x:24,y:60,width:392,height:24)
         let progress = NSProgressIndicator(frame:NSRect(x:24,y:28,width:392,height:16)); progress.isIndeterminate = true; progress.style = .bar; progress.startAnimation(nil)
         startup.contentView?.addSubview(heading); startup.contentView?.addSubview(progress)
         startup.center(); if !hidden {startup.orderFrontRegardless()}; self.startup = startup
@@ -273,10 +273,10 @@ final class PetController: NSObject, NSMenuDelegate {
                 self.startup?.orderOut(nil); self.startup = nil
                 // 像素、时间轴和清单校准一起切换，不能用新动作倍率绘制旧帧。
                 if TerminalMonitor.active?.showsAnimation == true {
-                    let previous = self.animation?.loadTiming == nil ? "起播" : TerminalMonitor.clip(self.current.id)
+                    let previous = self.animation?.loadTiming == nil ? L10n.text(.diagnostics,"pet.previous") : TerminalMonitor.clip(self.current.id)
                     var summary = previous+" → "+TerminalMonitor.clip(clip.id)
                     if let stats = self.animation?.stream?.statistics(),stats.underflows > 0 {
-                        summary += "  ·  上段等帧 \(stats.underflows) 次，最长 "+TerminalMonitor.milliseconds(stats.longestUnderflow)
+                        summary += L10n.format(.diagnostics,"pet.play.text",String(describing:stats.underflows))+TerminalMonitor.milliseconds(stats.longestUnderflow)
                     }
                     animation.loadTiming?.monitorTransition = summary
                 }
@@ -294,13 +294,13 @@ final class PetController: NSObject, NSMenuDelegate {
                 if self.mode == "move" { self.planMotion(manual: true) }
                 self.greetOnFirstAppearance()
             case .failure(let error):
-                TerminalMonitor.active?.write(.animation,TerminalMonitor.clip(clip.id)+"  加载失败  ·  "+TerminalMonitor.errorCode(error),.error)
+                TerminalMonitor.active?.write(.animation,TerminalMonitor.clip(clip.id)+L10n.text(.app,"pet.error.text")+TerminalMonitor.errorCode(error),.error)
                 self.startup?.orderOut(nil); self.startup = nil
                 self.began = self.now
                 if self.animation == nil {
                     self.timer?.invalidate(); self.timer = nil
                     self.updateVisibleActivity()
-                    RecoveryWindow.show(id:"animation-initialization",report:RecoveryReport(title:"桌宠画面未能加载",message:"动画没有可显示的画面。请确认应用资源完整，再重新加载。设置和历史记录不会被重置。",module:"动画",operation:"初始化动画",error:error),actionTitle:"重新加载") { [weak self] in self?.play(clip,mode) }
+                    RecoveryWindow.show(id:"animation-initialization",report:RecoveryReport(title:L10n.text(.diagnostics,"pet.play.title"),message:L10n.text(.diagnostics,"pet.play.message"),module:L10n.text(.diagnostics,"pet.play.text.2"),operation:L10n.text(.diagnostics,"pet.play.text.3"),error:error),actionTitle:L10n.text(.diagnostics,"pet.play.actionTitle")) { [weak self] in self?.play(clip,mode) }
                     return
                 }
                 self.bubble.showFailure(AppFailure.animation(error),scale:Double(self.bubblePercent)/100,

@@ -14,8 +14,8 @@ enum AppIcons {
     static let xai:NSImage? = bundledProviderIcon("xai-logo.png","xAI")
     static let mistral:NSImage? = bundledProviderIcon("mistral-logo.png","Mistral")
     static let kimi:NSImage? = bundledProviderIcon("kimi-logo.png","Kimi")
-    static let zhipu:NSImage? = bundledProviderIcon("zhipu-logo.png","智谱 GLM")
-    static let bailian:NSImage? = bundledProviderIcon("bailian-logo.png","阿里云百炼")
+    static let zhipu:NSImage? = bundledProviderIcon("zhipu-logo.png",L10n.text(.app,"branding.text.3"))
+    static let bailian:NSImage? = bundledProviderIcon("bailian-logo.png",L10n.text(.app,"branding.text.4"))
     static let openRouter:NSImage? = bundledProviderIcon("openrouter-logo.png","OpenRouter")
     static let groq:NSImage? = bundledProviderIcon("groq-logo.png","Groq")
     static let bedrock:NSImage? = bundledProviderIcon("bedrock-logo.png","Amazon Bedrock")
@@ -68,7 +68,7 @@ enum AppIcons {
               let context = CGContext(data:nil,width:pixels,height:pixels,bitsPerComponent:8,bytesPerRow:pixels*4,
                                       space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue),
               let sourceImage = source.cgImage(forProposedRect:nil,context:nil,hints:nil) else {
-            NSLog("无法读取桌宠模板图：%@",url.path); return nil
+            NSLog(L10n.text(.app,"appIcons.sourceImage.text"),url.path); return nil
         }
         let side = CGFloat(pixels)
         let scale = min(side/CGFloat(sourceImage.width),side/CGFloat(sourceImage.height))
@@ -76,7 +76,7 @@ enum AppIcons {
         let fitted = CGRect(x:(side-size.width)/2,y:(side-size.height)/2,width:size.width,height:size.height)
         context.interpolationQuality = .high
         context.draw(sourceImage,in:fitted)
-        guard let raster = context.makeImage() else {NSLog("无法绘制桌宠模板图：%@",name); return nil}
+        guard let raster = context.makeImage() else {NSLog(L10n.text(.app,"appIcons.raster.text"),name); return nil}
         let image = NSImage(cgImage:raster,size:NSSize(width:18,height:18))
         image.isTemplate = true; image.accessibilityDescription = PetPreferences.shared.appName
         return image
@@ -94,7 +94,7 @@ enum AppIcons {
             face.move(to:NSPoint(x:6,y:8)); face.curve(to:NSPoint(x:16,y:8),controlPoint1:NSPoint(x:8.5,y:5.5),controlPoint2:NSPoint(x:13.5,y:5.5)); face.stroke()
             return true
         }
-        image.isTemplate = true; image.accessibilityDescription = "访达中打开"
+        image.isTemplate = true; image.accessibilityDescription = L10n.text(.app,"branding.loadPetTemplate.accessibilityDescription")
         return image
     }()
 }

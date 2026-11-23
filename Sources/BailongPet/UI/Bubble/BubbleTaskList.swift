@@ -72,13 +72,13 @@ final class BubbleTaskList: NSView {
         let records = incoming.tasks; let previousRows = rows; subviews.filter {!($0 is BubbleTaskRow)}.forEach {$0.removeFromSuperview()}; rows = []
         var y:CGFloat = 0
         let labelBounds = NSRect(x:0,y:0,width:bounds.width,height:.greatestFiniteMagnitude)
-        for (index,section) in [("正在执行的任务：",records.filter(\.active)),("近期执行结束的任务：",Array(records.filter {!$0.active}.prefix(limit)))].enumerated() {
+        for (index,section) in [(L10n.text(.tasks,"overview.rebuild.text"),records.filter(\.active)),(L10n.text(.tasks,"overview.rebuild.text.2"),Array(records.filter {!$0.active}.prefix(limit)))].enumerated() {
             if index > 0 {y += 6*scale}
             let heading = label(section.0,bold:true); heading.font = .systemFont(ofSize:12*scale,weight:.medium)
             let headingHeight = ceil(heading.cell!.cellSize(forBounds:labelBounds).height)
             heading.frame = NSRect(x:0,y:y,width:bounds.width,height:headingHeight); addSubview(heading); y += headingHeight+scale
             if section.1.isEmpty {
-                let empty = label(incoming.status ?? (index == 0 ? "暂无正在执行的任务" : "暂无近期结束的任务"))
+                let empty = label(incoming.status ?? (index == 0 ? L10n.text(.tasks,"overview.empty") : L10n.text(.tasks,"overview.empty.2")))
                 empty.font = .systemFont(ofSize:11*scale); empty.textColor = .secondaryLabelColor
                 let height = ceil(empty.cell!.cellSize(forBounds:labelBounds).height)
                 empty.frame = NSRect(x:0,y:y,width:bounds.width,height:height); addSubview(empty); y += height
@@ -135,11 +135,11 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         name.font = .systemFont(ofSize:12*scale); name.lineBreakMode = .byTruncatingTail; name.maximumNumberOfLines = 1
         spinner.font = .monospacedSystemFont(ofSize:12*scale,weight:.medium)
         elapsed.font = .monospacedDigitSystemFont(ofSize:11*scale,weight:.medium); elapsed.alignment = .right
-        watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:"用时")
+        watch.image = NSImage(systemSymbolName:"stopwatch",accessibilityDescription:L10n.text(.tasks,"overview.accessibilityDescription"))
         activity.stringValue = task.activityLine ?? ""; activity.font = .systemFont(ofSize:11*scale); activity.textColor = StatusTextColor.secondary
         activity.isHidden = task.activityLine == nil
         for view in [spinner,name,elapsed,watch,stateIcon,jump,activityIcon,activity] as [NSView] {addSubview(view)}
-        jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:"在 Codex 中打开")
+        jump.image = NSImage(systemSymbolName:"arrow.up.right",accessibilityDescription:L10n.text(.tasks,"overview.accessibilityDescription.2"))
         jump.contentTintColor = .tertiaryLabelColor
         update(task)
     }
@@ -159,15 +159,15 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
             guard let self else {return false}
             return self.name.hasTruncatedText || self.activity.textOverflows
         }
-        let state = task.active ? "执行中" : task.status == "completed" ? "已完成" : task.status == "failed" ? "失败" : ["cancelled","canceled"].contains(task.status) ? "用户取消" : "已中断"
-        setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+"，转到 Codex")
+        let state = task.active ? L10n.text(.tasks,"overview.state") : task.status == "completed" ? L10n.text(.tasks,"overview.state.2") : task.status == "failed" ? L10n.text(.tasks,"overview.state.3") : ["cancelled","canceled"].contains(task.status) ? L10n.text(.tasks,"overview.state.4") : L10n.text(.tasks,"overview.state.5")
+        setAccessibilityLabel(name.stringValue+"，"+(task.activityLine ?? state)+L10n.text(.tasks,"overview.update.text"))
         renderedSweep = Int.min; renderedFrame = -1; needsRowLayout = true
     }
     func recordActivity(in monitor:TerminalMonitor) {
-        let label = activity.isHidden ? "无进展行" : task.activity?.monitorLabel ?? "无进展行"
+        let label = activity.isHidden ? L10n.text(.tasks,"bubble.label.text") : task.activity?.monitorLabel ?? L10n.text(.tasks,"bubble.label.text")
         guard monitoredActivity != label else {return}
         let change = monitoredActivity.map {$0+" → "+label} ?? label
-        monitor.write(.bubble,"轮次#"+TerminalMonitor.tag(task.turnID ?? task.key)+"  任务概览  ·  "+change)
+        monitor.write(.bubble,L10n.text(.tasks,"desktopSync.phase.text.2")+TerminalMonitor.tag(task.turnID ?? task.key)+L10n.text(.tasks,"bubbleTaskList.change.text")+change)
         monitoredActivity = label
     }
     func setMetadataVisible(_ visible:Bool) {

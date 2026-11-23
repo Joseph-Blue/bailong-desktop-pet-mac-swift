@@ -19,7 +19,7 @@ enum GPUStatistics {
         return unsafeBitCast(symbol, to: Usage.self)
     }()
     static func read() -> Result<Snapshot, Failure> {
-        guard let usage else { return .failure(Failure(message: "系统缺少资源组接口")) }
+        guard let usage else { return .failure(Failure(message: L10n.text(.diagnostics,"gpuStatistics.read.message"))) }
         // Two coalition IDs and three reserved uint64_t fields, 40 bytes.
         var identifiers = [UInt64](repeating: 0, count: 5)
         let received = identifiers.withUnsafeMutableBytes {
@@ -27,17 +27,17 @@ enum GPUStatistics {
         }
         guard received == 40 else {
             let code = errno
-            return .failure(Failure(message: "读取应用组失败：返回 \(received)，errno \(code)"))
+            return .failure(Failure(message: L10n.format(.diagnostics,"gpuStatistics.read.message.2",String(describing:received),String(describing:code))))
         }
         let coalition = identifiers[0]
-        guard coalition != 0 else { return .failure(Failure(message: "进程没有资源组")) }
+        guard coalition != 0 else { return .failure(Failure(message: L10n.text(.diagnostics,"gpuStatistics.read.message.3"))) }
         // Kernel copies min(requested size, struct size); only request the
         // stable prefix through gpu_time, not a guessed current struct layout.
         var prefix = [UInt64](repeating: 0, count: 9)
         let status = prefix.withUnsafeMutableBytes { usage(coalition, $0.baseAddress!, $0.count) }
         guard status == 0 else {
             let code = errno
-            return .failure(Failure(message: "读取 GPU 时间失败：errno \(code)（\(String(cString: strerror(code)))）"))
+            return .failure(Failure(message: L10n.format(.diagnostics,"gpuStatistics.read.message.4",String(describing:code),String(describing:String(cString: strerror(code))))))
         }
         return .success(Snapshot(coalition: coalition, nanoseconds: prefix[8]))
     }

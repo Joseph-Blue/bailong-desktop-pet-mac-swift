@@ -40,13 +40,13 @@ extension ChatController {
         do {
             try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
             newConversation(cwd:directory.path,entry:entry)
-        } catch {showError("无法使用默认工作区",error)}
+        } catch {showError(L10n.text(.conversation,"chatNavigation.newDefaultConversation.error"),error)}
     }
     func chooseFolder(entry:ChatEntry = .history) {
         let target = entry == .composer ? composerSelection : selected
         guard running == nil,!store.isReadOnly,let target,!target.external else {return}
         let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath:target.cwd); panel.prompt = "选择工作区"
+        panel.directoryURL = URL(fileURLWithPath:target.cwd); panel.prompt = L10n.text(.conversation,"chatNavigation.chooseFolder.text")
         ui.presentingFolderPicker = true
         let parent:NSWindow = entry == .composer ? ui.composer : ui.history
         if entry == .history && !parent.isVisible {ui.openHistory()}

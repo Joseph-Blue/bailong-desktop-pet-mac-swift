@@ -13,7 +13,7 @@ final class RunLifecycle {
         let unfinished: UnfinishedRun?
         if defaults.object(forKey:"runActive") as? Bool == true {
             let old = defaults.string(forKey:"runVersion") ?? ""
-            let version = !old.isEmpty && old.range(of:"^[0-9A-Za-z.+-]{1,40}$",options:.regularExpression) != nil ? old : "未知"
+            let version = !old.isEmpty && old.range(of:"^[0-9A-Za-z.+-]{1,40}$",options:.regularExpression) != nil ? old : L10n.text(.app,"runLifecycle.begin.text")
             unfinished = UnfinishedRun(started:defaults.object(forKey:"runStarted") as? Date,version:version)
         } else {unfinished = nil}
         defaults.set(version,forKey:"runVersion"); defaults.set(Date(),forKey:"runStarted")

@@ -10,23 +10,23 @@ struct RecoveryReport {
     var facts: [String] = []
     let date = Date()
     var text: String {
-        var lines = [PetPreferences.shared.appName+"错误报告", "版本："+Paths.version,
-                     "系统："+ProcessInfo.processInfo.operatingSystemVersionString,
-                     "架构："+architecture, "时间："+date.formatted(date:.numeric,time:.standard),
-                     "模块："+module, "操作："+operation, "状态："+title, "说明："+message]
+        var lines = [PetPreferences.shared.appName+L10n.text(.diagnostics,"recovery.lines"), L10n.text(.diagnostics,"recovery.lines.2")+Paths.version,
+                     L10n.text(.diagnostics,"recovery.recoveryReport.text")+ProcessInfo.processInfo.operatingSystemVersionString,
+                     L10n.text(.diagnostics,"recovery.recoveryReport.text.2")+architecture, L10n.text(.diagnostics,"recovery.recoveryReport.text.3")+date.formatted(date:.numeric,time:.standard),
+                     L10n.text(.diagnostics,"recovery.recoveryReport.text.4")+module, L10n.text(.diagnostics,"recovery.recoveryReport.text.5")+operation, L10n.text(.diagnostics,"recovery.recoveryReport.text.6")+title, L10n.text(.diagnostics,"recovery.recoveryReport.text.7")+message]
         if let error {
             let value = error as NSError
             let allowed = [NSCocoaErrorDomain,NSPOSIXErrorDomain,NSURLErrorDomain,"AVFoundationErrorDomain","NSOSStatusErrorDomain"]
-            lines += ["错误类型："+String(reflecting:type(of:error)),
-                      "错误域："+(allowed.contains(value.domain) ? value.domain : "应用错误"),"错误码：\(value.code)"]
-            if let settings = error as? PlaybackSettingsError {lines.append("无效播放设置："+settings.key)}
+            lines += [L10n.text(.diagnostics,"recovery.recoveryReport.text.8")+String(reflecting:type(of:error)),
+                      L10n.text(.diagnostics,"recovery.recoveryReport.text.9")+(allowed.contains(value.domain) ? value.domain : L10n.text(.diagnostics,"recovery.recoveryReport.text.10")),L10n.format(.diagnostics,"recovery.recoveryReport.text.11",String(describing:value.code))]
+            if let settings = error as? PlaybackSettingsError {lines.append(L10n.text(.diagnostics,"recovery.recoveryReport.text.12")+settings.key)}
             if let decoding = error as? DecodingError {
                 switch decoding {
-                case .dataCorrupted: lines.append("数据状态：内容损坏或格式错误")
-                case .keyNotFound: lines.append("数据状态：缺少必需字段")
-                case .typeMismatch: lines.append("数据状态：字段类型不符")
-                case .valueNotFound: lines.append("数据状态：必需字段为空")
-                @unknown default: lines.append("数据状态：解析未完成")
+                case .dataCorrupted: lines.append(L10n.text(.diagnostics,"recovery.recoveryReport.text.13"))
+                case .keyNotFound: lines.append(L10n.text(.diagnostics,"recovery.recoveryReport.text.14"))
+                case .typeMismatch: lines.append(L10n.text(.diagnostics,"recovery.recoveryReport.text.15"))
+                case .valueNotFound: lines.append(L10n.text(.diagnostics,"recovery.recoveryReport.text.16"))
+                @unknown default: lines.append(L10n.text(.diagnostics,"recovery.recoveryReport.text.17"))
                 }
             }
         }
@@ -64,9 +64,9 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         controller.heading.stringValue = report.title; controller.explanation.stringValue = report.message
         controller.report.string = report.text; controller.retry.title = actionTitle
         controller.recoveryAction = action; controller.retry.isEnabled = true
-        controller.activity.stringValue = controller.retrying ? "重试未完成 · "+report.date.formatted(date:.omitted,time:.standard) : ""
+        controller.activity.stringValue = controller.retrying ? L10n.text(.diagnostics,"recovery.show.text")+report.date.formatted(date:.omitted,time:.standard) : ""
         controller.retrying = false
-        controller.copy.title = "拷贝报告"
+        controller.copy.title = L10n.text(.diagnostics,"recovery.show.title")
         if !existed {controller.present(takeFocus:false)}
     }
     static func resolve(_ id:String) {
@@ -92,11 +92,11 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
     private var retrying = false
     override private init() {
         super.init()
-        window.title = "错误与恢复"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.title = L10n.text(.app,"application.installMenuBar.menuItem.7"); window.isReleasedWhenClosed = false; window.delegate = self
         window.contentMinSize = NSSize(width:580,height:420); window.collectionBehavior = [.fullScreenNone]
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         let root = NSView(); window.contentView = root
-        let icon = NSImageView(image:NSImage(systemSymbolName:"exclamationmark.triangle",accessibilityDescription:"运行错误")!)
+        let icon = NSImageView(image:NSImage(systemSymbolName:"exclamationmark.triangle",accessibilityDescription:L10n.text(.diagnostics,"recovery.icon"))!)
         icon.contentTintColor = .systemRed; icon.imageScaling = .scaleProportionallyUpOrDown
         icon.widthAnchor.constraint(equalToConstant:28).isActive = true; icon.heightAnchor.constraint(equalToConstant:28).isActive = true
         heading.font = .systemFont(ofSize:19,weight:.semibold)
@@ -108,7 +108,7 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
             field.widthAnchor.constraint(equalTo:description.widthAnchor).isActive = true
             field.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         }
-        let caption = label("错误报告",bold:true)
+        let caption = label(L10n.text(.diagnostics,"recovery.lines"),bold:true)
         activity.font = .systemFont(ofSize:11); activity.textColor = .secondaryLabelColor
         let reportHeader = NSStackView(views:[caption,NSView(),activity]); reportHeader.alignment = .firstBaseline; reportHeader.spacing = 12
         report.isEditable = false; report.isSelectable = true; report.textColor = .labelColor
@@ -116,17 +116,17 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
         report.isVerticallyResizable = true; report.isHorizontallyResizable = false; report.autoresizingMask = [.width]
         report.textContainer?.widthTracksTextView = true
         report.minSize = .zero; report.maxSize = NSSize(width:CGFloat.greatestFiniteMagnitude,height:CGFloat.greatestFiniteMagnitude)
-        report.setAccessibilityLabel("可拷贝的错误报告")
+        report.setAccessibilityLabel(L10n.text(.diagnostics,"recovery.text"))
         let scroll = GutterScrollView(); scroll.documentView = report; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         let reportBox = MessageTextBoxSurface(scroll:scroll)
-        copy = ActionButton("拷贝报告") {}
+        copy = ActionButton(L10n.text(.diagnostics,"recovery.show.title")) {}
         copy.image = NSImage(systemSymbolName:"doc.on.doc",accessibilityDescription:nil); copy.imagePosition = .imageLeading
         CopyFeedback.attach(to:copy) { [weak self] in self?.report.string }
-        let issue = ActionButton("反馈问题…") {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
+        let issue = ActionButton(L10n.text(.diagnostics,"recovery.issue")) {NSWorkspace.shared.open(UpdateChecker.repository.appendingPathComponent("issues/new"))}
         issue.image = NSImage(systemSymbolName:"arrow.up.right.square",accessibilityDescription:nil); issue.imagePosition = .imageLeading
-        issue.hoverHelp = "打开 GitHub 问题反馈页"
+        issue.hoverHelp = L10n.text(.diagnostics,"recovery.text.2")
         retry = ActionButton("") { [weak self] in self?.retryRecovery() }; retry.keepsAccentWhenInactive = true; retry.emphasize()
-        let quit = SettingsFooterButton(title:"退出程序",target:self,action:#selector(exitApplication))
+        let quit = SettingsFooterButton(title:L10n.text(.diagnostics,"recovery.quit"),target:self,action:#selector(exitApplication))
         quit.hasDestructiveAction = true; quit.isBordered = false
         for button in [copy!,issue,retry!] {
             button.configureFlexible(font:.systemFont(ofSize:13))
@@ -156,7 +156,7 @@ final class RecoveryWindow: NSObject, NSWindowDelegate {
     }
     private func retryRecovery() {
         guard !retrying else {return}
-        retrying = true; retry.isEnabled = false; activity.stringValue = "正在处理…"
+        retrying = true; retry.isEnabled = false; activity.stringValue = L10n.text(.diagnostics,"recovery.retryRecovery.text")
         window.contentView?.layoutSubtreeIfNeeded(); window.displayIfNeeded()
         // 成功由 resolve 收起窗口，失败由 show 更新报告及重新启用按钮；不伪造恢复成功。
         DispatchQueue.main.async { [weak self] in self?.recoveryAction() }

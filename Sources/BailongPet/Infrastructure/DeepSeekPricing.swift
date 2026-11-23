@@ -10,14 +10,14 @@ enum DeepSeekPricing {
     }()
     enum Period {
         case peak,offPeak
-        var title:String {self == .peak ? "高峰时段（峰）" : "空闲时段（谷）"}
+        var title:String {self == .peak ? L10n.text(.usage,"deepSeekPricing.period.text") : L10n.text(.usage,"deepSeekPricing.period.text.2")}
     }
     struct Snapshot {
         let period:Period
         let holiday:Bool
         let weekend:Bool
         let next:Date?
-        var title:String {period.title+(holiday ? "中国法定节假日" : weekend ? "周末" : "")}
+        var title:String {period.title+(holiday ? L10n.text(.usage,"deepSeekPricing.snapshot.text") : weekend ? L10n.text(.usage,"deepSeekPricing.snapshot.text.2") : "")}
     }
     private static let timestampFormatter:DateFormatter = {
         let format = DateFormatter()
@@ -30,7 +30,7 @@ enum DeepSeekPricing {
     static func countdown(until change:Date,now:Date) -> String {
         let seconds = max(0,Int(ceil(change.timeIntervalSince(now))))
         let clock = String(format:"%02d:%02d:%02d",seconds/3600%24,seconds/60%60,seconds%60)
-        return seconds >= 86400 ? "\(seconds/86400) 天 "+clock : clock
+        return seconds >= 86400 ? L10n.format(.usage,"deepSeekPricing.countdown.text",String(describing:seconds/86400))+clock : clock
     }
     // 国务院公布的放假区间（包含调休休息日）；周末补班不改变 DeepSeek 的周末谷价。
     // 2026：https://www.beijing.gov.cn/cs/gncs/zcwj/202603/t20260327_4568275.html

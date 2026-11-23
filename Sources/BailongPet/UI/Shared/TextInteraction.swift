@@ -8,8 +8,8 @@ enum BrowserSearchEngine:String, CaseIterable {
 
     static let key = "browserSearchEngine"
     static let defaultEngine = Self.bing
-    static let group = "网页搜索"
-    static let settingTitle = "搜索引擎"
+    static let group = L10n.text(.settings,"textInteraction.group")
+    static let settingTitle = L10n.text(.settings,"textInteraction.settingTitle")
     static var options:[(String,String)] {allCases.map {($0.rawValue,$0.title)}}
 
     var title:String {
@@ -22,9 +22,9 @@ enum BrowserSearchEngine:String, CaseIterable {
         case .ecosia: return "Ecosia"
         case .startpage: return "Startpage"
         case .perplexity: return "Perplexity"
-        case .sogou: return "搜狗"
-        case .so360: return "360 搜索"
-        case .baidu: return "百度"
+        case .sogou: return L10n.text(.app,"textInteraction.sogou")
+        case .so360: return L10n.text(.app,"textInteraction.so360")
+        case .baidu: return L10n.text(.app,"textInteraction.baidu")
         }
     }
 
@@ -64,7 +64,7 @@ enum TextContextMenu {
         image?.isTemplate = true
         return image
     }()
-    private static let commands = [("剪切",#selector(NSText.cut(_:)),"x","scissors"),("拷贝",#selector(NSText.copy(_:)),"c","doc.on.doc"),("粘贴",#selector(NSText.paste(_:)),"v","doc.on.clipboard"),("全选",selectAll,"a","")]
+    private static let commands = [(L10n.text(.app,"textInteraction.commands"),#selector(NSText.cut(_:)),"x","scissors"),(L10n.text(.app,"textInteraction.commands.2"),#selector(NSText.copy(_:)),"c","doc.on.doc"),(L10n.text(.app,"textInteraction.commands.3"),#selector(NSText.paste(_:)),"v","doc.on.clipboard"),(L10n.text(.app,"textInteraction.commands.4"),selectAll,"a","")]
     static weak var editMenu:NSMenu?
 
     static func menu(for target:NSTextView,systemMenu:@autoclosure () -> NSMenu?) -> NSMenu {
@@ -126,8 +126,8 @@ enum TextContextMenu {
     private static func undoItems(for target:NSTextView) -> [NSMenuItem] {
         guard canInsertText(in:target),let manager = target.undoManager else {return []}
         let commands:[(Bool,String,Selector,String,NSEvent.ModifierFlags)] = [
-            (manager.canUndo,"撤销",#selector(UndoManager.undo),"undo:",.command),
-            (manager.canRedo,"重做",#selector(UndoManager.redo),"redo:",[.command,.shift])
+            (manager.canUndo,L10n.text(.app,"textInteraction.undoItems.text"),#selector(UndoManager.undo),"undo:",.command),
+            (manager.canRedo,L10n.text(.app,"textInteraction.undoItems.text.2"),#selector(UndoManager.redo),"redo:",[.command,.shift])
         ]
         return commands.compactMap {available,title,action,systemAction,modifiers in
             guard available else {return nil}
@@ -150,21 +150,21 @@ enum TextContextMenu {
             if !query.isEmpty {
                 let saved = PetPreferences.shared.string(BrowserSearchEngine.key)
                 let engine = BrowserSearchEngine(rawValue:saved) ?? .defaultEngine
-                items.append(MenuAction("使用 \(engine.title) 网页搜索",symbol:"magnifyingglass") {openSearch(query,using:engine)})
+                items.append(MenuAction(L10n.format(.app,"textInteraction.contentItems.menuItem",String(describing:engine.title)),symbol:"magnifyingglass") {openSearch(query,using:engine)})
                 // AppKit 没有公开翻译项标识。保留系统创建的项及其原生动作。
                 if let native,let translation = native.items.first(where:{NSStringFromClass(type(of:$0)) == "RVTranslateMenuItem"}) {
                     native.removeItem(translation)
-                    translation.title = "翻译"
+                    translation.title = L10n.text(.app,"textInteraction.contentItems.title")
                     items.append(translation)
                 }
             }
         }
         if let native,let speech = native.items.first(where:{$0.submenu?.items.contains(where:{$0.action == startSpeaking}) == true}),
            let commands = speech.submenu?.items,commands.contains(where:{target.validateMenuItem($0)}) {
-            speech.title = "语音"
+            speech.title = L10n.text(.app,"textInteraction.contentItems.title.2")
             for command in commands {
-                if command.action == startSpeaking {command.title = "开始朗读"; command.target = target}
-                if command.action == stopSpeaking {command.title = "停止朗读"; command.target = target}
+                if command.action == startSpeaking {command.title = L10n.text(.app,"textInteraction.contentItems.title.3"); command.target = target}
+                if command.action == stopSpeaking {command.title = L10n.text(.app,"textInteraction.contentItems.title.4"); command.target = target}
             }
             native.removeItem(speech)
             items.append(speech)
@@ -200,7 +200,7 @@ enum TextContextMenu {
 
     private static func openSearch(_ query:String,using engine:BrowserSearchEngine) {
         guard let url = engine.searchURL(for:query) else {return}
-        if !NSWorkspace.shared.open(url) {showError("无法打开浏览器",PetFailure(message:"系统未能打开搜索网址。"))}
+        if !NSWorkspace.shared.open(url) {showError(L10n.text(.app,"textInteraction.openSearch.error"),PetFailure(message:L10n.text(.app,"textInteraction.openSearch.message")))}
     }
     static func performKeyEquivalent(_ event:NSEvent,in window:NSWindow) -> Bool {
         guard window.isKeyWindow,

@@ -7,7 +7,7 @@ extension TerminalMonitor {
         "thread/start","thread/resume","turn/start","turn/interrupt","item/commandExecution/requestApproval",
         "item/fileChange/requestApproval","item/permissions/requestApproval","item/tool/requestUserInput"
     ]
-    static func rpcName(_ method:String) -> String {rpcMethods.contains(method) ? method : "未识别方法"}
+    static func rpcName(_ method:String) -> String {rpcMethods.contains(method) ? method : L10n.text(.tasks,"codexProtocolMonitor.rpcName.text")}
     static func serverRequestID(_ value:Any) -> String {
         if let id = value as? Int {return String(id)}
         if let id = value as? String {return tag(id)}
@@ -16,23 +16,23 @@ extension TerminalMonitor {
     static func rpcFields(_ value:[String:Any]) -> String {
         let thread = value["thread"] as? [String:Any], turn = value["turn"] as? [String:Any]
         var fields = ""
-        if let id = (value["threadId"] ?? thread?["id"]) as? String {fields += "  会话#"+tag(id)}
-        if let id = (value["turnId"] ?? turn?["id"]) as? String {fields += "  轮次#"+tag(id)}
+        if let id = (value["threadId"] ?? thread?["id"]) as? String {fields += L10n.text(.tasks,"desktopQuestionReply.record.text")+tag(id)}
+        if let id = (value["turnId"] ?? turn?["id"]) as? String {fields += L10n.text(.tasks,"codexProtocolMonitor.id.text")+tag(id)}
         return fields
     }
     static func rpcResult(_ method:String,_ result:[String:Any]) -> String {
         if method == "model/list",let models = result["data"] as? [Any] {
-            return "  ·  \(models.count) 个模型"+(result["nextCursor"] is String ? "，还有下一页" : "")
+            return L10n.format(.tasks,"codexProtocolMonitor.models.text",String(describing:models.count))+(result["nextCursor"] is String ? L10n.text(.tasks,"codexProtocolMonitor.models.text.2") : "")
         }
         if method == "account/rateLimits/read",let limits = result["rateLimitsByLimitId"] as? [String:Any] {
-            return "  ·  \(limits.count) 组额度"
+            return L10n.format(.tasks,"codexProtocolMonitor.limits.text",String(describing:limits.count))
         }
         return rpcFields(result)
     }
     static func rpcError(_ value:[String:Any]) -> String {
         let code = (value["code"] as? Int).map {"  ·  RPC \($0)"} ?? ""
         let failure = CodexErrorMessage(CodexErrorMessage.encode(value))
-        return "  ·  "+(failure?.title ?? "服务端错误")+code
+        return "  ·  "+(failure?.title ?? L10n.text(.tasks,"codexProtocolMonitor.failure.text"))+code
     }
     func serverEvent(_ method:String,_ params:[String:Any],connection:Int) {
         let detail:String
@@ -43,7 +43,7 @@ extension TerminalMonitor {
             let turn = params["turn"] as? [String:Any] ?? [:]
             let status = turn["status"] as? String ?? ""
             level = status == "completed" ? .success : status == "failed" ? .error : .warning
-            detail = "  ·  "+Self.status(status)+((turn["items"] as? [Any]).map {"  ·  \($0.count) 项"} ?? "")
+            detail = "  ·  "+Self.status(status)+((turn["items"] as? [Any]).map {L10n.format(.tasks,"codexProtocolMonitor.status.text",String(describing:$0.count))} ?? "")
         case "item/started","item/completed":
             guard let item = params["item"] as? [String:Any] else {return}
             let type = item["type"] as? String ?? ""
@@ -57,18 +57,18 @@ extension TerminalMonitor {
             var operation = ""
             if ["commandExecution","mcpToolCall","dynamicToolCall","webSearch"].contains(type),
                let activity = TaskActivity.from(item:item) {operation = "  ·  "+activity.toolOperation.monitorName}
-            if type == "fileChange",let changes = item["changes"] as? [Any] {operation = "  ·  \(changes.count) 项文件改动"}
-            detail = "  ·  "+(known.contains(type) ? type : "其他项目")
+            if type == "fileChange",let changes = item["changes"] as? [Any] {operation = L10n.format(.tasks,"codexProtocolMonitor.changes.text",String(describing:changes.count))}
+            detail = "  ·  "+(known.contains(type) ? type : L10n.text(.tasks,"codexProtocolMonitor.changes.text.2"))
                 + ((item["id"] as? String).map {" #"+Self.tag($0)} ?? "") + operation
-                + (failed ? "  ·  失败" : outcome.map {"  ·  "+$0.label} ?? "")
+                + (failed ? L10n.text(.tasks,"codexProtocolMonitor.changes.text.3") : outcome.map {"  ·  "+$0.label} ?? "")
         case "turn/plan/updated":
-            detail = (params["plan"] as? [Any]).map {"  ·  \($0.count) 步"} ?? ""
+            detail = (params["plan"] as? [Any]).map {L10n.format(.tasks,"codexProtocolMonitor.labels.text",String(describing:$0.count))} ?? ""
         case "error":
             let retry = params["willRetry"] as? Bool == true
             level = retry ? .warning : .error
-            detail = (retry ? "  ·  将重试" : "")+Self.rpcError(params["error"] as? [String:Any] ?? [:])
+            detail = (retry ? L10n.text(.tasks,"codexProtocolMonitor.retry.text") : "")+Self.rpcError(params["error"] as? [String:Any] ?? [:])
         default:return // 流式 delta 和用量快照保持原有消费节奏。
         }
-        write(.server,"← 通知  "+method+"  ·  连接#\(connection)"+Self.rpcFields(params)+detail,level)
+        write(.server,L10n.text(.tasks,"codexProtocolMonitor.retry.text.2")+method+L10n.format(.tasks,"codexProtocolMonitor.retry.text.3",String(describing:connection))+Self.rpcFields(params)+detail,level)
     }
 }

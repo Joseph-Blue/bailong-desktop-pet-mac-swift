@@ -7,8 +7,8 @@ enum DesktopQueue {
         case desktop, queue
         var errorDescription:String? {
             switch self {
-            case .desktop:return "Codex 桌面端尚未运行。"
-            case .queue:return "Codex 桌面端尚未打开消息队列。"
+            case .desktop:return L10n.text(.conversation,"desktopQueue.desktop")
+            case .queue:return L10n.text(.conversation,"desktopQueue.queue")
             }
         }
     }
@@ -21,7 +21,7 @@ enum DesktopQueue {
             let apps = NSRunningApplication.runningApplications(withBundleIdentifier:"com.openai.codex").filter {!$0.isTerminated}
             if apps.isEmpty {throw Waiting.desktop}
             guard apps.count == 1,let app = apps.first,let bundle = app.bundleURL else {
-                throw PetFailure(message:"请在一个 Codex 桌面端中打开原会话。")
+                throw PetFailure(message:L10n.text(.conversation,"desktopQueue.running.message"))
             }
             let root = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory()+"/.codex"
             return Self(app:app,cli:bundle.appendingPathComponent(CodexConnection.packagedCLI),
@@ -37,7 +37,7 @@ enum DesktopQueue {
             let lock = store.appendingPathComponent("thread-writer-locks")
                 .appendingPathComponent(thread.uuidString.lowercased()+".lock")
             guard try Self.processes(using:lock).allSatisfy(belongsToDesktop) else {
-                throw PetFailure(message:"当前桌面端以外的进程正在使用这条会话的写入锁。")
+                throw PetFailure(message:L10n.text(.conversation,"desktopQueue.requireAvailableQueue.message"))
             }
         }
 
@@ -86,7 +86,7 @@ enum DesktopQueue {
             DispatchQueue.global(qos:.userInitiated).async {
                 let ready = candidate.flatMap { target in
                     Result {
-                        guard !target.app.isTerminated else {throw PetFailure(message:"Codex 桌面端已退出。")}
+                        guard !target.app.isTerminated else {throw PetFailure(message:L10n.text(.conversation,"desktopQueue.probe.message"))}
                         try target.requireAvailableQueue(for:id)
                         try DesktopHistoryReader.requireReplyConversation(thread,previousTurn:previousTurn,steering:false)
                         return target
@@ -150,12 +150,12 @@ enum DesktopQueue {
                 result = .success(ids[0])
             } else {
                 let reason:String
-                if task.terminationReason == .uncaughtSignal {reason = "队列命令被信号 \(status) 结束。"}
-                else if status == 0 {reason = "回执未匹配目标会话。"}
+                if task.terminationReason == .uncaughtSignal {reason = L10n.format(.conversation,"desktopQueue.submit.text",String(describing:status))}
+                else if status == 0 {reason = L10n.text(.conversation,"desktopQueue.submit.text.2")}
                 else if let error = lines.last(where:{$0.hasPrefix("Error: ") || $0.hasPrefix("error: ")}) {
                     reason = String(error.prefix(320))
-                } else {reason = "队列命令退出码为 \(status)。"}
-                result = .failure(PetFailure(message:"入队结果待确认。"+reason))
+                } else {reason = L10n.format(.conversation,"desktopQueue.submit.text.3",String(describing:status))}
+                result = .failure(PetFailure(message:L10n.text(.conversation,"desktopQueue.submit.message")+reason))
             }
             DispatchQueue.main.async {timeout.cancel(); completion(result)}
         }

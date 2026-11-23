@@ -70,8 +70,8 @@ enum FileEditRendering {
             let value = NSMutableAttributedString(attributedString:content); value.append(NSAttributedString(string:"\n",attributes:base))
             value.addAttribute(.paragraphStyle,value:paragraph,range:NSRange(location:0,length:value.length)); result.append(value)
         }
-        let header = NSMutableAttributedString(string:"已编辑 \(edits.count) 个文件",attributes:[.font:NSFont.systemFont(ofSize:font.pointSize,weight:.semibold),.foregroundColor:NSColor.labelColor])
-        if let icon = symbol("doc.badge.plus",description:"文件修改",font:font,side:font.pointSize) {
+        let header = NSMutableAttributedString(string:L10n.format(.workspace,"fileEditRendering.header",String(describing:edits.count)),attributes:[.font:NSFont.systemFont(ofSize:font.pointSize,weight:.semibold),.foregroundColor:NSColor.labelColor])
+        if let icon = symbol("doc.badge.plus",description:L10n.text(.workspace,"fileEditRendering.icon"),font:font,side:font.pointSize) {
             header.insert(NSAttributedString(string:"  ",attributes:base),at:0)
             header.insert(icon,at:0)
         }
