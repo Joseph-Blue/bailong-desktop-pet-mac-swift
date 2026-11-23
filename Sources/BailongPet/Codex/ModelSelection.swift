@@ -124,7 +124,8 @@ final class ChatModelSettings {
         let descriptions = ["none":"直接作答，不额外展开推理。", "minimal":"尽量减少思考，适合简单任务。",
             "low":"少量思考，优先响应速度。", "medium":"平衡思考深度与响应速度。",
             "high":"充分分析问题，适合较复杂的任务。", "xhigh":"深入分析复杂问题，可能需要更长时间。",
-            "max":"投入更多推理，适合难度较高的任务。", "ultra":"使用最高档推理投入，适合需要深入分析的任务。"]
+            "max":"投入更多推理，适合难度较高的任务；在 Codex 中默认隐藏显示。",
+            "ultra":"使用最高档推理投入，适合需要深入分析的任务；在特定情况下会更频繁派遣子代理。"]
         return descriptions[effort] ?? "使用当前模型提供的「\(Self.effortName(effort))」推理强度。"
     }
     var defaultTitle: String {

@@ -126,7 +126,7 @@ final class ModelSelectorContent: NSViewController {
         speedSwitch.isEnabled = !settings.loading && settings.supportsFastMode
         speedLabel.textColor = speedSwitch.isEnabled ? .labelColor : .disabledControlTextColor
         speedIcon.contentTintColor = speedLabel.textColor
-        let speedHelp = settings.supportsFastMode ? "开启后使用 Codex 官方快速模式（1.5倍速度），关闭后恢复标准速度。" : "当前模型未提供 Codex 官方快速档位。"
+        let speedHelp = settings.supportsFastMode ? "开启后使用 Codex 官方快速模式（1.5倍速度），会消耗更多额度。" : "当前模型未提供 Codex 官方快速档位。"
         speedSwitch.hoverHelp = speedHelp
         if settings.loading {explanation.stringValue = "正在读取可用模型…"}
         else if let error = settings.error {explanation.stringValue = "模型读取失败："+error}
