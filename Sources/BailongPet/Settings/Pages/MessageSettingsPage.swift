@@ -283,6 +283,7 @@ enum MessageSettingsPage {
         repositoryRow.setCustomSpacing(20,after:info)
 
         let indicators = NSTextField(wrappingLabelWithString:"")
+        indicators.isSelectable = false
         indicators.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let legend = NSStackView(views:[heading,repositoryRow,indicators])
         legend.orientation = .vertical
