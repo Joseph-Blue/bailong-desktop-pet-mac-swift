@@ -1,0 +1,527 @@
+/* 对话、历史与模型选择 · 简体中文 */
+
+/* API 供应商名称 */
+"apiProviderDirectory.apiProviderIdentity.text" = "当前 API 供应商：";
+"apiProviderDirectory.entry.name" = "OpenAI";
+"apiProviderDirectory.entry.name.2" = "DeepSeek";
+"apiProviderDirectory.entry.text" = "Mistral";
+"apiProviderDirectory.entry.name.3" = "Kimi（中国站）";
+"apiProviderDirectory.entry.name.4" = "Kimi（国际站）";
+"apiProviderDirectory.entry.name.5" = "智谱 GLM（中国站）";
+"apiProviderDirectory.entry.text.2" = "智谱 GLM";
+"apiProviderDirectory.entry.name.6" = "Z.AI GLM（国际站）";
+"apiProviderDirectory.entry.name.7" = "阿里云百炼（北京）";
+"apiProviderDirectory.entry.text.3" = "百炼 CN";
+"apiProviderDirectory.entry.name.8" = "阿里云百炼（新加坡）";
+"apiProviderDirectory.entry.text.4" = "百炼 SG";
+"apiProviderDirectory.entry.name.9" = "OpenRouter";
+"apiProviderDirectory.entry.name.10" = "Groq";
+"apiProviderDirectory.entry.name.11" = "Amazon Bedrock";
+"apiProviderDirectory.entry.name.12" = "Google Cloud Vertex AI";
+
+/* chatModelLoader */
+"chatModelLoader.page.text" = "缺少工作区模型配置";
+
+/* codex */
+"codex.state" = "已就绪";
+"codex.state.2" = "未连接";
+"codex.state.3" = "握手中";
+"codex.state.4" = "协议已连接";
+"codex.state.5" = "正在初始化";
+"codex.reportMonitorState.text" = "连接失败：";
+"codex.reportMonitorState.text.2" = "未运行";
+/* 参数 %1$@ = version；%2$@ = state；%3$@ = executableURL?.lastPathComponent ?? "codex"；%4$@ = pid；%5$@ = pending.count；%6$@ = executableURL?.path ?? "尚未启动" */
+"codex.reportMonitorState.text.3" = "%1$@ · %2$@ · 进程 %3$@ · PID %4$@ · 待回复 %5$@\n可执行文件：%6$@";
+"codex.reportMonitorState.text.4" = "尚未启动";
+"codex.version" = "版本不可读";
+"codex.summary.text" = "未找到桌面应用";
+"codex.package.text" = "版本未提供";
+"codex.package.text.2" = "尚未取得握手版本";
+"codex.package.text.3" = "安装版本 ";
+"codex.package.text.4" = "版本读取失败：";
+"codex.executable.message" = "指定的 Codex 程序不可执行：";
+"codex.executable.message.2" = "没有找到可用的 Codex。请安装或更新 Codex 桌面应用并登录，再重试。";
+"codex.openConversationForReply.message" = "原 Codex 会话已不存在。";
+"codex.openConversationForReply.message.2" = "未找到 Codex 桌面应用。";
+"codex.connect.text" = "解析协议帧";
+"codex.connect.message" = "Codex 连接已结束，任务状态未确认。";
+"codex.connect.error" = "读取到 EOF";
+"codex.failure" = "初始化握手";
+"codex.connect.text.2" = "启动子进程";
+"codex.prepareThread.text" = "缺少会话 ID";
+/* 参数 %1$@ = method */
+"codex.unsupported.text" = "此客户端未支持 %1$@";
+"codex.send.text" = "写入协议帧";
+"codex.abortUnconfirmedTask.message" = "已关闭桌宠任务连接并回收服务进程；任务最终结果未确认，请在 Codex 核对。";
+"codex.receive.text" = "请求缺少参数对象。";
+"codex.receive.text.2" = "事件缺少参数对象";
+"codex.receipt.text" = "  ·  缺少结果对象";
+"codex.receipt.text.2" = "回复缺少结果对象";
+"codex.fail.text" = "连接中断";
+
+/* codexProtocol */
+"codexProtocol.timeout" = "Codex 请求超时，任务状态尚未确认。";
+"codexProtocol.disconnected" = "Codex 任务连接未建立。";
+"codexProtocol.malformed" = "Codex 协议格式错误：";
+"codexProtocol.object.text" = "消息必须是对象";
+"codexProtocol.requireID.text" = "缺少有效标识";
+"codexProtocol.requireID.text.2" = "消息增量必须是文本";
+"codexProtocol.requireID.text.3" = "缺少问题列表";
+"codexProtocol.requireID.text.4" = "缺少问题标识";
+"codexProtocol.requireID.text.5" = "问题标识重复";
+"codexProtocol.requireID.text.6" = "缺少问题正文";
+
+/* desktopHistoryReader */
+"desktopHistoryReader.requireReplyConversation.message" = "原会话已归档或不存在，请在 Codex 中处理。";
+"desktopHistoryReader.requireReplyConversation.message.2" = "原会话状态已变化。请查看 Codex 当前对话后再发送。";
+"desktopHistoryReader.read.text" = "需要补充信息，请回到 Codex 处理。";
+"desktopHistoryReader.read.text.2" = "Codex 任务";
+
+/* desktopQueue */
+"desktopQueue.desktop" = "Codex 桌面端尚未运行。";
+"desktopQueue.queue" = "Codex 桌面端尚未打开消息队列。";
+"desktopQueue.running.message" = "请在一个 Codex 桌面端中打开原会话。";
+"desktopQueue.requireAvailableQueue.message" = "当前桌面端以外的进程正在使用这条会话的写入锁。";
+"desktopQueue.probe.message" = "Codex 桌面端已退出。";
+/* 参数 %1$@ = status */
+"desktopQueue.submit.text" = "队列命令被信号 %1$@ 结束。";
+"desktopQueue.submit.text.2" = "回执未匹配目标会话。";
+/* 参数 %1$@ = status */
+"desktopQueue.submit.text.3" = "队列命令退出码为 %1$@。";
+"desktopQueue.submit.message" = "入队结果待确认。";
+
+/* desktopReply */
+"desktopReply.ownerUnavailable.text" = "Codex 尚未加载这条会话。";
+"desktopReply.initialize.message" = "Codex 未返回本机连接标识。";
+"desktopReply.prepareConnection.message" = "Codex 未提供当前会话的模型设置。";
+"desktopReply.readServiceTier.message" = "Codex 会话速度状态协议不兼容。";
+"desktopReply.readServiceTier.message.2" = "未收到 Codex 原会话的速度设置。";
+"desktopReply.unconfirmed.text" = "尚未收到发送确认。请先到 Codex 查看消息是否已发送，确认未发送后再重试。\n\n";
+"desktopReply.submit.message" = "准备连接与发送会话不一致。";
+"desktopReply.submit.message.2" = "Codex 未确认插话进入原轮次。";
+"desktopReply.submit.message.3" = "Codex 未返回新轮次的确认信息。";
+
+/* desktopSync */
+"desktopSync.openInCodex" = "这个问题需要你转到 Codex 回复。";
+"desktopSync.clearLocalProjection.text" = "正在同步 Codex 任务状态…";
+"desktopSync.diagnostics" = "等待同步";
+"desktopSync.phase" = "等待首次同步";
+/* 参数 %1$@ = turns.count */
+"desktopSync.phase.2" = "活跃轮次 %1$@";
+"desktopSync.reportMonitorState.text" = "正在准备读取本机 Codex 的任务记录。\n读取成功后，这里会显示任务数量、当前状态和最近刷新时间。";
+"desktopSync.configurePermissionHook.message" = "桌宠审批通道未启动：";
+/* 参数 %1$@ = self.approvalReader.unavailableCount */
+"desktopSync.poll.text" = "%1$@ 个会话尚未收到 Codex 实时状态。";
+"desktopSync.poll.text.2" = "读取实时审批失败  ·  ";
+"desktopSync.poll.text.3" = " · 审批同步失败：";
+"desktopSync.poll.text.4" = "\n\n实时审批状态未同步：";
+"desktopSync.poll.text.5" = "读取任务记录失败  ·  ";
+"desktopSync.poll.text.6" = "Codex 当前任务状态读取失败";
+"desktopSync.poll.text.7" = "读取失败：";
+"desktopSync.poll.text.8" = "暂时无法读取 Codex 的任务记录。\n桌宠会自动重试；你也可以打开 Codex，确认会话能够正常使用。\n\n具体原因（供排查）：\n";
+"desktopSync.statusText" = "任务正在等待你的处理，请回到原 Codex 窗口。";
+"desktopSync.statusText.2" = "已经有一会儿没有新进度，任务尚未报告完成。";
+/* 参数 %1$@ = values.count；%2$@ = running.count；%3$@ = missing.count */
+"desktopSync.accept.text" = "%1$@ 条 · 活跃 %2$@ · 待更新 %3$@ · ";
+"desktopSync.submitAnswers.message" = "这道问题已回答或已结束，请查看 Codex 当前状态。";
+/* 参数 %1$@ = records.count；%2$@ = conversations */
+"desktopSync.describeStatus.text" = "当前读取到 %1$@ 条任务记录，来自 %2$@ 个 Codex 会话。";
+/* 参数 %1$@ = working */
+"desktopSync.describeStatus.text.2" = "正在进行：%1$@ 条";
+/* 参数 %1$@ = counts["waitingForApproval"] ?? 0 */
+"desktopSync.describeStatus.text.3" = "等待你批准：%1$@ 条";
+/* 参数 %1$@ = counts["waitingForInput"] ?? 0 */
+"desktopSync.describeStatus.text.4" = "等待你补充信息：%1$@ 条";
+/* 参数 %1$@ = counts["completed"] ?? 0 */
+"desktopSync.describeStatus.text.5" = "已完成：%1$@ 条";
+/* 参数 %1$@ = counts["failed"] ?? 0 */
+"desktopSync.describeStatus.text.6" = "已失败：%1$@ 条";
+/* 参数 %1$@ = stopped */
+"desktopSync.describeStatus.text.7" = "已停止：%1$@ 条";
+/* 参数 %1$@ = unknown */
+"desktopSync.describeStatus.text.8" = "状态尚不明确：%1$@ 条";
+/* 参数 %1$@ = missing */
+"desktopSync.describeStatus.text.9" = "另有 %1$@ 条此前仍在进行的任务暂时读不到，正在等待状态更新。";
+"desktopSync.describeStatus.text.10" = "最近刷新：";
+"desktopSync.close.text" = "已停止";
+"desktopSync.close.text.2" = "任务同步已停止，当前不会读取新的任务状态。";
+
+/* 模型与推理强度 */
+"modelSelection.displayName.text" = "快速（1.5倍速度）";
+"modelSelection.displayName.text.2" = "超快";
+"modelSelection.displayName.text.3" = "标准速度";
+"modelSelection.displayName.text.4" = "灵活";
+"modelSelection.effortName.text" = "无";
+"modelSelection.effortName.text.2" = "极低";
+"modelSelection.effortName.text.3" = "轻度";
+"modelSelection.effortName.text.4" = "中";
+"modelSelection.effortName.text.5" = "高";
+"modelSelection.effortName.text.6" = "极高";
+"modelSelection.effortName.text.7" = "持续";
+"modelSelection.effortName.text.8" = "未记录";
+"modelSelection.effortName.text.9" = "不可调";
+"modelSelection.effortName.text.10" = "跟随 Codex 的模型与推理强度设置。";
+"modelSelection.descriptions" = "直接作答，不额外展开推理。";
+"modelSelection.descriptions.2" = "尽量减少思考，适合简单任务。";
+"modelSelection.effortName.text.11" = "少量思考，优先响应速度。";
+"modelSelection.effortName.text.12" = "平衡思考深度与响应速度。";
+"modelSelection.effortName.text.13" = "充分分析问题，适合较复杂的任务。";
+"modelSelection.effortName.text.14" = "深入分析复杂问题，可能需要更长时间。";
+"modelSelection.effortName.text.15" = "投入更多推理，适合难度较高的任务；在 Codex 中默认隐藏显示。";
+"modelSelection.effortName.text.16" = "使用最高档推理投入，适合需要深入分析的任务；在特定情况下会更频繁派遣子代理。";
+/* 参数 %1$@ = Self.effortName(effort) */
+"modelSelection.effortName.text.17" = "使用当前模型提供的「%1$@」推理强度。";
+"modelSelection.effortName.text.18" = "未获取模型";
+"modelSelection.effortName.text.19" = "默认（";
+"modelSelection.effortName.text.20" = " - 跟随 Codex）";
+/* 参数 %1$@ = providerTitle ?? "原供应商" */
+"modelSelection.parameters.message" = "此对话使用 %1$@。请在 Codex 切回该供应商并刷新模型，或新建桌宠对话。";
+"modelSelection.parameters.error" = "原供应商";
+"modelSelection.parameters.message.2" = "所选模型暂不可用，请打开模型选择器刷新或选择其他模型。";
+"modelSelection.parameters.message.3" = "当前模型不支持所选推理强度，请重新选择。";
+
+/* 对话控制、发送及错误恢复 */
+"chatController.quota.text" = "正在同步 Codex 任务状态…";
+"chatController.reportHistoryReadFailure.title" = "历史正文未能读取";
+"chatController.reportHistoryReadFailure.message" = "历史写入已停止。可以导出原文件或重新读取。";
+"chatController.reportHistoryReadFailure.text" = "历史记录";
+"chatController.reportHistoryReadFailure.text.2" = "按需读取正文";
+"chatController.reportHistoryReadFailure.actionTitle" = "重新读取";
+"chatController.reloadHistory.message" = "请等待当前任务和发送完成后重新读取历史。";
+"chatController.clearLocalData.message" = "请等待工作区清理完成。";
+"chatController.clearLocalData.message.2" = "请先结束当前任务或等待消息发送完成，再清空数据。";
+"chatController.clearBuiltInWorkspace.message" = "工作区正在清理，请等待完成。";
+"chatController.clearBuiltInWorkspace.message.2" = "请先结束执行中的任务并等待消息发送完成，再清理内置工作区。";
+"chatController.message" = "会话管理已关闭。";
+"chatController.text" = "历史记录未能保存，请查看错误详情。";
+"chatController.title" = "历史记录未能保存";
+"chatController.message.2" = "新记录尚未保存到磁盘，退出应用后会丢失。请检查磁盘空间和写入权限，再点“重新保存”。原有记录保留。";
+"chatController.text.2" = "保存历史";
+"chatController.actionTitle" = "重新保存";
+"chatController.text.3" = "连接已关闭";
+"chatController.text.4" = "\n内置任务：";
+"chatController.text.5" = "空闲";
+"chatController.text.6" = "任务同步已停止";
+"chatController.loadHistoryInputs.text" = "用户消息读取失败：";
+"chatController.failure" = "Token 用量读取失败：";
+"chatController.inputState.text" = "发送到 Codex 原会话";
+"chatController.inputState.text.2" = "请在 Codex 原会话中处理当前任务。";
+"chatController.renameHistory.error" = "重命名未保存";
+"chatController.syncHistoryTitle.message" = "Codex 尚未提供这条会话的标题。";
+"chatController.syncHistoryTitle.error" = "标题同步未完成";
+"chatController.deleteHistory.error" = "记录尚未删除";
+"chatController.deleteHistory.message" = "请先停止这条对话中的任务，再删除记录。";
+"chatController.deleteHistory.message.2" = "请等待这条会话的消息发送完成。";
+"chatController.deleteHistory.error.2" = "记录删除失败";
+"chatController.submit.error" = "工作区正在清理";
+"chatController.submit.message" = "清理完成后再发送，输入内容已保留。";
+"chatController.submit.error.2" = "请确认模型选择";
+/* 参数 %1$@ = ModelPresentation.provider(provider) ?? provider */
+"chatController.submit.text" = "此对话使用 %1$@。请在 Codex 切回该供应商并刷新模型，或新建桌宠对话。";
+"chatController.interrupt.error" = "停止任务未成功";
+"chatController.shutdown.text" = "桌宠退出，任务未确认完成。";
+
+/* 对话跳转 */
+"chatNavigation.newDefaultConversation.error" = "无法使用默认工作区";
+"chatNavigation.chooseFolder.text" = "选择工作区";
+
+/* Codex 错误与连接提示 */
+"codexErrorMessage.reconnectStopped" = "重新连接失败，Codex 已停止重试。";
+"codexErrorMessage.reconnectAdvice" = "检查你的网络或节点环境。";
+"codexErrorMessage.category.text" = "Codex 未提供错误说明。";
+"codexErrorMessage.has.title" = "暂时无法在桌宠中使用这条会话";
+"codexErrorMessage.has.heading" = "请在 Codex 中继续这条会话，或在桌宠中新建对话。";
+"codexErrorMessage.has.title.2" = "与本机 Codex 的连接已断开";
+"codexErrorMessage.has.heading.2" = "桌宠无法继续接收任务状态。请打开 Codex 确认任务结果。";
+"codexErrorMessage.has.title.3" = "对话上下文已超限";
+"codexErrorMessage.has.heading.3" = "当前对话已超过模型的上下文上限。请在 Codex 中压缩上下文或新建对话。";
+"codexErrorMessage.has.title.4" = "本次任务预算已用尽";
+"codexErrorMessage.has.heading.4" = "本次任务已达到预算上限，请在 Codex 中检查会话预算设置。";
+"codexErrorMessage.has.title.5" = "Codex 使用额度已用尽";
+"codexErrorMessage.has.heading.5" = "当前账号的 Codex 使用额度已用尽。请在 Codex 中查看额度恢复时间或调整套餐。";
+"codexErrorMessage.has.title.6" = "API 余额不足";
+"codexErrorMessage.has.heading.6" = "当前 API 余额不足，请到对应服务商补充余额。";
+"codexErrorMessage.has.title.7" = "API 已达到用量上限";
+"codexErrorMessage.has.heading.7" = "当前 API 已达到用量上限，请检查服务商的用量设置。";
+"codexErrorMessage.has.title.8" = "API 可用额度不足";
+"codexErrorMessage.has.heading.8" = "当前 API 可用额度不足，请检查对应服务商的余额和用量上限。";
+"codexErrorMessage.has.title.9" = "模型与当前连接方式不匹配";
+"codexErrorMessage.has.heading.9" = "当前模型不支持此连接方式。请在 Codex 中切换到匹配的模型或服务商。";
+"codexErrorMessage.has.title.10" = "当前连接无法使用这个模型";
+"codexErrorMessage.has.heading.10" = "模型不存在或当前账号没有访问权限，请在 Codex 中重新选择模型。";
+"codexErrorMessage.has.title.11" = "身份验证失败";
+"codexErrorMessage.has.heading.11" = "当前连接的身份验证失败，请在 Codex 中重新登录或检查 API 配置。";
+"codexErrorMessage.has.title.12" = "请求频率受限";
+"codexErrorMessage.has.heading.12" = "请求过于频繁，请稍后重试。";
+"codexErrorMessage.has.title.13" = "模型服务繁忙";
+"codexErrorMessage.has.heading.13" = "模型服务暂时无法处理请求，请稍后重试。";
+"codexErrorMessage.has.title.14" = "当前连接没有访问权限";
+"codexErrorMessage.has.heading.14" = "当前服务拒绝访问，请在 Codex 中检查账号权限和服务商配置。";
+"codexErrorMessage.has.title.15" = "请求未被当前服务接受";
+"codexErrorMessage.has.heading.15" = "请查看技术详情，并检查当前模型、参数和附件设置。";
+"codexErrorMessage.has.title.16" = "重新连接失败";
+"codexErrorMessage.has.title.17" = "操作权限不足";
+"codexErrorMessage.has.heading.16" = "本次操作没有所需权限，请查看技术详情中的受限操作。";
+"codexErrorMessage.has.title.18" = "Codex 任务未能完成";
+"codexErrorMessage.has.heading.17" = "Codex 报告了错误，请查看技术详情。";
+"codexErrorMessage.retryActivity.title" = "正在重新连接";
+"codexErrorMessage.receiveProgress.title" = "连接已恢复，继续处理。";
+
+/* 对话类型及输入状态 */
+"conversationInput.conversationKind.text" = "桌宠人设对话";
+"conversationInput.conversationKind.text.2" = "Codex 项目对话";
+"conversationInput.jumpToCodexTitle" = "跳转到 Codex";
+/* 参数 %1$@ = jumpToCodexTitle */
+"conversationInput.steeringHint" = "Codex 新版桌面端通信方式暂不支持插话，点击「%1$@」进入原会话。";
+"conversationInput.canSend.text" = "历史只读：请在设置 → 高级导出原文件或重新读取";
+"conversationInput.canSend.text.2" = "请选择 Codex 项目对话";
+"conversationInput.canSend.text.3" = "正在发送…";
+"conversationInput.canSend.text.4" = "发送结果待确认，草稿已保留";
+"conversationInput.canSend.text.5" = "桌宠任务正在执行：";
+"conversationInput.canSend.text.6" = "当前会话等待处理，请转到 Codex";
+"conversationInput.canSend.text.7" = "发送时连接原会话；未就绪时打开 Codex";
+"conversationInput.canSend.text.8" = "执行中 · 发送后插话";
+
+/* desktopConversationSession */
+"desktopConversationSession.awaitingFirstSend" = "发送首条消息后显示模型信息";
+"desktopConversationSession.connecting" = "正在连接 Codex 原会话…";
+"desktopConversationSession.viewInCodex" = "在 Codex 中查看模型";
+"desktopConversationSession.cancelPreparation.text" = "已取消发送，草稿已保留。";
+"desktopConversationSession.replyNote.text" = "已排队，等待 Codex 处理。";
+"desktopConversationSession.refreshSettings.text" = "读取会话设置失败：";
+"desktopConversationSession.submit.text" = "连接原会话，准备插话";
+"desktopConversationSession.submit.text.2" = "连接原会话，准备回复";
+"desktopConversationSession.submitQueued.text" = "原会话缺少有效的 UUID。";
+"desktopConversationSession.submitQueued.message" = "桌面端或原会话状态已变化。";
+"desktopConversationSession.submitQueued.text.2" = "正在向 Codex 队列提交…";
+"desktopConversationSession.submitQueued.text.3" = "消息未发送。";
+"desktopConversationSession.submitQueued.text.4" = "等待原会话就绪超时";
+"desktopConversationSession.submitQueued.message.2" = "等待 Codex 打开原会话和消息队列超时。";
+"desktopConversationSession.submitQueued.text.5" = "正在等待 Codex 桌面队列就绪…";
+"desktopConversationSession.failBeforeSend.text" = "消息未发送，草稿已保留。";
+"desktopConversationSession.prepareColdReply.text" = "正在等待原会话就绪，就绪后自动发送…";
+"desktopConversationSession.probeColdReply.message" = "等待 Codex 原会话就绪超时。";
+"desktopConversationSession.probeColdReply.text" = "准备原会话失败";
+"desktopConversationSession.openForReply.text" = "正在打开 Codex 原会话…";
+"desktopConversationSession.failure" = "打开原会话失败";
+"desktopConversationSession.sendReply.text" = "发送前轮次已变化";
+"desktopConversationSession.sendReply.message" = "任务状态已变化，消息未发送。请确认后再次发送。";
+"desktopConversationSession.sendReply.text.2" = "正在连接，连上后自动发送…";
+"desktopConversationSession.sendReply.text.3" = "正在发送…";
+"desktopConversationSession.sendReply.text.4" = "连接原会话超时";
+"desktopConversationSession.sendReply.message.2" = "连接 Codex 原会话超时。";
+"desktopConversationSession.sendReply.text.5" = "插话：";
+"desktopConversationSession.checkDelivery.messageText" = "确认消息是否已发送";
+"desktopConversationSession.checkDelivery.messageText.2" = "检查原会话中的消息";
+"desktopConversationSession.checkDelivery.informativeText" = "请检查原会话和待发送队列，确认这条消息的状态。";
+"desktopConversationSession.checkDelivery.button" = "稍后确认";
+"desktopConversationSession.checkDelivery.button.2" = "已看到消息";
+"desktopConversationSession.checkDelivery.button.3" = "确认未入队或已移除";
+/* 参数 %1$@ = conversation.title */
+"desktopConversationSession.checkDelivery.informativeText.2" = "请在 Codex 的“%1$@”中查看这条消息。确认未发送后，才能再次发送。草稿已保留。";
+"desktopConversationSession.checkDelivery.button.4" = "确认未发送，重新编辑";
+
+/* history */
+"history.message" = "历史正文引用缺少数据库";
+"history.conversation.title" = "新对话";
+"history.validateIdentity.message" = "历史包含重复会话标识，原文件已保留。";
+"history.validateIdentity.message.2" = "历史包含重复轮次标识，原文件已保留。";
+"history.readLegacy.message" = "历史格式不支持：";
+"history.readLegacy.text" = "上次程序退出，任务未确认完成。";
+"history.readLegacy.text.2" = "历史读取或升级未完成，原文件保留：";
+"history.readLegacy.text.3" = "打开或迁移历史失败，进入只读模式  ·  ";
+"history.requireWritable.error" = " 请在设置 → 高级中导出原文件或重新读取。";
+"history.makeSnapshot.heading" = "对话记录";
+"history.drain.message" = "历史数据库未打开";
+
+/* historyBody */
+"historyBody.value.error" = "历史正文缺少存储来源";
+"historyBody.value.text" = "历史正文读取失败：";
+"historyBody.message" = "历史数据库格式不支持：";
+"historyBody.error" = "未提供";
+"historyBody.error.2" = "；建库回滚失败：";
+"historyBody.sqlError.error" = "无法打开历史数据库";
+"historyBody.reportReadFailure.text" = "历史正文读取失败，已停止写入：";
+"historyBody.body.message" = "历史正文缺失：";
+"historyBody.load.message" = "历史索引格式不支持";
+"historyBody.write.message" = "历史正文缺失，事务未保存";
+"historyBody.write.error" = "；事务回滚失败：";
+"historyBody.export.message" = "无法创建历史导出文件";
+
+/* historySearch */
+"historySearch.snippet.text" = "你";
+"historySearch.snippet.text.2" = "思考摘要";
+"historySearch.snippet.text.3" = "执行记录";
+"historySearch.snippet.text.4" = "回复";
+"historySearch.snippet.text.5" = "文件";
+"historySearch.snippet.text.6" = "标题匹配";
+
+/* 偏好选项与导入导出 */
+"preferences.sensitiveQuestionNotice" = "（已隐藏{桌宠名}的敏感信息提问）";
+"preferences.sensitiveInputNotice" = "（已隐藏{用户名}的敏感信息输入）";
+
+/* 临时聊天 */
+"composer.button" = "发送";
+"composer.historyLink" = "查看记录";
+"composer.button.2" = "新对话";
+"composer.button.3" = "停止任务";
+"composer.button.4" = "检查发送结果";
+"composer.modelRow" = "模型";
+"composer.button.5" = "重新读取";
+"composer.targetCaption" = "会话";
+"composer.restoreButton" = "返回输入";
+"composer.showFailure.button" = "技术详情…";
+"composer.open" = "打开 Codex";
+"composer.defaultItem" = "在默认工作区新建";
+"composer.same" = "在当前工作区新建";
+"composer.refresh.heading" = "选择会话…";
+"composer.refresh.heading.2" = "选择此对话的工作区…";
+"composer.refresh.heading.3" = "在其他工作区新建…";
+"composer.refresh.heading.4" = "取消发送";
+"composer.refresh.heading.5" = "正在停止…";
+
+/* composerControls */
+"composerControls.text" = "对话类型";
+"composerControls.captionWidth" = "工作区";
+"composerControls.accessibilityDescription" = "只读";
+"composerControls.effort" = "未提供";
+"composerControls.providerTitle" = "供应商未记录";
+"composerControls.update.text" = " · 只读";
+"composerControls.source" = "推理强度来自会话记录。";
+"composerControls.help" = "沿用 Codex 原会话设置，当前只读。";
+"composerControls.update.text.2" = "\n供应商：";
+"composerControls.update.text.3" = "\n模型：";
+"composerControls.update.text.4" = "\n推理强度：";
+"composerControls.update.text.5" = "\n速度档位：";
+"composerControls.update.text.6" = "正在读取 Codex 会话设置…";
+"composerControls.update.text.7" = "Codex 模型与推理强度，只读";
+"composerControls.update.text.8" = "最近回复：";
+
+/* 历史窗口与回复 */
+"chatWindow.noSearchResults" = "未找到匹配记录";
+"chatWindow.heading" = " · 历史对话";
+"chatWindow.column" = "会话";
+"chatWindow.text" = "历史对话";
+"chatWindow.toolbar" = "白龙历史工具栏";
+"chatWindow.button" = "发送";
+"chatWindow.button.2" = "停止任务";
+"chatWindow.button.3" = "检查发送结果";
+"chatWindow.button.4" = "重新读取";
+"chatWindow.text.2" = "上一处匹配（⇧⌘G）";
+"chatWindow.text.3" = "下一处匹配（⌘G）";
+"chatWindow.accessibilityDescription" = "较早记录";
+"chatWindow.accessibilityDescription.2" = "较新记录";
+"chatWindow.text.4" = "查看较早的 20 轮记录";
+"chatWindow.text.5" = "查看较新的 20 轮记录";
+"chatWindow.text.6" = "历史记录翻页";
+"chatWindow.toolbar.text" = "搜索历史记录";
+"chatWindow.toolbar.text.2" = "搜索标题和消息正文";
+"chatWindow.toolbar.label" = "显示或隐藏侧栏";
+"chatWindow.toolbar.label.2" = "新对话";
+"chatWindow.toolbar.label.3" = "选择文件夹";
+"chatWindow.toolbar.label.4" = "删除记录…";
+"chatWindow.toolbar.label.5" = "访达中打开";
+"chatWindow.updateSearchHighlights.text" = "标题匹配";
+"chatWindow.updateSearchHighlights.text.2" = "正文无匹配";
+/* 参数 %1$@ = visibleConversations.count */
+"chatWindow.refreshList.text" = "搜索结果：%1$@ 个对话";
+"chatWindow.conversationMenu.text" = "重命名对话标题…";
+"chatWindow.conversationMenu.text.2" = "同步 Codex 中生成的标题";
+"chatWindow.renameConversation.messageText" = "重命名对话标题";
+"chatWindow.renameConversation.informativeText" = "新标题保存在桌宠中。选择“同步 Codex 中生成的标题”可恢复跟随。";
+"chatWindow.renameConversation.button" = "保存";
+"chatWindow.renameConversation.button.2" = "取消";
+"chatWindow.confirmDeleteConversation.messageText" = "删除这条历史记录？";
+/* 参数 %1$@ = conversation.title */
+"chatWindow.confirmDeleteConversation.informativeText" = "从桌宠的本机历史文件中删除“%1$@”及其记录正文。Codex 原始会话和任务文件保留。";
+"chatWindow.confirmDeleteConversation.button" = "删除记录";
+/* 参数 %1$@ = selected.turns.count */
+"chatWindow.refresh.text" = " · 共 %1$@ 轮记录\n";
+"chatWindow.refresh.text.2" = "发送到这条 Codex 项目对话…";
+"chatWindow.refresh.heading" = "取消发送";
+"chatWindow.refresh.heading.2" = "正在停止…";
+"chatWindow.refreshTranscript.text" = "暂无记录";
+/* 参数 %1$@ = selected.turns.count */
+"chatWindow.refreshTranscript.text.2" = "共 %1$@ 轮记录";
+/* 参数 %1$@ = range.lowerBound+1；%2$@ = range.upperBound；%3$@ = selected.turns.count */
+"chatWindow.refreshTranscript.text.3" = "第 %1$@–%2$@ 轮 · 共 %3$@ 轮";
+
+/* chatViewLayout */
+"chatViewLayout.configureSendButton.text" = "发送";
+
+/* 会话选择与搜索 */
+"conversationPicker.title" = "选择会话…";
+"conversationPicker.text" = "选择目标会话";
+"conversationPicker.text.2" = "会话搜索";
+"conversationPicker.table" = "没有可选会话";
+"conversationPicker.loadView.text" = "搜索会话标题或工作区";
+"conversationPicker.tableView.text" = "执行中 · ";
+
+/* 当前模型摘要 */
+"modelPresentation.setSummary.text" = "快速模式 · ";
+"modelPresentation.bolt" = "快速模式";
+
+/* 对话模型选择器 */
+"modelSelector.text" = "选择模型与推理强度";
+"modelSelector.summary" = "未获取模型";
+"modelSelector.updateTitle.text" = "供应商：";
+"modelSelector.updateTitle.text.2" = "\n速度档位：1.5倍速度";
+"modelSelector.heading" = "模型与推理强度";
+"modelSelector.speedLabel" = "1.5倍速度";
+"modelSelector.sync" = "与 Codex 同步";
+"modelSelector.refresh" = "刷新模型";
+"modelSelector.loadView.text" = "推理强度";
+"modelSelector.refreshControls.text" = "推理强度 · ";
+"modelSelector.speedHelp" = "开启后使用 Codex 官方快速模式（1.5倍速度），会消耗更多额度。";
+"modelSelector.speedHelp.2" = "当前模型未提供 Codex 官方快速档位。";
+"modelSelector.refreshControls.text.2" = "正在读取可用模型…";
+"modelSelector.refreshControls.text.3" = "模型读取失败：";
+"modelSelector.refreshControls.text.4" = "请在 Codex 切回原供应商并刷新模型，或新建桌宠对话。";
+"modelSelector.refreshControls.text.5" = "此模型不提供可调整的推理强度。";
+
+/* 历史消息呈现 */
+"transcriptPresentation.text" = "完成";
+"transcriptPresentation.text.2" = "失败";
+"transcriptPresentation.text.3" = "中断";
+"transcriptPresentation.text.4" = "停止";
+"transcriptPresentation.text.5" = "时间未提供";
+"transcriptPresentation.copyButton" = "拷贝";
+"transcriptPresentation.codexButton" = "转到 Codex";
+"transcriptPresentation.heading" = "本轮  ";
+"transcriptPresentation.configure.text" = "Tokens 未提供";
+"transcriptPresentation.configure.text.2" = "Tokens 读取失败";
+"transcriptPresentation.configure.text.3" = "用量明细";
+
+/* 历史正文、标题及阅读入口 */
+"transcriptRenderer.appendMarkdown.text" = "与";
+"transcriptRenderer.appendMarkdown.text.2" = "聊聊";
+"transcriptRenderer.appendMarkdown.text.3" = "在下方输入想做的事。";
+"transcriptRenderer.appendMarkdown.accessibilityDescription" = "用户";
+"transcriptRenderer.appendMarkdown.text.4" = "公开思考摘要";
+"transcriptRenderer.appendMarkdown.text.5" = "执行记录";
+"transcriptRenderer.turnStatus.text" = "准备中";
+"transcriptRenderer.turnStatus.text.2" = "处理中";
+"transcriptRenderer.turnStatus.text.3" = "已完成";
+"transcriptRenderer.turnStatus.text.4" = "未完成";
+"transcriptRenderer.turnStatus.text.5" = "已中断";
+"transcriptRenderer.turnStatus.text.6" = "已停止";
+"transcriptRenderer.turnStatus.text.7" = "等待批准";
+"transcriptRenderer.turnStatus.text.8" = "等待补充";
+"transcriptRenderer.turnStatus.text.9" = "状态待确认";
+
+/* codeBlockRendering */
+"codeBlockRendering.text" = "代码";
+"codeBlockRendering.label" = "拷贝代码";
+"codeBlockRendering.text.2" = "拷贝";
+
+/* markdownText */
+"markdownText.render.text" = "查看图片";
+"markdownText.render.text.2" = "图片：";
+
+/* messageTextView */
+"messageTextView.prepareFileDisclosures.text" = "文件列表";
+"messageTextView.prepareFileDisclosures.heading" = "收起文件列表";
+/* 参数 %1$@ = extraCount */
+"messageTextView.prepareFileDisclosures.heading.2" = "再显示 %1$@ 个文件";
+/* 参数 %1$@ = extraCount */
+"messageTextView.prepareFileDisclosures.text.2" = "%1$@ 个文件";

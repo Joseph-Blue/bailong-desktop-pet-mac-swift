@@ -1,0 +1,226 @@
+/* 诊断与恢复 · 简体中文 */
+
+/* Apple Silicon 运行提示 */
+"rosettaNotice.confirmLaunch.messageText" = "你的 Mac 应使用 Apple Silicon 版";
+"rosettaNotice.confirmLaunch.informativeText" = "当前打开的是 Intel 版，正在通过 Rosetta 转译运行。强烈建议改用 Apple Silicon 原生版。\n\n请在发布页下载文件名以 macos-apple-silicon.zip 结尾的安装包。";
+"rosettaNotice.confirmLaunch.button" = "前往下载并退出";
+"rosettaNotice.confirmLaunch.button.2" = "仍要运行 Intel 版";
+"rosettaNotice.confirmLaunch.button.3" = "退出";
+"rosettaNotice.confirmLaunch.error" = "无法打开发布页";
+
+/* 状态栏、应用菜单与启动 */
+"application.startApplication.title" = "上次运行未正常结束";
+"application.startApplication.message" = "应用已重新启动。请检查任务状态；未完成的任务不会自动重新执行。";
+"application.startApplication.text" = "运行状态";
+"application.startApplication.text.2" = "检查上次退出记录";
+"application.startApplication.text.3" = "上次版本：";
+"application.startApplication.text.4" = "上次启动：";
+"application.startApplication.text.5" = "退出原因：未记录正常退出，无法据此区分崩溃、强制退出或断电。";
+"application.startApplication.actionTitle" = "继续使用";
+"application.startApplication.title.2" = "应用初始化未完成";
+"application.startApplication.message.2" = "请确认数据目录可写、应用资源完整，然后重新初始化。现有设置和历史不会被清空。";
+"application.startApplication.text.6" = "应用启动";
+"application.startApplication.text.7" = "初始化数据目录与素材";
+"application.startApplication.actionTitle.2" = "重新初始化";
+"application.loadChat.title" = "对话数据未能加载";
+"application.loadChat.message" = "历史原文件保留，对话和任务同步尚未启动。修复文件格式或读取权限后，可重新读取。";
+"application.loadChat.text" = "会话数据";
+"application.loadChat.text.2" = "读取历史与初始化任务目录";
+"application.loadChat.actionTitle" = "重新读取";
+
+/* 性能统计窗口与诊断报告 */
+"diagnostics.read.text" = "系统未返回进程换入计数";
+/* 参数 %1$@ = memoryStatus */
+"diagnostics.read.text.2" = "task_info 错误 %1$@";
+/* 参数 %1$@ = errno */
+"diagnostics.systemSwapText.text" = "不可用（vm.swapusage errno %1$@）";
+"diagnostics.architecture" = "x86_64 / Intel 指令集";
+"diagnostics.architecture.2" = "未知编译架构";
+/* 参数 %1$@ = Paths.version；%2$@ = commit；%3$@ = architecture；%4$@ = info.processName；%5$@ = info.processIdentifier；%6$@ = systemString("machdep.cpu.brand_string") ?? "型号不可用"；%7$@ = systemString("hw.machine") ?? "架构不可用"；%8$@ = info.processorCount；%9$@ = gpu?.name ?? "不可用"；%10$@ = gpu?.architecture.name ?? "架构不可用"；%11$@ = info.operatingSystemVersionString */
+"diagnostics.systemString.text" = "桌宠版本 %1$@%2$@ · %3$@\n进程 %4$@ · PID %5$@\nCPU %6$@ · %7$@ · %8$@ 核\nGPU %9$@ · %10$@\nmacOS %11$@";
+"diagnostics.systemString.text.2" = "型号不可用";
+"diagnostics.systemString.text.3" = "架构不可用";
+"diagnostics.systemString.text.4" = "不可用";
+"diagnostics.underflowTitle" = "本段动画等帧次数";
+"diagnostics.gpuStatus" = "等待采样";
+"diagnostics.title" = "应用性能信息统计";
+"diagnostics.text" = "更新 FPS";
+"diagnostics.text.2" = "CPU 总体";
+"diagnostics.text.3" = "运行内存 (RAM)";
+"diagnostics.text.4" = "GPU（应用组）";
+"diagnostics.titleWithHelp" = "播放时，到了该换帧的时间，新画面还没准备好，暂时停在上一帧。每次连续等待记为 1 次。";
+"diagnostics.closeButton" = "关闭";
+"diagnostics.copyButton" = "拷贝完整诊断";
+"diagnostics.accessibilityDescription" = "拷贝";
+"diagnostics.pinIcon" = "置顶";
+"diagnostics.pinLabel" = "置顶显示";
+/* 参数 %1$@ = snapshot.coalition */
+"diagnostics.sample.text" = "应用组 %1$@";
+"diagnostics.sample.text.2" = "重新建立采样基线";
+/* 参数 %1$@ = $0 */
+"diagnostics.update.text" = "%1$@ 次";
+"diagnostics.showCopiedInformation.messageText" = "已将当前的完整诊断拷贝至剪贴板";
+"diagnostics.showCopiedInformation.text" = "完整诊断";
+"diagnostics.showCopiedInformation.button" = "知道了";
+"diagnostics.automatic" = "自动 · ";
+"diagnostics.limit" = "满帧";
+"diagnostics.state" = "隐藏";
+"diagnostics.state.2" = "解码中";
+"diagnostics.state.3" = "播放";
+/* 参数 %1$@ = preloadEnabled ? "整段预加载" : "流式播放"；%2$@ = pet.current.title；%3$@ = state；%4$@ = String(format: "%.2f", pet.playbackRate)；%5$@ = automatic；%6$@ = resolution；%7$@ = resolution；%8$@ = limit；%9$@ = count == 0 ? 0 : index + 1；%10$@ = count；%11$@ = frames.total；%12$@ = number(reading.draws) */
+"diagnostics.playback" = "%1$@ · %2$@ · %3$@ · %4$@×\n画质 %5$@%6$@×%7$@ · 上限 %8$@\n帧 %9$@/%10$@ · 累计 %11$@ · 图层更新 %12$@/s";
+"diagnostics.playback.2" = "整段预加载";
+"diagnostics.playback.3" = "流式播放";
+/* 参数 %1$@ = milliseconds(frames.longestFrameHold) */
+"diagnostics.milliseconds.text" = "\n最长图像更新间隔（本次统计）%1$@";
+/* 参数 %1$@ = number(scheduling.callbackRate)；%2$@ = milliseconds(scheduling.averageDelay)；%3$@ = milliseconds(scheduling.longestDelay)；%4$@ = scheduling.overdueFrames */
+"diagnostics.milliseconds.text.2" = "\n调度 %1$@/s · 回调延后：平均 %2$@ · 最长 %3$@ · ≥ 一帧 %4$@ 次";
+/* 参数 %1$@ = milliseconds(timing.firstFrameAt - timing.requestedAt)；%2$@ = milliseconds(timing.readyAt - timing.firstFrameAt) */
+"diagnostics.milliseconds.text.3" = "\n本段加载：请求→首帧 %1$@ · 起播准备 %2$@";
+/* 参数 %1$@ = milliseconds(timing.handedAt.map { $0 - timing.readyAt })；%2$@ = milliseconds(timing.submittedAt.flatMap { displayed in timing.handedAt.map { displayed - $0 } }) */
+"diagnostics.milliseconds.text.4" = "\n准备→交接 %1$@ · 交接→图层 %2$@";
+/* 参数 %1$@ = milliseconds(timing.submittedAt.map { $0 - timing.requestedAt }) */
+"diagnostics.milliseconds.text.5" = "\n请求→图层 %1$@";
+/* 参数 %1$@ = title；%2$@ = progress.frames；%3$@ = progress.total */
+"diagnostics.milliseconds.text.6" = "整段预加载：%1$@ · %2$@/%3$@ 帧";
+"diagnostics.milliseconds.text.7" = "整段预加载：准备中";
+/* 参数 %1$@ = pet.current.title；%2$@ = count */
+"diagnostics.milliseconds.text.8" = "整段预加载：%1$@ · %2$@ 帧";
+/* 参数 %1$@ = buffer.buffered；%2$@ = stream.capacity；%3$@ = Self.underflowTitle；%4$@ = buffer.underflows；%5$@ = milliseconds(buffer.longestUnderflow)；%6$@ = buffer.decoded；%7$@ = buffer.converted；%8$@ = buffer.skipped；%9$@ = buffer.expired */
+"diagnostics.milliseconds.text.9" = "流式缓冲 %1$@/%2$@ 帧\n%3$@ %4$@ 次 · 最长等待 %5$@\n本段读取 %6$@ 帧 · 像素处理 %7$@ 帧 · 跳过 %8$@ 帧\n本段回调跨过可用帧 %9$@ 帧\n整段预加载：关闭";
+/* 参数 %1$@ = startup.frames；%2$@ = milliseconds(startup.seconds) */
+"diagnostics.milliseconds.text.10" = "\n起播 %1$@ 帧 · 余量 %2$@";
+"diagnostics.milliseconds.text.11" = "缺帧前接续";
+"diagnostics.milliseconds.text.12" = "缺帧后接续";
+"diagnostics.milliseconds.text.13" = "接续准备中";
+/* 参数 %1$@ = startup.reused；%2$@ = continuation；%3$@ = buffer.replayed */
+"diagnostics.milliseconds.text.14" = " · 复用 %1$@ 帧 · %2$@\n缓存区间重读 %3$@ 个样本，跳过像素处理";
+"diagnostics.milliseconds.text.15" = "流式缓冲：准备中";
+/* 参数 %1$@ = memoryText(UInt64(cache.openingBytes))；%2$@ = cache.openingClips；%3$@ = cache.hits */
+"diagnostics.milliseconds.text.16" = "\n开头缓存 %1$@ / 24 MiB · %2$@ 段 · 累计命中 %3$@ 次";
+"diagnostics.milliseconds.text.17" = "动态效果已停用";
+"diagnostics.milliseconds.text.18" = "开启 · 等待相近轮廓交接";
+"diagnostics.milliseconds.text.19" = "180 ms 淡化中";
+/* 参数 %1$@ = transition；%2$@ = pet.preferences.bool("animationEdgeCleanup") ? "开启" : "关闭" */
+"diagnostics.milliseconds.text.20" = "\n动作平滑过渡：%1$@ · 孤立杂点清理：%2$@";
+"diagnostics.milliseconds.text.21" = "开启";
+/* 参数 %1$@ = memoryText($0) */
+"diagnostics.milliseconds.text.22" = "累计 %1$@";
+"diagnostics.milliseconds.text.23" = "未观察到换入";
+/* 参数 %1$@ = number(totalCPU)；%2$@ = number(reading.cpu) */
+"diagnostics.resources" = "CPU 总体 %1$@%% · 单核基准 %2$@%%\n";
+/* 参数 %1$@ = previous.footprint.map(memoryText) ?? previous.memoryError ?? "不可用" */
+"diagnostics.milliseconds.text.24" = "运行内存 (RAM) %1$@\n";
+/* 参数 %1$@ = reading.gpu.map { String(format: "%.2f%%", $0) } ?? gpuStatus */
+"diagnostics.milliseconds.text.25" = "GPU（应用组）%1$@\n";
+/* 参数 %1$@ = previous.compressed.map(memoryText) ?? "不可用"；%2$@ = ProcessStatistics.systemSwapText() */
+"diagnostics.milliseconds.text.26" = "本进程压缩 %1$@ · 系统 Swap %2$@\n";
+/* 参数 %1$@ = swapinText；%2$@ = swapRateText */
+"diagnostics.milliseconds.text.27" = "本进程 Swap-in：%1$@%2$@\n";
+/* 参数 %1$@ = memoryText(UInt64(cache.bytes))；%2$@ = cache.frames；%3$@ = cache.clips */
+"diagnostics.milliseconds.text.28" = "帧像素合计 %1$@ · %2$@ 帧 · 已发布 %3$@ 段\n";
+/* 参数 %1$@ = preloadText */
+"diagnostics.milliseconds.text.29" = "%1$@\n动画磁盘缓存 0 B";
+/* 参数 %1$@ = CodexConnection.desktopDiagnostics；%2$@ = pet.syncDiagnostics()；%3$@ = pet.cliDiagnostics() */
+"diagnostics.connections" = "Codex 桌面端  %1$@\n只读同步  %2$@\nCodex CLI  %3$@";
+/* 参数 %1$@ = number(reading.fps)；%2$@ = number(frames.high)；%3$@ = number(frames.low) */
+"diagnostics.frameRates" = "更新 FPS %1$@ · HI %2$@ · LO %3$@";
+
+/* GPU 统计 */
+"gpuStatistics.read.message" = "系统缺少资源组接口";
+/* 参数 %1$@ = received；%2$@ = code */
+"gpuStatistics.read.message.2" = "读取应用组失败：返回 %1$@，errno %2$@";
+"gpuStatistics.read.message.3" = "进程没有资源组";
+/* 参数 %1$@ = code；%2$@ = String(cString: strerror(code)) */
+"gpuStatistics.read.message.4" = "读取 GPU 时间失败：errno %1$@（%2$@）";
+
+/* localStorage */
+"localStorage.size.message" = "无法读取目录：";
+"localStorage.clearBuiltInWorkspace.message" = "内置 Workspace 已被替换，未执行清理。";
+
+/* 恢复窗口与故障报告 */
+"recovery.lines" = "错误报告";
+"recovery.lines.2" = "版本：";
+"recovery.recoveryReport.text" = "系统：";
+"recovery.recoveryReport.text.2" = "架构：";
+"recovery.recoveryReport.text.3" = "时间：";
+"recovery.recoveryReport.text.4" = "模块：";
+"recovery.recoveryReport.text.5" = "操作：";
+"recovery.recoveryReport.text.6" = "状态：";
+"recovery.recoveryReport.text.7" = "说明：";
+"recovery.recoveryReport.text.8" = "错误类型：";
+"recovery.recoveryReport.text.9" = "错误域：";
+"recovery.recoveryReport.text.10" = "应用错误";
+/* 参数 %1$@ = value.code */
+"recovery.recoveryReport.text.11" = "错误码：%1$@";
+"recovery.recoveryReport.text.12" = "无效播放设置：";
+"recovery.recoveryReport.text.13" = "数据状态：内容损坏或格式错误";
+"recovery.recoveryReport.text.14" = "数据状态：缺少必需字段";
+"recovery.recoveryReport.text.15" = "数据状态：字段类型不符";
+"recovery.recoveryReport.text.16" = "数据状态：必需字段为空";
+"recovery.recoveryReport.text.17" = "数据状态：解析未完成";
+"recovery.show.text" = "重试未完成 · ";
+"recovery.show.title" = "拷贝报告";
+"recovery.title" = "错误与恢复";
+"recovery.icon" = "运行错误";
+"recovery.text" = "可拷贝的错误报告";
+"recovery.issue" = "反馈问题…";
+"recovery.text.2" = "打开 GitHub 问题反馈页";
+"recovery.quit" = "退出程序";
+"recovery.retryRecovery.text" = "正在处理…";
+
+/* semanticVersion */
+"semanticVersion.releaseTag.text" = "白龙桌宠Swift v";
+"semanticVersion.releaseTag.text.2" = "白龙桌宠Swiftv";
+"semanticVersion.releaseTag.text.3" = "白龙娘桌宠v";
+
+/* 动画帧转换 */
+"cpuFrameConverter.reserve.message" = "无法分配动画处理缓冲。";
+"cpuFrameConverter.frame.message" = "动画帧缺少 BGRA 颜色或透明度信息。";
+"cpuFrameConverter.frame.message.2" = "动画帧的透明度格式不受支持。";
+"cpuFrameConverter.frame.text" = "读取动画像素";
+"cpuFrameConverter.frame.message.3" = "动画帧没有像素数据。";
+"cpuFrameConverter.frame.text.2" = "准备动画缩放";
+"cpuFrameConverter.frame.text.3" = "缩放动画";
+"cpuFrameConverter.frame.message.4" = "无法分配动画画面。";
+"cpuFrameConverter.frame.message.5" = "无法创建动画像素源。";
+"cpuFrameConverter.frame.message.6" = "无法创建动画画面。";
+"cpuFrameConverter.makeConverter.text" = "创建动画颜色转换";
+"cpuFrameConverter.convert.text" = "准备动画颜色转换";
+"cpuFrameConverter.convert.text.2" = "转换动画颜色";
+/* 参数 %1$@ = operation；%2$@ = error */
+"cpuFrameConverter.failure.message" = "%1$@失败（%2$@）。";
+
+/* pet */
+"pet.toastSnapshot.text" = "等待初始化";
+"pet.toastSnapshot.text.2" = "尚未初始化";
+"pet.refreshWorkspaceBars.text" = "正在准备读取本机 Codex 的任务记录。";
+"pet.previous" = "起播";
+/* 参数 %1$@ = stats.underflows */
+"pet.play.text" = "  ·  上段等帧 %1$@ 次，最长 ";
+"pet.play.title" = "桌宠画面未能加载";
+"pet.play.message" = "动画没有可显示的画面。请确认应用资源完整，再重新加载。设置和历史记录不会被重置。";
+"pet.play.text.2" = "动画";
+"pet.play.text.3" = "初始化动画";
+"pet.play.actionTitle" = "重新加载";
+
+/* 应用和动画资源 */
+"resources.readVersion.message" = "VERSION 中的版本号无法识别。";
+"resources.failure" = "版本不可读";
+/* 参数 %1$@ = clip.title */
+"resources.load.message" = "「%1$@」没有视频轨道。";
+/* 参数 %1$@ = clip.title */
+"resources.load.message.2" = "「%1$@」缺少有效的素材帧率。";
+/* 参数 %1$@ = clip.title */
+"resources.load.message.3" = "「%1$@」没有可播放的帧。";
+
+/* 角色绘制与图层错误 */
+"spriteView.stages" = "请求→就绪 ";
+"spriteView.refreshFrame.text" = "就绪→交接 ";
+"spriteView.refreshFrame.text.2" = "交接→图层 ";
+
+/* streamingAnimation */
+"streamingAnimation.prime.message" = "流式动画没有可播放的帧。";
+"streamingAnimation.openReader.message" = "无法开始流式解码。";
+"streamingAnimation.readFrame.message" = "流式视频读取中断。";
+"streamingAnimation.readFrame.message.2" = "流式视频帧缺少像素数据。";

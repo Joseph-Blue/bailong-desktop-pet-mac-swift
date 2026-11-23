@@ -1,0 +1,128 @@
+/* 应用菜单与通用操作 · 简体中文 */
+
+/* 应用名称与品牌标识 */
+"branding.text" = "DeepSeek";
+"branding.text.2" = "Mistral";
+"branding.text.3" = "智谱 GLM";
+"branding.text.4" = "阿里云百炼";
+"branding.text.5" = "OpenRouter";
+"branding.text.6" = "Groq";
+"branding.text.7" = "Amazon Bedrock";
+"branding.text.8" = "Google Cloud Vertex AI";
+"branding.image" = "OpenAI";
+"branding.loadPetTemplate.accessibilityDescription" = "访达中打开";
+
+/* 退出与保存 */
+"runLifecycle.begin.text" = "未知";
+
+/* 状态栏、应用菜单与启动 */
+"application.startApplication.text" = "已有桌宠实例，本次开发进程退出";
+"application.startApplication.text.2" = "读取动画素材清单失败  ·  ";
+"application.started" = "未记录";
+"application.loadChat.message" = "数据管理已停止。";
+"application.loadChat.text" = "已停止";
+"application.loadChat.text.2" = "任务同步已停止，当前不会读取新的任务状态。";
+"application.loadChat.text.3" = "会话初始化未完成";
+"application.loadChat.text.4" = "会话初始化未完成，任务同步尚未启动。请打开历史会话重新读取。\n\n";
+"application.loadChat.text.5" = "任务同步未启动，请打开历史会话重试";
+"application.installTerminationSignals.text" = "正在退出并回收桌宠子进程…";
+"application.about" = "关于";
+"application.installMenuBar.menuItem" = "检查更新…";
+"application.settings" = "设置…";
+"application.close" = "关闭当前窗口";
+"application.closeWindow" = "关闭窗口";
+"application.quit" = "退出";
+"application.editItem" = "编辑";
+"application.installMenuBar.text" = "撤销";
+"application.installMenuBar.text.2" = "重做";
+"application.installMenuBar.text.3" = "剪切";
+"application.installMenuBar.text.4" = "拷贝";
+"application.installMenuBar.text.5" = "粘贴";
+"application.installMenuBar.text.6" = "全选";
+"application.conversation" = "对话";
+"application.installMenuBar.menuItem.2" = "打开对话";
+"application.installMenuBar.menuItem.3" = "新对话";
+"application.installMenuBar.menuItem.4" = "选择任务文件夹…";
+"application.installMenuBar.menuItem.5" = "历史对话";
+"application.windowsItem" = "窗口";
+"application.installMenuBar.menuItem.6" = "应用性能信息统计";
+"application.installMenuBar.menuItem.7" = "错误与恢复";
+"application.installMenuBar.title" = "最小化";
+"application.applicationWillTerminate.text" = "开发进程退出";
+"application.applicationWillTerminate.text.2" = "桌宠审批连接已结束，转到 Codex 处理。\n";
+
+/* 桌宠右键菜单 */
+"menu.openChat" = "打开对话";
+"menu.history" = "历史会话";
+"menu.checkUsage" = "查询额度";
+"menu.openCodex" = "跳转到 Codex";
+"menu.randomAnimation" = "播放随机动画";
+"menu.playAnimation" = "播放动作";
+"menu.idleAnimations" = "待机动作";
+"menu.interactionAnimations" = "互动动作";
+"menu.workAnimations" = "工作动作";
+"menu.movementAnimations" = "移动动作";
+"menu.quickToggles" = "快捷开关";
+"menu.autoMove" = "自主移动";
+"menu.soundEffects" = "播放音效";
+"menu.taskAlerts" = "任务气泡提醒";
+"menu.progressToast" = "思考与工具进展小气泡";
+"menu.hideInFullScreen" = "全屏时自动隐藏";
+"menu.startupSettings" = "启动设置…";
+"menu.resize" = "更改桌宠、气泡与文字大小…";
+"menu.namesAndDialogue" = "更改桌宠称呼和台词…";
+"menu.settings" = "设置…";
+"menu.toolsAndHelp" = "工具与帮助";
+"menu.taskSyncStatus" = "任务同步状态…";
+"menu.taskSyncTitle" = "Codex 任务同步状态";
+"menu.taskSyncAccessibility" = "任务同步";
+"menu.gotIt" = "知道了";
+"menu.diagnostics" = "性能统计…";
+"menu.checkForUpdates" = "检查更新…";
+"menu.about" = "关于";
+"menu.quit" = "退出";
+"menu.hideWorkspaceStatus" = "隐藏工作区状态条";
+"menu.showWorkspaceStatus" = "显示工作区状态条";
+"menu.showPet" = "显示桌宠";
+"menu.hidePet" = "隐藏桌宠";
+
+/* copyFeedback */
+"copyFeedback.copyValue.text" = "已拷贝";
+"copyFeedback.copyValue.text.2" = "拷贝失败";
+"copyFeedback.copyValue.text.3" = "拷贝失败，请重试";
+"copyFeedback.restore.text" = "拷贝";
+
+/* disclosureControl */
+"disclosureControl.accessibilityTitle" = "明细";
+"disclosureControl.updateAccessibility.text" = "收起";
+"disclosureControl.updateAccessibility.text.2" = "展开";
+"disclosureControl.copy" = "拷贝";
+
+/* hoverHelp */
+"hoverHelp.description" = "说明";
+
+/* 通用原生控件 */
+"nativeControls.showError.button" = "好";
+
+/* 文本编辑与网页搜索 */
+"textInteraction.bing" = "Bing";
+"textInteraction.google" = "Google";
+"textInteraction.duckDuckGo" = "DuckDuckGo";
+"textInteraction.brave" = "Brave Search";
+"textInteraction.sogou" = "搜狗";
+"textInteraction.so360" = "360 搜索";
+"textInteraction.baidu" = "百度";
+"textInteraction.commands" = "剪切";
+"textInteraction.commands.2" = "拷贝";
+"textInteraction.commands.3" = "粘贴";
+"textInteraction.commands.4" = "全选";
+"textInteraction.undoItems.text" = "撤销";
+"textInteraction.undoItems.text.2" = "重做";
+/* 参数 %1$@ = engine.title */
+"textInteraction.contentItems.menuItem" = "使用 %1$@ 网页搜索";
+"textInteraction.contentItems.title" = "翻译";
+"textInteraction.contentItems.title.2" = "语音";
+"textInteraction.contentItems.title.3" = "开始朗读";
+"textInteraction.contentItems.title.4" = "停止朗读";
+"textInteraction.openSearch.error" = "无法打开浏览器";
+"textInteraction.openSearch.message" = "系统未能打开搜索网址。";

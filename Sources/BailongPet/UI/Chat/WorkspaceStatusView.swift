@@ -6,6 +6,7 @@ import AppKit
 
 // 一条共用的次级信息行：目录入口、Git 摘要、本轮修改。可见入口与倒计时收起的独立小窗按事件更新。
 final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
+    static let compactButtonHeight:CGFloat = 20
     private let directory = WorkspaceLinkButton()
     private let git = HoverIconButton(symbol:"arrow.triangle.branch",label:"Git 状态"), changes = HoverIconButton(symbol:"doc",label:"本轮文件修改")
     private let popover = AnchoredPopover()
@@ -36,7 +37,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         directory.usesMonochromeLink = monochromeDirectory
         directory.font = .systemFont(ofSize:fontSize)
         updateDirectory()
-        for constraint in buttonHeights {constraint.constant = compact ? 20*fontSize/11 : 24}
+        for constraint in buttonHeights {constraint.constant = compact ? Self.compactButtonHeight*fontSize/11 : 24}
         for button in [git,changes] {button.horizontalPadding = compact ? 2 : 6}
         let font = NSFont.monospacedSystemFont(ofSize:fontSize,weight:.semibold)
         for button in [git,changes] where button.font != font {
@@ -50,11 +51,13 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func sourceIcon(_ kind:GitWorkspaceStatus.RepositoryKind) -> NSImage {
         let original = GitIcons.repository(kind)
-        guard compact else {return original}
+        guard compact,let font = git.font else {return original}
         let image = original.copy() as! NSImage
-        let side = (git.font?.pointSize ?? 11)+1
+        let side = font.pointSize
         let factor = side/max(original.size.width,original.size.height)
         image.size = NSSize(width:original.size.width*factor,height:original.size.height*factor)
+        let capCenter = InlineStatusLayout.lineBaseline(font:font,height:side)+font.capHeight/2
+        image.alignmentRect = NSRect(origin:NSPoint(x:0,y:capCenter-side/2),size:image.size)
         return image
     }
     var hasPresentedDetails:Bool {popover.isShown || git.isHighlighted || changes.isHighlighted || directory.isHighlighted}
@@ -187,7 +190,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         guard overviewWidth != width else {return}
         if overviewWidth == nil {
             for button in [git,changes] {
-                button.heightAnchor.constraint(lessThanOrEqualToConstant:22*(button.font?.pointSize ?? 11)/11).isActive = true
+                button.heightAnchor.constraint(lessThanOrEqualToConstant:Self.compactButtonHeight*(button.font?.pointSize ?? 11)/11).isActive = true
             }
         }
         overviewWidth = width

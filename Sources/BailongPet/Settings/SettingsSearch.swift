@@ -67,7 +67,8 @@ struct SettingsSearchEntry {
             add(.activity,PetGestureSetting.group,[gesture.title],keywords)
         }
         add(.activity,"桌宠吸边",["屏幕左右边缘吸边","左右露出比例","顶部刘海吸边","从刘海露出比例"],"刘海 屏幕 左右 边缘 顶部 收进刘海 收纳 倒挂 探头 召回 内建屏幕 MacBook 露出比例 55%")
-        add(.activity,"自主活动",["活跃程度","活动间隔","自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 安静 适中 活泼 自定义 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
+        add(.activity,"自主活动",["活动间隔"],"活跃程度 活跃度 动画 频率 待机")
+        add(.activity,"自主活动",["自主移动","活动范围","减少重复动作","整体播放速度"],"动画 频率 倍速 待机 吸边 任务 排除上一动作 随机互动 原地陪伴 小范围活动 整个屏幕")
         add(.activity,"任务动作",["收到任务时播放开场","完成任务时播放庆祝"],"动画")
         entries += MessageSettingsPage.Topic.allCases.map {Self(section:.messages,group:$0.rawValue,title:$0.rawValue,detail:.messages($0))}
         entries += MessageSettingsPage.searchEntries

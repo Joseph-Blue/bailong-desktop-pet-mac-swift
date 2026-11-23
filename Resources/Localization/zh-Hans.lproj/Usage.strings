@@ -1,0 +1,140 @@
+/* 额度与用量 · 简体中文 */
+
+/* dailyTokenUsage */
+"dailyTokenUsage.loading" = "加载中";
+"dailyTokenUsage.failed" = "读取失败";
+
+/* 本机用量读取 */
+"localDailyTokenReader.query.message" = "本机会话索引缺少日志路径。";
+"localDailyTokenReader.query.message.2" = "本机会话索引缺少创建时间。";
+"localDailyTokenReader.read.message" = "本机日志的供应商或会话来源不一致。";
+"localDailyTokenReader.read.message.2" = "无法读取本机用量日志的文件信息。";
+"localDailyTokenReader.append.message" = "本机用量事件超出读取长度。";
+"localDailyTokenReader.consume.message" = "本机用量事件缺少有效时间。";
+"localDailyTokenReader.consume.message.2" = "本机用量事件缺少请求计数。";
+"localDailyTokenReader.consume.message.3" = "本机用量事件缺少轮次标识。";
+
+/* 额度重置与倒计时 */
+/* 参数 %1$@ = $0 */
+"quotaResetCards.number.text" = "剩余 %1$@ 张";
+"quotaResetCards.number.text.2" = "暂未提供";
+"quotaResetCards.number.text.3" = "过期时间暂未提供";
+/* 参数 %1$@ = count；%2$@ = date.formatted(date:.abbreviated,time:.shortened) */
+"quotaResetCards.date" = "%1$@ 张 · %2$@ 到期";
+/* 参数 %1$@ = count */
+"quotaResetCards.unlimited" = "%1$@ 张 · 不限期";
+/* 参数 %1$@ = count */
+"quotaResetCards.unavailable" = "%1$@ 张 · 过期时间暂未提供";
+/* 参数 %1$@ = availableCount-expirations.count */
+"quotaResetCards.rank.text" = "其余 %1$@ 张 · 过期时间暂未提供";
+
+/* turnTokenReader */
+"turnTokenReader.read.message" = "Token 记录与目标轮次不一致。";
+"turnTokenReader.lines.message" = "Token 用量事件超出读取长度。";
+
+/* quotaCoordinator */
+"quotaCoordinator.render.title" = "今日用量";
+"quotaCoordinator.render.subtitle" = "（本机日志）";
+"quotaCoordinator.render.text" = "Codex 额度";
+
+/* Token 数量和格式 */
+"tokenUsage.options" = "完整数字";
+"tokenUsage.options.2" = "万 / 亿";
+"tokenUsage.number.text" = "万";
+"tokenUsage.number.text.2" = "亿";
+"tokenUsage.cacheLabel" = "缓存命中";
+"tokenUsage.detailRows.text" = "输入";
+"tokenUsage.detailRows.text.2" = "输出";
+
+/* DeepSeek 峰谷计费说明 */
+"deepSeekPricing.period.text" = "高峰时段（峰）";
+"deepSeekPricing.period.text.2" = "空闲时段（谷）";
+"deepSeekPricing.snapshot.text" = "中国法定节假日";
+"deepSeekPricing.snapshot.text.2" = "周末";
+/* 参数 %1$@ = seconds/86400 */
+"deepSeekPricing.countdown.text" = "%1$@ 天 ";
+
+/* 消息气泡 */
+"bubble.quotaRows.title" = "技术详情…";
+
+/* 额度气泡 */
+"quotaBubbleBody.arrange.text" = "缓存 · 更新于 ";
+"quotaBubbleBody.addQuotaRow.text" = "本机今日用量加载中";
+"quotaBubbleBody.addQuotaRow.button" = "重试";
+"quotaBubbleBody.addActions.button" = "打开供应商开放平台";
+"quotaBubbleBody.addActions.button.2" = "立即刷新";
+"quotaBubbleBody.renderLoading.text" = " 加载中";
+
+/* 套餐与额度显示 */
+"presentation.quotaPresentation.text" = "Business 按量计费";
+"presentation.quotaPresentation.text.2" = "Enterprise（自动化）";
+"presentation.quotaPresentation.text.3" = "Enterprise 按量计费";
+"presentation.plan.text" = "套餐未识别";
+"presentation.plan.text.2" = "套餐：";
+"presentation.plan.text.3" = "API 按量计费";
+"presentation.plan.text.4" = "Amazon Bedrock";
+"presentation.plan.text.5" = "Google Cloud Vertex AI";
+"presentation.plan.text.6" = "套餐信息暂不可用";
+"presentation.resetDateText.text" = "重置：";
+"presentation.resetDateText.text.2" = "日 ";
+"presentation.resetDateText.text.3" = "日";
+"presentation.countdown.text" = "<1分钟";
+/* 参数 %1$@ = days */
+"presentation.countdown.text.2" = "%1$@天";
+/* 参数 %1$@ = hours */
+"presentation.countdown.text.3" = "%1$@小时";
+/* 参数 %1$@ = minutes */
+"presentation.countdown.text.4" = "%1$@分钟";
+"presentation.periodTitle.text" = "30 天额度";
+"presentation.periodTitle.text.2" = "主要额度";
+"presentation.periodTitle.text.3" = "次要额度";
+"presentation.periodTitle.text.4" = "%.0f 天额度";
+"presentation.periodTitle.text.5" = "周额度";
+"presentation.periodTitle.text.6" = "%.0f 小时额度";
+"presentation.periodTitle.text.7" = "%.0f 分钟额度";
+/* 参数 %1$@ = index+1 */
+"presentation.overview.text" = "额度组 %1$@";
+"presentation.overview.text.2" = "剩余 %.0f%%";
+"presentation.overview.text.3" = "暂未提供";
+"presentation.overview.text.4" = "重置时间暂未提供";
+"presentation.overview.text.5" = "已用 ";
+"presentation.overview.text.6" = "上限 ";
+"presentation.overview.text.7" = "个人使用限额";
+"presentation.amount" = "不限额";
+"presentation.overview.text.8" = "剩余 ";
+"presentation.overview.text.9" = "无可用点数";
+"presentation.overview.text.10" = "余额暂未提供";
+"presentation.overview.text.11" = "可用点数 · ";
+"presentation.overview.text.12" = "使用额度";
+"presentation.overview.text.13" = "服务未返回额度窗口或点数信息。";
+"presentation.overview.text.14" = "已达到工作区设置的使用限额。";
+"presentation.overview.text.15" = "服务报告当前已达到使用限制。";
+"presentation.overview.title" = "额度重置卡";
+"presentation.overview.text.16" = "服务当前未允许使用包含额度。";
+"presentation.emptyMessage.text" = "API 按量计费，不使用 ChatGPT 订阅额度。";
+"presentation.emptyMessage.text.2" = "请在对应云服务中查看计费和使用限额。";
+"presentation.emptyMessage.text.3" = "服务未返回额度信息；这不表示剩余额度为零或不限额。";
+"presentation.unavailable.text" = "暂时无法获取";
+"presentation.api.title" = "当前 API 今日用量";
+"presentation.api.subtitle" = "（本机日志）";
+"presentation.deepSeekPricingRows.title" = "峰谷定价";
+"presentation.deepSeekPricingRows.text" = "时段未提供";
+"presentation.deepSeekPricingRows.title.2" = "下一个";
+"presentation.deepSeekPricingRows.title.3" = "距切换还有";
+
+/* Token 明细 */
+"tokenUsageView.heading" = "今日用量";
+"tokenUsageView.source" = "（本机日志）";
+"tokenUsageView.text" = " Token 明细";
+
+/* 订阅管理窗口 */
+"subscriptionManagement.forAccount.text" = "计费管理";
+"subscriptionManagement.forAccount.text.2" = "订阅管理";
+"subscriptionManagement.forAccount.text.3" = "ChatGPT 网页订阅";
+"subscriptionManagement.forAccount.text.4" = "Google Play 订阅";
+"subscriptionManagement.forAccount.text.5" = "Apple 订阅";
+"subscriptionManagement.forAccount.text.6" = "ChatGPT 工作区管理";
+"subscriptionManagement.forAccount.text.7" = "OpenAI API 计费";
+"subscriptionManagement.forAccount.text.8" = "AWS 计费";
+"subscriptionManagement.forAccount.text.9" = "Google Cloud 计费";
+"subscriptionManagement.add.text" = "ChatGPT Token 用量";

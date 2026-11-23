@@ -1,0 +1,4 @@
+/* 系统显示的应用名称与权限提示 · 简体中文 */
+"CFBundleName" = "白龙桌宠Swift";
+"CFBundleDisplayName" = "白龙桌宠Swift";
+"NSAppleEventsUsageDescription" = "点击本机文件链接时，恢复对应的访达窗口并选中文件。";

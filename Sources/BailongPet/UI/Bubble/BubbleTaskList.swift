@@ -71,23 +71,26 @@ final class BubbleTaskList: NSView {
         overview = incoming; showsTaskInfo = showInfo; recentLimit = limit
         let records = incoming.tasks; let previousRows = rows; subviews.filter {!($0 is BubbleTaskRow)}.forEach {$0.removeFromSuperview()}; rows = []
         var y:CGFloat = 0
+        let labelBounds = NSRect(x:0,y:0,width:bounds.width,height:.greatestFiniteMagnitude)
         for (index,section) in [("正在执行的任务：",records.filter(\.active)),("近期执行结束的任务：",Array(records.filter {!$0.active}.prefix(limit)))].enumerated() {
-            if index > 0 {y += 14*scale}
+            if index > 0 {y += 6*scale}
             let heading = label(section.0,bold:true); heading.font = .systemFont(ofSize:12*scale,weight:.medium)
-            heading.frame = NSRect(x:0,y:y,width:bounds.width,height:22*scale); addSubview(heading); y += 26*scale
+            let headingHeight = ceil(heading.cell!.cellSize(forBounds:labelBounds).height)
+            heading.frame = NSRect(x:0,y:y,width:bounds.width,height:headingHeight); addSubview(heading); y += headingHeight+scale
             if section.1.isEmpty {
                 let empty = label(incoming.status ?? (index == 0 ? "暂无正在执行的任务" : "暂无近期结束的任务"))
                 empty.font = .systemFont(ofSize:11*scale); empty.textColor = .secondaryLabelColor
-                let height = max(22*scale,empty.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:bounds.width,height:.greatestFiniteMagnitude)).height.rounded(.up))
+                let height = ceil(empty.cell!.cellSize(forBounds:labelBounds).height)
                 empty.frame = NSRect(x:0,y:y,width:bounds.width,height:height); addSubview(empty); y += height
             }
-            for task in section.1 {
+            for (rowIndex,task) in section.1.enumerated() {
+                if rowIndex > 0 {y += 2*scale}
                 let row = previousRows.first(where:{$0.task.key == task.key && $0.task.start == task.start && $0.task.turnID == task.turnID}) ?? BubbleTaskRow(task:task,scale:scale)
                 row.onMetadataResize = { [weak self] in self?.metadataLayoutDirty = true }
                 row.update(task)
                 row.frame = NSRect(x:0,y:y,width:bounds.width,height:row.rowHeight)
                 if row.superview == nil {addSubview(row)}
-                rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height+2*scale
+                rows.append(row); row.refresh(frame:tick % 10); y += row.frame.height
             }
         }
         for row in previousRows where !rows.contains(where:{$0 === row}) {row.stopMotion(); row.removeFromSuperview()}
@@ -109,8 +112,13 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
     private var metadata:WorkspaceStatusView?
     private var hasGit = false
     var onMetadataResize:() -> Void = {}
-    private var metadataHeight:CGFloat {PetPreferences.shared.bool("taskInfoBarEnabled") && (hasGit || !task.fileEdits.isEmpty) ? 22*scale : 0}
-    var rowHeight:CGFloat {32*scale+(task.activityLine == nil ? 0 : 20*scale)+metadataHeight}
+    private var titleHeight:CGFloat {20*scale}
+    private var activityHeight:CGFloat {task.activityLine == nil ? 0 : 16*scale}
+    private var metadataLineHeight:CGFloat {WorkspaceStatusView.compactButtonHeight*scale}
+    private var metadataHeight:CGFloat {
+        PetPreferences.shared.bool("taskInfoBarEnabled") && (hasGit || !task.fileEdits.isEmpty) ? metadataLineHeight : 0
+    }
+    var rowHeight:CGFloat {titleHeight+activityHeight+metadataHeight}
     var hasPresentedDetails:Bool {metadata?.hasPresentedDetails == true}
     private var hoverArea:NSTrackingArea?
     private var hovered = false
@@ -187,7 +195,7 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         let inset = 22*scale, width = max(0,bounds.width-inset)
         metadata.isHidden = metadataHeight == 0
         metadata.fitOverview(to:width)
-        metadata.frame = NSRect(x:inset,y:0,width:width,height:22*scale)
+        metadata.frame = NSRect(x:inset,y:0,width:width,height:metadataLineHeight)
     }
     func stopMotion() {setMetadataVisible(false); activity.stop(); TaskActivityAppearance.stop(activityIcon); restoreTitle(); renderedSweep = Int.min; renderedFrame = -1}
     private func restoreTitle() {
@@ -256,12 +264,12 @@ private final class BubbleTaskRow:NSButton,LinkCursorControl {
         needsRowLayout = false
         let textColor = task.active ? NSColor.labelColor : task.connectionFailed ? StatusTextColor.red : task.status == "completed" ? StatusTextColor.green : task.status == "failed" ? StatusTextColor.yellow : StatusTextColor.red
         elapsed.textColor = textColor; watch.contentTintColor = textColor; stateIcon.contentTintColor = textColor
-        let width = hasTime ? elapsed.fittingSize.width : 0, h = 32*scale, trailing = bounds.width-22*scale
+        let width = hasTime ? elapsed.fittingSize.width : 0, h = titleHeight, trailing = bounds.width-22*scale
         let headingY = bounds.height-h, metadataHeight = self.metadataHeight
         let iconSize = activityIcon.layoutSize, progressX = 22*scale
         layoutMetadata()
-        activityIcon.frame = NSRect(x:progressX,y:metadataHeight+(20*scale-iconSize.height)/2,width:iconSize.width,height:iconSize.height)
-        activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:metadataHeight,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:20*scale)
+        activityIcon.frame.origin.x = progressX
+        activity.frame = NSRect(x:progressX+iconSize.width+6*scale,y:metadataHeight,width:max(0,bounds.width-progressX-iconSize.width-10*scale),height:activityHeight)
         InlineStatusLayout.align(activityIcon,toLineIn:activity,font:activity.font!,side:iconSize.height,width:iconSize.width)
         TaskActivityAppearance.apply(task.activity,icon:activityIcon,text:activity,visible:window?.isVisible == true && !isHiddenOrHasHiddenAncestor)
         activity.start()

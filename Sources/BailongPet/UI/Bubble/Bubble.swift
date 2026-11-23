@@ -468,9 +468,11 @@ final class Bubble {
         let codexInNavigation = pendingAttention && !codexButton.isHidden
         let hasActionRow = !details.isHidden || !retryButton.isHidden || (!codexButton.isHidden && !codexInNavigation)
         let actionsHeight = hasActionRow ? buttonHeight+gap : 0
-        let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+gap
+        let navigationGap = taskList == nil ? gap : 4*scale
+        let navigationHeight = previousCard.isHidden && replyButton.isHidden ? 0 : buttonHeight+navigationGap
         let approvalHeight:CGFloat = approvalReject.isHidden ? 0 : buttonHeight+gap
-        let workspaceHeight = workspaceAttached ? max(20*scale,workspace.fittingSize.height)+4*scale : 0
+        let workspaceContentHeight = workspaceAttached ? max(WorkspaceStatusView.compactButtonHeight*scale,workspace.fittingSize.height) : 0
+        let workspaceHeight = workspaceAttached ? workspaceContentHeight+(bodyHeight > 0 ? 1 : 4)*scale : 0
         let rawControlsFooter = actionsHeight+navigationHeight+approvalHeight
         let controlsFooter = rawControlsFooter-(workspaceAttached && rawControlsFooter > 0 ? gap-4*scale : 0)
         let footer = controlsFooter+workspaceHeight
@@ -480,8 +482,7 @@ final class Bubble {
         let progressIconSide = progressIconSize.height
         let progressLineHeight = max(progressIconSide,ceil(progressFont.ascender-progressFont.descender+progressFont.leading)+2)
         let progressHeight = taskProgress.isHidden ? 0 : progressLineHeight+4*scale
-        // 短进展直接接实际摘要，不额外预留标题下的空白；长消息保留正文分隔。
-        let bodyGap = bodyHeight > 0 && kind != "progressToast" ? (taskProgress.isHidden ? 12 : 4)*scale : 0
+        let bodyGap = bodyHeight > 0 && kind != "progressToast" ? (taskList != nil || !taskProgress.isHidden ? 4 : 12)*scale : 0
         let baseChromeHeight = margin+bottomMargin+headingHeight+bodyGap+controlsFooter
         let chromeHeight = baseChromeHeight+progressHeight+workspaceHeight
         // 进展独占新增高度，包括启用宽高比时；不从原正文视口扣除。
@@ -495,7 +496,7 @@ final class Bubble {
             let bodyLayout = isToast ? BubbleBodyLayout(width:size.width,scale:scale) : targetBodyLayout
             self.updateCloseButtonSide()
             self.layoutHeading(in:size)
-            self.workspace.frame = NSRect(x:bodyLayout.inset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth,height:max(0,workspaceHeight-4*scale))
+            self.workspace.frame = NSRect(x:bodyLayout.inset,y:bottomMargin+controlsFooter,width:bodyLayout.contentWidth,height:workspaceContentHeight)
             let progressY = self.title.frame.minY-progressHeight
             self.taskProgressIcon.frame = NSRect(x:bodyLayout.inset,y:progressY+(progressLineHeight-progressIconSide)/2,width:progressIconSize.width,height:progressIconSide)
             self.taskProgress.frame = NSRect(x:bodyLayout.inset+progressIconSize.width+6*scale,y:progressY,width:max(0,bodyLayout.contentWidth-progressIconSize.width-6*scale),height:progressLineHeight)

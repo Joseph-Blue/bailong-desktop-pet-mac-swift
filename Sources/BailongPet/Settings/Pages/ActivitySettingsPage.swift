@@ -2,11 +2,11 @@ import AppKit
 
 final class ActivitySettingsPage {
     private let form:SettingsForm, catalog:Catalog?
-    private let reload:() -> Void, onPreview:(Clip) -> Void
+    private let onPreview:(Clip) -> Void
     private(set) var viewport:SettingsRowViewport?
     private var preferences:PetPreferences {form.preferences}
-    init(form:SettingsForm,catalog:Catalog?,reload:@escaping () -> Void,onPreview:@escaping (Clip) -> Void) {
-        self.form = form; self.catalog = catalog; self.reload = reload; self.onPreview = onPreview
+    init(form:SettingsForm,catalog:Catalog?,onPreview:@escaping (Clip) -> Void) {
+        self.form = form; self.catalog = catalog; self.onPreview = onPreview
     }
     func reset() {viewport = nil}
     func render() {
@@ -19,10 +19,7 @@ final class ActivitySettingsPage {
             form.slider("左右露出比例","sideExposurePercent",range:40...85,step:5,suffix:"%",requires:["sideDockEnabled"]),
             form.toggle("顶部刘海吸边","notchDockEnabled",detail:"仅对带刘海的 MacBook 机型的内建屏幕生效。",symbol:"macbook.gen2"),
             form.slider("从刘海露出比例","notchExposurePercent",range:40...85,step:5,suffix:"%",requires:["notchDockEnabled"])],symbol:"rectangle.inset.filled")
-        let interval = preferences.number("leisureInterval")
-        let preset = interval == 60 ? "60" : interval == 15 ? "15" : interval == 8 ? "8" : "custom"
         form.group("自主活动",[
-            form.popup("活跃程度",options:[("60","安静"),("15","适中"),("8","活泼"),("custom","自定义")],value:preset) { [weak self] value in if let seconds = Double(value) {self?.preferences.set(seconds,for:"leisureInterval"); self?.reload()} },
             form.slider("活动间隔","leisureInterval",range:5...180,suffix:"秒",detail:"到达间隔后，当前动作播放完再切换。"),
             form.toggle("自主移动","autoMove"),form.choice("活动范围","movementRange",[("still","原地陪伴"),("nearby","小范围活动"),("screen","整个屏幕")],requires:["autoMove"]),form.toggle("减少重复动作","avoidRepeat",detail:"随机互动和自主活动会减少重复，任务动作始终避免连续重复。"),
             form.slider("整体播放速度","playbackSpeed",range:0.75...1.5,step:0.05,suffix:"×",detail:"同时调整动作和移动速度；与单个动作的速度倍率相乘。")],symbol:"figure.walk.motion")

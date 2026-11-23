@@ -14,7 +14,7 @@ final class SettingsPanel: NSObject, NSWindowDelegate, NSTableViewDataSource, NS
     private lazy var appearancePage = AppearanceSettingsPage(form:form,window:window,
         onPreviewDetails:{ [weak self] in self?.onPreviewDetails() })
     private lazy var activityPage = ActivitySettingsPage(form:form,catalog:catalog,
-        reload:{ [weak self] in self?.render() },onPreview:{ [weak self] clip in self?.onPreview(clip) })
+        onPreview:{ [weak self] clip in self?.onPreview(clip) })
     private let aboutPage = AboutPageController()
     private lazy var workspacePage = WorkspaceSettingsPage(form:form,window:window,reload:{ [weak self] in self?.render() },clear:{ [weak self] completion in
         guard let action = self?.onClearDefaultWorkspace else {completion(.failure(PetFailure(message:"会话管理尚未就绪，无法清理工作区。"))); return}

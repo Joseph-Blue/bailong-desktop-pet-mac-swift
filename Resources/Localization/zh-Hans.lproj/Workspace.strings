@@ -1,0 +1,163 @@
+/* 工作区、Git 与文件 · 简体中文 */
+
+/* repositoryIcons */
+"repositoryIcons.remote" = "其他远端仓库";
+"repositoryIcons.repository.accessibilityDescription" = "Git";
+"repositoryIcons.repository.accessibilityDescription.2" = "GitHub";
+
+/* generatedImageLink */
+/* 参数 %1$@ = url.absoluteString */
+"generatedImageLink.markdown.text" = "[查看生成图片](<%1$@>)";
+
+/* Git 仓库和读写状态 */
+"gitWorkspace.conflicted" = "冲突";
+"gitWorkspace.conflicted.2" = "已暂存";
+"gitWorkspace.conflicted.3" = "未暂存";
+"gitWorkspace.conflicted.4" = "未跟踪";
+"gitWorkspace.stashLabel" = "贮藏 (Stash)";
+/* 参数 %1$@ = Self.stashLabel；%2$@ = stashes */
+"gitWorkspace.text" = "%1$@ %2$@ 条";
+"gitWorkspace.text.2" = "当前不在任何分支上 (Detached HEAD)";
+/* 参数 %1$@ = $0 */
+"gitWorkspace.text.3" = " %1$@ 项";
+"gitWorkspace.text.4" = "工作区干净";
+"gitWorkspace.change.text" = "新增";
+"gitWorkspace.change.text.2" = "删除";
+"gitWorkspace.change.text.3" = "重命名";
+"gitWorkspace.change.text.4" = "复制";
+"gitWorkspace.change.text.5" = "类型变化";
+"gitWorkspace.change.text.6" = "修改";
+"gitWorkspace.change.error" = "Git 分支计数格式无效。";
+"gitWorkspace.change.error.2" = "Git 文件状态格式无效。";
+"gitWorkspace.change.error.3" = "Git 文件状态不完整。";
+"gitWorkspace.change.error.4" = "Git 重命名记录缺少原路径。";
+"gitWorkspace.changes" = "双方删除";
+"gitWorkspace.changes.2" = "本地新增";
+"gitWorkspace.changes.3" = "本地修改／对方删除";
+"gitWorkspace.changes.4" = "对方新增";
+"gitWorkspace.changes.5" = "本地删除／对方修改";
+"gitWorkspace.changes.6" = "双方新增";
+"gitWorkspace.changes.7" = "双方修改";
+"gitWorkspace.change.text.7" = "子模块变化";
+"gitWorkspace.change.error.5" = "Git 未返回当前分支。";
+"gitWorkspace.run.error" = "Git 状态查询超时，点击重试。";
+"gitWorkspace.run.error.2" = "Git 状态超过 8 MiB，无法显示完整文件列表。";
+/* 参数 %1$@ = task.terminationStatus */
+"gitWorkspace.run.error.3" = "Git 查询失败（%1$@）。";
+"gitWorkspace.read.error" = "工作区目录不存在或无法访问。";
+"gitWorkspace.rebaseStep.text" = "应用补丁中";
+"gitWorkspace.rebaseStep.text.2" = "合并中";
+"gitWorkspace.rebaseStep.text.3" = "拣选中";
+"gitWorkspace.rebaseStep.text.4" = "拣选提交 (Cherry-pick) 进行中";
+"gitWorkspace.rebaseStep.text.5" = "还原中";
+"gitWorkspace.rebaseStep.text.6" = "撤销提交改动 (Revert) 进行中";
+"gitWorkspace.rebaseStep.text.7" = "二分查找中";
+/* 参数 %1$@ = progress */
+"gitWorkspace.rebaseStep.text.8" = "变基中 %1$@";
+/* 参数 %1$@ = progress */
+"gitWorkspace.rebaseStep.text.9" = "变基 (Rebase) %1$@";
+"gitWorkspace.rebaseStep.text.10" = "变基中";
+"gitWorkspace.rebaseStep.text.11" = "变基 (Rebase) 进行中";
+
+/* 工作区监视 */
+"gitWorkspaceObservation.update.error" = "无法监听工作区变更，请使用刷新按钮。";
+"gitWorkspaceObservation.update.error.2" = "无法启动工作区变更监听，请使用刷新按钮。";
+
+/* composerControls */
+"composerControls.text" = "在访达中打开工作区";
+"composerControls.update.text" = "未选择工作区";
+
+/* 文件列表与右键菜单 */
+"workspaceFileList.count" = "未提供";
+/* 参数 %1$@ = $0.added；%2$@ = $0.removed */
+"workspaceFileList.text" = "，新增 %1$@ 行，删除 %2$@ 行";
+"workspaceFileList.symbol.text" = "新增";
+"workspaceFileList.symbol.text.2" = "删除";
+"workspaceFileList.symbol.text.3" = "重命名";
+"workspaceFileList.symbol.text.4" = "复制";
+"workspaceFileList.symbol.text.5" = "类型变化";
+"workspaceFileList.symbol.text.6" = "子模块变化";
+"workspaceFileList.loadView.text" = "本轮文件修改，双击在访达中显示，右键显示文件操作";
+"workspaceFileList.text.2" = "打开仓库网页：";
+
+/* 独立工作区状态条 */
+"workspaceStatusPanel.title" = "工作区状态条";
+
+/* 目录、版本控制与本轮文件 */
+"status.git" = "Git 状态";
+"status.git.2" = "本轮文件修改";
+"status.text" = "Git 工作区状态";
+"status.text.2" = "本轮累计修改行数";
+"status.updateChanges.text" = " · 部分";
+/* 参数 %1$@ = edits.count */
+"status.description" = "本轮修改 %1$@ 个文件。";
+/* 参数 %1$@ = added；%2$@ = removed */
+"status.description.2" = "累计新增 %1$@ 行、删除 %2$@ 行。";
+/* 参数 %1$@ = edits.count-known.count */
+"status.description.3" = "\n%1$@ 个文件未提供行数。";
+"status.gitDidChange.title" = "读取中…";
+"status.presentStatus.title" = "读取失败";
+"status.presentStatus.text" = "Git 状态读取失败";
+"status.heading" = " · 首次提交前";
+"status.accessibility" = "上游：";
+"status.setLoading.heading" = "重试中…";
+"status.setLoading.heading.2" = "重试";
+"status.heading.2" = "Git 工作区";
+"status.settings" = "打开工作区状态设置";
+"status.metadata.text" = "工作区";
+"status.metadata.text.2" = "远端";
+"status.metadata.text.3" = "上游位于本地仓库";
+"status.metadata.text.4" = "未配置";
+"status.metadata.text.5" = "上游";
+"status.clean" = "工作区干净";
+"status.metadata.text.6" = "正在读取 Git 状态…";
+"status.metadata.text.7" = "非 Git 工作区";
+"status.metadata.text.8" = "Git 文件状态，双击在访达中显示，右键显示文件操作";
+/* 参数 %1$@ = group.rawValue；%2$@ = count */
+"status.tableView.text" = "%1$@，%2$@ 项";
+
+/* 在访达中显示或打开 */
+"finderFileReveal.openDirectory.error" = "无法打开任务文件夹";
+"finderFileReveal.openDirectory.message" = "请确认目录仍然存在：";
+"finderFileReveal.reveal.text" = "请在系统设置 → 隐私与安全性 → 自动化中，允许白龙桌宠Swift控制访达，然后重新点击文件链接。";
+"finderFileReveal.reveal.text.2" = "访达未完成文件定位。\n";
+/* 参数 %1$@ = process.terminationStatus */
+"finderFileReveal.reveal.text.3" = "脚本退出码：%1$@";
+"finderFileReveal.reveal.error" = "无法在访达中显示";
+"finderFileReveal.reveal.error.2" = "无法启动访达定位";
+
+/* 正文里的文件链接 */
+"messageFileLink.reveal.error" = "此文件不在本机";
+"messageFileLink.reveal.message" = "请在 Codex 中下载文件后，再到访达查看。";
+"messageFileLink.reveal.error.2" = "无法定位文件";
+"messageFileLink.reveal.message.2" = "此链接不是本机文件地址。";
+"messageFileLink.reveal.message.3" = "此链接使用相对路径，但这条消息没有任务文件夹信息。";
+"messageFileLink.reveal.error.3" = "文件不存在";
+
+/* 本轮文件修改与展开列表 */
+/* 参数 %1$@ = edits.count */
+"fileEditRendering.header" = "已编辑 %1$@ 个文件";
+"fileEditRendering.icon" = "文件修改";
+
+/* Git 简写、图例与悬停说明 */
+"gitStatusText.bashGitPrompt" = "bash-git-prompt 符号风格";
+"gitStatusText.powerlevel10k" = "Powerlevel10k 符号风格";
+"gitStatusText.gitCLI" = "缩写字母风格";
+"gitStatusText.clean" = "工作区干净";
+"gitStatusText.marker.text" = "落后";
+"gitStatusText.marker.text.2" = "领先";
+"gitStatusText.generic" = "通用 Git 仓库";
+"gitStatusText.github" = "GitHub 远端仓库";
+"gitStatusText.remote" = "其他远端仓库";
+"gitStatusText.repository.text" = "上游";
+"gitStatusText.repository.text.2" = "图例：\n";
+"gitStatusText.tracking.text" = "未设置";
+"gitStatusText.state" = "尚无本地提交";
+"gitStatusText.state.2" = "上游引用缺失";
+"gitStatusText.labels" = "尚无提交记录";
+
+/* 文件操作 */
+"workspaceFileActions.make.menuItem" = "在访达中显示";
+"workspaceFileActions.make.menuItem.2" = "拷贝文件路径";
+"workspaceFileActions.make.menuItem.3" = "拷贝本组文件路径";
+"workspaceFileActions.make.menuItem.4" = "拷贝所有文件路径";

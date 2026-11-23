@@ -1,0 +1,54 @@
+/* 动作名称 · 简体中文 */
+
+/* 目录中的默认待机 */
+"animation.idle.title" = "待机动作 01（默认）";
+
+/* 待机动作 */
+"animation.idle2.title" = "待机动作 02";
+"animation.idle03.title" = "待机动作 03 · 翻绘本";
+"animation.idle04.title" = "待机动作 04 · 贴贴枕头";
+"animation.idle05.title" = "待机动作 05 · 玩掌机";
+"animation.idle06.title" = "待机动作 06 · 贴尾巴";
+
+/* 互动动作 */
+"animation.01.title" = "招手/打招呼";
+"animation.04.title" = "灵感";
+"animation.05.title" = "得意";
+"animation.08.title" = "贴贴";
+"animation.09.title" = "傲娇";
+"animation.13.title" = "小生气";
+"animation.14.title" = "困倦";
+"animation.17.title" = "偷吃";
+"animation.18.title" = "庆祝";
+"animation.20.title" = "比心";
+"animation.21.title" = "龙族契约";
+"animation.22.title" = "眷属印记";
+"animation.24.title" = "宝藏收藏";
+"animation.25.title" = "幼龙吐息";
+"animation.26.title" = "逆鳞信任";
+
+/* 工作动作 */
+"animation.work01.title" = "收到任务";
+"animation.work02.title" = "处理任务";
+"animation.work03.title" = "整理归档文件";
+"animation.work04.title" = "翻阅工作资料";
+"animation.work05.title" = "放大镜查看细节";
+
+/* 移动动作 */
+"animation.move02left.title" = "跑步（向左）";
+"animation.move02.title" = "跑步（向右）";
+"animation.move01left.title" = "走路（向左）";
+"animation.move01right.title" = "走路（向右）";
+"animation.move03left.title" = "飞行（向左）";
+"animation.move03right.title" = "飞行（向右）";
+
+/* 拖拽 */
+"animation.drag.title" = "拖拽";
+
+/* 落地 */
+"animation.landing.title" = "落地";
+
+/* 额度动作 */
+"animation.quota.title" = "查阅额度";
+/* 清单未提供动作名时的默认标题 */
+"animation.quota.fallbackTitle" = "查询额度";

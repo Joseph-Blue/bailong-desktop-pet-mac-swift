@@ -1,0 +1,256 @@
+/* 任务气泡、进展、审批与问卷 · 简体中文 */
+
+/* Codex 项目审批 */
+"desktopApproval.handoffToCodex.text" = "允许本轮";
+"desktopApproval.handoffToCodex.text.2" = "允许这一次";
+"desktopApproval.handoffToCodex.text.3" = "等待批准权限请求。";
+"desktopApproval.handoffToCodex.text.4" = "等待批准文件修改。";
+"desktopApproval.handoffToCodex.text.5" = "等待批准执行操作。";
+"desktopApproval.labels" = "审批理由";
+"desktopApproval.labels.2" = "执行命令";
+"desktopApproval.labels.3" = "工作目录";
+"desktopApproval.labels.4" = "文件修改";
+"desktopApproval.labels.5" = "本轮请求的权限";
+"desktopApproval.labels.6" = "附加权限";
+"desktopApproval.labels.7" = "网络访问";
+"desktopApproval.labels.8" = "允许访问的目录";
+"desktopApproval.title" = "会话目录";
+"desktopApproval.submit.message" = "审批请求已结束，请查看 Codex 原会话。";
+"desktopApproval.submit.message.2" = "Codex 未返回审批连接标识。";
+"desktopApproval.submit.message.3" = "原审批窗口已变化，请转到 Codex 处理。";
+"desktopApproval.submit.message.4" = "审批请求已处理、已结束或操作内容已变化，请查看 Codex 当前状态。";
+"desktopApproval.submit.message.5" = "Codex 尚未确认审批处理结果。";
+"desktopApproval.submit.message.6" = "审批结果待确认，请转到 Codex 查看。\n";
+"desktopApproval.snapshot.message" = "未收到原会话的最新审批状态。";
+"desktopApproval.text" = "操作详情未完整提供，请转到 Codex 查看。";
+"desktopApproval.text.2" = "正在提交审批决定…";
+"desktopApproval.text.3" = "审批已处理。";
+
+/* 读取审批信息 */
+"desktopApprovalReader.read.message" = "Codex 未返回审批观察连接标识。";
+"desktopApprovalReader.consume.message" = "Codex 审批状态协议不兼容。";
+"desktopApprovalReader.consume.message.2" = "Codex 审批快照缺少请求列表。";
+"desktopApprovalReader.consume.message.3" = "Codex 审批增量格式不兼容。";
+
+/* 项目问卷答复 */
+"desktopQuestionReply.submit.message" = "请填写回答后再提交。";
+"desktopQuestionReply.submit.message.2" = "Codex 未返回本机连接标识。";
+"desktopQuestionReply.submit.message.3" = "未找到原会话窗口，请转到 Codex 回答。";
+"desktopQuestionReply.unavailable.text" = "Codex 本机通信尚未就绪。";
+"desktopQuestionReply.disconnected.text" = "Codex 本机连接已断开。";
+/* 参数 %1$@ = $0 */
+"desktopQuestionReply.responseTimeout.text" = "Codex 请求超时（%1$@）。";
+"desktopQuestionReply.responseTimeout.text.2" = "等待 Codex 响应超时。";
+/* 参数 %1$@ = method；%2$@ = code */
+"desktopQuestionReply.requestFailure.text" = "Codex 请求失败（%1$@）：%2$@";
+"desktopQuestionReply.message" = "Codex 本机通信路径过长。";
+"desktopQuestionReply.message.2" = "Codex 本机通信路径不是当前用户的套接字。";
+"desktopQuestionReply.message.3" = "无法创建本机通信连接。";
+"desktopQuestionReply.record.text" = "  会话#";
+"desktopQuestionReply.record.text.2" = "→ 请求";
+"desktopQuestionReply.record.text.3" = "← 回执";
+"desktopQuestionReply.is" = "等待响应超时";
+"desktopQuestionReply.is.2" = "桌面端已断开";
+"desktopQuestionReply.is.3" = "桌面端返回错误";
+"desktopQuestionReply.record.text.4" = "× 失败";
+/* 参数 %1$@ = method */
+"desktopQuestionReply.receiveResponse.message" = "Codex 本机请求失败（%1$@）：";
+"desktopQuestionReply.receiveResponse.error" = "请求失败";
+"desktopQuestionReply.receive.message" = "Codex 本机消息格式不兼容。";
+
+/* desktopRuntimeProjection */
+"desktopRuntimeProjection.patch.message" = "Codex 实时状态增量格式不兼容。";
+"desktopRuntimeProjection.patch.message.2" = "Codex 实时状态根节点无效。";
+"desktopRuntimeProjection.node.message" = "Codex 实时状态路径已变化。";
+"desktopRuntimeProjection.apply.message" = "Codex 实时状态索引已变化。";
+"desktopRuntimeProjection.apply.message.2" = "Codex 实时状态路径不兼容。";
+
+/* 任务请求与补充信息 */
+"requestCoordinator.enqueue.text" = "请求不属于当前任务。";
+"requestCoordinator.enqueue.text.2" = "请求不属于当前轮次。";
+"requestCoordinator.enqueue.text.3" = "收到命令审批";
+"requestCoordinator.enqueue.text.4" = "收到文件修改审批";
+"requestCoordinator.enqueue.text.5" = "收到权限审批";
+"requestCoordinator.enqueue.text.6" = "收到问卷";
+"requestCoordinator.nextRequest.text" = "请查看具体操作后决定。";
+"requestCoordinator.nextRequest.button" = "拒绝";
+"requestCoordinator.nextRequest.button.2" = "允许这一次";
+"requestCoordinator.questions.text" = "问题缺少标识。";
+"requestCoordinator.questions.text.2" = "请补充信息";
+"requestCoordinator.questions.button" = "提交";
+"requestCoordinator.questions.button.2" = "取消并停止";
+"requestCoordinator.questions.message" = "这道问题已结束。";
+
+/* 公开任务状态与工具进展 */
+"taskActivity.tool" = "工具调用";
+"taskActivity.command" = "运行命令";
+"taskActivity.read" = "读取文件";
+"taskActivity.search" = "搜索内容";
+"taskActivity.listFiles" = "列出文件";
+"taskActivity.edit" = "修改文件";
+"taskActivity.webSearch" = "搜索网页";
+"taskActivity.webOpen" = "打开网页";
+"taskActivity.webFind" = "页内查找";
+"taskActivity.imageGeneration" = "生成图片";
+"taskActivity.imageView" = "查看图片";
+"taskActivity.compaction" = "压缩上下文";
+"taskActivity.plan" = "更新计划";
+"taskActivity.collaboration" = "协调子任务";
+"taskActivity.waiting" = "等待子任务";
+"taskActivity.review" = "代码审查";
+"taskActivity.document" = "文档操作";
+"taskActivity.spreadsheet" = "表格操作";
+"taskActivity.presentation" = "演示文稿操作";
+"taskActivity.mail" = "邮件操作";
+"taskActivity.calendar" = "日历操作";
+"taskActivity.code" = "代码工具";
+"taskActivity.failed" = "失败";
+"taskActivity.failed.2" = "被拒绝";
+"taskActivity.failed.3" = "已取消";
+"taskActivity.failed.4" = "已中断";
+"taskActivity.reasoning" = "思考";
+"taskActivity.reply" = "正在回复";
+"taskActivity.append.text" = "结束";
+"taskActivity.append.text.2" = "正在重连";
+"taskActivity.status" = "状态提示";
+"taskActivity.append.text.3" = "等待审批";
+"taskActivity.attention" = "等待回答";
+"taskActivity.waiting.text" = "等待批准";
+/* 参数 %1$@ = lines.count-3 */
+"taskActivity.waiting.text.2" = "另有 %1$@ 项";
+"taskActivity.commandSummary.text" = " …（多行命令）";
+"taskActivity.from.title" = "正在思考";
+"taskActivity.from.text" = "调用工具";
+"taskActivity.from.text.2" = "在网页内查找";
+"taskActivity.from.text.3" = "浏览网页";
+"taskActivity.from.text.4" = "制定计划";
+"taskActivity.from.text.5" = "审查代码";
+"taskActivity.from.text.6" = "派发子任务";
+"taskActivity.from.text.7" = "等待子代理";
+"taskActivity.from.text.8" = "向子代理发送消息";
+"taskActivity.from.text.9" = "恢复子代理";
+"taskActivity.from.text.10" = "关闭子代理";
+"taskActivity.from.text.11" = "协调子代理";
+"taskActivity.label.text" = "已";
+"taskActivity.label.text.2" = "正在";
+"taskActivity.label.text.3" = "读取";
+"taskActivity.label.text.4" = "搜索";
+"taskActivity.label.title" = "已进入代码审查";
+"taskActivity.label.title.2" = "代码审查已结束";
+"taskActivity.activeGroupHeader.title" = "正在读取";
+"taskActivity.activeGroupHeader.heading" = "文件";
+"taskActivity.activeGroupHeader.heading.2" = "正在搜索文件夹 ";
+"taskActivity.activeGroupHeader.heading.3" = "正在搜索「";
+"taskActivity.activeGroupHeader.heading.4" = "正在搜索文件";
+"taskActivity.activeGroupHeader.heading.5" = "正在列出文件";
+"taskActivity.activeGroupHeader.heading.6" = "正在列出文件夹 ";
+"taskActivity.edit.2" = "正在修改文件";
+"taskActivity.labels" = "已调用工具";
+"taskActivity.labels.2" = "已修改文件";
+"taskActivity.labels.3" = "已读取文件";
+"taskActivity.labels.4" = "已运行命令";
+"taskActivity.labels.5" = "已搜索网页";
+"taskActivity.completedGroupHeader.text" = "工具活动已结束";
+
+/* userInputText */
+"userInputText.display.text" = "图片";
+"userInputText.placeholder" = "[图片]";
+/* 参数 %1$@ = linkedImages */
+"userInputText.placeholder.2" = "[图片 × %1$@]";
+"userInputText.display.text.2" = "[附件]";
+/* 参数 %1$@ = files */
+"userInputText.display.text.3" = "[附件 × %1$@]";
+
+/* 任务进展汇总 */
+"taskMessageAccumulator.labels" = "待开始";
+"taskMessageAccumulator.labels.2" = "进行中";
+"taskMessageAccumulator.labels.3" = "已完成";
+"taskMessageAccumulator.state" = "状态未提供";
+"taskMessageAccumulator.receive.title" = "正在更新计划";
+"taskMessageAccumulator.record.text" = "正在生成图片";
+"taskMessageAccumulator.record.text.2" = "工具";
+/* 参数 %1$@ = item["query"] ?? "" */
+"taskMessageAccumulator.record.text.3" = "搜索：%1$@";
+
+/* 任务结束状态 */
+"taskOutcome.body.text" = "任务已完成，Codex 未提供文字回复。";
+"taskOutcome.body.text.2" = "本次任务已中断，未收到最终回复。";
+"taskOutcome.body.text.3" = "本次任务执行失败，Codex 未提供错误说明。";
+
+/* taskReminder */
+"taskReminder.showTaskReminder.text" = "已经有一会儿没有新进度，任务尚未报告完成。";
+
+/* 消息气泡 */
+"bubble.move.text" = "任务同步尚未初始化";
+"bubble.renderCard.text" = "任务同步已停止";
+"bubble.button" = "查看记录详情";
+"bubble.title" = "正在提交…";
+"bubble.error" = "回答未提交";
+"bubble.button.2" = "拒绝";
+"bubble.button.3" = "允许这一次";
+"bubble.button.4" = "快捷回复";
+"bubble.text" = "上一条消息";
+"bubble.text.2" = "下一条消息";
+"bubble.button.5" = "< 上一题";
+"bubble.button.6" = "跳过";
+"bubble.button.7" = "转到 Codex";
+"bubble.button.8" = "重试";
+"bubble.accessibilityDescription" = "任务已处理时间";
+"bubble.render.accessibilityDescription" = "关闭气泡";
+"bubble.render.heading" = "技术详情…";
+"bubble.render.heading.2" = "提交回答";
+"bubble.source" = "待处理卡";
+"bubble.source.2" = "短进展";
+"bubble.source.3" = "主气泡";
+"bubble.refreshElapsed.text" = "已处理 ";
+"bubble.showFailure.title" = "打开 Codex";
+
+/* 任务概览 */
+"overview.rebuild.text" = "正在执行的任务：";
+"overview.rebuild.text.2" = "近期执行结束的任务：";
+"overview.empty" = "暂无正在执行的任务";
+"overview.empty.2" = "暂无近期结束的任务";
+"overview.accessibilityDescription" = "用时";
+"overview.accessibilityDescription.2" = "在 Codex 中打开";
+"overview.state" = "执行中";
+"overview.state.2" = "已完成";
+"overview.state.3" = "失败";
+"overview.state.4" = "用户取消";
+"overview.state.5" = "已中断";
+"overview.update.text" = "，转到 Codex";
+
+/* 问卷表单 */
+"questionForm.answer.text" = "关闭";
+"questionForm.answer.text.2" = "提交回答";
+"questionForm.answer.text.3" = "下一题 >";
+"questionForm.title" = "其他";
+"questionForm.text" = "输入回答";
+"questionForm.text.2" = "其他回答或补充说明";
+"questionForm.text.3" = "：输入回答";
+/* 参数 %1$@ = qi+1；%2$@ = questions.count */
+"questionForm.page" = "第 %1$@ / %2$@ 题";
+"questionForm.page.2" = " · 已跳过";
+"questionForm.text.heading" = "（推荐）";
+"questionForm.selectOption.text" = "补充说明（可选）";
+
+/* 通用原生控件 */
+"nativeControls.label" = "关闭气泡";
+"nativeControls.badge" = "推荐";
+
+/* 套餐与额度显示 */
+"presentation.question.text" = "需要输入敏感信息，请前往处理。";
+"presentation.prompt" = "请补充信息。";
+"presentation.suffixes" = "（推荐）";
+"presentation.suffixes.2" = " (推荐)";
+"presentation.action" = "等待批准文件修改。";
+"presentation.action.2" = "等待批准执行操作。";
+"presentation.animation.title" = "这个动作暂时无法播放";
+"presentation.animation.message" = "桌宠会保留当前画面。可以重试，或从菜单选择其他动作。";
+"presentation.codex.title" = "Codex 任务未能完成";
+"presentation.codex.message" = "Codex 未提供错误说明。";
+"presentation.showDetails.button" = "关闭";
+"presentation.showDetails.button.2" = "拷贝详情";
+"presentation.usageHeading" = "今日用量";
+"presentation.displayRows.text" = "ChatGPT 免费用户";
+"presentation.displayRows.text.2" = "计费方式 · ";
+"presentation.displayRows.text.3" = "ChatGPT 订阅 · ";
