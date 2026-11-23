@@ -126,11 +126,11 @@
 "taskActivity.from.text.4" = "制定计划";
 "taskActivity.from.text.5" = "审查代码";
 "taskActivity.from.text.6" = "派发子任务";
-"taskActivity.from.text.7" = "等待子代理";
-"taskActivity.from.text.8" = "向子代理发送消息";
-"taskActivity.from.text.9" = "恢复子代理";
-"taskActivity.from.text.10" = "关闭子代理";
-"taskActivity.from.text.11" = "协调子代理";
+"taskActivity.from.text.7" = "等待子智能体";
+"taskActivity.from.text.8" = "向子智能体发送消息";
+"taskActivity.from.text.9" = "恢复子智能体";
+"taskActivity.from.text.10" = "关闭子智能体";
+"taskActivity.from.text.11" = "协调子智能体";
 "taskActivity.label.text" = "已";
 "taskActivity.label.text.2" = "正在";
 "taskActivity.label.text.3" = "读取";

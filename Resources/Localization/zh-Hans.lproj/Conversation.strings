@@ -168,7 +168,7 @@
 "modelSelection.effortName.text.13" = "充分分析问题，适合较复杂的任务。";
 "modelSelection.effortName.text.14" = "深入分析复杂问题，可能需要更长时间。";
 "modelSelection.effortName.text.15" = "投入更多推理，适合难度较高的任务；在 Codex 中默认隐藏显示。";
-"modelSelection.effortName.text.16" = "使用最高档推理投入，适合需要深入分析的任务；在特定情况下会更频繁派遣子代理。";
+"modelSelection.effortName.text.16" = "使用最高档推理投入，适合需要深入分析的任务；在特定情况下会更频繁派遣子智能体。";
 /* 参数 %1$@ = Self.effortName(effort) */
 "modelSelection.effortName.text.17" = "使用当前模型提供的「%1$@」推理强度。";
 "modelSelection.effortName.text.18" = "未获取模型";
