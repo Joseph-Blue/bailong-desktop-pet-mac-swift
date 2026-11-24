@@ -15,7 +15,14 @@
 "gitWorkspace.change.text.4" = "Copied";
 "gitWorkspace.change.text.5" = "Type changed";
 "gitWorkspace.change.text.6" = "Modified";
-"gitWorkspace.change.text.7" = "Submodule changed";
+"gitWorkspace.submodule.commit" = "Submodule HEAD changed";
+"gitWorkspace.submodule.dirty" = "Submodule dirty";
+"gitWorkspace.submodule.both" = "Submodule HEAD changed · dirty";
+"gitWorkspace.submodule.staged" = "Updated gitlink";
+"gitWorkspace.repositories" = "%@ repositories";
+"gitWorkspace.dirtyRepositories" = "%@ changed";
+"gitWorkspace.failedRepositories" = "%@ failed";
+"gitWorkspace.selectRepository" = "Select repository";
 "gitWorkspace.changes" = "Both deleted";
 "gitWorkspace.changes.2" = "Added by us";
 "gitWorkspace.changes.3" = "Deleted by them";

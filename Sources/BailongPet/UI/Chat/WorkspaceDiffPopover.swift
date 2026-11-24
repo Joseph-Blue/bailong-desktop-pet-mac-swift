@@ -147,7 +147,7 @@ final class WorkspaceDiffPopover:NSViewController,NSPopoverDelegate,NSTextViewDe
             key = FileKey(path:entry.path,group:entry.group)
             setGitRows(snapshot)
             let feed = GitWorkspaceMonitor.directory(path); monitor = feed
-            if feed.hasBaseline,feed.failure == nil {setGitRows(feed.snapshot)}
+            if feed.hasBaseline,feed.failure == nil {setGitRows(feed.repositories.first {$0.root == snapshot.root}?.status)}
             feed.attach(self) { [weak self,weak feed] _,_ in
                 guard let self,let feed,self.monitor === feed,!feed.loading else {return}
                 self.refreshGit(from:feed)
@@ -172,11 +172,13 @@ final class WorkspaceDiffPopover:NSViewController,NSPopoverDelegate,NSTextViewDe
         return true
     }
     private func refreshGit(from monitor:GitWorkspaceMonitor) {
-        if let failure = monitor.failure {
-            if patch == nil {showMessage(failure)}
+        let repository = monitor.repositories.first {$0.root == directory?.path}
+        if let failure = monitor.failure ?? repository?.failure {
+            request?.cancel(); request = nil
+            showMessage(failure)
             return
         }
-        if setGitRows(monitor.snapshot) {reloadFiles()}
+        if setGitRows(repository?.status) {reloadFiles()}
         loadSelection(preservingPosition:true)
     }
     private func select(_ key:FileKey) {

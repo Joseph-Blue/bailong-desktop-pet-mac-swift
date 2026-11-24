@@ -16,7 +16,8 @@ final class GitWorkspaceMonitor {
     private var listeners = [ObjectIdentifier:Listener]()
     private var pending:DispatchWorkItem?, request:GitWorkspaceRequest?
     private var refreshAgain = false
-    private(set) var snapshot:GitWorkspaceStatus?, failure:String?, observationFailure:String?
+    private(set) var repositories = [GitRepositoryState]()
+    private(set) var failure:String?, observationFailure:String?
     private(set) var hasBaseline = false
     private var spaceRefresh:DispatchWorkItem?
     private var spaceRequests = [HuggingFaceSpace:(token:UUID,task:URLSessionDataTask)]()
@@ -53,20 +54,20 @@ final class GitWorkspaceMonitor {
         query.start(directory:path) { [weak self,weak query] result in
             guard let self,let query,self.request === query else {return}
             self.request = nil
-            let old = self.snapshot, oldFailure = self.failure, oldObservation = self.observationFailure, hadBaseline = self.hasBaseline
+            let old = self.repositories, oldFailure = self.failure, oldObservation = self.observationFailure, hadBaseline = self.hasBaseline
             var meaningful = false
             switch result {
             case .success(let value):
                 meaningful = hadBaseline && old != value
-                self.hasBaseline = true; self.snapshot = value; self.failure = nil
-                self.updateSpaces(Set([value?.remoteSpace,value?.pushSpace].compactMap {$0}))
+                self.hasBaseline = true; self.repositories = value; self.failure = nil
+                self.updateSpaces(Set(value.compactMap(\.status).flatMap {[$0.remoteSpace,$0.pushSpace].compactMap {$0}}))
                 do {
-                    try self.observation.update(paths:value?.observationPaths ?? [])
+                    try self.observation.update(paths:value.flatMap {$0.status?.observationPaths ?? [$0.root]})
                     self.observationFailure = nil
                 } catch {self.observationFailure = error.localizedDescription}
             case .failure(let error):self.failure = error.localizedDescription
             }
-            let changed = !hadBaseline || old != self.snapshot || oldFailure != self.failure || oldObservation != self.observationFailure
+            let changed = !hadBaseline || old != self.repositories || oldFailure != self.failure || oldObservation != self.observationFailure
             for listener in self.listeners.values {listener.gitChanged(changed,meaningful)}
             if self.refreshAgain {self.refreshAgain = false; self.scheduleRefresh()}
         }

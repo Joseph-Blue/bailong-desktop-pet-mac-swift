@@ -82,7 +82,14 @@
 "gitWorkspace.changes.5" = "本地删除／对方修改";
 "gitWorkspace.changes.6" = "双方新增";
 "gitWorkspace.changes.7" = "双方修改";
-"gitWorkspace.change.text.7" = "子模块变化";
+"gitWorkspace.submodule.commit" = "子模块提交不一致";
+"gitWorkspace.submodule.dirty" = "子模块内部有修改";
+"gitWorkspace.submodule.both" = "子模块提交不一致 · 内部有修改";
+"gitWorkspace.submodule.staged" = "更新子模块提交";
+"gitWorkspace.repositories" = "%@ 个仓库";
+"gitWorkspace.dirtyRepositories" = "%@ 个有修改";
+"gitWorkspace.failedRepositories" = "%@ 个读取失败";
+"gitWorkspace.selectRepository" = "选择仓库";
 "gitWorkspace.change.error.5" = "Git 未返回当前分支。";
 "gitWorkspace.run.error" = "Git 状态查询超时，点击重试。";
 "gitWorkspace.run.error.2" = "Git 状态超过 8 MiB，无法显示完整文件列表。";

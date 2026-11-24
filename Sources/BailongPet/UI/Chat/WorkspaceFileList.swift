@@ -144,7 +144,7 @@ final class WorkspaceFileRow:NSView {
         case .deleted:return ("minus.circle",StatusTextColor.red)
         case .renamed:return ("arrow.right",StatusTextColor.blue)
         case .copied:return ("doc.on.doc",StatusTextColor.teal)
-        case .typeChanged,.submodule:return ("square.stack.3d.up",StatusTextColor.purple)
+        case .typeChanged,.submoduleCommit,.submoduleDirty,.submoduleCommitAndDirty,.stagedGitlink:return ("square.stack.3d.up",StatusTextColor.purple)
         default:return ("pencil",StatusTextColor.orange)
         }
     }

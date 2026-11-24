@@ -59,7 +59,8 @@ struct GitWorkspaceStatus:Equatable {
         }
     }
     enum Change:Equatable {
-        case added, deleted, renamed, copied, typeChanged, submodule, modified, conflict(String)
+        case added, deleted, renamed, copied, typeChanged, modified, conflict(String)
+        case submoduleCommit, submoduleDirty, submoduleCommitAndDirty, stagedGitlink
         func title(using terms:GitTerminology) -> String {
             switch self {
             case .added:return terms.text("gitWorkspace.change.text")
@@ -67,7 +68,10 @@ struct GitWorkspaceStatus:Equatable {
             case .renamed:return terms.text("gitWorkspace.change.text.3")
             case .copied:return terms.text("gitWorkspace.change.text.4")
             case .typeChanged:return terms.text("gitWorkspace.change.text.5")
-            case .submodule:return terms.text("gitWorkspace.change.text.7")
+            case .submoduleCommit:return terms.text("gitWorkspace.submodule.commit")
+            case .submoduleDirty:return terms.text("gitWorkspace.submodule.dirty")
+            case .submoduleCommitAndDirty:return terms.text("gitWorkspace.submodule.both")
+            case .stagedGitlink:return terms.text("gitWorkspace.submodule.staged")
             case .modified:return terms.text("gitWorkspace.change.text.6")
             case .conflict(let code):
                 switch code {
@@ -219,15 +223,44 @@ struct GitWorkspaceStatus:Equatable {
             if kind == "u" {
                 result.entries.append(Entry(path:path,originalPath:original,group:.conflicted,change:.conflict(String(parts[1])))); continue
             }
-            if xy[0] != "." {result.entries.append(Entry(path:path,originalPath:original,group:.staged,change:change(xy[0])))}
-            if xy[1] != "." {result.entries.append(Entry(path:path,originalPath:original,group:.unstaged,change:change(xy[1])))}
-            // 子模块自身的修改／未跟踪内容也属于当前工作树的变化。
-            if xy[1] == ".",parts[2].hasPrefix("S"),parts[2].dropFirst().contains(where:{$0 != "."}) {
-                result.entries.append(Entry(path:path,originalPath:nil,group:.unstaged,change:.submodule))
+            let sub = parts[2]
+            if xy[0] != "." {
+                let staged:Change = xy[0] == "M" && parts[3] == "160000" && parts[4] == "160000" ? .stagedGitlink : change(xy[0])
+                result.entries.append(Entry(path:path,originalPath:original,group:.staged,change:staged))
+            }
+            // S<c><m><u> 比较子模块 HEAD 与父仓索引，并分别报告跟踪与未跟踪内容。
+            let commitChanged = sub.hasPrefix("SC")
+            let dirty = sub.hasPrefix("S") && (sub.hasSuffix("U") || sub.dropLast().hasSuffix("M"))
+            if commitChanged || dirty {
+                let state:Change = commitChanged ? (dirty ? .submoduleCommitAndDirty : .submoduleCommit) : .submoduleDirty
+                result.entries.append(Entry(path:path,originalPath:original,group:.unstaged,change:state))
+            } else if xy[1] != "." {
+                result.entries.append(Entry(path:path,originalPath:original,group:.unstaged,change:change(xy[1])))
             }
         }
         guard !result.branch.isEmpty else {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.change.error.5"))}
         return result
+    }
+}
+
+enum GitRepositoryState:Equatable {
+    case ready(GitWorkspaceStatus)
+    case failed(root:String,message:String)
+
+    var root:String {
+        switch self {
+        case .ready(let status):return status.root
+        case .failed(let root,_):return root
+        }
+    }
+    var status:GitWorkspaceStatus? {if case .ready(let status) = self {return status}; return nil}
+    var failure:String? {if case .failed(_,let message) = self {return message}; return nil}
+    var name:String {(root as NSString).lastPathComponent}
+    func summary(using terms:GitTerminology) -> String {
+        switch self {
+        case .ready(let status):return [name,status.title,status.summary(using:terms)].joined(separator:" · ")
+        case .failed:return name+" · "+L10n.text(.workspace,"status.presentStatus.title")
+        }
     }
 }
 
@@ -257,6 +290,7 @@ final class GitWorkspaceRequest {
         task.standardInput = FileHandle.nullDevice
         lock.lock()
         if cancelled {lock.unlock(); throw CancellationError()}
+        timedOut = false
         do {try task.run(); process = task} catch {lock.unlock(); throw error}
         lock.unlock()
         let timeout = DispatchWorkItem { [weak self,weak task] in
@@ -361,6 +395,23 @@ final class GitWorkspaceRequest {
             cursor.deleteLastPathComponent()
         }
         guard found else {return nil}
+        return try readRepository(directory:directory)
+    }
+
+    func readRepositories(directory:String) throws -> [GitRepositoryState] {
+        if let status = try read(directory:directory) {return [.ready(status)]}
+        let workspace = URL(fileURLWithPath:directory,isDirectory:true).standardizedFileURL.resolvingSymlinksInPath()
+        let children = try FileManager.default.contentsOfDirectory(at:workspace,includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])
+        let roots = Set(children.filter {FileManager.default.fileExists(atPath:$0.appendingPathComponent(".git").path)}
+            .map {$0.resolvingSymlinksInPath().path})
+        return try roots.sorted().map {root in
+            do {return .ready(try readRepository(directory:root))}
+            catch is CancellationError {throw CancellationError()}
+            catch {return .failed(root:root,message:error.localizedDescription)}
+        }
+    }
+
+    private func readRepository(directory:String) throws -> GitWorkspaceStatus {
         func string(_ args:[String],optional:Bool = false) throws -> String? {
             try gitString(directory,args,optional:optional)
         }
@@ -482,9 +533,9 @@ final class GitWorkspaceRequest {
         }
         return .init("rebase",detailKey:"gitWorkspace.rebaseStep.text.11")
     }
-    func start(directory:String,completion:@escaping (Result<GitWorkspaceStatus?,Error>) -> Void) {
+    func start(directory:String,completion:@escaping (Result<[GitRepositoryState],Error>) -> Void) {
         DispatchQueue.global(qos:.utility).async { [self] in
-            let result = Result {try read(directory:directory)}
+            let result = Result {try readRepositories(directory:directory)}
             DispatchQueue.main.async {completion(result)}
         }
     }

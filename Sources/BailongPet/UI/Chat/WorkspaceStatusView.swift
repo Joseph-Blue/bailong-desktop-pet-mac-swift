@@ -18,8 +18,11 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private var stashRequest:GitWorkspaceRequest?, stashFailure:String?
     private var stashes = [GitWorkspaceStatus.Stash]()
     private var spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result] {monitor?.spaceStatuses ?? [:]}
-    private var snapshot:GitWorkspaceStatus? {monitor?.snapshot}
-    private var failure:String? {monitor?.failure}
+    private var selectedRoot:String?, stashRoot:String?
+    private var repositories:[GitRepositoryState] {monitor?.repositories ?? []}
+    private var repository:GitRepositoryState? {repositories.first {$0.root == selectedRoot} ?? repositories.first}
+    private var snapshot:GitWorkspaceStatus? {repository?.status}
+    private var failure:String? {monitor?.failure ?? repository?.failure}
     private var overviewWidth:CGFloat?
     private var fullChanges = NSAttributedString(string:"")
     private var compact = false
@@ -114,7 +117,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         updateStatusStyle()
     }
     private func updateStatusStyle() {
-        guard active,snapshot != nil else {return}
+        guard active,!repositories.isEmpty else {return}
         if popover.isShown {
             if !showsChanges {presentPopoverContent()}
         } else {
@@ -128,7 +131,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     func update(directory nextPath:String,context:String?,turn:String?,edits:[FileEditSummary],executing:Bool,visible:Bool) {
         let changed = conversationKey != context || path != nextPath
-        if path != nextPath {detachMonitor(); git.isHidden = true}
+        if path != nextPath {detachMonitor(); selectedRoot = nil; git.isHidden = true}
         if changed {popover.close(); closeDiff(); editSignature = []; taskKey = nil}
         conversationKey = context; path = nextPath
         guard visible else {
@@ -169,7 +172,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private func updateDirectory() {
         directory.isHidden = compact
         let name = URL(fileURLWithPath:path).lastPathComponent
-        let project = snapshot.map {URL(fileURLWithPath:$0.root).lastPathComponent}
+        let project = snapshot.flatMap {path.hasPrefix($0.root+"/") ? URL(fileURLWithPath:$0.root).lastPathComponent : nil}
         directory.update(path:path,displayName:project.flatMap {$0 == name ? nil : $0+" / "+name} ?? name)
     }
     private func updateChanges(_ edits:[FileEditSummary]) {
@@ -237,6 +240,22 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         if meaningful {onContentChange()}
     }
     private func presentStatus() {
+        if repositories.count > 1,monitor?.failure == nil {
+            let terms = PetPreferences.shared.gitTerminology
+            let summary = repositories.map {$0.summary(using:terms)}.joined(separator:"\n")
+            git.isHidden = false; git.image = sourceIcon(.generic)
+            var labels = [terms.format("gitWorkspace.repositories",String(repositories.count))]
+            let dirty = repositories.filter {$0.status?.clean == false}.count
+            let failed = repositories.filter {$0.failure != nil}.count
+            if dirty > 0 {labels.append(terms.format("gitWorkspace.dirtyRepositories",String(dirty)))}
+            if failed > 0 {labels.append(terms.format("gitWorkspace.failedRepositories",String(failed)))}
+            if dirty == 0 && failed == 0 {labels.append(terms.text("gitStatusText.clean"))}
+            git.title = labels.joined(separator:" · ")
+            git.contentTintColor = .secondaryLabelColor
+            git.hoverHelp = summary
+            git.setAccessibilityValue(summary)
+            return
+        }
         git.isHidden = snapshot == nil && failure == nil
         if failure != nil || snapshot == nil {
             git.hoverHelp = nil
@@ -248,7 +267,8 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         let font = git.font!
         let preferences = PetPreferences.shared
         let style = preferences.gitStatusStyle, terms = preferences.gitTerminology
-        let heading = snapshot.title+(snapshot.initial ? terms.text("status.heading") : "")
+        let childName = path != snapshot.root && snapshot.root.hasPrefix(path+"/") ? (repository?.name ?? "")+" · " : ""
+        let heading = childName+snapshot.title+(snapshot.initial ? terms.text("status.heading") : "")
         func statusHeading(font:NSFont,color:NSColor) -> NSMutableAttributedString {
             let text = NSMutableAttributedString(string:heading,attributes:[.font:font,.foregroundColor:color])
             if let operation = snapshot.operation {
@@ -322,9 +342,15 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private func makeDetails() -> GitWorkspaceDetails {
         let loading = monitor?.loading == true || stashRequest != nil
         let preferences = PetPreferences.shared
-        let content = GitWorkspaceDetails(directory:path,snapshot:snapshot,stashes:stashes,stashLoading:stashRequest != nil && stashes.isEmpty,
+        let content = GitWorkspaceDetails(directory:path,repositories:repositories,repository:repository,stashes:stashes,stashLoading:stashRequest != nil && stashes.isEmpty,
             failure:failure ?? monitor?.observationFailure ?? stashFailure,loading:loading,style:preferences.gitStatusStyle,
             terms:preferences.gitTerminology,spaceStatuses:spaceStatuses)
+        content.onSelectRepository = { [weak self] root in
+            guard let self,self.repository?.root != root else {return}
+            self.selectedRoot = root
+            self.refreshStashes()
+            self.presentPopoverContent()
+        }
         content.onRetry = { [weak self] in self?.refreshGit() }
         content.onDiff = { [weak self] target in
             guard let self else {return}
@@ -338,6 +364,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func refreshStashes() {
         stashRequest?.cancel(); stashRequest = nil
+        if stashRoot != snapshot?.root {stashes = []; stashFailure = nil; stashRoot = snapshot?.root}
         guard let snapshot,snapshot.stashes > 0 else {stashes = []; stashFailure = nil; return}
         let query = GitWorkspaceRequest(); stashRequest = query
         query.startStashes(directory:snapshot.root,previous:stashes) { [weak self,weak query] result in
@@ -378,7 +405,13 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
     }
     private struct FileIdentity:Equatable {let path:String, group:GitWorkspaceStatus.Group?, stashCommit:String?}
-    private let directory:String, snapshot:GitWorkspaceStatus?, failure:String?
+    private let directory:String, repositories:[GitRepositoryState], repository:GitRepositoryState?, failure:String?
+    private var snapshot:GitWorkspaceStatus? {repository?.status}
+    var onSelectRepository:(String) -> Void = {_ in}
+    @objc private func selectRepository(_ sender:NSPopUpButton) {
+        guard let root = sender.selectedItem?.representedObject as? String else {return}
+        onSelectRepository(root)
+    }
     private let style:GitStatusStyle
     private let terms:GitTerminology
     private let spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result]
@@ -394,6 +427,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     var onRetry:() -> Void = {}
     var onDiff:(WorkspaceDiffTarget) -> Void = {_ in}
     func restoreReadingPosition(from previous:GitWorkspaceDetails) {
+        guard repository?.root == previous.repository?.root else {return}
         view.layoutSubtreeIfNeeded()
         if let origin = previous.table.enclosingScrollView?.contentView.bounds.origin,let scroll = table.enclosingScrollView {
             scroll.contentView.scroll(to:origin); scroll.reflectScrolledClipView(scroll.contentView)
@@ -406,9 +440,9 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
         table.selectRowIndexes(IndexSet(indices),byExtendingSelection:false)
     }
-    init(directory:String,snapshot:GitWorkspaceStatus?,stashes:[GitWorkspaceStatus.Stash],stashLoading:Bool,failure:String?,loading:Bool,
+    init(directory:String,repositories:[GitRepositoryState],repository:GitRepositoryState?,stashes:[GitWorkspaceStatus.Stash],stashLoading:Bool,failure:String?,loading:Bool,
          style:GitStatusStyle,terms:GitTerminology,spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result]) {
-        self.directory = directory; self.snapshot = snapshot; self.failure = failure; self.loading = loading
+        self.directory = directory; self.repositories = repositories; self.repository = repository; self.failure = failure; self.loading = loading
         self.style = style; self.terms = terms; self.spaceStatuses = spaceStatuses
         super.init(nibName:nil,bundle:nil)
         if let snapshot {
@@ -431,6 +465,22 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     override func loadView() {
         let detailWidth:CGFloat = 420
         let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
+        if repositories.count > 1 {
+            let picker = NSPopUpButton()
+            picker.autoenablesItems = false
+            picker.controlSize = .small
+            picker.cell?.lineBreakMode = .byTruncatingMiddle
+            picker.setAccessibilityLabel(terms.text("gitWorkspace.selectRepository"))
+            for item in repositories {
+                let option = NSMenuItem(title:item.summary(using:terms),action:nil,keyEquivalent:"")
+                option.representedObject = item.root
+                picker.menu?.addItem(option)
+                if item.root == repository?.root {picker.select(option)}
+            }
+            picker.target = self; picker.action = #selector(selectRepository(_:))
+            stack.addArrangedSubview(picker)
+            picker.widthAnchor.constraint(equalToConstant:detailWidth).isActive = true
+        }
         let heading = NSTextField(labelWithString:snapshot?.title ?? terms.text("status.heading.2"))
         heading.font = .systemFont(ofSize:13,weight:.semibold)
         heading.maximumNumberOfLines = 1
