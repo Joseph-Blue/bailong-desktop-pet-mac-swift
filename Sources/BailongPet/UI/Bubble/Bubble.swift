@@ -872,7 +872,9 @@ final class Bubble {
     private func startCountdown(_ seconds:Double) {
         countdown.start(seconds,paused:{ [weak self] in
             guard let self else {return false}
-            return self.workspace.hasPresentedDetails || self.taskList?.hasPresentedDetails == true || (self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation))
+            return self.workspace.hasPresentedDetails || self.taskList?.hasPresentedDetails == true
+                || WorkspaceDiffPopover.isShown(in:self.window)
+                || (self.preferences.bool("pauseOnHover") && self.window.frame.contains(NSEvent.mouseLocation))
         },expired:{ [weak self] in self?.hide(); self?.onClose() })
     }
     func refreshDuration() {if visible {startCountdown(pendingAttention || kind == "error" ? 0 : kind == "progressToast" ? preferences.number("progressToastSeconds") : preferences.duration(purpose,text:currentBody))}}
@@ -983,5 +985,8 @@ final class Bubble {
         onQuestionSubmit = nil; onQuestionsSkipped = nil; approval = nil; pendingAttention = false
         onDetails = {}; onCodex = {CodexConnection.openDesktop()}; retryButton.callback = {}
     }
-    func hide() {monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); quotaBody?.stop(); quotaBody = nil; window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()}
+    func hide() {
+        WorkspaceDiffPopover.close(in:window)
+        monitoredPresentation = nil; workspace.deactivate(); workspaceAttached = false; workspaceContextAvailable = false; workspace.isHidden = true; TaskActivityAppearance.stop(taskProgressIcon); TaskActivityAppearance.stop(headingIcon); displayedFailure = nil; taskProgress.stop(); quotaBody?.stop(); quotaBody = nil; window.defaultButtonCell = nil; saveCardForm(); cardStore.stopBrowsing(); taskList?.stop(); elapsedTimer?.invalidate(); elapsedTimer = nil; timedTaskKey = nil; headingTimer?.invalidate(); headingTimer = nil; headingPhase = 0; countdown.stop(); motion.hide(); placement = nil; placementSide = nil; kind = ""; relatedConversation = nil; onVisibilityChange()
+    }
 }

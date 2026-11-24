@@ -64,3 +64,11 @@
 "status.metadata.text.4" = "Not configured";
 "status.metadata.text.7" = "No Git repository";
 "status.tableView.text" = "%1$@, %2$@";
+"workspaceDiff.comparison.staged" = "HEAD → Index";
+"workspaceDiff.comparison.initial" = "Empty → Index";
+"workspaceDiff.comparison.unstaged" = "Index → Working Tree";
+"workspaceDiff.comparison.untracked" = "Empty → Working Tree";
+"workspaceDiff.comparison.conflicted" = "Conflict · Ours → Working Tree";
+"workspaceDiff.clean" = "No changes for this file in the selected comparison.";
+"workspaceDiff.conflicted" = "This file is conflicted. No diff is available between ours and the working tree.";
+"workspaceDiff.binary" = "Binary file changed";

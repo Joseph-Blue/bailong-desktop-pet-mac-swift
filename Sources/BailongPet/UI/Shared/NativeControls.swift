@@ -222,7 +222,7 @@ class ContentCursorPanel:NSPanel {
         LinkAppearance.cursor(at:point,in:contentView).set()
     }
 }
-final class PetWindow:ContentCursorPanel {
+class PetWindow:ContentCursorPanel {
     var allowsInput = false
     override var canBecomeKey:Bool {allowsInput}
     override var canBecomeMain:Bool {false}

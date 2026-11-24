@@ -243,7 +243,8 @@ final class GitWorkspaceRequest {
     private var process:Process?
     private var cancelled = false, timedOut = false
     func cancel() {lock.lock(); cancelled = true; if let process,process.isRunning {process.terminate()}; lock.unlock()}
-    private func run(_ directory:String,_ arguments:[String],optional:Bool = false) throws -> (Int32,Data) {
+    private func run(_ directory:String,_ arguments:[String],optional:Bool = false,outputLimit:Int = 8 * 1024 * 1024,
+                     limitMessage:String = "gitWorkspace.run.error.2",timeoutMessage:String = "gitWorkspace.run.error") throws -> (Int32,Data) {
         let task = Process(), pipe = Pipe()
         task.executableURL = URL(fileURLWithPath:"/usr/bin/git")
         task.arguments = ["--no-optional-locks","-C",directory]+arguments
@@ -273,19 +274,57 @@ final class GitWorkspaceRequest {
         }
         var data = Data(), exceeded = false
         while let chunk = try pipe.fileHandleForReading.read(upToCount:65536),!chunk.isEmpty {
-            if data.count+chunk.count <= 8*1024*1024 {if !exceeded {data.append(chunk)}}
+            if data.count+chunk.count <= outputLimit {if !exceeded {data.append(chunk)}}
             else {exceeded = true; if task.isRunning {task.terminate()}}
         }
         task.waitUntilExit()
         lock.lock(); let wasCancelled = cancelled, wasTimedOut = timedOut; lock.unlock()
         if wasCancelled {throw CancellationError()}
-        if wasTimedOut {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.run.error"))}
-        if exceeded {throw GitWorkspaceFailure(L10n.text(.workspace,"gitWorkspace.run.error.2"))}
+        if wasTimedOut {throw GitWorkspaceFailure(L10n.text(.workspace,timeoutMessage))}
+        if exceeded {throw GitWorkspaceFailure(L10n.text(.workspace,limitMessage))}
         if task.terminationStatus != 0 && !(optional && task.terminationStatus == 1) {
             let message = String(decoding:data,as:UTF8.self).trimmingCharacters(in:.whitespacesAndNewlines)
             throw GitWorkspaceFailure(message.isEmpty ? L10n.format(.workspace,"gitWorkspace.run.error.3",String(describing:task.terminationStatus)) : message)
         }
         return (task.terminationStatus,data)
+    }
+    func readDiff(root:String,entry:GitWorkspaceStatus.Entry) throws -> WorkspaceDiffPatch {
+        let options = ["--patch","--no-color","--no-ext-diff","--no-textconv","--unified=12",
+            "--src-prefix=a/","--dst-prefix=b/","--output-indicator-new=+","--output-indicator-old=-","--output-indicator-context= "]
+        let arguments:[String]
+        if entry.group == .untracked {
+            arguments = ["diff","--no-index"]+options+["--","/dev/null","./"+entry.path]
+        } else {
+            var comparison = ["--no-relative","--submodule=short","--ignore-submodules=none"]
+            if entry.group == .staged {comparison.append("--cached")}
+            if entry.group == .conflicted {comparison.append("--ours")}
+            var paths = [entry.path]
+            if let previous = entry.originalPath,entry.change == .renamed || entry.change == .copied {
+                comparison.append(entry.change == .renamed ? "--find-renames" : "--find-copies-harder")
+                paths.insert(previous,at:0)
+            }
+            arguments = ["--literal-pathspecs","diff"]+options+comparison+["--"]+paths
+        }
+        let (_,data) = try run(root,arguments,optional:entry.group == .untracked,outputLimit:WorkspaceDiffPatch.byteLimit,
+                               limitMessage:"workspaceDiff.tooLarge",timeoutMessage:"workspaceDiff.timeout")
+        guard let output = String(data:data,encoding:.utf8) else {
+            throw GitWorkspaceFailure(L10n.text(.workspace,"workspaceDiff.encoding"))
+        }
+        // 无索引比较用状态 1 表示存在差异，路径消失也会返回 1。
+        // 合并冲突的提示以及 Git 的诊断前缀不属于可拷贝的补丁。
+        if let header = output.range(of:"(?m)^diff --git ",options:.regularExpression) {
+            return try WorkspaceDiffPatch(String(output[header.lowerBound...]))
+        }
+        if output.isEmpty || (entry.group == .conflicted && output.hasPrefix("* Unmerged path ")) {
+            return try WorkspaceDiffPatch("")
+        }
+        throw GitWorkspaceFailure(output.trimmingCharacters(in:.whitespacesAndNewlines))
+    }
+    func startDiff(root:String,entry:GitWorkspaceStatus.Entry,completion:@escaping (Result<WorkspaceDiffPatch,Error>) -> Void) {
+        DispatchQueue.global(qos:.utility).async { [self] in
+            let result = Result {try readDiff(root:root,entry:entry)}
+            DispatchQueue.main.async {completion(result)}
+        }
     }
     private func gitString(_ directory:String,_ args:[String],optional:Bool = false) throws -> String? {
         let (code,data) = try run(directory,args,optional:optional)

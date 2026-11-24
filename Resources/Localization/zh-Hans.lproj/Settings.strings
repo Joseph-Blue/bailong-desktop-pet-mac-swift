@@ -73,7 +73,7 @@
 "settingsWindow.animationOpeningCache.detail" = "保留播放过的常用动作开头，运行内存（RAM）缓存上限 24 MiB。";
 "settingsWindow.render.text.2" = "动画效果改善";
 "settingsWindow.bubbleMotion.title" = "动态效果";
-"settingsWindow.bubbleMotion.detail" = "控制气泡、内容展开、选择弹窗、桌宠显隐及动作平滑过渡。";
+"settingsWindow.bubbleMotion.detail" = "控制气泡、内容展开、选择弹窗、桌宠显隐、拖拽物理效果和动作平滑过渡。";
 "settingsWindow.animationSmoothTransition.title" = "动作平滑过渡";
 "settingsWindow.animationSmoothTransition.detail" = "轮廓相近的动作交接时短暂淡化。";
 "settingsWindow.animationEdgeCleanup.title" = "孤立杂点清理";
@@ -175,12 +175,23 @@
 "settingsWindow.importSettings.error" = "导入设置失败";
 
 /* 动作与活动设置 */
+"activity.dragTiltEnabled.title" = "拖拽物理效果";
+"activity.dragTiltEnabled.detail" = "拖动时倾斜和回弹，快速甩动后松手会弹飞。";
+"activity.dragTiltEnabled.keywords" = "拖动 鼠标 触控板 倾斜 拖拽倾斜 拖拽倾斜强度 回弹 摆动 惯性 物理 弹球 弹飞 动态效果";
+"activity.dragTiltIntensity.title" = "拖拽物理强度";
+"activity.dragTiltIntensity.detail" = "调节倾斜、回弹和弹飞幅度。设为 0% 时直接跟手移动。";
+"activity.dragTiltIntensity.condition" = "开启动态效果和拖拽物理效果后显示";
 "activity.render.text" = "桌宠吸边";
 "activity.sideDockEnabled.title" = "屏幕左右边缘吸边";
 "activity.sideExposurePercent.title" = "左右露出比例";
 "activity.notchDockEnabled.title" = "顶部刘海吸边";
 "activity.notchDockEnabled.detail" = "仅对带刘海的 MacBook 机型的内建屏幕生效。";
 "activity.notchExposurePercent.title" = "从刘海露出比例";
+"activity.windowDockEnabled.title" = "窗口吸边";
+"activity.windowDockEnabled.detail" = "按住修饰键，将龙娘拖到窗口边缘后松手。贴住后随窗口移动。";
+"activity.windowDockEnabled.keywords" = "窗口 吸附 拖拽 跟随 ⌥ Option Alt ⇧ Shift ⌘ Command 修饰键 功能键";
+"activity.windowDockModifier.title" = "窗口吸边修饰键";
+"activity.windowDockModifier.condition" = "开启窗口吸边后显示";
 "activity.render.text.2" = "自主活动";
 "activity.leisureInterval.title" = "活动间隔";
 "activity.leisureInterval.suffix" = "秒";

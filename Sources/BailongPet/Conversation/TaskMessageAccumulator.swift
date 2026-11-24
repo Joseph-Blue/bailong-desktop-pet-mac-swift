@@ -12,6 +12,7 @@ final class TaskMessageAccumulator {
     private var activityItems = [[String:Any]]()
     private var finalText:String?
     private var editsByItem = [String:[FileEditSummary]](), editOrder = [String]()
+    private var editPatchBytes = 0
     var imageLinks:[String] {messageOrder.filter {imageMessageIDs.contains($0)}.compactMap {messages[$0]}}
     func clearActivity() {taskActivity = nil; connection = CodexConnectionProgress(); activityItems.removeAll()}
     func receiveError(_ params:[String:Any]) {
@@ -107,7 +108,10 @@ final class TaskMessageAccumulator {
             if let text = item["text"] as? String {steps[id] = text}
         case "fileChange":
             if editsByItem[id] == nil {editOrder.append(id)}
-            editsByItem[id] = FileEditSummary.read(item)
+            editPatchBytes -= (editsByItem[id] ?? []).reduce(0) {$0+$1.patchBytes}
+            let edits = FileEditSummary.read(item,patchBudget:FileEditSummary.patchBudget-editPatchBytes)
+            editPatchBytes += edits.reduce(0) {$0+$1.patchBytes}
+            editsByItem[id] = edits
             steps.removeValue(forKey:id)
         case "mcpToolCall", "dynamicToolCall": steps[id] = "\(item["status"] ?? "") · \(item["tool"] ?? L10n.text(.tasks,"taskMessageAccumulator.record.text.2"))"
         case "webSearch": steps[id] = L10n.format(.tasks,"taskMessageAccumulator.record.text.3",String(describing:item["query"] ?? ""))

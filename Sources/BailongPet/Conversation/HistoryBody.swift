@@ -7,7 +7,7 @@ struct HistoryBody:Codable {
     var sensitiveInputNotice:String?, sensitiveQuestionNotice:String?
     var fileEdits:[FileEditSummary]?
     var notices = [String:Double]()
-    var cost:Int {[input,messages,summary,steps,final,error,sensitiveInputNotice ?? "",sensitiveQuestionNotice ?? ""].reduce(0) {$0+$1.utf8.count} + notices.keys.reduce(0) {$0+$1.utf8.count} + (fileEdits ?? []).flatMap(\.signature).reduce(0) {$0+$1.utf8.count}}
+    var cost:Int {[input,messages,summary,steps,final,error,sensitiveInputNotice ?? "",sensitiveQuestionNotice ?? ""].reduce(0) {$0+$1.utf8.count} + notices.keys.reduce(0) {$0+$1.utf8.count} + (fileEdits ?? []).reduce(0) {$0+$1.cost}}
 }
 
 final class HistoryBodyReference: @unchecked Sendable {

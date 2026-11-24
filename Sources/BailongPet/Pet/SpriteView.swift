@@ -56,7 +56,7 @@ final class SpriteView: NSView, CAAnimationDelegate {
         cancelTransition()
         guard let pet, !pet.hidden, pet.preferences.bool("animationSmoothTransition"),
               pet.preferences.bool("bubbleMotion"), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              pet.current.id != clip.id, !pet.dockAnimating, let previous = pet.currentFrame,
+              pet.current.id != clip.id, !pet.dockAnimating, !pet.isDragTilting, let previous = pet.currentFrame,
               previous.image !== frame.image,
               displayedState?.image === previous.image,
               AnimationTransition.overlap(previous, clip: pet.current, frame, nextClip: clip) >= AnimationTransition.minimumOverlap else { return }
@@ -64,7 +64,12 @@ final class SpriteView: NSView, CAAnimationDelegate {
         transitionPending = true
     }
     @objc private func motionSettingsChanged() {
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { cancelTransition() }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            cancelTransition()
+            pet?.resetDragTilt()
+            pet?.landAfterThrow()
+            pet?.finishWindowDockMotion()
+        }
     }
     func cancelTransition() {
         transitionGeneration += 1; transitionPending = false; transitionImage = nil
@@ -79,7 +84,7 @@ final class SpriteView: NSView, CAAnimationDelegate {
     func refreshFrame() {
         guard let pet, !pet.hidden, let frame = pet.currentFrame, let layer else {return}
         let state = RenderState(image:frame.image,rect:pet.drawRect,bounds:bounds,transform:pet.transform,
-                                clipped:pet.dock == "notch",backingScale:window?.backingScaleFactor ?? 1)
+                                clipped:pet.clipsDockedSprite,backingScale:window?.backingScaleFactor ?? 1)
         if transitionImage != nil, !transitionPending, let previous = displayedState,
            previous.bounds != state.bounds || previous.transform != state.transform ||
            previous.clipped != state.clipped || previous.backingScale != state.backingScale {
@@ -136,7 +141,7 @@ final class SpriteView: NSView, CAAnimationDelegate {
     override func mouseDown(with event: NSEvent) {
         NSApp.preventWindowOrdering(); pet?.mouseDown(event)
     }
-    override func mouseDragged(with event: NSEvent) {pet?.mouseDragged(to:NSEvent.mouseLocation)}
+    override func mouseDragged(with event: NSEvent) {pet?.mouseDragged(to:NSEvent.mouseLocation,modifiers:event.modifierFlags)}
     override func pressureChange(with event:NSEvent) {
         if event.stage == 2 {pet?.forceClick()}
     }

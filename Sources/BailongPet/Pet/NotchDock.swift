@@ -44,6 +44,7 @@ extension PetController {
     func snapToNotch(on display:NSScreen) -> Bool {
         guard preferences.bool("notchDockEnabled"),let notch = NotchDockGeometry.region(on:display),
               NotchDockGeometry.canSnap(position:position,size:size,area:area(display),notch:notch) else {return false}
+        resetDragTilt()
         dockRestore = position; dock = "notch"
         notchDockArea = notch; notchDockDisplayID = PetPreferences.displayID(display)
         dockProgress = 0; dockFrom = 0; dockTarget = 1; dockBegan = now

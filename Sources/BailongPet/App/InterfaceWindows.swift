@@ -50,6 +50,7 @@ final class InterfaceWindows:NSObject {
             NSApp.setActivationPolicy(.accessory)
         }
     }
+    func isOpen(_ window:NSWindow) -> Bool {opened.contains(window)}
     @objc private func willClose(_ note:Notification) {
         guard let window = note.object as? NSWindow,opened.contains(window) else {return}
         closed(window)

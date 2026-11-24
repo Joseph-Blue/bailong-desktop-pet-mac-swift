@@ -6,14 +6,14 @@ enum PetGesture: CaseIterable {
 
 // SpriteView 接收原生事件；这里记录一次按压已触发的行为，以及仍待松手或到期的动作。
 struct PetGestureState {
-    private enum Phase { case single, double, dockClick, dockDouble, forceClick, dragging }
+    private enum Phase { case single, double, dockClick, dockDouble, forceClick, caught, dragging }
     private struct Press {
         let start: CGPoint
         let petOrigin: CGPoint
         let fromDock: Bool
         var phase: Phase
     }
-    enum Drag { case recall, move(to:CGPoint, began:Bool) }
+    enum Drag { case recall, move(to:CGPoint, grabbedAt:CGPoint?) }
     enum Release { case click(PetGesture), finishDrag, handled }
     enum Context { case menu, doubleClick, handled }
 
@@ -23,11 +23,13 @@ struct PetGestureState {
     var isDragging: Bool {press?.phase == .dragging}
     var allowsMovement: Bool {!isPressed || isDragging}
 
-    mutating func begin(at point:CGPoint, petOrigin:CGPoint, docked:Bool, clickCount:Int, now:TimeInterval) -> PetGesture? {
+    mutating func begin(at point:CGPoint, petOrigin:CGPoint, docked:Bool, caught:Bool = false, clickCount:Int, now:TimeInterval) -> PetGesture? {
         contextPress = nil
         let phase: Phase
         if docked {
             phase = recallDeadline.map {now <= $0} == true ? .dockDouble : .dockClick
+        } else if caught {
+            phase = .caught
         } else {
             phase = clickCount > 1 && clickCount.isMultiple(of:2) ? .double : .single
         }
@@ -54,7 +56,7 @@ struct PetGestureState {
             press?.phase = .dragging
         }
         if current.fromDock {return began ? .recall : nil}
-        return .move(to:CGPoint(x:current.petOrigin.x + dx, y:current.petOrigin.y + dy), began:began)
+        return .move(to:CGPoint(x:current.petOrigin.x + dx, y:current.petOrigin.y + dy), grabbedAt:began ? current.start : nil)
     }
 
     mutating func release(docked:Bool, now:TimeInterval) -> Release? {
@@ -67,7 +69,7 @@ struct PetGestureState {
         case .dockClick:
             if docked {recallDeadline = now + 0.25}
             return .handled
-        case .dockDouble, .forceClick: return .handled
+        case .dockDouble, .forceClick, .caught: return .handled
         }
     }
 

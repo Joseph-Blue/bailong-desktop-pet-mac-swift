@@ -58,8 +58,11 @@ struct SettingsSearchEntry {
             "search.add.text.89":L10n.text(.settings,"search.add.text.126"),
             "search.add.text.95":L10n.text(.settings,"search.add.text.127"),
             "search.add.text.102":L10n.text(.settings,"search.add.text.128"),
+            "activity.dragTiltEnabled.title":L10n.text(.settings,"search.add.text.127"),
+            "activity.dragTiltIntensity.title":L10n.text(.settings,"activity.dragTiltIntensity.condition"),
             "activity.sideExposurePercent.title":L10n.text(.settings,"search.add.text.129"),
             "activity.notchExposurePercent.title":L10n.text(.settings,"search.add.text.130"),
+            "activity.windowDockModifier.title":L10n.text(.settings,"activity.windowDockModifier.condition"),
             "activity.movementRange.title":L10n.text(.settings,"search.add.text.131"),
         ]
         func add(_ section:SettingsSection,_ group:String,titleKeys:[String],_ keywords:String) {
@@ -90,7 +93,9 @@ struct SettingsSearchEntry {
             let keywords = [gesture.keywords, gesture.help, actionNames].compactMap {$0}.joined(separator:" ")
             add(.activity,PetGestureSetting.group,[gesture.title],keywords)
         }
+        add(.activity,PetGestureSetting.group,titleKeys:["activity.dragTiltEnabled.title","activity.dragTiltIntensity.title"],L10n.text(.settings,"activity.dragTiltEnabled.keywords"))
         add(.activity,L10n.text(.settings,"activity.render.text"),titleKeys:["activity.sideDockEnabled.title","activity.sideExposurePercent.title","activity.notchDockEnabled.title","activity.notchExposurePercent.title"],L10n.text(.settings,"search.add.text.36"))
+        add(.activity,L10n.text(.settings,"activity.render.text"),titleKeys:["activity.windowDockEnabled.title","activity.windowDockModifier.title"],L10n.text(.settings,"activity.windowDockEnabled.keywords"))
         add(.activity,L10n.text(.settings,"activity.render.text.2"),titleKeys:["activity.leisureInterval.title"],L10n.text(.settings,"search.add.text.39"))
         add(.activity,L10n.text(.settings,"activity.render.text.2"),titleKeys:["activity.autoMove.title","activity.movementRange.title","activity.avoidRepeat.title","activity.playbackSpeed.title"],L10n.text(.settings,"search.add.text.44"))
         add(.activity,L10n.text(.settings,"activity.render.text.3"),titleKeys:["activity.taskOpening.title","activity.taskCelebration.title"],L10n.text(.settings,"search.add.text.48"))

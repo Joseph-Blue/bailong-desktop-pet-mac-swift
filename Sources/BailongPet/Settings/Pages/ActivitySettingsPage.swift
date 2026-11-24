@@ -13,12 +13,19 @@ final class ActivitySettingsPage {
         let gestureRows = PetGestureSetting.all.map { gesture in
             form.choice(gesture.title, gesture.key, PetGestureSetting.actions, width:260, help:gesture.help)
         }
-        form.group(PetGestureSetting.group,gestureRows,symbol:"computermouse")
+        let dragTilt = form.toggle(L10n.text(.settings,"activity.dragTiltEnabled.title"),"dragTiltEnabled",
+                                   detail:L10n.text(.settings,"activity.dragTiltEnabled.detail"),requires:["bubbleMotion"])
+        let dragTiltIntensity = form.slider(L10n.text(.settings,"activity.dragTiltIntensity.title"),"dragTiltIntensity",
+            range:PetPreferences.dragTiltIntensityRange,step:5,suffix:"%",detail:L10n.text(.settings,"activity.dragTiltIntensity.detail"),
+            requires:["bubbleMotion","dragTiltEnabled"])
+        form.group(PetGestureSetting.group,gestureRows+[dragTilt,dragTiltIntensity],symbol:"computermouse")
         form.group(L10n.text(.settings,"activity.render.text"),[
             form.toggle(L10n.text(.settings,"activity.sideDockEnabled.title"),"sideDockEnabled"),
             form.slider(L10n.text(.settings,"activity.sideExposurePercent.title"),"sideExposurePercent",range:40...85,step:5,suffix:"%",requires:["sideDockEnabled"]),
             form.toggle(L10n.text(.settings,"activity.notchDockEnabled.title"),"notchDockEnabled",detail:L10n.text(.settings,"activity.notchDockEnabled.detail"),symbol:"macbook.gen2"),
-            form.slider(L10n.text(.settings,"activity.notchExposurePercent.title"),"notchExposurePercent",range:40...85,step:5,suffix:"%",requires:["notchDockEnabled"])],symbol:"rectangle.inset.filled")
+            form.slider(L10n.text(.settings,"activity.notchExposurePercent.title"),"notchExposurePercent",range:40...85,step:5,suffix:"%",requires:["notchDockEnabled"]),
+            form.toggle(L10n.text(.settings,"activity.windowDockEnabled.title"),"windowDockEnabled",detail:L10n.text(.settings,"activity.windowDockEnabled.detail")),
+            form.choice(L10n.text(.settings,"activity.windowDockModifier.title"),WindowDockModifier.key,WindowDockModifier.options,requires:["windowDockEnabled"])],symbol:"rectangle.inset.filled")
         form.group(L10n.text(.settings,"activity.render.text.2"),[
             form.slider(L10n.text(.settings,"activity.leisureInterval.title"),"leisureInterval",range:5...180,suffix:L10n.text(.settings,"activity.leisureInterval.suffix"),detail:L10n.text(.settings,"activity.leisureInterval.detail")),
             form.toggle(L10n.text(.settings,"activity.autoMove.title"),"autoMove"),form.choice(L10n.text(.settings,"activity.movementRange.title"),"movementRange",[("still",L10n.text(.settings,"activity.movementRange.option.still")),("nearby",L10n.text(.settings,"activity.movementRange.option.nearby")),("screen",L10n.text(.settings,"activity.movementRange.option.screen"))],requires:["autoMove"]),form.toggle(L10n.text(.settings,"activity.avoidRepeat.title"),"avoidRepeat",detail:L10n.text(.settings,"activity.avoidRepeat.detail")),

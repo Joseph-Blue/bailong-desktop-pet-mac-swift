@@ -25,6 +25,7 @@ final class FileEditInteraction:NSResponder {
     required init?(coder:NSCoder) {fatalError()}
 
     func contentChanged(hasRows:Bool,reset:Bool) {
+        if reset || !hasRows,let view {WorkspaceDiffPopover.close(anchoredTo:view)}
         self.hasRows = hasRows; forceClick.isEnabled = hasRows
         hovered = nil
         if let selected,!reset,hasRows,let storage = view?.textStorage,
@@ -49,8 +50,14 @@ final class FileEditInteraction:NSResponder {
         guard let hit = hit(event) else {return nil}
         select(hit.row)
         let path = hit.row.path, directory = baseDirectory(), edits = hit.section.edits
+        let target = WorkspaceDiffTarget.turn(directory:directory,edits:edits,path:path)
+        let anchor = rect(for:hit.row)
         return WorkspaceFileMenu.make(path:Self.fileURL(path,relativeTo:directory)?.path ?? path,
-                                      reveal:{Self.reveal(path,relativeTo:directory)}) {
+                                      reveal:{Self.reveal(path,relativeTo:directory)},diff:{ [weak view] in
+            guard let view,let anchor else {return}
+            let visible = anchor.intersection(view.visibleRect)
+            if !visible.isEmpty {target.open(from:view,rect:visible)}
+        }) {
             edits.map {Self.fileURL($0.path,relativeTo:directory)?.path ?? $0.path}
         }
     }

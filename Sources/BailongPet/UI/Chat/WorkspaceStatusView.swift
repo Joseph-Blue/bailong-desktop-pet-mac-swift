@@ -129,7 +129,7 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     func update(directory nextPath:String,context:String?,turn:String?,edits:[FileEditSummary],executing:Bool,visible:Bool) {
         let changed = conversationKey != context || path != nextPath
         if path != nextPath {detachMonitor(); git.isHidden = true}
-        if changed {popover.close(); editSignature = []; taskKey = nil}
+        if changed {popover.close(); closeDiff(); editSignature = []; taskKey = nil}
         conversationKey = context; path = nextPath
         guard visible else {
             if active {deactivate()}
@@ -161,8 +161,9 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func notifyLayoutChange() {if !popover.isShown {onStatusChange()}}
     func deactivate() {
-        active = false; detachMonitor(); fileEdits = []; git.isHidden = true; changes.isHidden = true; popover.close()
+        active = false; detachMonitor(); fileEdits = []; git.isHidden = true; changes.isHidden = true; popover.close(); closeDiff()
     }
+    private func closeDiff() {WorkspaceDiffPopover.close(anchoredTo:git); WorkspaceDiffPopover.close(anchoredTo:changes)}
     private func detachMonitor() {monitor?.detach(self); monitor = nil; git.hoverHelp = nil}
     deinit {detachMonitor(); if let windowObserver {NotificationCenter.default.removeObserver(windowObserver)}}
     private func updateDirectory() {
@@ -301,7 +302,15 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     }
     private func presentPopoverContent() {
         let previous = popover.contentViewController as? GitWorkspaceDetails
-        let content:NSViewController = showsChanges ? TurnFileEditsDetails(edits:fileEdits,directory:path) : makeDetails()
+        let content:NSViewController
+        if showsChanges {
+            let details = TurnFileEditsDetails(edits:fileEdits,directory:path)
+            details.onDiff = { [weak self] target in
+                guard let self else {return}
+                openDiff(target,from:changes)
+            }
+            content = details
+        } else {content = makeDetails()}
         _ = content.view
         // 已打开时只因真实内容变化替换一次，避免加载态与完成态两次尺寸动画。
         let animated = popover.animates
@@ -313,11 +322,19 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
     private func makeDetails() -> GitWorkspaceDetails {
         let loading = monitor?.loading == true || stashRequest != nil
         let preferences = PetPreferences.shared
-        let content = GitWorkspaceDetails(snapshot:snapshot,stashes:stashes,stashLoading:stashRequest != nil && stashes.isEmpty,
+        let content = GitWorkspaceDetails(directory:path,snapshot:snapshot,stashes:stashes,stashLoading:stashRequest != nil && stashes.isEmpty,
             failure:failure ?? monitor?.observationFailure ?? stashFailure,loading:loading,style:preferences.gitStatusStyle,
             terms:preferences.gitTerminology,spaceStatuses:spaceStatuses)
         content.onRetry = { [weak self] in self?.refreshGit() }
+        content.onDiff = { [weak self] target in
+            guard let self else {return}
+            openDiff(target,from:git)
+        }
         return content
+    }
+    private func openDiff(_ target:WorkspaceDiffTarget,from anchor:NSView) {
+        popover.close()
+        target.open(from:anchor,rect:anchor.bounds)
     }
     private func refreshStashes() {
         stashRequest?.cancel(); stashRequest = nil
@@ -342,7 +359,10 @@ final class WorkspaceStatusView:NSStackView,NSPopoverDelegate {
         guard active else {return}
         presentStatus(); updateDirectory(); updateChanges(fileEdits); onStatusChange()
     }
-    func containsInteraction(at point:NSPoint) -> Bool {popover.isShown && popover.contentViewController?.view.window?.frame.contains(point) == true}
+    func containsInteraction(at point:NSPoint) -> Bool {
+        (popover.isShown && popover.contentViewController?.view.window?.frame.contains(point) == true)
+            || WorkspaceDiffPopover.contains(point,anchoredTo:git) || WorkspaceDiffPopover.contains(point,anchoredTo:changes)
+    }
 }
 
 private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,NSTableViewDelegate {
@@ -358,7 +378,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
     }
     private struct FileIdentity:Equatable {let path:String, group:GitWorkspaceStatus.Group?, stashCommit:String?}
-    private let snapshot:GitWorkspaceStatus?, failure:String?
+    private let directory:String, snapshot:GitWorkspaceStatus?, failure:String?
     private let style:GitStatusStyle
     private let terms:GitTerminology
     private let spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result]
@@ -372,6 +392,7 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
     private var rows = [Row]()
     private let table = WorkspaceFileTable()
     var onRetry:() -> Void = {}
+    var onDiff:(WorkspaceDiffTarget) -> Void = {_ in}
     func restoreReadingPosition(from previous:GitWorkspaceDetails) {
         view.layoutSubtreeIfNeeded()
         if let origin = previous.table.enclosingScrollView?.contentView.bounds.origin,let scroll = table.enclosingScrollView {
@@ -385,9 +406,9 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
         }
         table.selectRowIndexes(IndexSet(indices),byExtendingSelection:false)
     }
-    init(snapshot:GitWorkspaceStatus?,stashes:[GitWorkspaceStatus.Stash],stashLoading:Bool,failure:String?,loading:Bool,
+    init(directory:String,snapshot:GitWorkspaceStatus?,stashes:[GitWorkspaceStatus.Stash],stashLoading:Bool,failure:String?,loading:Bool,
          style:GitStatusStyle,terms:GitTerminology,spaceStatuses:[HuggingFaceSpace:HuggingFaceSpace.Result]) {
-        self.snapshot = snapshot; self.failure = failure; self.loading = loading
+        self.directory = directory; self.snapshot = snapshot; self.failure = failure; self.loading = loading
         self.style = style; self.terms = terms; self.spaceStatuses = spaceStatuses
         super.init(nibName:nil,bundle:nil)
         if let snapshot {
@@ -536,9 +557,18 @@ private final class GitWorkspaceDetails:NSViewController,NSTableViewDataSource,N
                 case .operation,.stashHeading,.stashSubject,.stashLoading,.stashFile:return nil
                 }
             }
+            table.diffForRow = { [weak self] row in
+                guard let self,let snapshot,rows.indices.contains(row),case .file(let entry) = rows[row] else {return nil}
+                return .git(directory:directory,snapshot:snapshot,entry:entry)
+            }
+            table.onDiff = onDiff
             table.setAccessibilityLabel(L10n.text(.workspace,"status.metadata.text.8"))
             scroll.documentView = table; stack.addArrangedSubview(scroll)
             scroll.heightAnchor.constraint(equalToConstant:min(300,rows.indices.reduce(CGFloat.zero) {$0+rowHeight($1)})).isActive = true
+            if snapshot?.entries.isEmpty == false {
+                let actions = NSStackView(views:[NSView(),table.makeDiffButton()]); actions.alignment = .centerY
+                stack.addArrangedSubview(actions)
+            }
         }
         view = NSView(); view.addSubview(stack); stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:16),stack.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-16),stack.topAnchor.constraint(equalTo:view.topAnchor,constant:16),stack.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-16),stack.widthAnchor.constraint(equalToConstant:detailWidth)])

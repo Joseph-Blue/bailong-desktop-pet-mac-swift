@@ -56,8 +56,13 @@ final class WorkspaceFileForceClick:NSGestureRecognizer,NSGestureRecognizerDeleg
 }
 
 enum WorkspaceFileMenu {
-    static func make(path:String?,reveal:(() -> Void)?,groupPaths:(() -> [String])? = nil,allPaths:@escaping () -> [String]) -> NSMenu {
+    static func make(path:String?,reveal:(() -> Void)?,diff:(() -> Void)? = nil,
+                     groupPaths:(() -> [String])? = nil,allPaths:@escaping () -> [String]) -> NSMenu {
         let menu = NSMenu()
+        if let diff {
+            menu.addItem(MenuAction(L10n.text(.workspace,"workspaceDiff.open"),symbol:"doc.text.magnifyingglass",diff))
+            menu.addItem(.separator())
+        }
         if let path {
             if let reveal {
                 let item = MenuAction(L10n.text(.workspace,"workspaceFileActions.make.menuItem"),reveal)

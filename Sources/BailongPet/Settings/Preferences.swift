@@ -32,7 +32,7 @@ enum SettingsSection: Int, CaseIterable {
         switch self {
         case .general: return ["rememberPosition","preferredDisplay","autoFullscreen",BrowserSearchEngine.key,ProjectSendChannel.key]
         case .identity: return ["ownerName","customAddress","petName","greetingTemplate","customLines","randomWorkingLines","taskProgressTemplate","taskUpdateTemplate","taskSuccessTemplate","taskFailureTemplate","taskInterruptedTemplate","quotaLoadingTemplate","taskAnswerTemplate","taskApprovalTemplate"] + ConversationLines.keys
-        case .activity: return PetGestureSetting.all.map(\.key) + ["sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
+        case .activity: return PetGestureSetting.all.map(\.key) + ["dragTiltEnabled","dragTiltIntensity","sideDockEnabled","sideExposurePercent","notchDockEnabled","notchExposurePercent","windowDockEnabled",WindowDockModifier.key,"leisureInterval","autoMove","movementRange","avoidRepeat","playbackSpeed","animationWeights","animationSpeeds","taskOpening","taskCelebration"]
         case .messages: return MessageSettingsPage.preferenceKeys + [PetPreferences.tokenDetailsKey]
         case .appearance: return ["petPercent","bubblePercent","bubbleAspectEnabled","bubbleAspectRatio","messageFontSize","appearanceMode","accentStyle","accentRGB","bubbleMaterial","glassFollowsSystem","glassOpacity",BubbleCloseButtonPosition.key]
         case .advanced: return ["defaultWorkspace"]
@@ -45,6 +45,31 @@ enum SettingsSection: Int, CaseIterable {
 
 enum MessagePurpose { case interaction, progress, result, attention, quota, preview }
 enum AnimationSelection { case general, idle, docked, task }
+
+enum WindowDockModifier: String, CaseIterable {
+    case option, shift, command
+
+    static let key = "windowDockModifier"
+    static var options: [(String,String)] {allCases.map {($0.rawValue,$0.title)}}
+
+    private var title: String {
+        switch self {
+        case .option: return "⌥ Option"
+        case .shift: return "⇧ Shift"
+        case .command: return "⌘ Command"
+        }
+    }
+    func matchesRelease(_ flags: NSEvent.ModifierFlags, lastDragModifiers: NSEvent.ModifierFlags) -> Bool {
+        let supported: NSEvent.ModifierFlags = [.option,.shift,.command,.control]
+        let released = flags.intersection(supported)
+        let modifiers = released.isEmpty ? lastDragModifiers.intersection(supported) : released
+        switch self {
+        case .option: return modifiers == .option
+        case .shift: return modifiers == .shift
+        case .command: return modifiers == .command
+        }
+    }
+}
 
 enum BubbleCloseButtonPosition:String, CaseIterable {
     case upperLeft, upperRight, towardScreenCenter
@@ -101,6 +126,7 @@ final class PetPreferences {
     static let shared = PetPreferences()
     static let didChange = Notification.Name("BailongPreferencesDidChange")
     static let tokenDetailsKey = "tokenDetailsExpanded"
+    static let dragTiltIntensityRange = 0.0...200.0
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":50,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
         "automaticallyCheckUpdates":false,"defaultWorkspace":"","petChatFastMode":false,
@@ -117,7 +143,8 @@ final class PetPreferences {
         "taskFailureTemplate":L10n.text(.dialogue,"dialogue.taskFailureTemplate"),"taskInterruptedTemplate":L10n.text(.dialogue,"dialogue.taskInterruptedTemplate"),
         "quotaLoadingTemplate":L10n.text(.settings,"preferences.labels.text"),
         "taskAnswerTemplate":L10n.text(.dialogue,"dialogue.taskAnswerTemplate"),"taskApprovalTemplate":L10n.text(.dialogue,"dialogue.taskApprovalTemplate"),
-        "sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,
+        "dragTiltEnabled":true,"dragTiltIntensity":100.0,"sideDockEnabled":true,"sideExposurePercent":55.0,"notchDockEnabled":true,"notchExposurePercent":55.0,
+        "windowDockEnabled":false,WindowDockModifier.key:WindowDockModifier.option.rawValue,
         "leisureInterval":15.0,"autoMove":true,"movementRange":"screen","avoidRepeat":true,"playbackSpeed":1.0,
         "animationWeights":[String:Int](),"animationSpeeds":[String:Double](),"taskOpening":true,"taskCelebration":true,
         "sendShortcut":"commandReturn","taskBubbles":true,"progressBubbles":true,"resultBubbles":true,"interactionBubbles":true,
@@ -128,6 +155,7 @@ final class PetPreferences {
     ].merging(PetGestureSetting.all.map {($0.key,$0.defaultAction)}) {_, gesture in gesture}
      .merging(ConversationLines.defaults) {existing,_ in existing}
     static let ranges: [String:ClosedRange<Double>] = [
+        "dragTiltIntensity":dragTiltIntensityRange,
         "taskReminderMinutes":1...30,"bubbleCardLimit":5...100,"recentTaskCount":1...20,
         "sideExposurePercent":40...85,"notchExposurePercent":40...85,"glassOpacity":0...1,"animationBufferFrames":6...240,"leisureInterval":5...180,"playbackSpeed":0.75...1.5,"interactionSeconds":0...60,"progressSeconds":0...60,"progressToastSeconds":1...10,
         "resultSeconds":0...120,"quotaSeconds":0...120,"quotaCacheSeconds":15...300,"quietStart":0...1439,"quietEnd":0...1439,
@@ -164,7 +192,7 @@ final class PetPreferences {
     static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
         TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue),GitStatusStyle.key:GitStatusStyle.allCases.map(\.rawValue),BrowserSearchEngine.key:BrowserSearchEngine.allCases.map(\.rawValue),
-        ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue),BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.allCases.map(\.rawValue)]
+        ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue),BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.allCases.map(\.rawValue),WindowDockModifier.key:WindowDockModifier.allCases.map(\.rawValue)]
         .merging(PetGestureSetting.all.map {($0.key,PetGestureSetting.actions.map(\.0))}) {_, gesture in gesture}
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
@@ -410,7 +438,7 @@ final class PetPreferences {
         if key == "favorites", let list = value as? [String] {return list.allSatisfy {clipIDs.contains($0)}}
         if key == "accentRGB", let rgb = value as? [NSNumber] {return rgb.count == 3 && rgb.allSatisfy {CFGetTypeID($0) != CFBooleanGetTypeID() && (0...1).contains($0.doubleValue)}}
         if let range = ranges[key], let n = value as? NSNumber {
-            let integer = ["bubbleCardLimit","recentTaskCount","petPercent","bubblePercent","quietStart","quietEnd","animationBufferFrames","quotaCacheSeconds"].contains(key)
+            let integer = ["bubbleCardLimit","recentTaskCount","petPercent","bubblePercent","quietStart","quietEnd","animationBufferFrames","quotaCacheSeconds","dragTiltIntensity"].contains(key)
             return CFGetTypeID(n) != CFBooleanGetTypeID() && range.contains(n.doubleValue) && (!integer || n.doubleValue.rounded() == n.doubleValue)
         }
         if let b = baseline as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID() {return (value as? NSNumber).map {CFGetTypeID($0) == CFBooleanGetTypeID()} ?? false}

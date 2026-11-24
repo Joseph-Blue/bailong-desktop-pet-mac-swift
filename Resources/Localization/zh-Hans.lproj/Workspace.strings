@@ -1,5 +1,48 @@
 /* 工作区、Git 与文件 · 简体中文 */
 
+/* 文件改动查看器 */
+"workspaceDiff.title" = "查看改动";
+"workspaceDiff.open" = "查看改动…";
+"workspaceDiff.files" = "有改动的文件";
+"workspaceDiff.turnComparison" = "本轮操作 · 修改前 → 修改后";
+"workspaceDiff.operations" = "本轮修改操作";
+"workspaceDiff.operation" = "第 %1$@ 次修改";
+"workspaceDiff.comparison.staged" = "最近一次提交 → 暂存区";
+"workspaceDiff.comparison.initial" = "空内容 → 暂存区";
+"workspaceDiff.comparison.unstaged" = "暂存区 → 工作区";
+"workspaceDiff.comparison.untracked" = "空内容 → 工作区";
+"workspaceDiff.comparison.conflicted" = "冲突 · 当前一方 → 工作区";
+"workspaceDiff.clean" = "此文件在所选比较中没有改动。";
+"workspaceDiff.conflicted" = "此文件存在冲突，当前一方与工作区之间没有可显示的差异。";
+"workspaceDiff.binary" = "二进制文件已变更";
+"workspaceDiff.loading" = "正在读取改动…";
+"workspaceDiff.unrecorded" = "这次修改没有补丁记录。";
+"workspaceDiff.tooLarge" = "改动超过查看器的大小上限。";
+"workspaceDiff.timeout" = "读取 Git 改动超时，请点按刷新。";
+"workspaceDiff.encoding" = "改动包含无法以 UTF-8 显示的文本。";
+"workspaceDiff.previous" = "上一处改动";
+"workspaceDiff.next" = "下一处改动";
+"workspaceDiff.copy" = "拷贝 Diff";
+"workspaceDiff.refresh" = "刷新";
+"workspaceDiff.layout" = "差异显示格式";
+"workspaceDiff.inline" = "统一";
+"workspaceDiff.sideBySide" = "并排";
+"workspaceDiff.before" = "修改前";
+"workspaceDiff.after" = "修改后";
+"workspaceDiff.fold.show" = "展开 %1$@ 行";
+"workspaceDiff.fold.hide" = "收起 %1$@ 行";
+"workspaceDiff.gap" = "⋯  %1$@ 行未改动";
+"workspaceDiff.noNewline" = "文件末尾无换行";
+"workspaceDiff.renameFrom" = "原路径  %1$@";
+"workspaceDiff.renameTo" = "新路径  %1$@";
+"workspaceDiff.copyFrom" = "复制来源  %1$@";
+"workspaceDiff.copyTo" = "复制目标  %1$@";
+"workspaceDiff.oldMode" = "原文件模式  %1$@";
+"workspaceDiff.newMode" = "新文件模式  %1$@";
+"workspaceDiff.fileAdded" = "新增文件";
+"workspaceDiff.fileDeleted" = "删除文件";
+"workspaceDiff.noText" = "没有文本行改动。";
+
 /* repositoryIcons */
 "repositoryIcons.remote" = "其他远端平台";
 "repositoryIcons.repository.accessibilityDescription" = "Git";

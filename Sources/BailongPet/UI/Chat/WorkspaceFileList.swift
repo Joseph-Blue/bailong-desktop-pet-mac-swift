@@ -25,11 +25,16 @@ final class WorkspaceFileTableRow:NSTableRowView {
 final class WorkspaceFileTable:NSTableView {
     var fileURLForRow:(Int) -> URL? = {_ in nil}
     var fileGroupForRow:(Int) -> GitWorkspaceStatus.Group? = {_ in nil}
+    var diffForRow:(Int) -> WorkspaceDiffTarget? = {_ in nil}
+    var onDiff:(WorkspaceDiffTarget) -> Void = {_ in}
+    private weak var diffButton:NSButton?
     override init(frame:NSRect) {
         super.init(frame:frame)
         style = .plain; backgroundColor = .clear; headerView = nil
         columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         target = self; doubleAction = #selector(revealClickedFile)
+        NotificationCenter.default.addObserver(self,selector:#selector(selectionChanged),
+            name:NSTableView.selectionDidChangeNotification,object:self)
         let forceClick = WorkspaceFileForceClick(target:self,action:#selector(showForceClickMenu(_:)))
         forceClick.canOpenMenu = { [weak self] event in
             guard let self else {return false}
@@ -53,10 +58,20 @@ final class WorkspaceFileTable:NSTableView {
             { [weak self] in self?.filePaths(in:group) ?? [] }
         }
         let reveal = file.map {file in {WorkspaceFileMenu.reveal(file)}}
-        return WorkspaceFileMenu.make(path:file?.path,reveal:reveal,groupPaths:groupPaths) { [weak self] in
+        let openDiff = onDiff
+        let diff = diffForRow(index).map {target in {openDiff(target)}}
+        return WorkspaceFileMenu.make(path:file?.path,reveal:reveal,diff:diff,groupPaths:groupPaths) { [weak self] in
             self?.filePaths() ?? []
         }
     }
+    func makeDiffButton() -> NSButton {
+        let button = NSButton(title:L10n.text(.workspace,"workspaceDiff.open"),target:self,action:#selector(openSelectedDiff))
+        button.controlSize = .small; button.bezelStyle = .rounded
+        diffButton = button; selectionChanged()
+        return button
+    }
+    @objc private func selectionChanged() {diffButton?.isEnabled = selectedRow >= 0 && diffForRow(selectedRow) != nil}
+    @objc private func openSelectedDiff() {if selectedRow >= 0,let target = diffForRow(selectedRow) {onDiff(target)}}
     @objc private func revealClickedFile() {
         guard clickedRow >= 0,let file = fileURLForRow(clickedRow) else {return}
         WorkspaceFileMenu.reveal(file)
@@ -138,6 +153,7 @@ final class WorkspaceFileRow:NSView {
 final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableViewDelegate {
     private let edits:[FileEditSummary],directory:String
     private let table = WorkspaceFileTable()
+    var onDiff:(WorkspaceDiffTarget) -> Void = {_ in}
     private let countWidths:(added:CGFloat,removed:CGFloat)
     private let repeatedNames:Set<String>
     init(edits:[FileEditSummary],directory:String) {
@@ -156,11 +172,23 @@ final class TurnFileEditsDetails:NSViewController,NSTableViewDataSource,NSTableV
             guard let self,self.edits.indices.contains(row) else {return nil}
             return URL(fileURLWithPath:self.edits[row].path,relativeTo:URL(fileURLWithPath:self.directory,isDirectory:true)).standardizedFileURL
         }
+        table.diffForRow = { [weak self] row in
+            guard let self,edits.indices.contains(row) else {return nil}
+            let base = directory.isEmpty ? nil : URL(fileURLWithPath:directory,isDirectory:true)
+            return .turn(directory:base,edits:edits,path:edits[row].path)
+        }
+        table.onDiff = onDiff
         table.setAccessibilityLabel(L10n.text(.workspace,"workspaceFileList.loadView.text"))
         let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.drawsBackground = false; scroll.contentView.drawsBackground = false; scroll.verticalScrollElasticity = .allowed
-        view = NSView(frame:NSRect(x:0,y:0,width:440,height:min(340,max(32,CGFloat(edits.count)*34))+16))
-        scroll.frame = view.bounds.insetBy(dx:8,dy:8); scroll.autoresizingMask = [.width,.height]; view.addSubview(scroll)
+        let button = table.makeDiffButton()
+        view = NSView(frame:NSRect(x:0,y:0,width:440,height:min(340,max(32,CGFloat(edits.count)*34))+44))
+        for child in [scroll,button] {child.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(child)}
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:8),scroll.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-8),
+            scroll.topAnchor.constraint(equalTo:view.topAnchor,constant:8),scroll.bottomAnchor.constraint(equalTo:button.topAnchor,constant:-4),
+            button.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-8),button.bottomAnchor.constraint(equalTo:view.bottomAnchor,constant:-8)
+        ])
         preferredContentSize = view.frame.size
     }
     func numberOfRows(in tableView:NSTableView) -> Int {edits.count}

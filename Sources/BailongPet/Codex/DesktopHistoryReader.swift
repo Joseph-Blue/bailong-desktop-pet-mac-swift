@@ -191,7 +191,8 @@ enum DesktopHistoryReader {
                 json_extract(item_json,'$.reason') reason,
                 CASE WHEN item_type='commandExecution' THEN json_extract(item_json,'$.command') END command,
                 CASE WHEN item_type='commandExecution' THEN json_extract(item_json,'$.commandActions') END command_actions,
-                CASE WHEN item_type='fileChange' THEN json_extract(item_json,'$.changes') END changes,
+                CASE WHEN item_type='fileChange' THEN (SELECT json_group_array(json_object('path',json_extract(value,'$.path')))
+                    FROM json_each(item_json,'$.changes')) END changes,
                 CASE WHEN item_type='webSearch' THEN json_extract(item_json,'$.query') END query,
                 CASE WHEN item_type='reasoning' THEN json_extract(item_json,'$.summary') END summary,
                 CASE WHEN item_type IN ('mcpToolCall','dynamicToolCall','collabAgentToolCall','collabToolCall') THEN json_extract(item_json,'$.tool') END tool,
@@ -273,11 +274,13 @@ enum DesktopHistoryReader {
                 }
                 // 修改摘要读取完整轮次，不受上方近期 200 条进展／消息窗口限制。
                 let edits = try history.rows("SELECT json_extract(item_json,'$.changes') changes FROM thread_items WHERE thread_id=? AND turn_id=? AND item_type='fileChange' AND json_extract(item_json,'$.status')='completed' ORDER BY rollout_ordinal",[actual,turn["turn_id"]!])
-                var fileEdits = [FileEditSummary]()
+                var fileEdits = [FileEditSummary](), patchBudget = FileEditSummary.patchBudget
                 for edit in edits {
                     if let raw = edit["changes"],raw != "null" {
                         let changes = try JSONSerialization.jsonObject(with:Data(raw.utf8))
-                        fileEdits += FileEditSummary.read(["type":"fileChange","status":"completed","changes":changes])
+                        let summaries = FileEditSummary.read(["type":"fileChange","status":"completed","changes":changes],patchBudget:patchBudget)
+                        patchBudget -= summaries.reduce(0) {$0+$1.patchBytes}
+                        fileEdits += summaries
                     }
                 }
                 result[result.count-1].fileEdits = FileEditSummary.merged(fileEdits)
