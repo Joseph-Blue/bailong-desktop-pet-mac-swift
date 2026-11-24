@@ -121,6 +121,7 @@ final class AccentSelectionRow:NSTableRowView {
 // 状态文字、细线图标与任务结果圆标共用动态色，按钮填充仍使用原系统语义色。
 enum StatusTextColor {
     static let red = adaptive(.systemRed)
+    static let amber = adaptive(NSColor(srgbRed:1,green:0.75,blue:0,alpha:1))
     static let orange = adaptive(.systemOrange)
     static let yellow = adaptive(.systemYellow)
     static let green = adaptive(.systemGreen)

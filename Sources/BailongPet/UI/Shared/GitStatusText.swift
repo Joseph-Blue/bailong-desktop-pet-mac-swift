@@ -45,9 +45,9 @@ enum GitStatusText {
     }
     private static let groups:[(group:GitWorkspaceStatus.Group,indicator:Indicator)] = [
         (.conflicted,Indicator("~","✖","C",GitWorkspaceStatus.Group.conflicted.titleKey,StatusTextColor.red)),
-        (.staged,Indicator("+","●","S",GitWorkspaceStatus.Group.staged.titleKey,StatusTextColor.green)),
+        (.staged,Indicator("+","●","S",GitWorkspaceStatus.Group.staged.titleKey,StatusTextColor.amber)),
         (.unstaged,Indicator("!","✚","M",GitWorkspaceStatus.Group.unstaged.titleKey,StatusTextColor.orange)),
-        (.untracked,Indicator("?","…","?",GitWorkspaceStatus.Group.untracked.titleKey,.labelColor))
+        (.untracked,Indicator("?","…","U",GitWorkspaceStatus.Group.untracked.titleKey,.labelColor))
     ]
     private static let clean = Indicator("✓","✔","✓","gitStatusText.clean",StatusTextColor.green)
     private static let stash = Indicator("*","⚑","SH","gitWorkspace.stashLabel",StatusTextColor.purple)
