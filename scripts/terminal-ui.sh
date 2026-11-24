@@ -36,7 +36,7 @@ bailong_header() {
     local separator="────────────────────────────────────────"
     if (( $# >= 3 )); then
         separator+="────────────────────────"
-        if [[ -n "$3" ]]; then version_label+="（${3[1,8]}）"; fi
+        if [[ -n "$3" ]]; then version_label+=$'\t\t'"${3[1,8]}"; fi
     fi
     case "$2" in
         arm64) architecture="Apple Silicon · arm64" ;;

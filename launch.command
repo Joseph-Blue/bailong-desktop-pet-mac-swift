@@ -15,7 +15,8 @@ case "${BAILONG_BUILD_PROFILE:-auto}" in
     *) bailong_usage_error "未知档位：$BAILONG_BUILD_PROFILE" ;;
 esac
 app="$output/白龙桌宠Swift.app"
-bailong_header "打开应用" "$target_arch"
+source_commit="$(bailong_source_commit)"
+bailong_header "打开应用" "$target_arch" "$source_commit"
 print -r -- "应用：$app"
 if [[ ! -d "$app" ]]; then
     print -u2 "未找到此应用。先构建：./build.command $target_arch"
