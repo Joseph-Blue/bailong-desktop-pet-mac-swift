@@ -24,6 +24,28 @@ enum ModelPresentation {
     }
 }
 
+extension ChatSpeed {
+    var icon:NSImage? {
+        switch self {
+        case .standard:return nil
+        case .fast:return NSImage(systemSymbolName:"bolt",accessibilityDescription:title)
+        case .ultrafast:return Self.doubleBolt
+        }
+    }
+    private static let doubleBolt:NSImage? = {
+        guard let bolt = NSImage(systemSymbolName:"bolt",accessibilityDescription:nil) else {return nil}
+        let size = bolt.size, offset = size.width*0.77
+        let image = NSImage(size:NSSize(width:size.width+offset,height:size.height),flipped:false) {_ in
+            bolt.draw(in:NSRect(origin:.zero,size:size))
+            bolt.draw(in:NSRect(origin:NSPoint(x:offset,y:0),size:size))
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = ChatSpeed.ultrafast.title
+        return image
+    }()
+}
+
 enum ModelSummaryLayout {
     static let maximumModelWidth:CGFloat = 320
     static let minimumModelWidth:CGFloat = 180
@@ -43,7 +65,7 @@ enum ModelSummaryLayout {
 // 两类会话共用原生模型字段的尺寸、字体和轮廓；交互能力由各子类决定。
 class ModelSummaryButton:NSButton {
     private var summaryText:String?
-    private var showsLightning = false
+    private var speed = ChatSpeed.standard
     private var providerIcon:NSImage?
     private var widthLimit:NSLayoutConstraint!
     var preservesProviderIconColor:Bool {false}
@@ -64,11 +86,11 @@ class ModelSummaryButton:NSButton {
     var naturalLayoutWidth:CGFloat {min(ModelSummaryLayout.maximumModelWidth,intrinsicContentSize.width.rounded(.up))}
     var layoutWidth:CGFloat {min(maximumLayoutWidth,intrinsicContentSize.width.rounded(.up))}
 
-    @discardableResult func setSummary(_ text:String,lightning:Bool,providerIcon:NSImage? = nil) -> Bool {
-        guard summaryText != text || showsLightning != lightning || self.providerIcon !== providerIcon else {return false}
-        summaryText = text; showsLightning = lightning; self.providerIcon = providerIcon
+    @discardableResult func setSummary(_ text:String,speed:ChatSpeed,providerIcon:NSImage? = nil) -> Bool {
+        guard summaryText != text || self.speed != speed || self.providerIcon !== providerIcon else {return false}
+        summaryText = text; self.speed = speed; self.providerIcon = providerIcon
         title = text
-        setAccessibilityValue((lightning ? L10n.text(.conversation,"modelPresentation.setSummary.text") : "")+text)
+        setAccessibilityValue((speed == .standard ? "" : speed.title+" · ")+text)
         applySummaryIcons()
         invalidateIntrinsicContentSize()
         needsDisplay = true
@@ -87,13 +109,13 @@ class ModelSummaryButton:NSButton {
         applySummaryIcons()
     }
     private func applySummaryIcons() {
-        guard let text = summaryText,providerIcon != nil || showsLightning else {return}
+        guard let text = summaryText,providerIcon != nil || speed != .standard else {return}
         let font = font ?? .systemFont(ofSize:13)
         let side = font.pointSize
         let foreground = NSColor(cgColor:AppAppearance.resolvedColor(.labelColor,for:effectiveAppearance)) ?? .labelColor
         let value = NSMutableAttributedString(string:"")
-        func append(_ image:NSImage?) {
-            let square = NSSize(width:side,height:side)
+        func append(_ image:NSImage?,width:CGFloat) {
+            let square = NSSize(width:width,height:side)
             let icon = NSImage(size:square,flipped:false) { rect in
                 guard let image else {return true}
                 image.draw(in:ModelSummaryButton.imageRect(for:image,in:rect))
@@ -101,13 +123,13 @@ class ModelSummaryButton:NSButton {
                 return true
             }
             let attachment = NSTextAttachment(); attachment.image = icon
-            attachment.bounds = NSRect(x:0,y:(font.capHeight-side)/2,width:side,height:side)
+            attachment.bounds = NSRect(x:0,y:(font.capHeight-side)/2,width:width,height:side)
             value.append(NSAttributedString(attachment:attachment))
             value.append(NSAttributedString(string:" ",attributes:[.font:font]))
         }
         // 标题为独立绘制的供应商图标保留同样的宽度。
-        if let providerIcon {append(separateProviderIcon == nil ? providerIcon : nil)}
-        if showsLightning,let bolt = NSImage(systemSymbolName:"bolt",accessibilityDescription:L10n.text(.conversation,"modelPresentation.bolt")) {append(bolt)}
+        if let providerIcon {append(separateProviderIcon == nil ? providerIcon : nil,width:side)}
+        if let icon = speed.icon {append(icon,width:speed == .ultrafast ? side*1.5 : side)}
         value.append(NSAttributedString(string:text,attributes:[.font:font]))
         attributedTitle = value
     }

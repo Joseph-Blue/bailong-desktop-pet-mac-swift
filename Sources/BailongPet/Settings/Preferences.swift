@@ -129,7 +129,7 @@ final class PetPreferences {
     static let dragTiltIntensityRange = 0.0...200.0
     static let defaults: [String:Any] = [
         "approvalButtonOrder":"rejectLeft","recordHistory":true,"bubbleCardLimit":50,"recentTaskCount":5,"showTaskOverview":true,"showThinkingProgress":true,"showToolProgress":true,"hideToolFailures":true,"progressToastEnabled":true,"progressToastSeconds":2.0,"taskReminderEnabled":true,"taskReminderMinutes":5.0,
-        "automaticallyCheckUpdates":false,"defaultWorkspace":"","petChatFastMode":false,
+        "automaticallyCheckUpdates":false,"defaultWorkspace":"",ChatSpeed.preferenceKey:ChatSpeed.standard.rawValue,
         "taskInfoBarEnabled":true,"gitWindowEnabled":false,GitStatusStyle.key:GitStatusStyle.defaultStyle.rawValue,GitTerminology.key:false,tokenDetailsKey:false,TokenCountFormat.key:TokenCountFormat.full.rawValue,
         "bubbleMaterial":glassAvailable ? "glass" : "plain","glassFollowsSystem":true,"glassOpacity":0.5,"bubbleMotion":true,
         BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.upperLeft.rawValue,
@@ -192,7 +192,7 @@ final class PetPreferences {
     static let choices = ["approvalButtonOrder":["rejectLeft","allowLeft"],"bubbleMaterial":["glass","plain"],"animationQuality":["auto","720","512","384","256"],"animationFPSLimit":["full","20","15"],"sendShortcut":SendShortcut.allCases.map(\.rawValue),"movementRange":["still","nearby","screen"],
         "appearanceMode":AppAppearance.choices.map(\.0),"accentStyle":AppAccent.choices.map(\.0),
         TokenCountFormat.key:TokenCountFormat.allCases.map(\.rawValue),GitStatusStyle.key:GitStatusStyle.allCases.map(\.rawValue),BrowserSearchEngine.key:BrowserSearchEngine.allCases.map(\.rawValue),
-        ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue),BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.allCases.map(\.rawValue),WindowDockModifier.key:WindowDockModifier.allCases.map(\.rawValue)]
+        ChatSpeed.preferenceKey:ChatSpeed.allCases.map(\.rawValue),ProjectSendChannel.key:ProjectSendChannel.allCases.map(\.rawValue),BubbleCloseButtonPosition.key:BubbleCloseButtonPosition.allCases.map(\.rawValue),WindowDockModifier.key:WindowDockModifier.allCases.map(\.rawValue)]
         .merging(PetGestureSetting.all.map {($0.key,PetGestureSetting.actions.map(\.0))}) {_, gesture in gesture}
     private(set) var compatibilityNotice:String?
     let defaults: UserDefaults
@@ -201,6 +201,12 @@ final class PetPreferences {
         desktopVersion = CodexConnection.detectDesktopVersion()
         automaticChannel = ProjectSendChannel.recommended(for:desktopVersion?.number)
         guard defaults.integer(forKey:SettingsStorage.schemaKey) <= SettingsStorage.schemaVersion else {return}
+        if let legacy = defaults.object(forKey:"petChatFastMode") as? Bool {
+            if defaults.object(forKey:ChatSpeed.preferenceKey) == nil {
+                defaults.set((legacy ? ChatSpeed.fast : .standard).rawValue,forKey:ChatSpeed.preferenceKey)
+            }
+            defaults.removeObject(forKey:"petChatFastMode")
+        }
         TemplateSyntax.migrateOnce(defaults,keys:SettingsSection.identity.keys.filter {TemplateSyntax.isTemplateKey($0) || $0 == "customLines"})
         let receivedKeys = ["desktopTaskReceivedTemplate","desktopTaskReceivedBodyTemplate"]
         let received = Dictionary(uniqueKeysWithValues:receivedKeys.compactMap {key in defaults.object(forKey:key).map {(key,$0)}})
@@ -394,6 +400,14 @@ final class PetPreferences {
         }
         guard (1...SettingsStorage.schemaVersion).contains(schema) else {
             throw PetFailure(message:L10n.format(.settings,"preferences.importData.message.2",String(describing:schema)))
+        }
+        if let legacy = values.removeValue(forKey:"petChatFastMode") {
+            guard Self.valid(legacy,key:"petChatFastMode",baseline:false,clipIDs:clipIDs) else {
+                throw PetFailure(message:L10n.format(.settings,"preferences.importData.message.5","petChatFastMode"))
+            }
+            if values[ChatSpeed.preferenceKey] == nil {
+                values[ChatSpeed.preferenceKey] = ((legacy as! Bool) ? ChatSpeed.fast : .standard).rawValue
+            }
         }
         values = TemplateSyntax.migrate(values)
         values = ConversationLines.migrateReceivedLine(values)

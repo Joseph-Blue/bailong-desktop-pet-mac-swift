@@ -53,7 +53,7 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
             let providerSummary = provider == nil ? L10n.text(.conversation,"composerControls.providerTitle") : ModelPresentation.provider(provider,name:identity?.summaryName,
                 usesChatGPTAccount:conversation?.createdWithChatGPT == true)
             setSummary(ModelPresentation.summary(model:settings.model,effort:effort,provider:providerSummary)+L10n.text(.conversation,"composerControls.update.text"),
-                lightning:CodexServiceTier.hasLightning(settings.serviceTier),providerIcon:providerIcon)
+                speed:ChatSpeed(tier:settings.serviceTier) ?? .standard,providerIcon:providerIcon)
             let source = settings.effortFromHistory ? L10n.text(.conversation,"composerControls.source") : ""
             var help = L10n.text(.conversation,"composerControls.help")+source
             if let providerTitle {help += L10n.text(.conversation,"composerControls.update.text.2")+providerTitle}
@@ -61,7 +61,7 @@ final class ChatReadOnlyModelField: ModelSummaryButton {
             if let tier = settings.serviceTier {help += L10n.text(.conversation,"composerControls.update.text.5")+CodexServiceTier.displayName(tier)}
             hoverHelp = help
         } else {
-            setSummary(notice?.message ?? L10n.text(.conversation,"composerControls.update.text.6"),lightning:false)
+            setSummary(notice?.message ?? L10n.text(.conversation,"composerControls.update.text.6"),speed:.standard)
             setHoverHelp(title) { [weak self] in self?.hasTruncatedTitle == true }
         }
         setAccessibilityLabel(L10n.text(.conversation,"composerControls.update.text.7"))

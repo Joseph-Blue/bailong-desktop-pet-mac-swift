@@ -147,7 +147,7 @@
 "desktopSync.close.text.2" = "任务同步已停止，当前不会读取新的任务状态。";
 
 /* 模型与推理强度 */
-"modelSelection.displayName.text" = "快速（1.5倍速度）";
+"modelSelection.displayName.text" = "快速";
 "modelSelection.displayName.text.2" = "超快";
 "modelSelection.displayName.text.3" = "标准速度";
 "modelSelection.displayName.text.4" = "灵活";
@@ -457,15 +457,11 @@
 "conversationPicker.loadView.text" = "搜索会话标题或工作区";
 "conversationPicker.tableView.text" = "执行中 · ";
 
-/* 当前模型摘要 */
-"modelPresentation.setSummary.text" = "快速模式 · ";
-"modelPresentation.bolt" = "快速模式";
-
 /* 对话模型选择器 */
 "modelSelector.text" = "选择模型与推理强度";
 "modelSelector.summary" = "未获取模型";
 "modelSelector.updateTitle.text" = "供应商：";
-"modelSelector.updateTitle.text.2" = "\n速度档位：1.5倍速度";
+"modelSelector.speed" = "速度档位";
 "modelSelector.heading" = "模型与推理强度";
 "modelSelector.speedLabel" = "1.5倍速度";
 "modelSelector.sync" = "与 Codex 同步";

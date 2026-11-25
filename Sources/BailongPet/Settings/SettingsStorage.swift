@@ -9,7 +9,7 @@ enum SettingsStorage {
     static let defaults:UserDefaults = {
         let result = UserDefaults(suiteName:domain)!
         if result.object(forKey:schemaKey) == nil {
-            let keys = Array(PetPreferences.defaults.keys)+["x","y","petChatModel","petChatEffort","favorites"]
+            let keys = Array(PetPreferences.defaults.keys)+["x","y","petChatModel","petChatEffort","petChatFastMode","favorites"]
             var values = [String:Any]()
             for key in keys {
                 if let value = UserDefaults.standard.object(forKey:key) {values[key] = value}

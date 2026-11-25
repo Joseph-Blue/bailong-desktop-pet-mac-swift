@@ -8,11 +8,31 @@ struct ChatModel: Decodable {
     let isDefault: Bool, hidden: Bool
     var serviceTiers: [ServiceTier]? = nil
     var defaultServiceTier:String? = nil
-    var fastTier:ServiceTier? {serviceTiers?.first {CodexServiceTier.isFast($0.id) || ["fast","priority"].contains($0.name.lowercased())}}
+    func tier(for speed:ChatSpeed) -> ServiceTier? {
+        serviceTiers?.first {ChatSpeed(tier:$0.id) == speed}
+            ?? serviceTiers?.first {ChatSpeed(tier:$0.name.lowercased()) == speed}
+    }
+}
+
+enum ChatSpeed:String,CaseIterable {
+    case standard = "default", fast, ultrafast
+    static let preferenceKey = "petChatSpeed"
+
+    init?(tier:String?) {
+        switch tier {
+        case "standard","default":self = .standard
+        case "priority","fast":self = .fast
+        case "ultrafast":self = .ultrafast
+        default:return nil
+        }
+    }
+    static func saved(in defaults:UserDefaults) -> Self {
+        if let raw = defaults.string(forKey:preferenceKey),let speed = Self(rawValue:raw) {return speed}
+        return defaults.bool(forKey:"petChatFastMode") ? .fast : .standard
+    }
+    var title:String {CodexServiceTier.displayName(rawValue)}
 }
 enum CodexServiceTier {
-    static func isFast(_ tier:String?) -> Bool {tier == "fast" || tier == "priority"}
-    static func hasLightning(_ tier:String?) -> Bool {isFast(tier) || tier == "ultrafast"}
     static func displayName(_ tier:String) -> String {
         switch tier {
         case "fast","priority":return L10n.text(.conversation,"modelSelection.displayName.text")
@@ -29,7 +49,7 @@ final class ChatModelSettings {
     init(defaults: UserDefaults = SettingsStorage.defaults) {
         self.defaults = defaults
         selectedModel = defaults.string(forKey:"petChatModel"); selectedEffort = defaults.string(forKey:"petChatEffort")
-        selectedFast = defaults.bool(forKey:"petChatFastMode")
+        selectedSpeed = ChatSpeed.saved(in:defaults)
         NotificationCenter.default.addObserver(self,selector:#selector(preferencesChanged),name:PetPreferences.didChange,object:nil)
     }
     private(set) var models = [ChatModel]()
@@ -60,40 +80,48 @@ final class ChatModelSettings {
         guard let original = conversation?.modelProvider,let configuredProvider else {return false}
         return original != configuredProvider
     }
-    private(set) var selectedFast:Bool?
-    var supportsFastMode:Bool {configuredProvider == "openai" && currentModel?.fastTier != nil}
-    var fastMode:Bool {
-        let tier = configuredServiceTier ?? currentModel?.defaultServiceTier
-        let configuredFast = CodexServiceTier.isFast(tier) || (tier != nil && tier == currentModel?.fastTier?.id)
-        return supportsFastMode && (selectedFast ?? configuredFast)
+    private var selectedSpeed:ChatSpeed?
+    var availableSpeeds:[ChatSpeed] {
+        guard configuredProvider == "openai",let model = currentModel else {return [.standard]}
+        return ChatSpeed.allCases.filter {$0 == .standard || model.tier(for:$0) != nil}
+    }
+    var speed:ChatSpeed {
+        let configured = configuredServiceTier ?? currentModel?.defaultServiceTier
+        let available = availableSpeeds
+        if let selectedSpeed {return available.contains(selectedSpeed) ? selectedSpeed : .standard}
+        return available.first { option in
+            option != .standard && (ChatSpeed(tier:configured) == option || currentModel?.tier(for:option)?.id == configured)
+        } ?? .standard
     }
     private(set) var loading = false
     private(set) var error: String?
     var onLoad: (Bool) -> Void = {_ in}
     private(set) var selectedModel:String?, selectedEffort:String?
     private var selectionKey:String?
-    private var selections = [String:(model:String?,effort:String?,fast:Bool?)]()
+    private var selections = [String:(model:String?,effort:String?,speed:ChatSpeed?)]()
     func activate(_ conversation:Conversation) {
         self.conversation = conversation
         let key = conversation.key
         guard selectionKey != key else {return}
-        if let selectionKey {selections[selectionKey] = (selectedModel,selectedEffort,selectedFast)}
+        if let selectionKey {selections[selectionKey] = (selectedModel,selectedEffort,selectedSpeed)}
         selectionKey = key
-        let choice = selections[key] ?? (defaults.string(forKey:"petChatModel"),defaults.string(forKey:"petChatEffort"),defaults.bool(forKey:"petChatFastMode"))
-        selectedModel = choice.0; selectedEffort = choice.1; selectedFast = choice.2
+        let choice = selections[key] ?? (defaults.string(forKey:"petChatModel"),defaults.string(forKey:"petChatEffort"),ChatSpeed.saved(in:defaults))
+        selectedModel = choice.0; selectedEffort = choice.1; selectedSpeed = choice.2
         notify()
     }
     func clearSelections() {selections.removeAll(); selectionKey = nil; conversation = nil}
     func forget(_ key:String) {selections.removeValue(forKey:key)}
     @objc private func preferencesChanged(_ note:Notification) {
-        guard (note.userInfo?["keys"] as? [String])?.contains("petChatFastMode") == true else {return}
-        selectedFast = defaults.bool(forKey:"petChatFastMode")
-        for key in Array(selections.keys) {selections[key]?.fast = selectedFast}
+        guard (note.userInfo?["keys"] as? [String])?.contains(ChatSpeed.preferenceKey) == true else {return}
+        selectedSpeed = ChatSpeed.saved(in:defaults)
+        for key in Array(selections.keys) {selections[key]?.speed = selectedSpeed}
         notify()
     }
-    func chooseFastMode(_ enabled:Bool) {
-        guard !enabled || supportsFastMode else {return}
-        selectedFast = enabled; defaults.set(enabled,forKey:"petChatFastMode"); notify()
+    func chooseSpeed(_ speed:ChatSpeed) {
+        guard availableSpeeds.contains(speed) else {return}
+        selectedSpeed = speed
+        defaults.set(speed.rawValue,forKey:ChatSpeed.preferenceKey)
+        notify()
     }
     var currentModelID: String? {
         if providerMismatch {return recordedTurn?.model}
@@ -136,7 +164,7 @@ final class ChatModelSettings {
     func syncWithCodex() {
         defaults.removeObject(forKey:"petChatModel")
         defaults.removeObject(forKey:"petChatEffort")
-        selectedModel = nil; selectedEffort = nil; selectedFast = nil
+        selectedModel = nil; selectedEffort = nil; selectedSpeed = nil
         notify(); onLoad(true)
     }
     func setLoading() {loading = true; error = nil; notify()}
@@ -149,7 +177,7 @@ final class ChatModelSettings {
         self.configuredProvider = configuredProvider; self.configuredServiceTier = configuredServiceTier
         self.providerName = providerName; self.providerSummaryName = providerSummaryName
         configuredProviderIconID = providerIconID
-        if selectedFast == nil,configuredProvider == "openai" {defaults.set(fastMode,forKey:"petChatFastMode")}
+        if selectedSpeed == nil,configuredProvider == "openai" {defaults.set(speed.rawValue,forKey:ChatSpeed.preferenceKey)}
         if configuredProvider == "openai",!providerMismatch,let effort = selectedEffort,!supportedEfforts.contains(where:{$0.reasoningEffort == effort}) {
             defaults.removeObject(forKey:"petChatEffort")
             selectedEffort = nil
@@ -184,7 +212,7 @@ final class ChatModelSettings {
         }
         var result = [String:Any]()
         // 关闭时明确覆盖旧线程的快速档，不能省略后继承上轮设置。
-        if configuredProvider == "openai" {result["serviceTier"] = fastMode ? currentModel!.fastTier!.id : "default"}
+        if configuredProvider == "openai" {result["serviceTier"] = speed == .standard ? "default" : currentModel?.tier(for:speed)?.id}
         if let model = currentModelID {result["model"] = model}
         if let effort = currentEffort {
             if let currentModel, !currentModel.supportedReasoningEfforts.contains(where:{$0.reasoningEffort == effort}) {

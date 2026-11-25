@@ -18,12 +18,12 @@ final class ModelSelector: ModelSummaryButton, NSPopoverDelegate {
     @objc private func updateTitle() {
         let summary = ModelPresentation.summary(model:settings.currentModelID ?? L10n.text(.conversation,"modelSelector.summary"),displayName:settings.currentModel?.displayName,
             effort:settings.effortTitle,provider:settings.summaryProvider)
-        let fastMode = settings.fastMode
-        let changed = setSummary(summary,lightning:fastMode,providerIcon:AppIcons.apiProvider(settings.providerIconID))
+        let speed = settings.speed
+        let changed = setSummary(summary,speed:speed,providerIcon:AppIcons.apiProvider(settings.providerIconID))
         var details = [summary,settings.providerTitle.map {L10n.text(.conversation,"modelSelector.updateTitle.text")+$0}].compactMap {$0}.joined(separator:"\n")
-        if fastMode {details += L10n.text(.conversation,"modelSelector.updateTitle.text.2")}
+        if speed != .standard {details += L10n.text(.conversation,"composerControls.update.text.5")+speed.title}
         setHoverHelp(details) { [weak self] in
-            fastMode || self?.hasTruncatedTitle == true
+            speed != .standard || self?.hasTruncatedTitle == true
         }
         if changed {onSummaryChange()}
     }
@@ -61,6 +61,7 @@ final class ModelSelectorContent: NSViewController {
     private let effort = NSTextField(wrappingLabelWithString:"")
     private let speedLabel = NSTextField(labelWithString:L10n.text(.conversation,"modelSelector.speedLabel"))
     private let speedIcon = NSImageView()
+    private let speedPicker = AccentPopUpButton(frame:.zero,pullsDown:false)
     private let speedSwitch = AccentSwitch(frame:.zero)
     private let explanation = NSTextField(wrappingLabelWithString:"")
     private let slider = NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil)
@@ -85,6 +86,9 @@ final class ModelSelectorContent: NSViewController {
         effort.font = .systemFont(ofSize:14*scale,weight:.semibold)
         speedLabel.font = .systemFont(ofSize:12*scale)
         speedIcon.image = NSImage(systemSymbolName:"bolt",accessibilityDescription:nil)
+        speedPicker.controlSize = .small; speedPicker.font = speedLabel.font
+        speedPicker.target = self; speedPicker.action = #selector(speedPicked)
+        speedPicker.setAccessibilityLabel(L10n.text(.conversation,"modelSelector.speed"))
         speedSwitch.controlSize = .small; speedSwitch.target = self; speedSwitch.action = #selector(speedChanged)
         speedSwitch.setAccessibilityLabel(L10n.text(.conversation,"modelSelector.speedLabel"))
         slider.target = self; slider.action = #selector(effortChanged)
@@ -93,7 +97,7 @@ final class ModelSelectorContent: NSViewController {
         explanation.textColor = .secondaryLabelColor
         refresh.callback = { [weak self] in self?.settings.onLoad(true) }
         sync.emphasize(); sync.callback = { [weak self] in self?.settings.syncWithCodex() }
-        [heading,picker,effort,speedIcon,speedLabel,speedSwitch,slider,explanation].forEach {body.addSubview($0)}
+        [heading,picker,effort,speedIcon,speedLabel,speedSwitch,speedPicker,slider,explanation].forEach {body.addSubview($0)}
         for button in footerButtons {
             button.configureFlexible(font:.systemFont(ofSize:13*scale))
             body.addSubview(button)
@@ -122,12 +126,29 @@ final class ModelSelectorContent: NSViewController {
         }
         effort.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text")+settings.effortTitle
         effort.textColor = AppAccent.color
-        speedSwitch.state = settings.fastMode ? .on : .off
-        speedSwitch.isEnabled = !settings.loading && settings.supportsFastMode
-        speedLabel.textColor = speedSwitch.isEnabled ? .labelColor : .disabledControlTextColor
-        speedIcon.contentTintColor = speedLabel.textColor
-        let speedHelp = settings.supportsFastMode ? L10n.text(.conversation,"modelSelector.speedHelp") : L10n.text(.conversation,"modelSelector.speedHelp.2")
-        speedSwitch.hoverHelp = speedHelp
+        let speeds = settings.availableSpeeds
+        let hasMenu = speeds.contains(.ultrafast)
+        speedPicker.isHidden = !hasMenu; speedSwitch.isHidden = hasMenu
+        speedIcon.isHidden = hasMenu; speedLabel.isHidden = hasMenu
+        if hasMenu {
+            speedPicker.removeAllItems()
+            for speed in speeds {
+                speedPicker.addItem(withTitle:speed.title)
+                let item = speedPicker.lastItem!
+                item.representedObject = speed.rawValue
+                item.image = speed.icon
+                item.toolTip = settings.currentModel?.tier(for:speed)?.description
+                if speed == settings.speed {speedPicker.select(item)}
+            }
+            speedPicker.isEnabled = !settings.loading
+            speedPicker.hoverHelp = speedPicker.selectedItem?.toolTip
+        } else {
+            speedSwitch.state = settings.speed == .fast ? .on : .off
+            speedSwitch.isEnabled = !settings.loading && speeds.contains(.fast)
+            speedLabel.textColor = speedSwitch.isEnabled ? .labelColor : .disabledControlTextColor
+            speedIcon.contentTintColor = speedLabel.textColor
+            speedSwitch.hoverHelp = L10n.text(.conversation,speeds.contains(.fast) ? "modelSelector.speedHelp" : "modelSelector.speedHelp.2")
+        }
         if settings.loading {explanation.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text.2")}
         else if let error = settings.error {explanation.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text.3")+error}
         else if settings.providerMismatch {explanation.stringValue = L10n.text(.conversation,"modelSelector.refreshControls.text.4")}
@@ -177,10 +198,10 @@ final class ModelSelectorContent: NSViewController {
             max(minimum,text.cell!.cellSize(forBounds:NSRect(x:0,y:0,width:width,height:CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
         }
         let effortWidth = max(1,contentWidth-speedWidth-gap)
-        let rowHeight = max(textHeight(effort,width:effortWidth,minimum:22*scale),speedSwitch.intrinsicContentSize.height)
+        let rowHeight = max(textHeight(effort,width:effortWidth,minimum:22*scale),speedControl.intrinsicContentSize.height)
         effort.frame = NSRect(x:margin,y:y,width:effortWidth,height:rowHeight)
-        let switchSize = speedSwitch.intrinsicContentSize
-        speedSwitch.frame = NSRect(x:documentWidth-margin-switchSize.width,y:y+(rowHeight-switchSize.height)/2,width:switchSize.width,height:switchSize.height)
+        let switchSize = speedControl.intrinsicContentSize
+        speedControl.frame = NSRect(x:documentWidth-margin-switchSize.width,y:y+(rowHeight-switchSize.height)/2,width:switchSize.width,height:switchSize.height)
         let labelSize = speedLabel.intrinsicContentSize
         speedLabel.frame = NSRect(x:speedSwitch.frame.minX-gap-labelSize.width,y:y+(rowHeight-labelSize.height)/2,width:labelSize.width,height:labelSize.height)
         speedIcon.frame = NSRect(x:speedLabel.frame.minX-18*scale,y:y+(rowHeight-14*scale)/2,width:14*scale,height:14*scale)
@@ -227,7 +248,12 @@ final class ModelSelectorContent: NSViewController {
         return y
     }
     @objc private func modelChanged() {settings.chooseModel(picker.selectedItem?.representedObject as? String)}
-    private var speedWidth:CGFloat {18*scale+speedLabel.intrinsicContentSize.width+8*scale+speedSwitch.intrinsicContentSize.width}
-    @objc private func speedChanged() {settings.chooseFastMode(speedSwitch.state == .on)}
+    private var speedControl:NSControl {speedPicker.isHidden ? speedSwitch : speedPicker}
+    private var speedWidth:CGFloat {speedPicker.isHidden ? 18*scale+speedLabel.intrinsicContentSize.width+8*scale+speedSwitch.intrinsicContentSize.width : speedPicker.intrinsicContentSize.width}
+    @objc private func speedChanged() {settings.chooseSpeed(speedSwitch.state == .on ? .fast : .standard)}
+    @objc private func speedPicked() {
+        guard let id = speedPicker.selectedItem?.representedObject as? String,let speed = ChatSpeed(rawValue:id) else {return}
+        settings.chooseSpeed(speed)
+    }
     @objc private func effortChanged() {guard options.indices.contains(slider.integerValue) else{return}; settings.chooseEffort(options[slider.integerValue].reasoningEffort)}
 }
